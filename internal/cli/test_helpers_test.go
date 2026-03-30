@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -30,6 +31,35 @@ func captureOutput(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
 }
 
 func restoreOutput() {}
+
+func setTestConfigDir(t *testing.T, root string) {
+	t.Helper()
+	t.Setenv("APPDATA", root)
+	t.Setenv("XDG_CONFIG_HOME", root)
+	t.Setenv("HOME", root)
+}
+
+func writeTestConfig(t *testing.T, root string) {
+	t.Helper()
+
+	configDir := filepath.Join(root, "zotcli")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	configJSON := `{
+  "mode": "web",
+  "library_type": "user",
+  "library_id": "123456",
+  "api_key": "secret",
+  "style": "apa",
+  "locale": "en-US",
+  "timeout_seconds": 20
+}`
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(configJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func newTestAPI(t *testing.T) (string, func()) {
 	t.Helper()
