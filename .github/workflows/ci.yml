@@ -11,6 +11,7 @@ permissions:
   contents: read
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   GO_VERSION_LDFLAGS: >-
     -X zotero_cli/internal/cli.version=dev
     -X zotero_cli/internal/cli.commit=${{ github.sha }}
@@ -32,7 +33,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
 
       - name: Check formatting
         shell: bash
@@ -75,7 +75,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
 
       - name: Cross build
         shell: bash

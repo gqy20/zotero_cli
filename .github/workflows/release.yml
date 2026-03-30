@@ -10,6 +10,7 @@ permissions:
   contents: write
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('manual-{0}', github.run_number) }}
   GO_VERSION_LDFLAGS: >-
     -X zotero_cli/internal/cli.version=${{ github.ref_type == 'tag' && github.ref_name || format('manual-{0}', github.run_number) }}
@@ -51,7 +52,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
 
       - name: Run tests
         run: go test ./...
