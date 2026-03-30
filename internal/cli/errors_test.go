@@ -1,0 +1,131 @@
+package cli
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestRunUnknownCommandReturnsUsageError(t *testing.T) {
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"wat"})
+
+	if exitCode != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "unknown command: wat") {
+		t.Fatalf("expected unknown command message, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Usage:") {
+		t.Fatalf("expected usage text on stdout, got %q", stdout.String())
+	}
+}
+
+func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
+	testCases := []struct {
+		name string
+		args []string
+	}{
+		{name: "find", args: []string{"find", "attention"}},
+		{name: "show", args: []string{"show", "X42A7DEE"}},
+		{name: "cite", args: []string{"cite", "X42A7DEE"}},
+		{name: "export query", args: []string{"export", "attention"}},
+		{name: "export item key", args: []string{"export", "--item-key", "X42A7DEE"}},
+		{name: "collections", args: []string{"collections"}},
+		{name: "notes", args: []string{"notes"}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			configRoot := t.TempDir()
+			setTestConfigDir(t, configRoot)
+
+			_, stderr := captureOutput(t)
+			exitCode := Run(tc.args)
+
+			if exitCode != 3 {
+				t.Fatalf("expected exit code 3, got %d; stderr=%q", exitCode, stderr.String())
+			}
+			if !strings.Contains(stderr.String(), "config not found; run `zot config init` first") {
+				t.Fatalf("expected config-not-found message, got %q", stderr.String())
+			}
+		})
+	}
+}
+
+func TestRunShowRejectsExtraPositionalArgs(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"show", "X42A7DEE", "extra"})
+
+	if exitCode != 2 {
+		t.Fatalf("expected exit code 2, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), usageShow) {
+		t.Fatalf("expected usage message, got %q", stderr.String())
+	}
+}
+
+func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
+	testCases := []struct {
+		name       string
+		args       []string
+		wantUsage  string
+		wantStderr string
+	}{
+		{
+			name:      "find missing query",
+			args:      []string{"find"},
+			wantUsage: usageFind,
+		},
+		{
+			name:       "cite invalid format",
+			args:       []string{"cite", "X42A7DEE", "--format", "bad"},
+			wantUsage:  usageCite,
+			wantStderr: "error: unsupported format",
+		},
+		{
+			name:       "export conflicting args",
+			args:       []string{"export", "mixed", "--item-key", "X42A7DEE"},
+			wantUsage:  usageExport,
+			wantStderr: "error: cannot use query and --item-key together",
+		},
+		{
+			name:      "collections extra arg",
+			args:      []string{"collections", "extra"},
+			wantUsage: usageCollections,
+		},
+		{
+			name:      "notes extra arg",
+			args:      []string{"notes", "extra"},
+			wantUsage: usageNotes,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			configRoot := t.TempDir()
+			setTestConfigDir(t, configRoot)
+			writeTestConfig(t, configRoot)
+
+			_, stderr := captureOutput(t)
+			exitCode := Run(tc.args)
+
+			if exitCode != 2 {
+				t.Fatalf("expected exit code 2, got %d; stderr=%q", exitCode, stderr.String())
+			}
+			if tc.wantStderr != "" && !strings.Contains(stderr.String(), tc.wantStderr) {
+				t.Fatalf("expected %q in stderr, got %q", tc.wantStderr, stderr.String())
+			}
+			if !strings.Contains(stderr.String(), tc.wantUsage) {
+				t.Fatalf("expected usage %q in stderr, got %q", tc.wantUsage, stderr.String())
+			}
+		})
+	}
+}

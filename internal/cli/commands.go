@@ -155,7 +155,10 @@ func runShow(args []string) int {
 		}
 		if key == "" {
 			key = arg
+			continue
 		}
+		fmt.Fprintln(stderr, usageShow)
+		return 2
 	}
 
 	if strings.TrimSpace(key) == "" {
