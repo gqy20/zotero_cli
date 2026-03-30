@@ -45,6 +45,8 @@ func Run(args []string) int {
 		return runShow(args[1:])
 	case "cite":
 		return runCite(args[1:])
+	case "export":
+		return runExport(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -412,6 +414,129 @@ func runCite(args []string) int {
 	return 0
 }
 
+func runExport(args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: zot export <query> [--limit N] [--json] | zot export --item-key KEY [--json]")
+		return 2
+	}
+
+	itemKey, findOpts, jsonOutput, err := parseExportArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, "usage: zot export <query> [--limit N] [--json] | zot export --item-key KEY [--json]")
+		return 2
+	}
+
+	cfg, _, err := config.Load()
+	if err != nil {
+		if errors.Is(err, config.ErrNotFound) {
+			fmt.Fprintln(stderr, "config not found; run `zot config init` first")
+			return 3
+		}
+		return printErr(err)
+	}
+
+	baseURL := os.Getenv("ZOT_BASE_URL")
+	client := zoteroapi.New(cfg, baseURL, nil)
+
+	keys := make([]string, 0, 8)
+	if itemKey != "" {
+		keys = append(keys, itemKey)
+	} else {
+		items, err := client.FindItems(context.Background(), findOpts)
+		if err != nil {
+			return printErr(err)
+		}
+		items = filterDefaultFindItems(items, findOpts)
+		for _, item := range items {
+			keys = append(keys, item.Key)
+		}
+	}
+
+	results := make([]zoteroapi.CitationResult, 0, len(keys))
+	for _, key := range keys {
+		result, err := client.GetCitation(context.Background(), key, zoteroapi.CitationOptions{
+			Format: "bib",
+			Style:  cfg.Style,
+			Locale: cfg.Locale,
+		})
+		if err != nil {
+			return printErr(err)
+		}
+		results = append(results, result)
+	}
+
+	if jsonOutput {
+		out := map[string]any{
+			"ok":      true,
+			"command": "export",
+			"data":    results,
+			"meta": map[string]any{
+				"total": len(results),
+			},
+		}
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(out); err != nil {
+			return printErr(err)
+		}
+		return 0
+	}
+
+	for i, result := range results {
+		if i > 0 {
+			fmt.Fprintln(stdout)
+		}
+		fmt.Fprintln(stdout, result.Text)
+	}
+	return 0
+}
+
+func parseExportArgs(args []string) (string, zoteroapi.FindOptions, bool, error) {
+	var itemKey string
+	var jsonOutput bool
+	findOpts := zoteroapi.FindOptions{}
+	queryParts := make([]string, 0, len(args))
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonOutput = true
+		case "--item-key":
+			if i+1 >= len(args) {
+				return "", zoteroapi.FindOptions{}, false, errors.New("missing value for --item-key")
+			}
+			i++
+			itemKey = args[i]
+		case "--limit":
+			if i+1 >= len(args) {
+				return "", zoteroapi.FindOptions{}, false, errors.New("missing value for --limit")
+			}
+			i++
+			limit, err := strconv.Atoi(args[i])
+			if err != nil || limit <= 0 {
+				return "", zoteroapi.FindOptions{}, false, errors.New("invalid value for --limit")
+			}
+			findOpts.Limit = limit
+		default:
+			queryParts = append(queryParts, args[i])
+		}
+	}
+
+	if itemKey != "" && len(queryParts) > 0 {
+		return "", zoteroapi.FindOptions{}, false, errors.New("cannot use query and --item-key together")
+	}
+
+	if itemKey == "" {
+		findOpts.Query = strings.TrimSpace(strings.Join(queryParts, " "))
+		if findOpts.Query == "" {
+			return "", zoteroapi.FindOptions{}, false, errors.New("missing query or --item-key")
+		}
+	}
+
+	return itemKey, findOpts, jsonOutput, nil
+}
+
 func parseCiteArgs(args []string) (string, zoteroapi.CitationOptions, bool, error) {
 	var key string
 	opts := zoteroapi.CitationOptions{}
@@ -532,6 +657,7 @@ Commands:
   find           Search items in the configured Zotero library
   show           Show item details
   cite           Generate a citation or bibliography entry
+  export         Export bibliography entries
 `, exe, exe)
 }
 

@@ -162,6 +162,31 @@ func newTestAPI(t *testing.T) (string, func()) {
 					},
 				})
 			}
+		case "/users/123456/items/ART12345":
+			include := r.URL.Query().Get("include")
+			switch include {
+			case "bib":
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"key": "ART12345",
+					"bib": "<div class=\"csl-bib-body\"><div class=\"csl-entry\">Lovelace, A. (2024). <i>Primary Article</i>.</div></div>",
+				})
+			default:
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"key": "ART12345",
+					"data": map[string]any{
+						"itemType": "journalArticle",
+						"title":    "Primary Article",
+						"date":     "2024",
+						"creators": []map[string]any{
+							{
+								"creatorType": "author",
+								"firstName":   "Ada",
+								"lastName":    "Lovelace",
+							},
+						},
+					},
+				})
+			}
 		case "/users/123456/items/X42A7DEE/children":
 			_ = json.NewEncoder(w).Encode([]map[string]any{
 				{
@@ -183,6 +208,8 @@ func newTestAPI(t *testing.T) (string, func()) {
 					},
 				},
 			})
+		case "/users/123456/items/ART12345/children":
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
 		default:
 			http.NotFound(w, r)
 		}
