@@ -47,6 +47,8 @@ func Run(args []string) int {
 		return runCite(args[1:])
 	case "export":
 		return runExport(args[1:])
+	case "collections":
+		return runCollections(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -492,6 +494,61 @@ func runExport(args []string) int {
 	return 0
 }
 
+func runCollections(args []string) int {
+	jsonOutput := false
+	for _, arg := range args {
+		if arg == "--json" {
+			jsonOutput = true
+			continue
+		}
+		fmt.Fprintln(stderr, "usage: zot collections [--json]")
+		return 2
+	}
+
+	cfg, _, err := config.Load()
+	if err != nil {
+		if errors.Is(err, config.ErrNotFound) {
+			fmt.Fprintln(stderr, "config not found; run `zot config init` first")
+			return 3
+		}
+		return printErr(err)
+	}
+
+	baseURL := os.Getenv("ZOT_BASE_URL")
+	client := zoteroapi.New(cfg, baseURL, nil)
+	collections, err := client.ListCollections(context.Background())
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		out := map[string]any{
+			"ok":      true,
+			"command": "collections",
+			"data":    collections,
+			"meta": map[string]any{
+				"total": len(collections),
+			},
+		}
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(out); err != nil {
+			return printErr(err)
+		}
+		return 0
+	}
+
+	for _, collection := range collections {
+		fmt.Fprintf(stdout, "%-10s  %-20s  items=%d  children=%d\n",
+			collection.Key,
+			collection.Name,
+			collection.NumItems,
+			collection.NumCollections,
+		)
+	}
+	return 0
+}
+
 func parseExportArgs(args []string) (string, zoteroapi.FindOptions, bool, error) {
 	var itemKey string
 	var jsonOutput bool
@@ -658,6 +715,7 @@ Commands:
   show           Show item details
   cite           Generate a citation or bibliography entry
   export         Export bibliography entries
+  collections    List collections
 `, exe, exe)
 }
 

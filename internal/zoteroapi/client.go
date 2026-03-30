@@ -34,6 +34,14 @@ type CitationOptions struct {
 	Locale string
 }
 
+type Collection struct {
+	Key            string `json:"key"`
+	Name           string `json:"name"`
+	ParentKey      string `json:"parent_key,omitempty"`
+	NumCollections int    `json:"num_collections,omitempty"`
+	NumItems       int    `json:"num_items,omitempty"`
+}
+
 type Item struct {
 	Key         string       `json:"key"`
 	ItemType    string       `json:"item_type"`
@@ -97,6 +105,22 @@ type apiCitationResponse struct {
 	Key      string `json:"key"`
 	Citation string `json:"citation"`
 	Bib      string `json:"bib"`
+}
+
+type apiCollection struct {
+	Key  string            `json:"key"`
+	Data apiCollectionData `json:"data"`
+	Meta apiCollectionMeta `json:"meta"`
+}
+
+type apiCollectionData struct {
+	Name   string      `json:"name"`
+	Parent interface{} `json:"parentCollection"`
+}
+
+type apiCollectionMeta struct {
+	NumCollections int `json:"numCollections"`
+	NumItems       int `json:"numItems"`
 }
 
 type CitationResult struct {
@@ -204,6 +228,36 @@ func (c *Client) GetCitation(ctx context.Context, key string, opts CitationOptio
 		Text:   compactWhitespace(stripHTML(htmlValue)),
 		HTML:   htmlValue,
 	}, nil
+}
+
+func (c *Client) ListCollections(ctx context.Context) ([]Collection, error) {
+	resp, err := c.doRequest(ctx, "collections", FindOptions{}, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("zotero api returned status %d", resp.StatusCode)
+	}
+
+	var raw []apiCollection
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, err
+	}
+
+	collections := make([]Collection, 0, len(raw))
+	for _, collection := range raw {
+		collections = append(collections, Collection{
+			Key:            collection.Key,
+			Name:           collection.Data.Name,
+			ParentKey:      collectionParentKey(collection.Data.Parent),
+			NumCollections: collection.Meta.NumCollections,
+			NumItems:       collection.Meta.NumItems,
+		})
+	}
+
+	return collections, nil
 }
 
 func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {
@@ -317,6 +371,14 @@ func mapCreators(creators []apiCreator) []Creator {
 		})
 	}
 	return out
+}
+
+func collectionParentKey(value interface{}) string {
+	parent, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	return parent
 }
 
 func firstNonEmpty(values ...string) string {

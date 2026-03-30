@@ -210,6 +210,31 @@ func newTestAPI(t *testing.T) (string, func()) {
 			})
 		case "/users/123456/items/ART12345/children":
 			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		case "/users/123456/collections":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"key": "COLL1234",
+					"data": map[string]any{
+						"name":   "Projects",
+						"parent": "",
+					},
+					"meta": map[string]any{
+						"numCollections": 2,
+						"numItems":       5,
+					},
+				},
+				{
+					"key": "COLL5678",
+					"data": map[string]any{
+						"name":   "Reading",
+						"parent": "COLL1234",
+					},
+					"meta": map[string]any{
+						"numCollections": 0,
+						"numItems":       12,
+					},
+				},
+			})
 		default:
 			http.NotFound(w, r)
 		}
