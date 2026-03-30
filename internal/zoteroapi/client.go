@@ -334,6 +334,10 @@ func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOpt
 }
 
 func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOptions, extraQuery map[string]string) (*http.Response, error) {
+	if c.cfg.Mode != "" && c.cfg.Mode != "web" {
+		return nil, fmt.Errorf("unsupported mode %q", c.cfg.Mode)
+	}
+
 	u, err := url.Parse(c.baseURL)
 	if err != nil {
 		return nil, err

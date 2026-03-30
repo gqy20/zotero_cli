@@ -252,3 +252,22 @@ func TestNewUsesConfiguredTimeoutForDefaultClient(t *testing.T) {
 		t.Fatalf("expected timeout 7s, got %s", got)
 	}
 }
+
+func TestClientRejectsUnsupportedMode(t *testing.T) {
+	t.Parallel()
+
+	client := New(config.Config{
+		Mode:        "local",
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, "https://example.com", &http.Client{})
+
+	_, err := client.FindItems(context.Background(), FindOptions{Query: "test"})
+	if err == nil {
+		t.Fatal("expected error for unsupported mode")
+	}
+	if got := err.Error(); got != `unsupported mode "local"` {
+		t.Fatalf("unexpected error: %q", got)
+	}
+}
