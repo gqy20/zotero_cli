@@ -2,40 +2,41 @@
 
 一个面向终端与 AI 工作流的 Zotero CLI。
 
-当前版本优先解决几件事：
+当前版本先把最常用的几件事做好：
 
-- 在命令行里快速搜索文献
-- 查看单条文献的核心信息和附件
+- 在命令行里搜索文献
+- 查看单条文献详情和附件
 - 生成单条引用
 - 导出 bibliography 文本
+- 查看 collections 和 notes
 - 提供稳定的 `--json` 输出，方便脚本和 AI 调用
 
-项目仍处于 MVP 阶段，但核心工作流已经可以使用。
+项目还在 MVP 阶段，但核心工作流已经可以使用。
 
 ## 适合谁用
 
 如果你有下面这些需求，这个工具会比较合适：
 
-- 已经在使用 Zotero 管理论文
+- 已经在用 Zotero 管理论文
 - 想在终端里快速查文献，而不是频繁切回 Zotero 窗口
-- 想把 Zotero 接入脚本、自动化流程、编辑器或 AI agent
+- 想把 Zotero 接入脚本、自动化流程、编辑器或者 AI agent
 
 ## 现在能做什么
 
-当前已经可用的能力：
+当前已经可用的命令有：
 
-- 查看当前配置：`config show`
-- 搜索文献：`find`
-- 查看单条文献详情：`show`
-- 生成单条引用：`cite`
-- 导出 bibliography：`export`
-- 支持 `.env` 配置
-- 支持 `--json` 结构化输出
+- `config show`：查看当前生效配置
+- `find`：搜索文献
+- `show`：查看单条文献详情
+- `cite`：生成单条引用
+- `export`：导出 bibliography
+- `collections`：列出文献夹
+- `notes`：列出笔记
 
 已经验证过的真实工作流：
 
 1. 用 `find` 搜索文献
-2. 从结果里拿到真实 `key`
+2. 从结果里拿到条目 `key`
 3. 用 `show` 查看详情和附件
 4. 用 `cite` 生成单条引用
 5. 用 `export` 导出 bibliography
@@ -50,7 +51,7 @@ cd zotero_cli
 go build -o zot.exe .\cmd\zot
 ```
 
-编译完成后，你就可以直接使用：
+编译完成后，就可以直接使用：
 
 ```powershell
 .\zot.exe version
@@ -67,24 +68,25 @@ ZOT_LIBRARY_ID=123456
 ZOT_API_KEY=replace-me
 ```
 
-你至少需要这两个 Zotero 信息：
+最少需要这几个字段：
 
-- `library_id`
-- `api_key`
+- `ZOT_LIBRARY_TYPE`
+- `ZOT_LIBRARY_ID`
+- `ZOT_API_KEY`
 
 说明：
 
 - `.env` 已加入 Git 忽略，不会默认提交
-- 环境变量会覆盖配置文件中的同名值
-- 如果你更喜欢配置文件，也可以使用 `zot config init`
+- 环境变量会覆盖配置文件中的同名字段
+- 如果你更喜欢配置文件，也可以用 `zot config init`
 
-### 3. 验证配置是否生效
+### 3. 验证配置
 
 ```powershell
 .\zot.exe config show
 ```
 
-如果输出里能看到掩码后的 `api_key`、`library_id` 和 `library_type`，说明当前配置已经读取成功。
+如果输出里能看到掩码后的 `api_key`、`library_id` 和 `library_type`，说明配置已经读取成功。
 
 ## 常用命令
 
@@ -105,7 +107,7 @@ ZOT_API_KEY=replace-me
 
 当前 `find` 的行为：
 
-- 默认会过滤掉 `attachment` 和 `note`，优先展示主条目
+- 默认过滤 `attachment` 和 `note`
 - 支持 `--item-type`
 - 支持 `--limit`
 - 支持 `--json`
@@ -123,7 +125,7 @@ ZOT_API_KEY=replace-me
 - 条目类型
 - 作者
 - 日期
-- 期刊 / 容器信息
+- 期刊或容器信息
 - DOI
 - URL
 - tags
@@ -159,7 +161,34 @@ ZOT_API_KEY=replace-me
 - 支持按查询结果批量导出 bibliography
 - 支持 `--limit`
 - 支持 `--json`
-- 当前导出格式为 bibliography 文本
+
+### 查看 collections
+
+```powershell
+.\zot.exe collections
+.\zot.exe collections --json
+```
+
+当前会返回文献夹的：
+
+- `key`
+- `name`
+- `parent_key`
+- `num_collections`
+- `num_items`
+
+### 查看 notes
+
+```powershell
+.\zot.exe notes
+.\zot.exe notes --json
+```
+
+当前 `notes` 的行为：
+
+- `--json` 返回完整笔记数据
+- 默认文本模式会尽量隐藏明显的机器笔记
+- 如果当前库里只有机器笔记，文本模式会给出提示，避免把日志样内容直接铺满终端
 
 ## 推荐使用方式
 
@@ -179,8 +208,6 @@ ZOT_API_KEY=replace-me
 3. 需要单条引用时用 `cite`
 4. 需要 bibliography 时用 `export`
 
-这条链路已经在真实 Zotero 库上验证通过。
-
 ## 当前限制
 
 当前版本还没有这些能力：
@@ -189,15 +216,15 @@ ZOT_API_KEY=replace-me
 - 本地全文索引
 - 写操作
 - MCP server
-- collections / notes 的专门命令
+- 更细的 notes / annotations 支持
 
-当前使用的后端仍然是：
+当前后端仍然是：
 
 - Zotero Web API
 
 ## 开发
 
-如果你是在开发这个项目，而不是日常使用，才更推荐使用 `go run`：
+如果你是在开发这个项目，而不是日常使用，更适合用 `go run`：
 
 ```powershell
 go run .\cmd\zot version
@@ -218,16 +245,16 @@ go build -o zot.exe .\cmd\zot
 
 ## 文档
 
-更细的技术和工程说明都放在 `docs` 目录里：
+更细的技术和工程说明放在 `docs` 目录：
 
-- MVP 设计文档：[docs/MVP.md](/D:/C/Documents/Program/Go/zotero_cli/docs/MVP.md)
-- GitHub Actions 说明：[docs/github-actions.md](/D:/C/Documents/Program/Go/zotero_cli/docs/github-actions.md)
+- [MVP 设计文档](/D:/C/Documents/Program/Go/zotero_cli/docs/MVP.md)
+- [GitHub Actions 说明](/D:/C/Documents/Program/Go/zotero_cli/docs/github-actions.md)
 
 ## 下一步
 
 当前更可能优先推进的方向：
 
 - 继续完善 `export` 的格式支持
-- 增加 collections / notes 支持
-- 逐步打磨 JSON schema
-- 继续优化用户体验与错误提示
+- 继续打磨 `collections` / `notes` 的可用性
+- 稳定 JSON schema
+- 继续优化错误提示和终端体验
