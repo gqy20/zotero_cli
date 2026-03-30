@@ -43,6 +43,8 @@ func Run(args []string) int {
 		return runFind(args[1:])
 	case "show":
 		return runShow(args[1:])
+	case "cite":
+		return runCite(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -353,6 +355,109 @@ func runShow(args []string) int {
 	return 0
 }
 
+func runCite(args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: zot cite <item-key> [--format citation|bib] [--style STYLE] [--locale LOCALE] [--json]")
+		return 2
+	}
+
+	key, opts, jsonOutput, err := parseCiteArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, "usage: zot cite <item-key> [--format citation|bib] [--style STYLE] [--locale LOCALE] [--json]")
+		return 2
+	}
+
+	cfg, _, err := config.Load()
+	if err != nil {
+		if errors.Is(err, config.ErrNotFound) {
+			fmt.Fprintln(stderr, "config not found; run `zot config init` first")
+			return 3
+		}
+		return printErr(err)
+	}
+
+	if opts.Format == "" {
+		opts.Format = "citation"
+	}
+	if opts.Style == "" {
+		opts.Style = cfg.Style
+	}
+	if opts.Locale == "" {
+		opts.Locale = cfg.Locale
+	}
+
+	baseURL := os.Getenv("ZOT_BASE_URL")
+	client := zoteroapi.New(cfg, baseURL, nil)
+	result, err := client.GetCitation(context.Background(), key, opts)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		out := map[string]any{
+			"ok":      true,
+			"command": "cite",
+			"data":    result,
+		}
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(out); err != nil {
+			return printErr(err)
+		}
+		return 0
+	}
+
+	fmt.Fprintln(stdout, result.Text)
+	return 0
+}
+
+func parseCiteArgs(args []string) (string, zoteroapi.CitationOptions, bool, error) {
+	var key string
+	opts := zoteroapi.CitationOptions{}
+	jsonOutput := false
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonOutput = true
+		case "--format":
+			if i+1 >= len(args) {
+				return "", zoteroapi.CitationOptions{}, false, errors.New("missing value for --format")
+			}
+			i++
+			opts.Format = args[i]
+		case "--style":
+			if i+1 >= len(args) {
+				return "", zoteroapi.CitationOptions{}, false, errors.New("missing value for --style")
+			}
+			i++
+			opts.Style = args[i]
+		case "--locale":
+			if i+1 >= len(args) {
+				return "", zoteroapi.CitationOptions{}, false, errors.New("missing value for --locale")
+			}
+			i++
+			opts.Locale = args[i]
+		default:
+			if key == "" {
+				key = args[i]
+				continue
+			}
+			return "", zoteroapi.CitationOptions{}, false, errors.New("too many positional arguments")
+		}
+	}
+
+	if strings.TrimSpace(key) == "" {
+		return "", zoteroapi.CitationOptions{}, false, errors.New("missing item key")
+	}
+	if opts.Format != "" && opts.Format != "citation" && opts.Format != "bib" {
+		return "", zoteroapi.CitationOptions{}, false, errors.New("unsupported format")
+	}
+
+	return key, opts, jsonOutput, nil
+}
+
 func renderCreators(creators []zoteroapi.Creator) string {
 	if len(creators) == 0 {
 		return ""
@@ -426,6 +531,7 @@ Commands:
   config show    Show active config with masked secrets
   find           Search items in the configured Zotero library
   show           Show item details
+  cite           Generate a citation or bibliography entry
 `, exe, exe)
 }
 

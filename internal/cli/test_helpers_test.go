@@ -127,27 +127,41 @@ func newTestAPI(t *testing.T) (string, func()) {
 
 			_ = json.NewEncoder(w).Encode(items)
 		case "/users/123456/items/X42A7DEE":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"key": "X42A7DEE",
-				"data": map[string]any{
-					"itemType":         "conferencePaper",
-					"title":            "Attention Is All You Need",
-					"date":             "2017",
-					"url":              "https://arxiv.org/abs/1706.03762",
-					"DOI":              "10.48550/arXiv.1706.03762",
-					"proceedingsTitle": "NeurIPS 2017",
-					"creators": []map[string]any{
-						{
-							"creatorType": "author",
-							"firstName":   "Ashish",
-							"lastName":    "Vaswani",
+			include := r.URL.Query().Get("include")
+			switch include {
+			case "citation":
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"key":      "X42A7DEE",
+					"citation": "<span>(Vaswani, 2017)</span>",
+				})
+			case "bib":
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"key": "X42A7DEE",
+					"bib": "<div class=\"csl-bib-body\"><div class=\"csl-entry\">Vaswani, A. (2017). <i>Attention Is All You Need</i>.</div></div>",
+				})
+			default:
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"key": "X42A7DEE",
+					"data": map[string]any{
+						"itemType":         "conferencePaper",
+						"title":            "Attention Is All You Need",
+						"date":             "2017",
+						"url":              "https://arxiv.org/abs/1706.03762",
+						"DOI":              "10.48550/arXiv.1706.03762",
+						"proceedingsTitle": "NeurIPS 2017",
+						"creators": []map[string]any{
+							{
+								"creatorType": "author",
+								"firstName":   "Ashish",
+								"lastName":    "Vaswani",
+							},
+						},
+						"tags": []map[string]any{
+							{"tag": "transformers"},
 						},
 					},
-					"tags": []map[string]any{
-						{"tag": "transformers"},
-					},
-				},
-			})
+				})
+			}
 		case "/users/123456/items/X42A7DEE/children":
 			_ = json.NewEncoder(w).Encode([]map[string]any{
 				{

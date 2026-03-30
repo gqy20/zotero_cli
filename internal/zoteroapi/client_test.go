@@ -175,3 +175,61 @@ func TestClientGetItem(t *testing.T) {
 		t.Fatalf("unexpected content type: %q", item.Attachments[0].ContentType)
 	}
 }
+
+func TestClientGetCitation(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Zotero-API-Key"); got != "secret" {
+			t.Fatalf("unexpected api key: %q", got)
+		}
+		if r.URL.Path != "/users/123/items/X42A7DEE" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("include"); got != "citation" {
+			t.Fatalf("unexpected include: %q", got)
+		}
+		if got := r.URL.Query().Get("format"); got != "json" {
+			t.Fatalf("unexpected format: %q", got)
+		}
+		if got := r.URL.Query().Get("style"); got != "apa" {
+			t.Fatalf("unexpected style: %q", got)
+		}
+		if got := r.URL.Query().Get("locale"); got != "en-US" {
+			t.Fatalf("unexpected locale: %q", got)
+		}
+
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"key":      "X42A7DEE",
+			"citation": "<span>(Vaswani, 2017)</span>",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	got, err := client.GetCitation(context.Background(), "X42A7DEE", CitationOptions{
+		Format: "citation",
+		Style:  "apa",
+		Locale: "en-US",
+	})
+	if err != nil {
+		t.Fatalf("GetCitation returned error: %v", err)
+	}
+
+	if got.Key != "X42A7DEE" {
+		t.Fatalf("unexpected key: %q", got.Key)
+	}
+	if got.Text != "(Vaswani, 2017)" {
+		t.Fatalf("unexpected text: %q", got.Text)
+	}
+	if got.HTML != "<span>(Vaswani, 2017)</span>" {
+		t.Fatalf("unexpected html: %q", got.HTML)
+	}
+}

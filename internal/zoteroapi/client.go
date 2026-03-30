@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"net/url"
 	"path"
+	"regexp"
 	"strings"
 
 	"zotero_cli/internal/config"
@@ -24,6 +26,12 @@ type FindOptions struct {
 	Query    string
 	ItemType string
 	Limit    int
+}
+
+type CitationOptions struct {
+	Format string
+	Style  string
+	Locale string
 }
 
 type Item struct {
@@ -85,6 +93,23 @@ type apiTag struct {
 	Tag string `json:"tag"`
 }
 
+type apiCitationResponse struct {
+	Key      string `json:"key"`
+	Citation string `json:"citation"`
+	Bib      string `json:"bib"`
+}
+
+type CitationResult struct {
+	Key    string `json:"key"`
+	Format string `json:"format"`
+	Style  string `json:"style,omitempty"`
+	Locale string `json:"locale,omitempty"`
+	Text   string `json:"text"`
+	HTML   string `json:"html,omitempty"`
+}
+
+var htmlTagRe = regexp.MustCompile(`<[^>]+>`)
+
 func New(cfg config.Config, baseURL string, httpClient *http.Client) *Client {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
@@ -114,7 +139,7 @@ func (c *Client) FindItems(ctx context.Context, opts FindOptions) ([]Item, error
 }
 
 func (c *Client) GetItem(ctx context.Context, key string) (Item, error) {
-	resp, err := c.doRequest(ctx, path.Join("items", key), FindOptions{})
+	resp, err := c.doRequest(ctx, path.Join("items", key), FindOptions{}, nil)
 	if err != nil {
 		return Item{}, err
 	}
@@ -140,8 +165,49 @@ func (c *Client) GetItem(ctx context.Context, key string) (Item, error) {
 	return item, nil
 }
 
+func (c *Client) GetCitation(ctx context.Context, key string, opts CitationOptions) (CitationResult, error) {
+	include := opts.Format
+	if include == "" {
+		include = "citation"
+	}
+
+	resp, err := c.doRequest(ctx, path.Join("items", key), FindOptions{}, map[string]string{
+		"format":  "json",
+		"include": include,
+		"style":   opts.Style,
+		"locale":  opts.Locale,
+	})
+	if err != nil {
+		return CitationResult{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return CitationResult{}, fmt.Errorf("zotero api returned status %d", resp.StatusCode)
+	}
+
+	var raw apiCitationResponse
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return CitationResult{}, err
+	}
+
+	htmlValue := raw.Citation
+	if include == "bib" {
+		htmlValue = raw.Bib
+	}
+
+	return CitationResult{
+		Key:    raw.Key,
+		Format: include,
+		Style:  opts.Style,
+		Locale: opts.Locale,
+		Text:   compactWhitespace(stripHTML(htmlValue)),
+		HTML:   htmlValue,
+	}, nil
+}
+
 func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {
-	resp, err := c.doRequest(ctx, relativePath, opts)
+	resp, err := c.doRequest(ctx, relativePath, opts, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +225,7 @@ func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOpt
 	return raw, nil
 }
 
-func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOptions) (*http.Response, error) {
+func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOptions, extraQuery map[string]string) (*http.Response, error) {
 	u, err := url.Parse(c.baseURL)
 	if err != nil {
 		return nil, err
@@ -174,7 +240,7 @@ func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOp
 		return nil, fmt.Errorf("unsupported library_type %q", c.cfg.LibraryType)
 	}
 
-	if opts.Query != "" || opts.ItemType != "" || opts.Limit > 0 {
+	if opts.Query != "" || opts.ItemType != "" || opts.Limit > 0 || len(extraQuery) > 0 {
 		values := u.Query()
 		if opts.Query != "" {
 			values.Set("q", opts.Query)
@@ -184,6 +250,11 @@ func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOp
 		}
 		if opts.Limit > 0 {
 			values.Set("limit", fmt.Sprintf("%d", opts.Limit))
+		}
+		for key, value := range extraQuery {
+			if value != "" {
+				values.Set(key, value)
+			}
 		}
 		u.RawQuery = values.Encode()
 	}
@@ -200,6 +271,23 @@ func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOp
 		return nil, err
 	}
 	return resp, nil
+}
+
+func stripHTML(value string) string {
+	return html.UnescapeString(htmlTagRe.ReplaceAllString(value, " "))
+}
+
+func compactWhitespace(value string) string {
+	value = strings.Join(strings.Fields(value), " ")
+	replacer := strings.NewReplacer(
+		" .", ".",
+		" ,", ",",
+		" ;", ";",
+		" :", ":",
+		" )", ")",
+		"( ", "(",
+	)
+	return replacer.Replace(value)
 }
 
 func mapItem(item apiItem) Item {
