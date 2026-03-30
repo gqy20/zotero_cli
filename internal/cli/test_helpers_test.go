@@ -57,6 +57,13 @@ func newTestAPI(t *testing.T) (string, func()) {
 							"note":     "<p>Follow-up reading list</p>",
 						},
 					},
+					{
+						"key": "NOTE3333",
+						"data": map[string]any{
+							"itemType": "note",
+							"note":     "<p>X42A7DEE {\"readingTime\":1234,\"progress\":0.7}</p>",
+						},
+					},
 				})
 				return
 			}
@@ -252,6 +259,33 @@ func newTestAPI(t *testing.T) (string, func()) {
 					"meta": map[string]any{
 						"numCollections": 0,
 						"numItems":       12,
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+
+	return server.URL, server.Close
+}
+
+func newMachineOnlyNotesAPI(t *testing.T) (string, func()) {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/users/123456/items":
+			if r.URL.Query().Get("itemType") != "note" {
+				_ = json.NewEncoder(w).Encode([]map[string]any{})
+				return
+			}
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"key": "NOTE9000",
+					"data": map[string]any{
+						"itemType": "note",
+						"note":     "<p>ITEM1234 {\"readingTime\":88}</p>",
 					},
 				},
 			})

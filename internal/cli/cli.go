@@ -595,8 +595,14 @@ func runNotes(args []string) int {
 		return 0
 	}
 
-	for _, note := range notes {
-		fmt.Fprintf(stdout, "%-10s  %s\n", note.Key, note.Content)
+	visible := filterVisibleNotes(notes)
+	if len(visible) == 0 {
+		fmt.Fprintln(stdout, "no readable notes found in text mode; use --json to inspect all notes")
+		return 0
+	}
+
+	for _, note := range visible {
+		fmt.Fprintf(stdout, "%-10s  %s\n", note.Key, notePreview(note.Content))
 	}
 	return 0
 }
@@ -727,6 +733,31 @@ func attachmentKind(attachment zoteroapi.Attachment) string {
 		}
 		return "attachment"
 	}
+}
+
+func filterVisibleNotes(notes []zoteroapi.Note) []zoteroapi.Note {
+	filtered := make([]zoteroapi.Note, 0, len(notes))
+	for _, note := range notes {
+		if isMachineNote(note.Content) {
+			continue
+		}
+		filtered = append(filtered, note)
+	}
+	return filtered
+}
+
+func isMachineNote(content string) bool {
+	content = strings.TrimSpace(content)
+	return strings.Contains(content, "{\"readingTime\":")
+}
+
+func notePreview(content string) string {
+	content = strings.TrimSpace(content)
+	const limit = 96
+	if len(content) <= limit {
+		return content
+	}
+	return strings.TrimSpace(content[:limit-3]) + "..."
 }
 
 func maskConfig(cfg config.Config) map[string]any {
