@@ -66,6 +66,7 @@ ZOT_MODE=web
 ZOT_LIBRARY_TYPE=user
 ZOT_LIBRARY_ID=123456
 ZOT_API_KEY=replace-me
+ZOT_TIMEOUT_SECONDS=20
 ```
 
 最少需要这几个字段：
@@ -78,6 +79,8 @@ ZOT_API_KEY=replace-me
 
 - `.env` 已加入 Git 忽略，不会默认提交
 - 环境变量会覆盖配置文件中的同名字段
+- 当前仅支持 `ZOT_MODE=web`
+- `ZOT_TIMEOUT_SECONDS` 会控制默认 HTTP 请求超时，默认值是 `20`
 - 如果你更喜欢配置文件，也可以用 `zot config init`
 
 ### 3. 验证配置
