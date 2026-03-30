@@ -19,3 +19,4 @@ coverage.out
 Thumbs.db
 PROFILE
 .env
+.claude/

@@ -52,6 +52,7 @@ jobs:
 
   cross-platform-build:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: verify
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
