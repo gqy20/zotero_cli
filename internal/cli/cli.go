@@ -38,6 +38,8 @@ func Run(args []string) int {
 		return runConfig(args[1:])
 	case "find":
 		return runFind(args[1:])
+	case "show":
+		return runShow(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -194,6 +196,83 @@ func runFind(args []string) int {
 	return 0
 }
 
+func runShow(args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: zot show <item-key> [--json]")
+		return 2
+	}
+
+	jsonOutput := false
+	key := ""
+	for _, arg := range args {
+		if arg == "--json" {
+			jsonOutput = true
+			continue
+		}
+		if key == "" {
+			key = arg
+		}
+	}
+
+	if strings.TrimSpace(key) == "" {
+		fmt.Fprintln(stderr, "usage: zot show <item-key> [--json]")
+		return 2
+	}
+
+	cfg, _, err := config.Load()
+	if err != nil {
+		if errors.Is(err, config.ErrNotFound) {
+			fmt.Fprintln(stderr, "config not found; run `zot config init` first")
+			return 3
+		}
+		return printErr(err)
+	}
+
+	baseURL := os.Getenv("ZOT_BASE_URL")
+	client := zoteroapi.New(cfg, baseURL, nil)
+	item, err := client.GetItem(context.Background(), key)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		out := map[string]any{
+			"ok":      true,
+			"command": "show",
+			"data":    item,
+		}
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(out); err != nil {
+			return printErr(err)
+		}
+		return 0
+	}
+
+	fmt.Fprintf(stdout, "Key: %s\n", item.Key)
+	fmt.Fprintf(stdout, "Title: %s\n", item.Title)
+	fmt.Fprintf(stdout, "Type: %s\n", item.ItemType)
+	if len(item.Creators) > 0 {
+		fmt.Fprintf(stdout, "Creators: %s\n", joinCreatorNames(item.Creators))
+	}
+	if item.Date != "" {
+		fmt.Fprintf(stdout, "Date: %s\n", item.Date)
+	}
+	if item.Container != "" {
+		fmt.Fprintf(stdout, "Container: %s\n", item.Container)
+	}
+	if item.DOI != "" {
+		fmt.Fprintf(stdout, "DOI: %s\n", item.DOI)
+	}
+	if item.URL != "" {
+		fmt.Fprintf(stdout, "URL: %s\n", item.URL)
+	}
+	if len(item.Tags) > 0 {
+		fmt.Fprintf(stdout, "Tags: %s\n", strings.Join(item.Tags, ", "))
+	}
+	return 0
+}
+
 func renderCreators(creators []zoteroapi.Creator) string {
 	if len(creators) == 0 {
 		return ""
@@ -202,6 +281,16 @@ func renderCreators(creators []zoteroapi.Creator) string {
 		return creators[0].Name
 	}
 	return creators[0].Name + " et al."
+}
+
+func joinCreatorNames(creators []zoteroapi.Creator) string {
+	names := make([]string, 0, len(creators))
+	for _, creator := range creators {
+		if creator.Name != "" {
+			names = append(names, creator.Name)
+		}
+	}
+	return strings.Join(names, ", ")
 }
 
 func maskConfig(cfg config.Config) map[string]any {
@@ -239,6 +328,7 @@ Commands:
   config init    Create a starter config file
   config show    Show active config with masked secrets
   find           Search items in the configured Zotero library
+  show           Show item details
 `, exe, exe)
 }
 

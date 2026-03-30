@@ -54,6 +54,28 @@ func newTestAPI(t *testing.T) (string, func()) {
 					},
 				},
 			})
+		case "/users/123456/items/X42A7DEE":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"key": "X42A7DEE",
+				"data": map[string]any{
+					"itemType":         "conferencePaper",
+					"title":            "Attention Is All You Need",
+					"date":             "2017",
+					"url":              "https://arxiv.org/abs/1706.03762",
+					"DOI":              "10.48550/arXiv.1706.03762",
+					"proceedingsTitle": "NeurIPS 2017",
+					"creators": []map[string]any{
+						{
+							"creatorType": "author",
+							"firstName":   "Ashish",
+							"lastName":    "Vaswani",
+						},
+					},
+					"tags": []map[string]any{
+						{"tag": "transformers"},
+					},
+				},
+			})
 		default:
 			http.NotFound(w, r)
 		}
