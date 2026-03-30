@@ -5,6 +5,9 @@
 *.so
 *.dylib
 zot
+!cmd/
+!cmd/zot/
+!cmd/zot/main.go
 
 # Go build and test artifacts
 *.test

@@ -21,20 +21,30 @@ type Client struct {
 }
 
 type Item struct {
-	Key       string    `json:"key"`
-	ItemType  string    `json:"item_type"`
-	Title     string    `json:"title"`
-	Date      string    `json:"date"`
-	Creators  []Creator `json:"creators"`
-	Container string    `json:"container,omitempty"`
-	DOI       string    `json:"doi,omitempty"`
-	URL       string    `json:"url,omitempty"`
-	Tags      []string  `json:"tags,omitempty"`
+	Key         string       `json:"key"`
+	ItemType    string       `json:"item_type"`
+	Title       string       `json:"title"`
+	Date        string       `json:"date"`
+	Creators    []Creator    `json:"creators"`
+	Container   string       `json:"container,omitempty"`
+	DOI         string       `json:"doi,omitempty"`
+	URL         string       `json:"url,omitempty"`
+	Tags        []string     `json:"tags,omitempty"`
+	Attachments []Attachment `json:"attachments,omitempty"`
 }
 
 type Creator struct {
 	Name        string `json:"name"`
 	CreatorType string `json:"creator_type"`
+}
+
+type Attachment struct {
+	Key         string `json:"key"`
+	ItemType    string `json:"item_type"`
+	Title       string `json:"title,omitempty"`
+	ContentType string `json:"content_type,omitempty"`
+	LinkMode    string `json:"link_mode,omitempty"`
+	Filename    string `json:"filename,omitempty"`
 }
 
 type apiItem struct {
@@ -48,6 +58,9 @@ type apiItemData struct {
 	Date             string       `json:"date"`
 	DOI              string       `json:"DOI"`
 	URL              string       `json:"url"`
+	ContentType      string       `json:"contentType"`
+	LinkMode         string       `json:"linkMode"`
+	Filename         string       `json:"filename"`
 	PublicationTitle string       `json:"publicationTitle"`
 	ProceedingsTitle string       `json:"proceedingsTitle"`
 	BookTitle        string       `json:"bookTitle"`
@@ -110,7 +123,15 @@ func (c *Client) GetItem(ctx context.Context, key string) (Item, error) {
 		return Item{}, err
 	}
 
-	return mapItem(raw), nil
+	item := mapItem(raw)
+
+	children, err := c.getItems(ctx, path.Join("items", key, "children"), "")
+	if err != nil {
+		return Item{}, err
+	}
+	item.Attachments = mapAttachments(children)
+
+	return item, nil
 }
 
 func (c *Client) getItems(ctx context.Context, relativePath, query string) ([]apiItem, error) {
@@ -211,6 +232,24 @@ func mapTags(tags []apiTag) []string {
 		if tag.Tag != "" {
 			out = append(out, tag.Tag)
 		}
+	}
+	return out
+}
+
+func mapAttachments(items []apiItem) []Attachment {
+	out := make([]Attachment, 0, len(items))
+	for _, item := range items {
+		if item.Data.ItemType != "attachment" {
+			continue
+		}
+		out = append(out, Attachment{
+			Key:         item.Key,
+			ItemType:    item.Data.ItemType,
+			Title:       item.Data.Title,
+			ContentType: item.Data.ContentType,
+			LinkMode:    item.Data.LinkMode,
+			Filename:    item.Data.Filename,
+		})
 	}
 	return out
 }

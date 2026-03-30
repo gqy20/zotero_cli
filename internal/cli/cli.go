@@ -14,11 +14,13 @@ import (
 	"zotero_cli/internal/zoteroapi"
 )
 
-const version = "0.1.0"
-
 var (
 	stdout = io.Writer(os.Stdout)
 	stderr = io.Writer(os.Stderr)
+
+	version   = "dev"
+	commit    = "unknown"
+	buildDate = "unknown"
 )
 
 func Run(args []string) int {
@@ -32,7 +34,7 @@ func Run(args []string) int {
 		printUsage()
 		return 0
 	case "version":
-		fmt.Fprintln(stdout, version)
+		printVersion()
 		return 0
 	case "config":
 		return runConfig(args[1:])
@@ -270,6 +272,19 @@ func runShow(args []string) int {
 	if len(item.Tags) > 0 {
 		fmt.Fprintf(stdout, "Tags: %s\n", strings.Join(item.Tags, ", "))
 	}
+	if len(item.Attachments) > 0 {
+		fmt.Fprintf(stdout, "Attachments: %d\n", len(item.Attachments))
+		for _, attachment := range item.Attachments {
+			label := attachment.Title
+			if attachment.Filename != "" {
+				label = attachment.Filename
+			}
+			if label == "" {
+				label = attachment.Key
+			}
+			fmt.Fprintf(stdout, "  - %s (%s)\n", label, attachment.ContentType)
+		}
+	}
 	return 0
 }
 
@@ -330,6 +345,12 @@ Commands:
   find           Search items in the configured Zotero library
   show           Show item details
 `, exe, exe)
+}
+
+func printVersion() {
+	fmt.Fprintf(stdout, "zot %s\n", version)
+	fmt.Fprintf(stdout, "commit: %s\n", commit)
+	fmt.Fprintf(stdout, "built: %s\n", buildDate)
 }
 
 func printConfigUsage() {

@@ -80,37 +80,54 @@ func TestClientGetItem(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/users/123/items/X42A7DEE" {
-			t.Fatalf("unexpected path: %s", r.URL.Path)
-		}
 		if got := r.Header.Get("Zotero-API-Key"); got != "secret" {
 			t.Fatalf("unexpected api key: %q", got)
 		}
 
-		item := map[string]any{
-			"key": "X42A7DEE",
-			"data": map[string]any{
-				"itemType":         "conferencePaper",
-				"title":            "Attention Is All You Need",
-				"date":             "2017",
-				"url":              "https://arxiv.org/abs/1706.03762",
-				"DOI":              "10.48550/arXiv.1706.03762",
-				"proceedingsTitle": "NeurIPS 2017",
-				"creators": []map[string]any{
-					{
-						"creatorType": "author",
-						"firstName":   "Ashish",
-						"lastName":    "Vaswani",
+		switch r.URL.Path {
+		case "/users/123/items/X42A7DEE":
+			item := map[string]any{
+				"key": "X42A7DEE",
+				"data": map[string]any{
+					"itemType":         "conferencePaper",
+					"title":            "Attention Is All You Need",
+					"date":             "2017",
+					"url":              "https://arxiv.org/abs/1706.03762",
+					"DOI":              "10.48550/arXiv.1706.03762",
+					"proceedingsTitle": "NeurIPS 2017",
+					"creators": []map[string]any{
+						{
+							"creatorType": "author",
+							"firstName":   "Ashish",
+							"lastName":    "Vaswani",
+						},
+					},
+					"tags": []map[string]any{
+						{"tag": "transformers"},
 					},
 				},
-				"tags": []map[string]any{
-					{"tag": "transformers"},
+			}
+			if err := json.NewEncoder(w).Encode(item); err != nil {
+				t.Fatal(err)
+			}
+		case "/users/123/items/X42A7DEE/children":
+			children := []map[string]any{
+				{
+					"key": "PDF12345",
+					"data": map[string]any{
+						"itemType":    "attachment",
+						"title":       "Attention Is All You Need PDF",
+						"contentType": "application/pdf",
+						"linkMode":    "imported_file",
+						"filename":    "attention-is-all-you-need.pdf",
+					},
 				},
-			},
-		}
-
-		if err := json.NewEncoder(w).Encode(item); err != nil {
-			t.Fatal(err)
+			}
+			if err := json.NewEncoder(w).Encode(children); err != nil {
+				t.Fatal(err)
+			}
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 	}))
 	defer server.Close()
@@ -137,5 +154,14 @@ func TestClientGetItem(t *testing.T) {
 	}
 	if len(item.Tags) != 1 || item.Tags[0] != "transformers" {
 		t.Fatalf("unexpected tags: %#v", item.Tags)
+	}
+	if len(item.Attachments) != 1 {
+		t.Fatalf("unexpected attachments: %#v", item.Attachments)
+	}
+	if item.Attachments[0].Key != "PDF12345" {
+		t.Fatalf("unexpected attachment key: %q", item.Attachments[0].Key)
+	}
+	if item.Attachments[0].ContentType != "application/pdf" {
+		t.Fatalf("unexpected content type: %q", item.Attachments[0].ContentType)
 	}
 }

@@ -4,8 +4,43 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestRunVersion(t *testing.T) {
+	oldVersion := version
+	oldCommit := commit
+	oldBuildDate := buildDate
+
+	version = "v1.2.3"
+	commit = "abc1234"
+	buildDate = "2026-03-30T22:30:00Z"
+	t.Cleanup(func() {
+		version = oldVersion
+		commit = oldCommit
+		buildDate = oldBuildDate
+	})
+
+	stdout, _ := captureOutput(t)
+	exitCode := Run([]string{"version"})
+	restoreOutput()
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"zot v1.2.3",
+		"commit: abc1234",
+		"built: 2026-03-30T22:30:00Z",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output %q", want, got)
+		}
+	}
+}
 
 func TestRunFindJSON(t *testing.T) {
 	configRoot := t.TempDir()
@@ -106,5 +141,10 @@ func TestRunShowJSON(t *testing.T) {
 
 	if data["doi"] != "10.48550/arXiv.1706.03762" {
 		t.Fatalf("unexpected doi: %#v", data["doi"])
+	}
+
+	attachments, ok := data["attachments"].([]any)
+	if !ok || len(attachments) != 1 {
+		t.Fatalf("unexpected attachments payload: %#v", data["attachments"])
 	}
 }

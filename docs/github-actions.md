@@ -25,6 +25,8 @@ Workflow: `.github/workflows/release.yml`
 - Triggers when a tag matching `v*` is pushed, for example `v0.1.0`
 - Re-runs the test suite before packaging
 - Builds release archives for the same target platforms
+- Injects version, commit, and build date into the binary at build time
+- Generates a `checksums.txt` file for all release artifacts
 - Publishes a GitHub Release and uploads packaged binaries automatically
 
 ## Suggested release flow

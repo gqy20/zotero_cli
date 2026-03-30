@@ -76,6 +76,19 @@ func newTestAPI(t *testing.T) (string, func()) {
 					},
 				},
 			})
+		case "/users/123456/items/X42A7DEE/children":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"key": "PDF12345",
+					"data": map[string]any{
+						"itemType":    "attachment",
+						"title":       "Attention Is All You Need PDF",
+						"contentType": "application/pdf",
+						"linkMode":    "imported_file",
+						"filename":    "attention-is-all-you-need.pdf",
+					},
+				},
+			})
 		default:
 			http.NotFound(w, r)
 		}

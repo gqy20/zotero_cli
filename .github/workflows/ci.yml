@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+env:
+  GO_VERSION_LDFLAGS: >-
+    -X zotero_cli/internal/cli.version=dev
+    -X zotero_cli/internal/cli.commit=${{ github.sha }}
+    -X zotero_cli/internal/cli.buildDate=${{ github.event.head_commit.timestamp || github.run_id }}
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -42,7 +48,7 @@ jobs:
         run: go test ./...
 
       - name: Build CLI
-        run: go build ./cmd/zot
+        run: go build -trimpath -ldflags "${GO_VERSION_LDFLAGS}" ./cmd/zot
 
   cross-platform-build:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
@@ -84,7 +90,7 @@ jobs:
             ext=".exe"
           fi
           out="dist/zot-${GOOS}-${GOARCH}${ext}"
-          go build -trimpath -o "${out}" ./cmd/zot
+          go build -trimpath -ldflags "${GO_VERSION_LDFLAGS}" -o "${out}" ./cmd/zot
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
