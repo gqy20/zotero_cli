@@ -2,10 +2,12 @@
 
 一个面向终端与 AI 工作流的 Zotero CLI。
 
-当前版本优先解决三件事：
+当前版本优先解决几件事：
 
 - 在命令行里快速搜索文献
 - 查看单条文献的核心信息和附件
+- 生成单条引用
+- 导出 bibliography 文本
 - 提供稳定的 `--json` 输出，方便脚本和 AI 调用
 
 项目仍处于 MVP 阶段，但核心工作流已经可以使用。
@@ -26,6 +28,7 @@
 - 搜索文献：`find`
 - 查看单条文献详情：`show`
 - 生成单条引用：`cite`
+- 导出 bibliography：`export`
 - 支持 `.env` 配置
 - 支持 `--json` 结构化输出
 
@@ -34,6 +37,8 @@
 1. 用 `find` 搜索文献
 2. 从结果里拿到真实 `key`
 3. 用 `show` 查看详情和附件
+4. 用 `cite` 生成单条引用
+5. 用 `export` 导出 bibliography
 
 ## 快速开始
 
@@ -140,6 +145,22 @@ ZOT_API_KEY=replace-me
 - 支持 `--locale`
 - 支持 `--json`
 
+### 导出 bibliography
+
+```powershell
+.\zot.exe export --item-key SA6DHVIM
+.\zot.exe export mixed --limit 1
+.\zot.exe export --item-key SA6DHVIM --json
+```
+
+当前 `export` 的行为：
+
+- 支持按 `--item-key` 导出单条 bibliography
+- 支持按查询结果批量导出 bibliography
+- 支持 `--limit`
+- 支持 `--json`
+- 当前导出格式为 bibliography 文本
+
 ## 推荐使用方式
 
 目前最顺手的使用方式是：
@@ -147,12 +168,16 @@ ZOT_API_KEY=replace-me
 ```powershell
 .\zot.exe find 2024
 .\zot.exe show SA6DHVIM --json
+.\zot.exe cite SA6DHVIM
+.\zot.exe export --item-key SA6DHVIM
 ```
 
 也就是：
 
 1. 先用 `find` 找到条目
 2. 再用返回的 `key` 调 `show`
+3. 需要单条引用时用 `cite`
+4. 需要 bibliography 时用 `export`
 
 这条链路已经在真实 Zotero 库上验证通过。
 
@@ -160,10 +185,11 @@ ZOT_API_KEY=replace-me
 
 当前版本还没有这些能力：
 
-- `export`
+- BibTeX / BibLaTeX 导出
 - 本地全文索引
 - 写操作
 - MCP server
+- collections / notes 的专门命令
 
 当前使用的后端仍然是：
 
@@ -201,7 +227,7 @@ go build -o zot.exe .\cmd\zot
 
 当前更可能优先推进的方向：
 
-- 继续优化 `show` 的附件展示
-- 增加 `cite`
-- 增加 `export`
-- 逐步补 collections / notes 支持
+- 继续完善 `export` 的格式支持
+- 增加 collections / notes 支持
+- 逐步打磨 JSON schema
+- 继续优化用户体验与错误提示
