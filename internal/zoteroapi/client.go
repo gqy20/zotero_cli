@@ -10,6 +10,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"time"
 
 	"zotero_cli/internal/config"
 )
@@ -154,12 +155,23 @@ func New(cfg config.Config, baseURL string, httpClient *http.Client) *Client {
 		baseURL = defaultBaseURL
 	}
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = defaultHTTPClient(cfg)
 	}
 	return &Client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		httpClient: httpClient,
 		cfg:        cfg,
+	}
+}
+
+func defaultHTTPClient(cfg config.Config) *http.Client {
+	timeout := time.Duration(cfg.TimeoutSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = 20 * time.Second
+	}
+
+	return &http.Client{
+		Timeout: timeout,
 	}
 }
 

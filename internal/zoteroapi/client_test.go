@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"zotero_cli/internal/config"
 )
@@ -231,5 +232,23 @@ func TestClientGetCitation(t *testing.T) {
 	}
 	if got.HTML != "<span>(Vaswani, 2017)</span>" {
 		t.Fatalf("unexpected html: %q", got.HTML)
+	}
+}
+
+func TestNewUsesConfiguredTimeoutForDefaultClient(t *testing.T) {
+	t.Parallel()
+
+	client := New(config.Config{
+		LibraryType:    "user",
+		LibraryID:      "123",
+		APIKey:         "secret",
+		TimeoutSeconds: 7,
+	}, "", nil)
+
+	if client.httpClient == nil {
+		t.Fatal("expected http client to be initialized")
+	}
+	if got := client.httpClient.Timeout; got != 7*time.Second {
+		t.Fatalf("expected timeout 7s, got %s", got)
 	}
 }
