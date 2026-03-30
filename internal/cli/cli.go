@@ -49,6 +49,8 @@ func Run(args []string) int {
 		return runExport(args[1:])
 	case "collections":
 		return runCollections(args[1:])
+	case "notes":
+		return runNotes(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -549,6 +551,56 @@ func runCollections(args []string) int {
 	return 0
 }
 
+func runNotes(args []string) int {
+	jsonOutput := false
+	for _, arg := range args {
+		if arg == "--json" {
+			jsonOutput = true
+			continue
+		}
+		fmt.Fprintln(stderr, "usage: zot notes [--json]")
+		return 2
+	}
+
+	cfg, _, err := config.Load()
+	if err != nil {
+		if errors.Is(err, config.ErrNotFound) {
+			fmt.Fprintln(stderr, "config not found; run `zot config init` first")
+			return 3
+		}
+		return printErr(err)
+	}
+
+	baseURL := os.Getenv("ZOT_BASE_URL")
+	client := zoteroapi.New(cfg, baseURL, nil)
+	notes, err := client.ListNotes(context.Background())
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		out := map[string]any{
+			"ok":      true,
+			"command": "notes",
+			"data":    notes,
+			"meta": map[string]any{
+				"total": len(notes),
+			},
+		}
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(out); err != nil {
+			return printErr(err)
+		}
+		return 0
+	}
+
+	for _, note := range notes {
+		fmt.Fprintf(stdout, "%-10s  %s\n", note.Key, note.Content)
+	}
+	return 0
+}
+
 func parseExportArgs(args []string) (string, zoteroapi.FindOptions, bool, error) {
 	var itemKey string
 	var jsonOutput bool
@@ -716,6 +768,7 @@ Commands:
   cite           Generate a citation or bibliography entry
   export         Export bibliography entries
   collections    List collections
+  notes          List notes
 `, exe, exe)
 }
 

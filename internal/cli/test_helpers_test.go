@@ -41,6 +41,26 @@ func newTestAPI(t *testing.T) (string, func()) {
 			itemType := r.URL.Query().Get("itemType")
 			limit := r.URL.Query().Get("limit")
 
+			if itemType == "note" {
+				_ = json.NewEncoder(w).Encode([]map[string]any{
+					{
+						"key": "NOTE1111",
+						"data": map[string]any{
+							"itemType": "note",
+							"note":     "<p>Key finding about transformers</p>",
+						},
+					},
+					{
+						"key": "NOTE2222",
+						"data": map[string]any{
+							"itemType": "note",
+							"note":     "<p>Follow-up reading list</p>",
+						},
+					},
+				})
+				return
+			}
+
 			items := []map[string]any{
 				{
 					"key": "X42A7DEE",

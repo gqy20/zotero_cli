@@ -42,6 +42,11 @@ type Collection struct {
 	NumItems       int    `json:"num_items,omitempty"`
 }
 
+type Note struct {
+	Key     string `json:"key"`
+	Content string `json:"content"`
+}
+
 type Item struct {
 	Key         string       `json:"key"`
 	ItemType    string       `json:"item_type"`
@@ -121,6 +126,16 @@ type apiCollectionData struct {
 type apiCollectionMeta struct {
 	NumCollections int `json:"numCollections"`
 	NumItems       int `json:"numItems"`
+}
+
+type apiNoteData struct {
+	ItemType string `json:"itemType"`
+	Note     string `json:"note"`
+}
+
+type apiNoteItem struct {
+	Key  string      `json:"key"`
+	Data apiNoteData `json:"data"`
 }
 
 type CitationResult struct {
@@ -258,6 +273,33 @@ func (c *Client) ListCollections(ctx context.Context) ([]Collection, error) {
 	}
 
 	return collections, nil
+}
+
+func (c *Client) ListNotes(ctx context.Context) ([]Note, error) {
+	resp, err := c.doRequest(ctx, "items", FindOptions{ItemType: "note"}, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("zotero api returned status %d", resp.StatusCode)
+	}
+
+	var raw []apiNoteItem
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, err
+	}
+
+	notes := make([]Note, 0, len(raw))
+	for _, note := range raw {
+		notes = append(notes, Note{
+			Key:     note.Key,
+			Content: compactWhitespace(stripHTML(note.Data.Note)),
+		})
+	}
+
+	return notes, nil
 }
 
 func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {
