@@ -347,7 +347,7 @@ func runShow(args []string) int {
 			if label == "" {
 				label = attachment.Key
 			}
-			fmt.Fprintf(stdout, "  - %s (%s)\n", label, attachment.ContentType)
+			fmt.Fprintf(stdout, "  - [%s] %s\n", attachmentKind(attachment), label)
 		}
 	}
 	return 0
@@ -371,6 +371,23 @@ func joinCreatorNames(creators []zoteroapi.Creator) string {
 		}
 	}
 	return strings.Join(names, ", ")
+}
+
+func attachmentKind(attachment zoteroapi.Attachment) string {
+	if attachment.ContentType == "application/pdf" {
+		return "pdf"
+	}
+	switch attachment.LinkMode {
+	case "linked_url":
+		return "link"
+	case "linked_file", "imported_file":
+		return "file"
+	default:
+		if attachment.ContentType != "" {
+			return "file"
+		}
+		return "attachment"
+	}
 }
 
 func maskConfig(cfg config.Config) map[string]any {

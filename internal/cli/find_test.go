@@ -311,7 +311,51 @@ func TestRunShowJSON(t *testing.T) {
 	}
 
 	attachments, ok := data["attachments"].([]any)
-	if !ok || len(attachments) != 1 {
+	if !ok || len(attachments) != 2 {
 		t.Fatalf("unexpected attachments payload: %#v", data["attachments"])
+	}
+}
+
+func TestRunShowTextOutputFormatsAttachmentsClearly(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+
+	configDir := filepath.Join(configRoot, "zotcli")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	configJSON := `{
+  "mode": "web",
+  "library_type": "user",
+  "library_id": "123456",
+  "api_key": "secret",
+  "style": "apa",
+  "locale": "en-US",
+  "timeout_seconds": 20
+}`
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(configJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"show", "X42A7DEE"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Attachments: 2",
+		"[pdf] attention-is-all-you-need.pdf",
+		"[link] Notion",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output %q", want, got)
+		}
 	}
 }

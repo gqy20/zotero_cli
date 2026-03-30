@@ -160,6 +160,14 @@ func newTestAPI(t *testing.T) (string, func()) {
 						"filename":    "attention-is-all-you-need.pdf",
 					},
 				},
+				{
+					"key": "URL12345",
+					"data": map[string]any{
+						"itemType": "attachment",
+						"title":    "Notion",
+						"linkMode": "linked_url",
+					},
+				},
 			})
 		default:
 			http.NotFound(w, r)
