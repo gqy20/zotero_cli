@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"zotero_cli/internal/config"
@@ -133,23 +134,19 @@ func runConfigInit(args []string) int {
 
 func runFind(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: zot find <query> [--json]")
+		fmt.Fprintln(stderr, "usage: zot find <query> [--json] [--item-type TYPE] [--limit N]")
 		return 2
 	}
 
-	jsonOutput := false
-	queryParts := make([]string, 0, len(args))
-	for _, arg := range args {
-		if arg == "--json" {
-			jsonOutput = true
-			continue
-		}
-		queryParts = append(queryParts, arg)
+	opts, jsonOutput, err := parseFindArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, "usage: zot find <query> [--json] [--item-type TYPE] [--limit N]")
+		return 2
 	}
 
-	query := strings.TrimSpace(strings.Join(queryParts, " "))
-	if query == "" {
-		fmt.Fprintln(stderr, "usage: zot find <query> [--json]")
+	if strings.TrimSpace(opts.Query) == "" {
+		fmt.Fprintln(stderr, "usage: zot find <query> [--json] [--item-type TYPE] [--limit N]")
 		return 2
 	}
 
@@ -164,10 +161,11 @@ func runFind(args []string) int {
 
 	baseURL := os.Getenv("ZOT_BASE_URL")
 	client := zoteroapi.New(cfg, baseURL, nil)
-	items, err := client.FindItems(context.Background(), query)
+	items, err := client.FindItems(context.Background(), opts)
 	if err != nil {
 		return printErr(err)
 	}
+	items = filterDefaultFindItems(items, opts)
 
 	if jsonOutput {
 		out := map[string]any{
@@ -187,15 +185,82 @@ func runFind(args []string) int {
 	}
 
 	for _, item := range items {
-		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(stdout, "%-10s  %-16s  %-6s  %-18s  %s\n",
 			item.Key,
-			item.Title,
-			renderCreators(item.Creators),
-			item.Date,
 			item.ItemType,
+			shortDate(item.Date),
+			shortCreators(item.Creators),
+			item.Title,
 		)
 	}
 	return 0
+}
+
+func parseFindArgs(args []string) (zoteroapi.FindOptions, bool, error) {
+	opts := zoteroapi.FindOptions{}
+	jsonOutput := false
+	queryParts := make([]string, 0, len(args))
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonOutput = true
+		case "--item-type":
+			if i+1 >= len(args) {
+				return zoteroapi.FindOptions{}, false, errors.New("missing value for --item-type")
+			}
+			i++
+			opts.ItemType = args[i]
+		case "--limit":
+			if i+1 >= len(args) {
+				return zoteroapi.FindOptions{}, false, errors.New("missing value for --limit")
+			}
+			i++
+			limit, err := strconv.Atoi(args[i])
+			if err != nil || limit <= 0 {
+				return zoteroapi.FindOptions{}, false, errors.New("invalid value for --limit")
+			}
+			opts.Limit = limit
+		default:
+			queryParts = append(queryParts, args[i])
+		}
+	}
+
+	opts.Query = strings.TrimSpace(strings.Join(queryParts, " "))
+	return opts, jsonOutput, nil
+}
+
+func filterDefaultFindItems(items []zoteroapi.Item, opts zoteroapi.FindOptions) []zoteroapi.Item {
+	if opts.ItemType != "" {
+		return items
+	}
+
+	filtered := make([]zoteroapi.Item, 0, len(items))
+	for _, item := range items {
+		if item.ItemType == "attachment" || item.ItemType == "note" {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	return filtered
+}
+
+func shortDate(value string) string {
+	if len(value) >= 4 {
+		return value[:4]
+	}
+	return value
+}
+
+func shortCreators(creators []zoteroapi.Creator) string {
+	if len(creators) == 0 {
+		return ""
+	}
+	name := creators[0].Name
+	if len(creators) == 1 {
+		return name
+	}
+	return name + " et al."
 }
 
 func runShow(args []string) int {

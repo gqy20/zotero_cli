@@ -20,6 +20,12 @@ type Client struct {
 	cfg        config.Config
 }
 
+type FindOptions struct {
+	Query    string
+	ItemType string
+	Limit    int
+}
+
 type Item struct {
 	Key         string       `json:"key"`
 	ItemType    string       `json:"item_type"`
@@ -93,8 +99,8 @@ func New(cfg config.Config, baseURL string, httpClient *http.Client) *Client {
 	}
 }
 
-func (c *Client) FindItems(ctx context.Context, query string) ([]Item, error) {
-	raw, err := c.getItems(ctx, "items", query)
+func (c *Client) FindItems(ctx context.Context, opts FindOptions) ([]Item, error) {
+	raw, err := c.getItems(ctx, "items", opts)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +114,7 @@ func (c *Client) FindItems(ctx context.Context, query string) ([]Item, error) {
 }
 
 func (c *Client) GetItem(ctx context.Context, key string) (Item, error) {
-	resp, err := c.doRequest(ctx, path.Join("items", key), "")
+	resp, err := c.doRequest(ctx, path.Join("items", key), FindOptions{})
 	if err != nil {
 		return Item{}, err
 	}
@@ -125,7 +131,7 @@ func (c *Client) GetItem(ctx context.Context, key string) (Item, error) {
 
 	item := mapItem(raw)
 
-	children, err := c.getItems(ctx, path.Join("items", key, "children"), "")
+	children, err := c.getItems(ctx, path.Join("items", key, "children"), FindOptions{})
 	if err != nil {
 		return Item{}, err
 	}
@@ -134,8 +140,8 @@ func (c *Client) GetItem(ctx context.Context, key string) (Item, error) {
 	return item, nil
 }
 
-func (c *Client) getItems(ctx context.Context, relativePath, query string) ([]apiItem, error) {
-	resp, err := c.doRequest(ctx, relativePath, query)
+func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {
+	resp, err := c.doRequest(ctx, relativePath, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +159,7 @@ func (c *Client) getItems(ctx context.Context, relativePath, query string) ([]ap
 	return raw, nil
 }
 
-func (c *Client) doRequest(ctx context.Context, relativePath, query string) (*http.Response, error) {
+func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOptions) (*http.Response, error) {
 	u, err := url.Parse(c.baseURL)
 	if err != nil {
 		return nil, err
@@ -168,9 +174,17 @@ func (c *Client) doRequest(ctx context.Context, relativePath, query string) (*ht
 		return nil, fmt.Errorf("unsupported library_type %q", c.cfg.LibraryType)
 	}
 
-	if query != "" {
+	if opts.Query != "" || opts.ItemType != "" || opts.Limit > 0 {
 		values := u.Query()
-		values.Set("q", query)
+		if opts.Query != "" {
+			values.Set("q", opts.Query)
+		}
+		if opts.ItemType != "" {
+			values.Set("itemType", opts.ItemType)
+		}
+		if opts.Limit > 0 {
+			values.Set("limit", fmt.Sprintf("%d", opts.Limit))
+		}
 		u.RawQuery = values.Encode()
 	}
 

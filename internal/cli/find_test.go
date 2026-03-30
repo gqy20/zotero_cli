@@ -97,6 +97,166 @@ func TestRunFindJSON(t *testing.T) {
 	if !ok || len(data) != 1 {
 		t.Fatalf("unexpected data payload: %#v", got["data"])
 	}
+
+	item, ok := data[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected item payload: %#v", data[0])
+	}
+
+	if item["item_type"] != "conferencePaper" {
+		t.Fatalf("unexpected item type: %#v", item["item_type"])
+	}
+}
+
+func TestRunFindJSONFiltersNonTopItemsByDefault(t *testing.T) {
+	configRoot := t.TempDir()
+	t.Setenv("APPDATA", configRoot)
+
+	configDir := filepath.Join(configRoot, "zotcli")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	configJSON := `{
+  "mode": "web",
+  "library_type": "user",
+  "library_id": "123456",
+  "api_key": "secret",
+  "style": "apa",
+  "locale": "en-US",
+  "timeout_seconds": 20
+}`
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(configJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed", "--json"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+
+	data, ok := got["data"].([]any)
+	if !ok {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	if len(data) != 2 {
+		t.Fatalf("expected only top-level items, got %#v", got["data"])
+	}
+	for _, raw := range data {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected item payload: %#v", raw)
+		}
+		itemType, _ := item["item_type"].(string)
+		if itemType == "attachment" || itemType == "note" {
+			t.Fatalf("expected attachment/note to be filtered out, got %#v", item)
+		}
+	}
+}
+
+func TestRunFindJSONSupportsItemTypeAndLimit(t *testing.T) {
+	configRoot := t.TempDir()
+	t.Setenv("APPDATA", configRoot)
+
+	configDir := filepath.Join(configRoot, "zotcli")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	configJSON := `{
+  "mode": "web",
+  "library_type": "user",
+  "library_id": "123456",
+  "api_key": "secret",
+  "style": "apa",
+  "locale": "en-US",
+  "timeout_seconds": 20
+}`
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(configJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed", "--item-type", "journalArticle", "--limit", "1", "--json"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+
+	item, ok := data[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected item payload: %#v", data[0])
+	}
+	if item["item_type"] != "journalArticle" {
+		t.Fatalf("unexpected item type: %#v", item["item_type"])
+	}
+}
+
+func TestRunFindTextOutputShowsOnlyTopItems(t *testing.T) {
+	configRoot := t.TempDir()
+	t.Setenv("APPDATA", configRoot)
+
+	configDir := filepath.Join(configRoot, "zotcli")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	configJSON := `{
+  "mode": "web",
+  "library_type": "user",
+  "library_id": "123456",
+  "api_key": "secret",
+  "style": "apa",
+  "locale": "en-US",
+  "timeout_seconds": 20
+}`
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(configJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 visible lines, got %d: %q", len(lines), stdout.String())
+	}
+	if strings.Contains(stdout.String(), "Attachment PDF") || strings.Contains(stdout.String(), "My note") {
+		t.Fatalf("unexpected non-top-level items in output: %q", stdout.String())
+	}
 }
 
 func TestRunShowJSON(t *testing.T) {

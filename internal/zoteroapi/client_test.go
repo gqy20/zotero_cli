@@ -23,6 +23,12 @@ func TestClientFindItems(t *testing.T) {
 		if got := r.URL.Query().Get("q"); got != "attention" {
 			t.Fatalf("unexpected query: %q", got)
 		}
+		if got := r.URL.Query().Get("itemType"); got != "journalArticle" {
+			t.Fatalf("unexpected itemType: %q", got)
+		}
+		if got := r.URL.Query().Get("limit"); got != "5" {
+			t.Fatalf("unexpected limit: %q", got)
+		}
 
 		items := []map[string]any{
 			{
@@ -54,7 +60,11 @@ func TestClientFindItems(t *testing.T) {
 		APIKey:      "secret",
 	}, server.URL, server.Client())
 
-	items, err := client.FindItems(context.Background(), "attention")
+	items, err := client.FindItems(context.Background(), FindOptions{
+		Query:    "attention",
+		ItemType: "journalArticle",
+		Limit:    5,
+	})
 	if err != nil {
 		t.Fatalf("FindItems returned error: %v", err)
 	}

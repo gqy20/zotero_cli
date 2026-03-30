@@ -37,7 +37,11 @@ func newTestAPI(t *testing.T) (string, func()) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/users/123456/items":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			query := r.URL.Query().Get("q")
+			itemType := r.URL.Query().Get("itemType")
+			limit := r.URL.Query().Get("limit")
+
+			items := []map[string]any{
 				{
 					"key": "X42A7DEE",
 					"data": map[string]any{
@@ -53,7 +57,75 @@ func newTestAPI(t *testing.T) (string, func()) {
 						},
 					},
 				},
-			})
+			}
+
+			if query == "mixed" {
+				items = []map[string]any{
+					{
+						"key": "ART12345",
+						"data": map[string]any{
+							"itemType": "journalArticle",
+							"title":    "Primary Article",
+							"date":     "2024",
+							"creators": []map[string]any{
+								{
+									"creatorType": "author",
+									"firstName":   "Ada",
+									"lastName":    "Lovelace",
+								},
+							},
+						},
+					},
+					{
+						"key": "ATT12345",
+						"data": map[string]any{
+							"itemType": "attachment",
+							"title":    "Attachment PDF",
+							"date":     "",
+						},
+					},
+					{
+						"key": "NOTE1234",
+						"data": map[string]any{
+							"itemType": "note",
+							"title":    "My note",
+							"date":     "",
+						},
+					},
+					{
+						"key": "ART67890",
+						"data": map[string]any{
+							"itemType": "journalArticle",
+							"title":    "Secondary Article",
+							"date":     "2023",
+							"creators": []map[string]any{
+								{
+									"creatorType": "author",
+									"firstName":   "Grace",
+									"lastName":    "Hopper",
+								},
+							},
+						},
+					},
+				}
+			}
+
+			if itemType != "" {
+				filtered := make([]map[string]any, 0, len(items))
+				for _, item := range items {
+					data, _ := item["data"].(map[string]any)
+					if data["itemType"] == itemType {
+						filtered = append(filtered, item)
+					}
+				}
+				items = filtered
+			}
+
+			if limit == "1" && len(items) > 1 {
+				items = items[:1]
+			}
+
+			_ = json.NewEncoder(w).Encode(items)
 		case "/users/123456/items/X42A7DEE":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"key": "X42A7DEE",
