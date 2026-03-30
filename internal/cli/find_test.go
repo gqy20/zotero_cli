@@ -8,6 +8,13 @@ import (
 	"testing"
 )
 
+func setTestConfigDir(t *testing.T, root string) {
+	t.Helper()
+	t.Setenv("APPDATA", root)
+	t.Setenv("XDG_CONFIG_HOME", root)
+	t.Setenv("HOME", root)
+}
+
 func TestRunVersion(t *testing.T) {
 	oldVersion := version
 	oldCommit := commit
@@ -44,7 +51,7 @@ func TestRunVersion(t *testing.T) {
 
 func TestRunFindJSON(t *testing.T) {
 	configRoot := t.TempDir()
-	t.Setenv("APPDATA", configRoot)
+	setTestConfigDir(t, configRoot)
 	t.Setenv("ZOT_BASE_URL", "http://127.0.0.1:1")
 
 	configDir := filepath.Join(configRoot, "zotcli")
@@ -94,7 +101,7 @@ func TestRunFindJSON(t *testing.T) {
 
 func TestRunShowJSON(t *testing.T) {
 	configRoot := t.TempDir()
-	t.Setenv("APPDATA", configRoot)
+	setTestConfigDir(t, configRoot)
 
 	configDir := filepath.Join(configRoot, "zotcli")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
