@@ -4,9 +4,29 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 )
+
+func writeTestJSON(w http.ResponseWriter, payload any) {
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func writeVersionedBatchResult(w http.ResponseWriter, version string, successful map[string]any, unchanged map[string]any) {
+	w.Header().Set("Last-Modified-Version", version)
+	if unchanged == nil {
+		unchanged = map[string]any{}
+	}
+	writeTestJSON(w, map[string]any{
+		"successful": successful,
+		"unchanged":  unchanged,
+		"failed":     map[string]any{},
+	})
+}
+
+func writeVersionedNoContent(w http.ResponseWriter, version string) {
+	w.Header().Set("Last-Modified-Version", version)
+	w.WriteHeader(http.StatusNoContent)
+}
 
 func newTestAPI(t *testing.T) (string, func()) {
 	t.Helper()
@@ -16,106 +36,79 @@ func newTestAPI(t *testing.T) (string, func()) {
 			var body any
 			if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
 				if items, ok := body.([]any); ok && len(items) > 1 {
-					w.Header().Set("Last-Modified-Version", "52")
-					_ = json.NewEncoder(w).Encode(map[string]any{
-						"successful": map[string]any{
-							"0": map[string]any{
-								"key":     "ITEMA001",
-								"version": 51,
-							},
-							"1": map[string]any{
-								"key":     "ITEMA002",
-								"version": 52,
-							},
+					writeVersionedBatchResult(w, "52", map[string]any{
+						"0": map[string]any{
+							"key":     "ITEMA001",
+							"version": 51,
 						},
-						"unchanged": map[string]any{},
-						"failed":    map[string]any{},
-					})
+						"1": map[string]any{
+							"key":     "ITEMA002",
+							"version": 52,
+						},
+					}, nil)
 					return
 				}
 			}
-			w.Header().Set("Last-Modified-Version", "42")
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"successful": map[string]any{
-					"0": map[string]any{
-						"key":     "NEWA1234",
-						"version": 42,
-					},
+			writeVersionedBatchResult(w, "42", map[string]any{
+				"0": map[string]any{
+					"key":     "NEWA1234",
+					"version": 42,
 				},
-				"unchanged": map[string]any{},
-				"failed":    map[string]any{},
-			})
+			}, nil)
 			return
 		}
 		if r.Method == http.MethodPatch && r.URL.Path == "/users/123456/items" {
 			var body []map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			w.Header().Set("Last-Modified-Version", "53")
 			if len(body) > 0 {
 				if tags, ok := body[0]["tags"]; ok && tags != nil {
-					_ = json.NewEncoder(w).Encode(map[string]any{
-						"successful": map[string]any{
-							"0": map[string]any{
-								"key":     "ITEMA001",
-								"version": 53,
-							},
-							"1": map[string]any{
-								"key":     "ITEMA002",
-								"version": 53,
-							},
+					writeVersionedBatchResult(w, "53", map[string]any{
+						"0": map[string]any{
+							"key":     "ITEMA001",
+							"version": 53,
 						},
-						"unchanged": map[string]any{},
-						"failed":    map[string]any{},
-					})
+						"1": map[string]any{
+							"key":     "ITEMA002",
+							"version": 53,
+						},
+					}, nil)
 					return
 				}
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"successful": map[string]any{
-					"0": map[string]any{
-						"key":     "ITEMA001",
-						"version": 53,
-					},
+			writeVersionedBatchResult(w, "53", map[string]any{
+				"0": map[string]any{
+					"key":     "ITEMA001",
+					"version": 53,
 				},
-				"unchanged": map[string]any{
-					"1": 52,
-				},
-				"failed": map[string]any{},
+			}, map[string]any{
+				"1": 52,
 			})
 			return
 		}
 		if r.Method == http.MethodDelete && r.URL.Path == "/users/123456/items" {
-			w.Header().Set("Last-Modified-Version", "54")
-			w.WriteHeader(http.StatusNoContent)
+			writeVersionedNoContent(w, "54")
 			return
 		}
 		if r.Method == http.MethodPatch && r.URL.Path == "/users/123456/items/ABCD2345" {
-			w.Header().Set("Last-Modified-Version", "8")
-			w.WriteHeader(http.StatusNoContent)
+			writeVersionedNoContent(w, "8")
 			return
 		}
 		if r.Method == http.MethodDelete && r.URL.Path == "/users/123456/items/ABCD2345" {
-			w.Header().Set("Last-Modified-Version", "9")
-			w.WriteHeader(http.StatusNoContent)
+			writeVersionedNoContent(w, "9")
 			return
 		}
 		if r.Method == http.MethodPost && r.URL.Path == "/users/123456/collections" {
-			w.Header().Set("Last-Modified-Version", "11")
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"successful": map[string]any{
-					"0": map[string]any{
-						"key":     "COLLNEW1",
-						"version": 11,
-					},
+			writeVersionedBatchResult(w, "11", map[string]any{
+				"0": map[string]any{
+					"key":     "COLLNEW1",
+					"version": 11,
 				},
-				"unchanged": map[string]any{},
-				"failed":    map[string]any{},
-			})
+			}, nil)
 			return
 		}
 		if r.Method == http.MethodPut && r.URL.Path == "/users/123456/collections/COLL1234" {
 			w.Header().Set("Last-Modified-Version", "12")
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			writeTestJSON(w, map[string]any{
 				"key":     "COLL1234",
 				"version": 12,
 				"name":    "Renamed Collection",
@@ -123,8 +116,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 			return
 		}
 		if r.Method == http.MethodDelete && r.URL.Path == "/users/123456/collections/COLL1234" {
-			w.Header().Set("Last-Modified-Version", "13")
-			w.WriteHeader(http.StatusNoContent)
+			writeVersionedNoContent(w, "13")
 			return
 		}
 
@@ -144,7 +136,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 
 			if r.URL.Query().Get("format") == "versions" {
 				w.Header().Set("Last-Modified-Version", "111")
-				_ = json.NewEncoder(w).Encode(map[string]int{
+				writeTestJSON(w, map[string]int{
 					"ITEM1234": 90,
 					"ITEM5678": 91,
 				})
@@ -156,13 +148,13 @@ func newTestAPI(t *testing.T) (string, func()) {
 				return
 			}
 			if itemKey != "" && format == "csljson" {
-				_ = json.NewEncoder(w).Encode([]map[string]any{
+				writeTestJSON(w, []map[string]any{
 					{"id": "X42A7DEE", "title": "Attention Is All You Need"},
 				})
 				return
 			}
 			if itemKey == "ITEMA001,ITEMA002" {
-				_ = json.NewEncoder(w).Encode([]map[string]any{
+				writeTestJSON(w, []map[string]any{
 					{
 						"key":     "ITEMA001",
 						"version": 52,
@@ -190,7 +182,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 			}
 
 			if itemType == "note" {
-				_ = json.NewEncoder(w).Encode([]map[string]any{
+				writeTestJSON(w, []map[string]any{
 					{
 						"key": "NOTE1111",
 						"data": map[string]any{
@@ -353,22 +345,22 @@ func newTestAPI(t *testing.T) (string, func()) {
 				items = items[:1]
 			}
 
-			_ = json.NewEncoder(w).Encode(items)
+			writeTestJSON(w, items)
 		case "/users/123456/items/X42A7DEE":
 			include := r.URL.Query().Get("include")
 			switch include {
 			case "citation":
-				_ = json.NewEncoder(w).Encode(map[string]any{
+				writeTestJSON(w, map[string]any{
 					"key":      "X42A7DEE",
 					"citation": "<span>(Vaswani, 2017)</span>",
 				})
 			case "bib":
-				_ = json.NewEncoder(w).Encode(map[string]any{
+				writeTestJSON(w, map[string]any{
 					"key": "X42A7DEE",
 					"bib": "<div class=\"csl-bib-body\"><div class=\"csl-entry\">Vaswani, A. (2017). <i>Attention Is All You Need</i>.</div></div>",
 				})
 			default:
-				_ = json.NewEncoder(w).Encode(map[string]any{
+				writeTestJSON(w, map[string]any{
 					"key": "X42A7DEE",
 					"data": map[string]any{
 						"itemType":         "conferencePaper",
@@ -394,12 +386,12 @@ func newTestAPI(t *testing.T) (string, func()) {
 			include := r.URL.Query().Get("include")
 			switch include {
 			case "bib":
-				_ = json.NewEncoder(w).Encode(map[string]any{
+				writeTestJSON(w, map[string]any{
 					"key": "ART12345",
 					"bib": "<div class=\"csl-bib-body\"><div class=\"csl-entry\">Lovelace, A. (2024). <i>Primary Article</i>.</div></div>",
 				})
 			default:
-				_ = json.NewEncoder(w).Encode(map[string]any{
+				writeTestJSON(w, map[string]any{
 					"key": "ART12345",
 					"data": map[string]any{
 						"itemType": "journalArticle",
@@ -419,12 +411,12 @@ func newTestAPI(t *testing.T) (string, func()) {
 			include := r.URL.Query().Get("include")
 			switch include {
 			case "bib":
-				_ = json.NewEncoder(w).Encode(map[string]any{
+				writeTestJSON(w, map[string]any{
 					"key": "ART67890",
 					"bib": "<div class=\"csl-bib-body\"><div class=\"csl-entry\">Hopper, G. (2023). <i>Secondary Article</i>.</div></div>",
 				})
 			default:
-				_ = json.NewEncoder(w).Encode(map[string]any{
+				writeTestJSON(w, map[string]any{
 					"key": "ART67890",
 					"data": map[string]any{
 						"itemType": "journalArticle",
@@ -441,7 +433,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 				})
 			}
 		case "/users/123456/items/X42A7DEE/children":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			writeTestJSON(w, []map[string]any{
 				{
 					"key": "PDF12345",
 					"data": map[string]any{
@@ -462,16 +454,16 @@ func newTestAPI(t *testing.T) (string, func()) {
 				},
 			})
 		case "/users/123456/items/ART12345/children":
-			_ = json.NewEncoder(w).Encode([]map[string]any{})
+			writeTestJSON(w, []map[string]any{})
 		case "/users/123456/collections":
 			if r.URL.Query().Get("format") == "versions" {
 				w.Header().Set("Last-Modified-Version", "333")
-				_ = json.NewEncoder(w).Encode(map[string]int{
+				writeTestJSON(w, map[string]int{
 					"COLL1234": 9,
 				})
 				return
 			}
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			writeTestJSON(w, []map[string]any{
 				{
 					"key": "COLL1234",
 					"data": map[string]any{
@@ -496,7 +488,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 				},
 			})
 		case "/users/123456/collections/top":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			writeTestJSON(w, []map[string]any{
 				{
 					"key": "COLLTOP1",
 					"data": map[string]any{
@@ -510,7 +502,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 				},
 			})
 		case "/users/123456/tags":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			writeTestJSON(w, []map[string]any{
 				{
 					"tag": "transformers",
 					"meta": map[string]any{
@@ -527,7 +519,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 		case "/users/123456/items/top":
 			if r.URL.Query().Get("format") == "versions" {
 				w.Header().Set("Last-Modified-Version", "222")
-				_ = json.NewEncoder(w).Encode(map[string]int{
+				writeTestJSON(w, map[string]int{
 					"ITEM1234": 100,
 					"ITEM5678": 101,
 				})
@@ -535,7 +527,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 			}
 			http.NotFound(w, r)
 		case "/users/123456/collections/COLL1234/items":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			writeTestJSON(w, []map[string]any{
 				{
 					"key":     "ART12345",
 					"version": 18,
@@ -573,7 +565,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 				},
 			})
 		case "/users/123456/items/trash":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			writeTestJSON(w, []map[string]any{
 				{
 					"key": "TRASH123",
 					"data": map[string]any{
@@ -591,7 +583,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 				},
 			})
 		case "/users/123456/publications/items":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			writeTestJSON(w, []map[string]any{
 				{
 					"key": "PUB12345",
 					"data": map[string]any{
@@ -611,26 +603,21 @@ func newTestAPI(t *testing.T) (string, func()) {
 		case "/users/123456/searches":
 			if r.URL.Query().Get("format") == "versions" {
 				w.Header().Set("Last-Modified-Version", "444")
-				_ = json.NewEncoder(w).Encode(map[string]int{
+				writeTestJSON(w, map[string]int{
 					"SCH12345": 12,
 				})
 				return
 			}
 			if r.Method == http.MethodPost {
-				w.Header().Set("Last-Modified-Version", "48")
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"successful": map[string]any{
-						"0": map[string]any{
-							"key":     "SCH67890",
-							"version": 48,
-						},
+				writeVersionedBatchResult(w, "48", map[string]any{
+					"0": map[string]any{
+						"key":     "SCH67890",
+						"version": 48,
 					},
-					"unchanged": map[string]any{},
-					"failed":    map[string]any{},
-				})
+				}, nil)
 				return
 			}
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			writeTestJSON(w, []map[string]any{
 				{
 					"key": "SCH12345",
 					"data": map[string]any{
@@ -648,45 +635,44 @@ func newTestAPI(t *testing.T) (string, func()) {
 				w.Header().Set("Last-Modified-Version", "49")
 				w.WriteHeader(http.StatusOK)
 			case http.MethodDelete:
-				w.Header().Set("Last-Modified-Version", "50")
-				w.WriteHeader(http.StatusNoContent)
+				writeVersionedNoContent(w, "50")
 			default:
 				http.NotFound(w, r)
 			}
 		case "/users/123456/deleted":
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			writeTestJSON(w, map[string]any{
 				"collections": []string{"COLL1234"},
 				"searches":    []string{"SCH12345"},
 				"items":       []string{"ITEM1234", "ITEM5678"},
 				"tags":        []string{"obsolete"},
 			})
 		case "/itemTypes":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			writeTestJSON(w, []map[string]any{
 				{"itemType": "book", "localized": "Book"},
 				{"itemType": "note", "localized": "Note"},
 			})
 		case "/itemFields":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			writeTestJSON(w, []map[string]any{
 				{"field": "title", "localized": "Title"},
 				{"field": "url", "localized": "URL"},
 			})
 		case "/creatorFields":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			writeTestJSON(w, []map[string]any{
 				{"field": "firstName", "localized": "First"},
 				{"field": "lastName", "localized": "Last"},
 			})
 		case "/itemTypeFields":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			writeTestJSON(w, []map[string]any{
 				{"field": "title", "localized": "Title"},
 				{"field": "abstractNote", "localized": "Abstract"},
 			})
 		case "/itemTypeCreatorTypes":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			writeTestJSON(w, []map[string]any{
 				{"creatorType": "author", "localized": "Author"},
 				{"creatorType": "editor", "localized": "Editor"},
 			})
 		case "/items/new":
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			writeTestJSON(w, map[string]any{
 				"itemType": "book",
 				"title":    "",
 				"creators": []map[string]any{
@@ -697,7 +683,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 				"relations":   map[string]any{},
 			})
 		case "/keys/secret":
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			writeTestJSON(w, map[string]any{
 				"userID": 123456,
 				"access": map[string]any{
 					"user": map[string]any{
@@ -706,7 +692,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 				},
 			})
 		case "/users/123456/groups":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
+			writeTestJSON(w, []map[string]any{
 				{
 					"id": 111,
 					"data": map[string]any{
@@ -723,94 +709,6 @@ func newTestAPI(t *testing.T) (string, func()) {
 		default:
 			http.NotFound(w, r)
 		}
-	}))
-
-	return server.URL, server.Close
-}
-
-func newMachineOnlyNotesAPI(t *testing.T) (string, func()) {
-	t.Helper()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/users/123456/items":
-			if r.URL.Query().Get("itemType") != "note" {
-				_ = json.NewEncoder(w).Encode([]map[string]any{})
-				return
-			}
-			_ = json.NewEncoder(w).Encode([]map[string]any{
-				{
-					"key": "NOTE9000",
-					"data": map[string]any{
-						"itemType": "note",
-						"note":     "<p>ITEM1234 {\"readingTime\":88}</p>",
-					},
-				},
-			})
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-
-	return server.URL, server.Close
-}
-
-var _ = os.ErrNotExist
-
-type errorAPIServer struct {
-	url     string
-	cleanup func()
-}
-
-func newErrorAPI(t *testing.T, status int, retryAfter string) errorAPIServer {
-	t.Helper()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if retryAfter != "" {
-			w.Header().Set("Retry-After", retryAfter)
-		}
-		http.Error(w, http.StatusText(status), status)
-	}))
-
-	return errorAPIServer{
-		url:     server.URL,
-		cleanup: server.Close,
-	}
-}
-
-func newErrorAPIWithBody(t *testing.T, status int, retryAfter string, body string) errorAPIServer {
-	t.Helper()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if retryAfter != "" {
-			w.Header().Set("Retry-After", retryAfter)
-		}
-		http.Error(w, body, status)
-	}))
-
-	return errorAPIServer{
-		url:     server.URL,
-		cleanup: server.Close,
-	}
-}
-
-func newConditionalVersionsAPI(t *testing.T) (string, func()) {
-	t.Helper()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/users/123456/items" {
-			http.NotFound(w, r)
-			return
-		}
-		if r.URL.Query().Get("format") != "versions" {
-			http.NotFound(w, r)
-			return
-		}
-		if got := r.Header.Get("If-Modified-Since-Version"); got != "88" {
-			t.Fatalf("unexpected If-Modified-Since-Version: %q", got)
-		}
-
-		w.WriteHeader(http.StatusNotModified)
 	}))
 
 	return server.URL, server.Close
