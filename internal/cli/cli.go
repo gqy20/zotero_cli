@@ -114,6 +114,7 @@ Commands:
   config path    Print config path
   config init    Create a starter config file
   config show    Show active config with masked secrets
+  config validate  Validate library_id and api_key against Zotero
   find           Search items in the configured Zotero library
   show           Show item details
   cite           Generate a citation or bibliography entry
@@ -166,6 +167,7 @@ func printConfigUsage() {
   zot config init
   zot config init --example
   zot config show
+  zot config validate
 `)
 }
 

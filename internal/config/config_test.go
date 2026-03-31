@@ -19,7 +19,7 @@ func TestLoadReturnsEnvConfigWhenFileMissing(t *testing.T) {
 	setConfigEnv(t, root)
 
 	envPath := filepath.Join(root, ".env")
-	envBody := "ZOT_LIBRARY_TYPE=user\nZOT_LIBRARY_ID=123456\nZOT_API_KEY=secret\nZOT_TIMEOUT_SECONDS=9\n"
+	envBody := "ZOT_LIBRARY_TYPE=user\nZOT_LIBRARY_ID=123456\nZOT_API_KEY=secret\nZOT_TIMEOUT_SECONDS=9\nZOT_RETRY_MAX_ATTEMPTS=4\nZOT_RETRY_BASE_DELAY_MS=125\n"
 	if err := os.WriteFile(envPath, []byte(envBody), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -46,6 +46,12 @@ func TestLoadReturnsEnvConfigWhenFileMissing(t *testing.T) {
 	if cfg.TimeoutSeconds != 9 {
 		t.Fatalf("expected timeout 9, got %d", cfg.TimeoutSeconds)
 	}
+	if cfg.RetryMaxAttempts != 4 {
+		t.Fatalf("expected retry max attempts 4, got %d", cfg.RetryMaxAttempts)
+	}
+	if cfg.RetryBaseDelayMilliseconds != 125 {
+		t.Fatalf("expected retry base delay 125, got %d", cfg.RetryBaseDelayMilliseconds)
+	}
 }
 
 func TestLoadEnvOverridesConfigFile(t *testing.T) {
@@ -64,7 +70,9 @@ func TestLoadEnvOverridesConfigFile(t *testing.T) {
   "api_key": "file-key",
   "style": "apa",
   "locale": "en-US",
-  "timeout_seconds": 20
+  "timeout_seconds": 20,
+  "retry_max_attempts": 3,
+  "retry_base_delay_ms": 250
 }`
 	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(configBody), 0o600); err != nil {
 		t.Fatal(err)
@@ -73,6 +81,7 @@ func TestLoadEnvOverridesConfigFile(t *testing.T) {
 	t.Setenv("ZOT_LIBRARY_ID", "env-id")
 	t.Setenv("ZOT_API_KEY", "env-key")
 	t.Setenv("ZOT_TIMEOUT_SECONDS", "15")
+	t.Setenv("ZOT_RETRY_MAX_ATTEMPTS", "5")
 
 	cfg, _, err := Load()
 	if err != nil {
@@ -90,6 +99,12 @@ func TestLoadEnvOverridesConfigFile(t *testing.T) {
 	}
 	if cfg.TimeoutSeconds != 15 {
 		t.Fatalf("expected env to override timeout, got %d", cfg.TimeoutSeconds)
+	}
+	if cfg.RetryMaxAttempts != 5 {
+		t.Fatalf("expected env to override retry attempts, got %d", cfg.RetryMaxAttempts)
+	}
+	if cfg.RetryBaseDelayMilliseconds != 250 {
+		t.Fatalf("expected file-backed retry delay to remain, got %d", cfg.RetryBaseDelayMilliseconds)
 	}
 }
 

@@ -74,6 +74,8 @@ func runConfig(args []string) int {
 			"path":   path,
 			"config": maskConfig(cfg),
 		})
+	case "validate":
+		return runConfigValidate()
 	case "init":
 		return runConfigInit(args[1:])
 	default:
@@ -113,6 +115,31 @@ func runConfigInit(args []string) int {
 	fmt.Fprintf(stdout, "created config at %s\n", path)
 	fmt.Fprintln(stdout, "edit the file and fill in your library_type, library_id, and api_key")
 	return 0
+}
+
+func runConfigValidate() int {
+	cfg, _, err := config.Load()
+	if err != nil {
+		if errors.Is(err, config.ErrNotFound) {
+			fmt.Fprintf(stderr, "config not found; run `zot config init` first\n")
+			return 3
+		}
+		return printErr(err)
+	}
+
+	baseURL := os.Getenv("ZOT_BASE_URL")
+	client := zoteroapi.New(cfg, baseURL, nil)
+
+	result, err := client.ValidateLibraryAccess(context.Background())
+	if err != nil {
+		return printErr(err)
+	}
+
+	return writeJSON(jsonResponse{
+		OK:      true,
+		Command: "config-validate",
+		Data:    result,
+	})
 }
 
 func runFind(args []string) int {

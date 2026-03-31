@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"math"
 	"net/http"
+	"net"
 	"net/url"
 	"path"
 	"regexp"
@@ -25,6 +27,7 @@ type Client struct {
 	baseURL    string
 	httpClient *http.Client
 	cfg        config.Config
+	sleep      func(time.Duration)
 }
 
 type FindOptions struct {
@@ -126,6 +129,13 @@ type KeyInfo struct {
 type GroupInfo struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
+}
+
+type ValidationResult struct {
+	LibraryType string `json:"library_type"`
+	LibraryID   string `json:"library_id"`
+	KeyUserID   int    `json:"key_user_id"`
+	GroupFound  bool   `json:"group_found,omitempty"`
 }
 
 type Item struct {
@@ -340,6 +350,7 @@ func New(cfg config.Config, baseURL string, httpClient *http.Client) *Client {
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		httpClient: httpClient,
 		cfg:        cfg,
+		sleep:      time.Sleep,
 	}
 }
 
@@ -1024,6 +1035,41 @@ func (c *Client) ListGroupsForUser(ctx context.Context, userID string) ([]GroupI
 	return out, nil
 }
 
+func (c *Client) ValidateLibraryAccess(ctx context.Context) (ValidationResult, error) {
+	info, err := c.GetKeyInfo(ctx, c.cfg.APIKey)
+	if err != nil {
+		return ValidationResult{}, err
+	}
+
+	result := ValidationResult{
+		LibraryType: c.cfg.LibraryType,
+		LibraryID:   c.cfg.LibraryID,
+		KeyUserID:   info.UserID,
+	}
+
+	switch c.cfg.LibraryType {
+	case "user":
+		if strconv.Itoa(info.UserID) != c.cfg.LibraryID {
+			return ValidationResult{}, fmt.Errorf("configured user library %s does not match api key owner %d", c.cfg.LibraryID, info.UserID)
+		}
+		return result, nil
+	case "group":
+		groups, err := c.ListGroupsForUser(ctx, strconv.Itoa(info.UserID))
+		if err != nil {
+			return ValidationResult{}, err
+		}
+		for _, group := range groups {
+			if strconv.Itoa(group.ID) == c.cfg.LibraryID {
+				result.GroupFound = true
+				return result, nil
+			}
+		}
+		return ValidationResult{}, fmt.Errorf("configured group library %s is not accessible to api key owner %d", c.cfg.LibraryID, info.UserID)
+	default:
+		return ValidationResult{}, fmt.Errorf("unsupported library_type %q", c.cfg.LibraryType)
+	}
+}
+
 func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {
 	return c.fetchAllItems(ctx, relativePath, opts)
 }
@@ -1296,13 +1342,9 @@ func (c *Client) doGlobalJSONRequest(ctx context.Context, relativePath string, q
 	}
 	u.RawQuery = values.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Zotero-API-Version", "3")
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doHTTPRequest(ctx, http.MethodGet, u.String(), nil, true, map[string]string{
+		"Zotero-API-Version": "3",
+	})
 	if err != nil {
 		return err
 	}
@@ -1370,21 +1412,19 @@ func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOp
 		u.RawQuery = values.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
+	headers := map[string]string{
+		"Zotero-API-Key":     c.cfg.APIKey,
+		"Zotero-API-Version": "3",
 	}
-	req.Header.Set("Zotero-API-Key", c.cfg.APIKey)
-	req.Header.Set("Zotero-API-Version", "3")
 	for _, headerSet := range extraHeaders {
 		for key, value := range headerSet {
 			if value != "" {
-				req.Header.Set(key, value)
+				headers[key] = value
 			}
 		}
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doHTTPRequest(ctx, http.MethodGet, u.String(), nil, true, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -1410,29 +1450,112 @@ func (c *Client) doWriteRequest(ctx context.Context, method string, relativePath
 		return nil, fmt.Errorf("unsupported library_type %q", c.cfg.LibraryType)
 	}
 
-	var reader io.Reader
+	var payload []byte
 	if body != nil {
-		payload, err := json.Marshal(body)
+		payload, err = json.Marshal(body)
 		if err != nil {
 			return nil, err
 		}
-		reader = strings.NewReader(string(payload))
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), reader)
-	if err != nil {
-		return nil, err
+	headers := map[string]string{
+		"Zotero-API-Key":     c.cfg.APIKey,
+		"Zotero-API-Version": "3",
 	}
-	req.Header.Set("Zotero-API-Key", c.cfg.APIKey)
-	req.Header.Set("Zotero-API-Version", "3")
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		headers["Content-Type"] = "application/json"
 	}
 	if ifUnmodifiedSinceVersion > 0 {
-		req.Header.Set("If-Unmodified-Since-Version", strconv.Itoa(ifUnmodifiedSinceVersion))
+		headers["If-Unmodified-Since-Version"] = strconv.Itoa(ifUnmodifiedSinceVersion)
 	}
 
-	return c.httpClient.Do(req)
+	return c.doHTTPRequest(ctx, method, u.String(), payload, false, headers)
+}
+
+func (c *Client) doHTTPRequest(ctx context.Context, method string, rawURL string, body []byte, retryable bool, headers map[string]string) (*http.Response, error) {
+	attempts := 1
+	if retryable && c.cfg.RetryMaxAttempts > 1 {
+		attempts = c.cfg.RetryMaxAttempts
+	}
+
+	for attempt := 1; attempt <= attempts; attempt++ {
+		var reader io.Reader
+		if body != nil {
+			reader = strings.NewReader(string(body))
+		}
+
+		req, err := http.NewRequestWithContext(ctx, method, rawURL, reader)
+		if err != nil {
+			return nil, err
+		}
+		for key, value := range headers {
+			if value != "" {
+				req.Header.Set(key, value)
+			}
+		}
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			if !retryable || attempt == attempts || !shouldRetryError(err) {
+				return nil, err
+			}
+			c.pauseBeforeRetry(attempt, 0)
+			continue
+		}
+
+		if !retryable || attempt == attempts || !shouldRetryStatus(resp.StatusCode) {
+			return resp, nil
+		}
+
+		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+		resp.Body.Close()
+		c.pauseBeforeRetry(attempt, retryAfter)
+	}
+
+	return nil, errors.New("zotero api request failed after retries")
+}
+
+func (c *Client) pauseBeforeRetry(attempt int, retryAfter time.Duration) {
+	delay := retryAfter
+	if delay <= 0 {
+		baseDelay := c.cfg.RetryBaseDelayMilliseconds
+		if baseDelay <= 0 {
+			baseDelay = 250
+		}
+		multiplier := math.Pow(2, float64(attempt-1))
+		delay = time.Duration(float64(baseDelay)*multiplier) * time.Millisecond
+	}
+	if c.sleep != nil && delay > 0 {
+		c.sleep(delay)
+	}
+}
+
+func shouldRetryStatus(status int) bool {
+	switch status {
+	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
+}
+
+func shouldRetryError(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+func parseRetryAfter(value string) time.Duration {
+	if value == "" {
+		return 0
+	}
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func stripHTML(value string) string {

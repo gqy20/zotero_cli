@@ -1723,6 +1723,148 @@ func TestClientFindItemsIncludesRetryAfterForRateLimit(t *testing.T) {
 	}
 }
 
+func TestClientFindItemsRetriesOnRateLimit(t *testing.T) {
+	t.Parallel()
+
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "slow down", http.StatusTooManyRequests)
+			return
+		}
+		if err := json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"key": "ITEM1234",
+				"data": map[string]any{
+					"itemType": "book",
+					"title":    "Retried",
+				},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType:                "user",
+		LibraryID:                  "123",
+		APIKey:                     "secret",
+		RetryMaxAttempts:           2,
+		RetryBaseDelayMilliseconds: 1,
+	}, server.URL, server.Client())
+	client.sleep = func(time.Duration) {}
+
+	items, err := client.FindItems(context.Background(), FindOptions{})
+	if err != nil {
+		t.Fatalf("FindItems returned error: %v", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("expected 2 attempts, got %d", attempts)
+	}
+	if len(items) != 1 || items[0].Key != "ITEM1234" {
+		t.Fatalf("unexpected items: %#v", items)
+	}
+}
+
+func TestClientCreateItemDoesNotRetryWrites(t *testing.T) {
+	t.Parallel()
+
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		http.Error(w, "slow down", http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType:                "user",
+		LibraryID:                  "123",
+		APIKey:                     "secret",
+		RetryMaxAttempts:           3,
+		RetryBaseDelayMilliseconds: 1,
+	}, server.URL, server.Client())
+	client.sleep = func(time.Duration) {}
+
+	_, err := client.CreateItem(context.Background(), map[string]any{"itemType": "book"}, 41)
+	if err == nil {
+		t.Fatal("expected rate limit error")
+	}
+	if attempts != 1 {
+		t.Fatalf("expected 1 attempt for write request, got %d", attempts)
+	}
+}
+
+func TestClientValidateLibraryAccessForUser(t *testing.T) {
+	t.Parallel()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123456",
+		APIKey:      "secret",
+	}, "", nil)
+	client.baseURL = "http://example.test"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/keys/secret" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"userID": 123456,
+			"access": map[string]any{"user": map[string]any{"library": true}},
+		})
+	}))
+	defer server.Close()
+	client.baseURL = server.URL
+	client.httpClient = server.Client()
+
+	result, err := client.ValidateLibraryAccess(context.Background())
+	if err != nil {
+		t.Fatalf("ValidateLibraryAccess returned error: %v", err)
+	}
+	if result.KeyUserID != 123456 || result.LibraryID != "123456" {
+		t.Fatalf("unexpected validation result: %#v", result)
+	}
+}
+
+func TestClientValidateLibraryAccessForGroup(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/keys/secret":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"userID": 123456,
+				"access": map[string]any{"user": map[string]any{"library": true}},
+			})
+		case "/users/123456/groups":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"id": 999, "data": map[string]any{"name": "Other"}},
+				{"id": 222, "data": map[string]any{"name": "Team"}},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "group",
+		LibraryID:   "222",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.ValidateLibraryAccess(context.Background())
+	if err != nil {
+		t.Fatalf("ValidateLibraryAccess returned error: %v", err)
+	}
+	if !result.GroupFound || result.LibraryID != "222" {
+		t.Fatalf("unexpected validation result: %#v", result)
+	}
+}
+
 func TestClientUpdateItemReturnsReadablePreconditionError(t *testing.T) {
 	t.Parallel()
 

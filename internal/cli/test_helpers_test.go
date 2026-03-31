@@ -54,7 +54,9 @@ func writeTestConfig(t *testing.T, root string) {
   "api_key": "secret",
   "style": "apa",
   "locale": "en-US",
-  "timeout_seconds": 20
+  "timeout_seconds": 20,
+  "retry_max_attempts": 3,
+  "retry_base_delay_ms": 1
 }`
 	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(configJSON), 0o600); err != nil {
 		t.Fatal(err)

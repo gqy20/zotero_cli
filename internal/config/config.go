@@ -13,24 +13,28 @@ import (
 var ErrNotFound = errors.New("config not found")
 
 type Config struct {
-	Mode           string `json:"mode"`
-	LibraryType    string `json:"library_type"`
-	LibraryID      string `json:"library_id"`
-	APIKey         string `json:"api_key"`
-	Style          string `json:"style"`
-	Locale         string `json:"locale"`
-	TimeoutSeconds int    `json:"timeout_seconds"`
+	Mode                      string `json:"mode"`
+	LibraryType               string `json:"library_type"`
+	LibraryID                 string `json:"library_id"`
+	APIKey                    string `json:"api_key"`
+	Style                     string `json:"style"`
+	Locale                    string `json:"locale"`
+	TimeoutSeconds            int    `json:"timeout_seconds"`
+	RetryMaxAttempts          int    `json:"retry_max_attempts"`
+	RetryBaseDelayMilliseconds int   `json:"retry_base_delay_ms"`
 }
 
 func Default() Config {
 	return Config{
-		Mode:           "web",
-		LibraryType:    "",
-		LibraryID:      "",
-		APIKey:         "",
-		Style:          "apa",
-		Locale:         "en-US",
-		TimeoutSeconds: 20,
+		Mode:                       "web",
+		LibraryType:                "",
+		LibraryID:                  "",
+		APIKey:                     "",
+		Style:                      "apa",
+		Locale:                     "en-US",
+		TimeoutSeconds:             20,
+		RetryMaxAttempts:           3,
+		RetryBaseDelayMilliseconds: 250,
 	}
 }
 
@@ -137,6 +141,22 @@ func loadEnvConfig() (Config, bool, error) {
 		cfg.TimeoutSeconds = timeout
 		found = true
 	}
+	if value := firstNonEmpty(os.Getenv("ZOT_RETRY_MAX_ATTEMPTS"), envFile["ZOT_RETRY_MAX_ATTEMPTS"]); value != "" {
+		attempts, err := strconv.Atoi(value)
+		if err != nil {
+			return Config{}, false, err
+		}
+		cfg.RetryMaxAttempts = attempts
+		found = true
+	}
+	if value := firstNonEmpty(os.Getenv("ZOT_RETRY_BASE_DELAY_MS"), envFile["ZOT_RETRY_BASE_DELAY_MS"]); value != "" {
+		delay, err := strconv.Atoi(value)
+		if err != nil {
+			return Config{}, false, err
+		}
+		cfg.RetryBaseDelayMilliseconds = delay
+		found = true
+	}
 
 	return cfg, found, nil
 }
@@ -198,6 +218,12 @@ func mergeConfig(dst *Config, src Config) {
 	}
 	if src.TimeoutSeconds != 0 {
 		dst.TimeoutSeconds = src.TimeoutSeconds
+	}
+	if src.RetryMaxAttempts != 0 {
+		dst.RetryMaxAttempts = src.RetryMaxAttempts
+	}
+	if src.RetryBaseDelayMilliseconds != 0 {
+		dst.RetryBaseDelayMilliseconds = src.RetryBaseDelayMilliseconds
 	}
 }
 

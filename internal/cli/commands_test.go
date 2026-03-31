@@ -44,6 +44,34 @@ func TestRunConfigInitCreatesFileWhenOnlyEnvConfigExists(t *testing.T) {
 	}
 }
 
+func TestRunConfigValidateJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"config", "validate"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	if got["command"] != "config-validate" {
+		t.Fatalf("unexpected command: %#v", got["command"])
+	}
+	data, ok := got["data"].(map[string]any)
+	if !ok || data["key_user_id"] != float64(123456) {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+}
+
 func TestRunShowJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

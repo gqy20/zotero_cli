@@ -673,13 +673,15 @@ func notePreview(content string) string {
 
 func maskConfig(cfg config.Config) map[string]any {
 	return map[string]any{
-		"mode":            cfg.Mode,
-		"library_type":    cfg.LibraryType,
-		"library_id":      cfg.LibraryID,
-		"api_key":         maskSecret(cfg.APIKey),
-		"style":           cfg.Style,
-		"locale":          cfg.Locale,
-		"timeout_seconds": cfg.TimeoutSeconds,
+		"mode":                cfg.Mode,
+		"library_type":        cfg.LibraryType,
+		"library_id":          cfg.LibraryID,
+		"api_key":             maskSecret(cfg.APIKey),
+		"style":               cfg.Style,
+		"locale":              cfg.Locale,
+		"timeout_seconds":     cfg.TimeoutSeconds,
+		"retry_max_attempts":  cfg.RetryMaxAttempts,
+		"retry_base_delay_ms": cfg.RetryBaseDelayMilliseconds,
 	}
 }
 
