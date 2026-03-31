@@ -125,6 +125,9 @@ jobs:
       - build
     if: startsWith(github.ref, 'refs/tags/')
     steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
       - name: Download packaged artifacts
         uses: actions/download-artifact@v4
         with:
@@ -138,8 +141,39 @@ jobs:
           cd dist
           sha256sum * > checksums.txt
 
+      - name: Build release notes from changelog
+        shell: bash
+        env:
+          VERSION: ${{ env.RELEASE_VERSION }}
+        run: |
+          version="${VERSION#v}"
+          notes_file="release-notes.md"
+
+          awk -v version="$version" '
+            $0 ~ "^## \\[" version "\\]" { capture=1; next }
+            capture && $0 ~ "^## \\[" { exit }
+            capture { print }
+          ' CHANGELOG.md > "${notes_file}"
+
+          if [[ ! -s "${notes_file}" ]]; then
+            echo "No changelog entry found for version ${version}" >&2
+            exit 1
+          fi
+
+          {
+            echo "## ${VERSION}"
+            echo
+            cat "${notes_file}"
+            echo
+            echo "---"
+            echo
+            echo "See also: https://github.com/${{ github.repository }}/blob/${VERSION}/CHANGELOG.md"
+          } > "${notes_file}.tmp"
+
+          mv "${notes_file}.tmp" "${notes_file}"
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body_path: release-notes.md
           files: dist/*
