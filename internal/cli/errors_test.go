@@ -21,6 +21,21 @@ func TestRunUnknownCommandReturnsUsageError(t *testing.T) {
 	}
 }
 
+func TestHelpIncludesDeleteWarnings(t *testing.T) {
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"help"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Delete Warnings:") {
+		t.Fatalf("expected delete warning section, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "If you are an agent or automation tool, stop and think before deleting anything.") {
+		t.Fatalf("expected agent warning, got %q", stdout.String())
+	}
+}
+
 func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 	testCases := []struct {
 		name string

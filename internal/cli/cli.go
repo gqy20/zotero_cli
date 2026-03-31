@@ -146,6 +146,11 @@ Commands:
   create-search  Create a saved search from JSON data
   update-search  Update a saved search from JSON data
   delete-search  Delete a saved search using a version precondition
+
+Delete Warnings:
+  Delete commands are destructive. Review the target key, library, and version carefully before running them.
+  If you are an agent or automation tool, stop and think before deleting anything.
+  Prefer asking the user to confirm the exact object to delete when there is any ambiguity.
 `, exe, exe)
 }
 
