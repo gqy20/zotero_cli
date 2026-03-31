@@ -101,8 +101,9 @@ func parseFindArgs(args []string) (zoteroapi.FindOptions, bool, error) {
 	return opts, jsonOutput, nil
 }
 
-func parseExportArgs(args []string) (string, zoteroapi.FindOptions, bool, error) {
+func parseExportArgs(args []string) (string, zoteroapi.FindOptions, string, bool, error) {
 	var itemKey string
+	var format string
 	var jsonOutput bool
 	findOpts := zoteroapi.FindOptions{}
 	queryParts := make([]string, 0, len(args))
@@ -113,18 +114,24 @@ func parseExportArgs(args []string) (string, zoteroapi.FindOptions, bool, error)
 			jsonOutput = true
 		case "--item-key":
 			if i+1 >= len(args) {
-				return "", zoteroapi.FindOptions{}, false, errors.New("missing value for --item-key")
+				return "", zoteroapi.FindOptions{}, "", false, errors.New("missing value for --item-key")
 			}
 			i++
 			itemKey = args[i]
+		case "--format":
+			if i+1 >= len(args) {
+				return "", zoteroapi.FindOptions{}, "", false, errors.New("missing value for --format")
+			}
+			i++
+			format = args[i]
 		case "--limit":
 			if i+1 >= len(args) {
-				return "", zoteroapi.FindOptions{}, false, errors.New("missing value for --limit")
+				return "", zoteroapi.FindOptions{}, "", false, errors.New("missing value for --limit")
 			}
 			i++
 			limit, err := strconv.Atoi(args[i])
 			if err != nil || limit <= 0 {
-				return "", zoteroapi.FindOptions{}, false, errors.New("invalid value for --limit")
+				return "", zoteroapi.FindOptions{}, "", false, errors.New("invalid value for --limit")
 			}
 			findOpts.Limit = limit
 		default:
@@ -133,17 +140,21 @@ func parseExportArgs(args []string) (string, zoteroapi.FindOptions, bool, error)
 	}
 
 	if itemKey != "" && len(queryParts) > 0 {
-		return "", zoteroapi.FindOptions{}, false, errors.New("cannot use query and --item-key together")
+		return "", zoteroapi.FindOptions{}, "", false, errors.New("cannot use query and --item-key together")
 	}
 
 	if itemKey == "" {
 		findOpts.Query = strings.TrimSpace(strings.Join(queryParts, " "))
 		if findOpts.Query == "" {
-			return "", zoteroapi.FindOptions{}, false, errors.New("missing query or --item-key")
+			return "", zoteroapi.FindOptions{}, "", false, errors.New("missing query or --item-key")
 		}
 	}
 
-	return itemKey, findOpts, jsonOutput, nil
+	if format != "" && format != "bib" && format != "bibtex" && format != "biblatex" && format != "csljson" && format != "ris" {
+		return "", zoteroapi.FindOptions{}, "", false, errors.New("unsupported format")
+	}
+
+	return itemKey, findOpts, format, jsonOutput, nil
 }
 
 func parseCiteArgs(args []string) (string, zoteroapi.CitationOptions, bool, error) {

@@ -112,6 +112,12 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			wantStderr: "error: cannot use query and --item-key together",
 		},
 		{
+			name:       "export invalid format",
+			args:       []string{"export", "--item-key", "X42A7DEE", "--format", "bad"},
+			wantUsage:  usageExport,
+			wantStderr: "error: unsupported format",
+		},
+		{
 			name:      "collections extra arg",
 			args:      []string{"collections", "extra"},
 			wantUsage: usageCollections,

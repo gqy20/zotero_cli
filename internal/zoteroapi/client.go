@@ -88,6 +88,18 @@ type VersionsResult struct {
 	NotModified         bool           `json:"not_modified,omitempty"`
 }
 
+type ExportOptions struct {
+	Format string
+	Style  string
+	Locale string
+}
+
+type ExportResult struct {
+	Format string `json:"format"`
+	Text   string `json:"text,omitempty"`
+	Data   any    `json:"data,omitempty"`
+}
+
 type LocalizedValue struct {
 	ID        string `json:"id"`
 	Localized string `json:"localized"`
@@ -413,6 +425,72 @@ func (c *Client) GetCitation(ctx context.Context, key string, opts CitationOptio
 		Locale: opts.Locale,
 		Text:   compactWhitespace(stripHTML(htmlValue)),
 		HTML:   htmlValue,
+	}, nil
+}
+
+func (c *Client) ExportItems(ctx context.Context, keys []string, opts ExportOptions) (ExportResult, error) {
+	format := opts.Format
+	if format == "" {
+		format = "bib"
+	}
+
+	if format == "bib" {
+		results := make([]CitationResult, 0, len(keys))
+		for _, key := range keys {
+			result, err := c.GetCitation(ctx, key, CitationOptions{
+				Format: "bib",
+				Style:  opts.Style,
+				Locale: opts.Locale,
+			})
+			if err != nil {
+				return ExportResult{}, err
+			}
+			results = append(results, result)
+		}
+
+		texts := make([]string, 0, len(results))
+		for _, result := range results {
+			texts = append(texts, result.Text)
+		}
+		return ExportResult{
+			Format: "bib",
+			Text:   strings.Join(texts, "\n\n"),
+			Data:   results,
+		}, nil
+	}
+
+	resp, err := c.doRequest(ctx, "items", FindOptions{}, map[string]string{
+		"itemKey": strings.Join(keys, ","),
+		"format":  format,
+	})
+	if err != nil {
+		return ExportResult{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ExportResult{}, apiErrorFromResponse(resp)
+	}
+
+	if format == "csljson" {
+		var payload any
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			return ExportResult{}, err
+		}
+		return ExportResult{
+			Format: format,
+			Data:   payload,
+		}, nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ExportResult{}, err
+	}
+
+	return ExportResult{
+		Format: format,
+		Text:   string(body),
 	}, nil
 }
 

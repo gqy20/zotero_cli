@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -229,6 +230,76 @@ func TestClientListPublicationsItems(t *testing.T) {
 
 	if len(items) != 1 || items[0].Key != "PUB12345" {
 		t.Fatalf("unexpected publications items: %#v", items)
+	}
+}
+
+func TestClientExportItemsBibTeX(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123/items" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("itemKey"); got != "X42A7DEE,ART12345" {
+			t.Fatalf("unexpected itemKey: %q", got)
+		}
+		if got := r.URL.Query().Get("format"); got != "bibtex" {
+			t.Fatalf("unexpected format: %q", got)
+		}
+
+		_, _ = w.Write([]byte("@article{vaswani2017,\n  title = {Attention Is All You Need}\n}"))
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.ExportItems(context.Background(), []string{"X42A7DEE", "ART12345"}, ExportOptions{
+		Format: "bibtex",
+	})
+	if err != nil {
+		t.Fatalf("ExportItems returned error: %v", err)
+	}
+
+	if result.Format != "bibtex" || !strings.Contains(result.Text, "@article{vaswani2017") {
+		t.Fatalf("unexpected export result: %#v", result)
+	}
+}
+
+func TestClientExportItemsCSLJSON(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("format"); got != "csljson" {
+			t.Fatalf("unexpected format: %q", got)
+		}
+		if err := json.NewEncoder(w).Encode([]map[string]any{
+			{"id": "X42A7DEE", "title": "Attention Is All You Need"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.ExportItems(context.Background(), []string{"X42A7DEE"}, ExportOptions{
+		Format: "csljson",
+	})
+	if err != nil {
+		t.Fatalf("ExportItems returned error: %v", err)
+	}
+
+	payload, ok := result.Data.([]any)
+	if !ok || len(payload) != 1 {
+		t.Fatalf("unexpected export payload: %#v", result)
 	}
 }
 

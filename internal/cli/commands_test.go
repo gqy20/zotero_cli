@@ -192,9 +192,12 @@ func TestRunExportByItemKeyJSON(t *testing.T) {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 
-	data, ok := got["data"].([]any)
-	if !ok || len(data) != 1 {
+	data, ok := got["data"].(map[string]any)
+	if !ok {
 		t.Fatalf("unexpected export payload: %#v", got["data"])
+	}
+	if data["format"] != "bib" {
+		t.Fatalf("unexpected export format: %#v", data)
 	}
 }
 
@@ -216,6 +219,55 @@ func TestRunExportByQueryText(t *testing.T) {
 	got := stdout.String()
 	if !strings.Contains(got, "Lovelace, A. (2024). Primary Article.") {
 		t.Fatalf("unexpected export output: %q", got)
+	}
+}
+
+func TestRunExportBibTeXText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"export", "--item-key", "X42A7DEE", "--format", "bibtex"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	if got := stdout.String(); !strings.Contains(got, "@article{vaswani2017") {
+		t.Fatalf("unexpected bibtex output: %q", got)
+	}
+}
+
+func TestRunExportCSLJSONJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"export", "--item-key", "X42A7DEE", "--format", "csljson", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+
+	if got["command"] != "export" {
+		t.Fatalf("unexpected command: %#v", got["command"])
+	}
+	data, ok := got["data"].(map[string]any)
+	if !ok || data["format"] != "csljson" {
+		t.Fatalf("unexpected export payload: %#v", got["data"])
 	}
 }
 

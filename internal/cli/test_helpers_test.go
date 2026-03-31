@@ -76,12 +76,25 @@ func newTestAPI(t *testing.T) (string, func()) {
 			direction := r.URL.Query().Get("direction")
 			qmode := r.URL.Query().Get("qmode")
 			includeTrashed := r.URL.Query().Get("includeTrashed")
+			format := r.URL.Query().Get("format")
+			itemKey := r.URL.Query().Get("itemKey")
 
 			if r.URL.Query().Get("format") == "versions" {
 				w.Header().Set("Last-Modified-Version", "111")
 				_ = json.NewEncoder(w).Encode(map[string]int{
 					"ITEM1234": 90,
 					"ITEM5678": 91,
+				})
+				return
+			}
+
+			if itemKey != "" && format == "bibtex" {
+				_, _ = w.Write([]byte("@article{vaswani2017,\n  title = {Attention Is All You Need}\n}\n"))
+				return
+			}
+			if itemKey != "" && format == "csljson" {
+				_ = json.NewEncoder(w).Encode([]map[string]any{
+					{"id": "X42A7DEE", "title": "Attention Is All You Need"},
 				})
 				return
 			}

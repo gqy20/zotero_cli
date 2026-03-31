@@ -15,7 +15,7 @@ const (
 	usageFind                 = "usage: zot find <query> [--json] [--item-type TYPE] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed]"
 	usageShow                 = "usage: zot show <item-key> [--json]"
 	usageCite                 = "usage: zot cite <item-key> [--format citation|bib] [--style STYLE] [--locale LOCALE] [--json]"
-	usageExport               = "usage: zot export <query> [--limit N] [--json] | zot export --item-key KEY [--json]"
+	usageExport               = "usage: zot export <query> [--limit N] [--format bib|bibtex|biblatex|csljson|ris] [--json] | zot export --item-key KEY [--format bib|bibtex|biblatex|csljson|ris] [--json]"
 	usageCollections          = "usage: zot collections [--json]"
 	usageNotes                = "usage: zot notes [--json]"
 	usageTags                 = "usage: zot tags [--json]"
@@ -288,7 +288,7 @@ func runExport(args []string) int {
 		return 2
 	}
 
-	itemKey, findOpts, jsonOutput, err := parseExportArgs(args)
+	itemKey, findOpts, format, jsonOutput, err := parseExportArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		fmt.Fprintln(stderr, usageExport)
@@ -314,36 +314,31 @@ func runExport(args []string) int {
 		}
 	}
 
-	results := make([]zoteroapi.CitationResult, 0, len(keys))
-	for _, key := range keys {
-		result, err := client.GetCitation(context.Background(), key, zoteroapi.CitationOptions{
-			Format: "bib",
-			Style:  cfg.Style,
-			Locale: cfg.Locale,
-		})
-		if err != nil {
-			return printErr(err)
-		}
-		results = append(results, result)
+	result, err := client.ExportItems(context.Background(), keys, zoteroapi.ExportOptions{
+		Format: format,
+		Style:  cfg.Style,
+		Locale: cfg.Locale,
+	})
+	if err != nil {
+		return printErr(err)
 	}
 
 	if jsonOutput {
 		return writeJSON(jsonResponse{
 			OK:      true,
 			Command: "export",
-			Data:    results,
+			Data:    result,
 			Meta: map[string]any{
-				"total": len(results),
+				"total": len(keys),
 			},
 		})
 	}
 
-	for i, result := range results {
-		if i > 0 {
-			fmt.Fprintln(stdout)
-		}
+	if result.Text != "" {
 		fmt.Fprintln(stdout, result.Text)
+		return 0
 	}
+	return writeJSON(result.Data)
 	return 0
 }
 
