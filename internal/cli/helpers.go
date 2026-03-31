@@ -296,6 +296,109 @@ func parseSingleValueCommand(args []string, usage string) (string, bool, bool) {
 	return value, jsonOutput, true
 }
 
+func parseWriteCreateArgs(args []string, usage string) (map[string]any, int, bool, bool) {
+	var raw string
+	var version int
+	var jsonOutput bool
+	var versionSet bool
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonOutput = true
+		case "--data":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, usage)
+				return nil, 0, false, false
+			}
+			i++
+			raw = args[i]
+		case "--if-unmodified-since-version":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, usage)
+				return nil, 0, false, false
+			}
+			i++
+			parsed, err := strconv.Atoi(args[i])
+			if err != nil || parsed <= 0 {
+				fmt.Fprintln(stderr, usage)
+				return nil, 0, false, false
+			}
+			version = parsed
+			versionSet = true
+		default:
+			fmt.Fprintln(stderr, usage)
+			return nil, 0, false, false
+		}
+	}
+
+	if raw == "" || !versionSet {
+		fmt.Fprintln(stderr, usage)
+		return nil, 0, false, false
+	}
+
+	var data map[string]any
+	if err := json.Unmarshal([]byte(raw), &data); err != nil {
+		fmt.Fprintln(stderr, usage)
+		return nil, 0, false, false
+	}
+	return data, version, jsonOutput, true
+}
+
+func parseWriteUpdateArgs(args []string, usage string) (string, map[string]any, int, bool, bool) {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, usage)
+		return "", nil, 0, false, false
+	}
+	key := args[0]
+	data, version, jsonOutput, ok := parseWriteCreateArgs(args[1:], usage)
+	if !ok {
+		return "", nil, 0, false, false
+	}
+	return key, data, version, jsonOutput, true
+}
+
+func parseWriteDeleteArgs(args []string, usage string) (string, int, bool, bool) {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, usage)
+		return "", 0, false, false
+	}
+	key := args[0]
+	var version int
+	var jsonOutput bool
+	var versionSet bool
+
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonOutput = true
+		case "--if-unmodified-since-version":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, usage)
+				return "", 0, false, false
+			}
+			i++
+			parsed, err := strconv.Atoi(args[i])
+			if err != nil || parsed <= 0 {
+				fmt.Fprintln(stderr, usage)
+				return "", 0, false, false
+			}
+			version = parsed
+			versionSet = true
+		default:
+			fmt.Fprintln(stderr, usage)
+			return "", 0, false, false
+		}
+	}
+
+	if !versionSet {
+		fmt.Fprintln(stderr, usage)
+		return "", 0, false, false
+	}
+
+	return key, version, jsonOutput, true
+}
+
 func loadClient() (config.Config, *zoteroapi.Client, int) {
 	cfg, _, err := config.Load()
 	if err != nil {

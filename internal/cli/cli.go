@@ -73,6 +73,12 @@ func Run(args []string) int {
 		return runCollectionsTop(args[1:])
 	case "publications":
 		return runPublications(args[1:])
+	case "create-item":
+		return runCreateItem(args[1:])
+	case "update-item":
+		return runUpdateItem(args[1:])
+	case "delete-item":
+		return runDeleteItem(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -113,6 +119,9 @@ Commands:
   trash         List items currently in the trash
   collections-top  List only top-level collections
   publications     List items in My Publications
+  create-item   Create a new item from JSON data
+  update-item   Update an existing item from JSON data
+  delete-item   Delete an item using a version precondition
 `, exe, exe)
 }
 

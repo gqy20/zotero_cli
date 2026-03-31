@@ -100,6 +100,11 @@ type ExportResult struct {
 	Data   any    `json:"data,omitempty"`
 }
 
+type WriteResult struct {
+	Key                 string `json:"key,omitempty"`
+	LastModifiedVersion int    `json:"last_modified_version,omitempty"`
+}
+
 type LocalizedValue struct {
 	ID        string `json:"id"`
 	Localized string `json:"localized"`
@@ -258,6 +263,15 @@ type apiGroup struct {
 
 type apiGroupData struct {
 	Name string `json:"name"`
+}
+
+type apiWriteResponse struct {
+	Successful map[string]apiWriteSuccess `json:"successful"`
+}
+
+type apiWriteSuccess struct {
+	Key     string `json:"key"`
+	Version int    `json:"version"`
 }
 
 type CitationResult struct {
@@ -491,6 +505,65 @@ func (c *Client) ExportItems(ctx context.Context, keys []string, opts ExportOpti
 	return ExportResult{
 		Format: format,
 		Text:   string(body),
+	}, nil
+}
+
+func (c *Client) CreateItem(ctx context.Context, data map[string]any, ifUnmodifiedSinceVersion int) (WriteResult, error) {
+	resp, err := c.doWriteRequest(ctx, http.MethodPost, "items", []map[string]any{data}, ifUnmodifiedSinceVersion)
+	if err != nil {
+		return WriteResult{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return WriteResult{}, apiErrorFromResponse(resp)
+	}
+
+	var result apiWriteResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return WriteResult{}, err
+	}
+
+	writeResult := WriteResult{
+		LastModifiedVersion: parseLastModifiedVersion(resp.Header.Get("Last-Modified-Version")),
+	}
+	if success, ok := result.Successful["0"]; ok {
+		writeResult.Key = success.Key
+	}
+	return writeResult, nil
+}
+
+func (c *Client) UpdateItem(ctx context.Context, key string, data map[string]any, ifUnmodifiedSinceVersion int) (WriteResult, error) {
+	resp, err := c.doWriteRequest(ctx, http.MethodPatch, path.Join("items", key), data, ifUnmodifiedSinceVersion)
+	if err != nil {
+		return WriteResult{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		return WriteResult{}, apiErrorFromResponse(resp)
+	}
+
+	return WriteResult{
+		Key:                 key,
+		LastModifiedVersion: parseLastModifiedVersion(resp.Header.Get("Last-Modified-Version")),
+	}, nil
+}
+
+func (c *Client) DeleteItem(ctx context.Context, key string, ifUnmodifiedSinceVersion int) (WriteResult, error) {
+	resp, err := c.doWriteRequest(ctx, http.MethodDelete, path.Join("items", key), nil, ifUnmodifiedSinceVersion)
+	if err != nil {
+		return WriteResult{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		return WriteResult{}, apiErrorFromResponse(resp)
+	}
+
+	return WriteResult{
+		Key:                 key,
+		LastModifiedVersion: parseLastModifiedVersion(resp.Header.Get("Last-Modified-Version")),
 	}, nil
 }
 
@@ -978,6 +1051,17 @@ func apiErrorFromResponse(resp *http.Response) error {
 	return apiErr
 }
 
+func parseLastModifiedVersion(value string) int {
+	if value == "" {
+		return 0
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0
+	}
+	return parsed
+}
+
 func versionsPath(objectType string) (string, error) {
 	switch objectType {
 	case "collections":
@@ -1101,6 +1185,50 @@ func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOp
 		return nil, err
 	}
 	return resp, nil
+}
+
+func (c *Client) doWriteRequest(ctx context.Context, method string, relativePath string, body any, ifUnmodifiedSinceVersion int) (*http.Response, error) {
+	if c.cfg.Mode != "" && c.cfg.Mode != "web" {
+		return nil, fmt.Errorf("unsupported mode %q", c.cfg.Mode)
+	}
+
+	u, err := url.Parse(c.baseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	switch c.cfg.LibraryType {
+	case "user":
+		u.Path = path.Join(u.Path, "users", c.cfg.LibraryID, relativePath)
+	case "group":
+		u.Path = path.Join(u.Path, "groups", c.cfg.LibraryID, relativePath)
+	default:
+		return nil, fmt.Errorf("unsupported library_type %q", c.cfg.LibraryType)
+	}
+
+	var reader io.Reader
+	if body != nil {
+		payload, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		reader = strings.NewReader(string(payload))
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), reader)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Zotero-API-Key", c.cfg.APIKey)
+	req.Header.Set("Zotero-API-Version", "3")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if ifUnmodifiedSinceVersion > 0 {
+		req.Header.Set("If-Unmodified-Since-Version", strconv.Itoa(ifUnmodifiedSinceVersion))
+	}
+
+	return c.httpClient.Do(req)
 }
 
 func stripHTML(value string) string {

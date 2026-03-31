@@ -33,6 +33,9 @@ const (
 	usageTrash                = "usage: zot trash [--json]"
 	usageCollectionsTop       = "usage: zot collections-top [--json]"
 	usagePublications         = "usage: zot publications [--json]"
+	usageCreateItem           = "usage: zot create-item --data JSON --if-unmodified-since-version N [--json]"
+	usageUpdateItem           = "usage: zot update-item <item-key> --data JSON --if-unmodified-since-version N [--json]"
+	usageDeleteItem           = "usage: zot delete-item <item-key> --if-unmodified-since-version N [--json]"
 )
 
 func runConfig(args []string) int {
@@ -869,6 +872,75 @@ func runPublications(args []string) int {
 			item.Title,
 		)
 	}
+	return 0
+}
+
+func runCreateItem(args []string) int {
+	data, version, jsonOutput, ok := parseWriteCreateArgs(args, usageCreateItem)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	result, err := client.CreateItem(context.Background(), data, version)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: "create-item", Data: result})
+	}
+	fmt.Fprintf(stdout, "created item %s\n", result.Key)
+	return 0
+}
+
+func runUpdateItem(args []string) int {
+	key, data, version, jsonOutput, ok := parseWriteUpdateArgs(args, usageUpdateItem)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	result, err := client.UpdateItem(context.Background(), key, data, version)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: "update-item", Data: result})
+	}
+	fmt.Fprintf(stdout, "updated item %s\n", result.Key)
+	return 0
+}
+
+func runDeleteItem(args []string) int {
+	key, version, jsonOutput, ok := parseWriteDeleteArgs(args, usageDeleteItem)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	result, err := client.DeleteItem(context.Background(), key, version)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: "delete-item", Data: result})
+	}
+	fmt.Fprintf(stdout, "deleted item %s\n", result.Key)
 	return 0
 }
 

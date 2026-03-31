@@ -303,6 +303,139 @@ func TestClientExportItemsCSLJSON(t *testing.T) {
 	}
 }
 
+func TestClientCreateItem(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/users/123/items" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("If-Unmodified-Since-Version"); got != "41" {
+			t.Fatalf("unexpected If-Unmodified-Since-Version: %q", got)
+		}
+
+		var body []map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body) != 1 || body[0]["itemType"] != "book" {
+			t.Fatalf("unexpected request body: %#v", body)
+		}
+
+		w.Header().Set("Last-Modified-Version", "42")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"successful": map[string]any{
+				"0": map[string]any{
+					"key":     "NEWA1234",
+					"version": 42,
+				},
+			},
+			"unchanged": map[string]any{},
+			"failed":    map[string]any{},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.CreateItem(context.Background(), map[string]any{
+		"itemType": "book",
+		"title":    "My Book",
+	}, 41)
+	if err != nil {
+		t.Fatalf("CreateItem returned error: %v", err)
+	}
+	if result.Key != "NEWA1234" || result.LastModifiedVersion != 42 {
+		t.Fatalf("unexpected create result: %#v", result)
+	}
+}
+
+func TestClientUpdateItem(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/users/123/items/ABCD2345" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("If-Unmodified-Since-Version"); got != "7" {
+			t.Fatalf("unexpected If-Unmodified-Since-Version: %q", got)
+		}
+
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body["title"] != "Updated Title" {
+			t.Fatalf("unexpected request body: %#v", body)
+		}
+
+		w.Header().Set("Last-Modified-Version", "8")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.UpdateItem(context.Background(), "ABCD2345", map[string]any{
+		"title": "Updated Title",
+	}, 7)
+	if err != nil {
+		t.Fatalf("UpdateItem returned error: %v", err)
+	}
+	if result.LastModifiedVersion != 8 {
+		t.Fatalf("unexpected update result: %#v", result)
+	}
+}
+
+func TestClientDeleteItem(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/users/123/items/ABCD2345" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("If-Unmodified-Since-Version"); got != "8" {
+			t.Fatalf("unexpected If-Unmodified-Since-Version: %q", got)
+		}
+		w.Header().Set("Last-Modified-Version", "9")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.DeleteItem(context.Background(), "ABCD2345", 8)
+	if err != nil {
+		t.Fatalf("DeleteItem returned error: %v", err)
+	}
+	if result.LastModifiedVersion != 9 {
+		t.Fatalf("unexpected delete result: %#v", result)
+	}
+}
+
 func TestClientGetItem(t *testing.T) {
 	t.Parallel()
 

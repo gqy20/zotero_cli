@@ -65,6 +65,31 @@ func newTestAPI(t *testing.T) (string, func()) {
 	t.Helper()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/users/123456/items" {
+			w.Header().Set("Last-Modified-Version", "42")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"successful": map[string]any{
+					"0": map[string]any{
+						"key":     "NEWA1234",
+						"version": 42,
+					},
+				},
+				"unchanged": map[string]any{},
+				"failed":    map[string]any{},
+			})
+			return
+		}
+		if r.Method == http.MethodPatch && r.URL.Path == "/users/123456/items/ABCD2345" {
+			w.Header().Set("Last-Modified-Version", "8")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if r.Method == http.MethodDelete && r.URL.Path == "/users/123456/items/ABCD2345" {
+			w.Header().Set("Last-Modified-Version", "9")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
 		switch r.URL.Path {
 		case "/users/123456/items":
 			query := r.URL.Query().Get("q")

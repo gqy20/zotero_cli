@@ -47,6 +47,9 @@ func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 		{name: "trash", args: []string{"trash"}},
 		{name: "collections top", args: []string{"collections-top"}},
 		{name: "publications", args: []string{"publications"}},
+		{name: "create item", args: []string{"create-item", "--data", `{"itemType":"book"}`, "--if-unmodified-since-version", "1"}},
+		{name: "update item", args: []string{"update-item", "ABCD2345", "--data", `{"title":"Updated"}`, "--if-unmodified-since-version", "1"}},
+		{name: "delete item", args: []string{"delete-item", "ABCD2345", "--if-unmodified-since-version", "1"}},
 	}
 
 	for _, tc := range testCases {
@@ -205,6 +208,21 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			name:      "publications extra arg",
 			args:      []string{"publications", "extra"},
 			wantUsage: usagePublications,
+		},
+		{
+			name:      "create item missing data",
+			args:      []string{"create-item"},
+			wantUsage: usageCreateItem,
+		},
+		{
+			name:      "update item missing args",
+			args:      []string{"update-item", "ABCD2345"},
+			wantUsage: usageUpdateItem,
+		},
+		{
+			name:      "delete item missing version",
+			args:      []string{"delete-item", "ABCD2345"},
+			wantUsage: usageDeleteItem,
 		},
 	}
 
