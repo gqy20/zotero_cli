@@ -69,6 +69,10 @@ func Run(args []string) int {
 		return runGroups(args[1:])
 	case "trash":
 		return runTrash(args[1:])
+	case "collections-top":
+		return runCollectionsTop(args[1:])
+	case "publications":
+		return runPublications(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -107,6 +111,8 @@ Commands:
   key-info      Show the owner and privileges for an API key
   groups        List groups accessible to a user
   trash         List items currently in the trash
+  collections-top  List only top-level collections
+  publications     List items in My Publications
 `, exe, exe)
 }
 

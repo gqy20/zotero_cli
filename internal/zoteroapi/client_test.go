@@ -151,6 +151,87 @@ func TestClientListTrashItems(t *testing.T) {
 	}
 }
 
+func TestClientListTopCollections(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123/collections/top" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		if err := json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"key": "COLLTOP1",
+				"data": map[string]any{
+					"name":             "Top Folder",
+					"parentCollection": false,
+				},
+				"meta": map[string]any{
+					"numCollections": 1,
+					"numItems":       8,
+				},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	collections, err := client.ListTopCollections(context.Background())
+	if err != nil {
+		t.Fatalf("ListTopCollections returned error: %v", err)
+	}
+
+	if len(collections) != 1 || collections[0].Key != "COLLTOP1" {
+		t.Fatalf("unexpected collections: %#v", collections)
+	}
+}
+
+func TestClientListPublicationsItems(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123/publications/items" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		if err := json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"key": "PUB12345",
+				"data": map[string]any{
+					"itemType": "journalArticle",
+					"title":    "Published Article",
+					"date":     "2020",
+				},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	items, err := client.ListPublicationsItems(context.Background(), FindOptions{})
+	if err != nil {
+		t.Fatalf("ListPublicationsItems returned error: %v", err)
+	}
+
+	if len(items) != 1 || items[0].Key != "PUB12345" {
+		t.Fatalf("unexpected publications items: %#v", items)
+	}
+}
+
 func TestClientGetItem(t *testing.T) {
 	t.Parallel()
 

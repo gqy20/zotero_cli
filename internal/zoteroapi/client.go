@@ -334,6 +334,20 @@ func (c *Client) ListTrashItems(ctx context.Context, opts FindOptions) ([]Item, 
 	return items, nil
 }
 
+func (c *Client) ListPublicationsItems(ctx context.Context, opts FindOptions) ([]Item, error) {
+	raw, err := c.getItems(ctx, path.Join("publications", "items"), opts)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]Item, 0, len(raw))
+	for _, item := range raw {
+		items = append(items, mapItem(item))
+	}
+
+	return items, nil
+}
+
 func (c *Client) GetItem(ctx context.Context, key string) (Item, error) {
 	resp, err := c.doRequest(ctx, path.Join("items", key), FindOptions{}, nil)
 	if err != nil {
@@ -404,6 +418,26 @@ func (c *Client) GetCitation(ctx context.Context, key string, opts CitationOptio
 
 func (c *Client) ListCollections(ctx context.Context) ([]Collection, error) {
 	raw, err := c.getCollections(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	collections := make([]Collection, 0, len(raw))
+	for _, collection := range raw {
+		collections = append(collections, Collection{
+			Key:            collection.Key,
+			Name:           collection.Data.Name,
+			ParentKey:      collectionParentKey(collection.Data.Parent),
+			NumCollections: collection.Meta.NumCollections,
+			NumItems:       collection.Meta.NumItems,
+		})
+	}
+
+	return collections, nil
+}
+
+func (c *Client) ListTopCollections(ctx context.Context) ([]Collection, error) {
+	raw, err := c.fetchAllCollections(ctx, path.Join("collections", "top"))
 	if err != nil {
 		return nil, err
 	}

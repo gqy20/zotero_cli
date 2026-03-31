@@ -345,6 +345,20 @@ func newTestAPI(t *testing.T) (string, func()) {
 					},
 				},
 			})
+		case "/users/123456/collections/top":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"key": "COLLTOP1",
+					"data": map[string]any{
+						"name":             "Top Folder",
+						"parentCollection": false,
+					},
+					"meta": map[string]any{
+						"numCollections": 1,
+						"numItems":       8,
+					},
+				},
+			})
 		case "/users/123456/tags":
 			_ = json.NewEncoder(w).Encode([]map[string]any{
 				{
@@ -383,6 +397,24 @@ func newTestAPI(t *testing.T) (string, func()) {
 								"creatorType": "author",
 								"firstName":   "Dana",
 								"lastName":    "Scott",
+							},
+						},
+					},
+				},
+			})
+		case "/users/123456/publications/items":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"key": "PUB12345",
+					"data": map[string]any{
+						"itemType": "journalArticle",
+						"title":    "Published Article",
+						"date":     "2020",
+						"creators": []map[string]any{
+							{
+								"creatorType": "author",
+								"firstName":   "Claude",
+								"lastName":    "Shannon",
 							},
 						},
 					},

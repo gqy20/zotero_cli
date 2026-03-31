@@ -31,6 +31,8 @@ const (
 	usageKeyInfo              = "usage: zot key-info <api-key> [--json]"
 	usageGroups               = "usage: zot groups [--json]"
 	usageTrash                = "usage: zot trash [--json]"
+	usageCollectionsTop       = "usage: zot collections-top [--json]"
+	usagePublications         = "usage: zot publications [--json]"
 )
 
 func runConfig(args []string) int {
@@ -779,6 +781,83 @@ func runTrash(args []string) int {
 		return writeJSON(jsonResponse{
 			OK:      true,
 			Command: "trash",
+			Data:    items,
+			Meta: map[string]any{
+				"total": len(items),
+			},
+		})
+	}
+
+	for _, item := range items {
+		fmt.Fprintf(stdout, "%-10s  %-16s  %-6s  %-18s  %s\n",
+			item.Key,
+			item.ItemType,
+			shortDate(item.Date),
+			shortCreators(item.Creators),
+			item.Title,
+		)
+	}
+	return 0
+}
+
+func runCollectionsTop(args []string) int {
+	jsonOutput, ok := parseJSONOnlyArgs(args, usageCollectionsTop)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	collections, err := client.ListTopCollections(context.Background())
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{
+			OK:      true,
+			Command: "collections-top",
+			Data:    collections,
+			Meta: map[string]any{
+				"total": len(collections),
+			},
+		})
+	}
+
+	for _, collection := range collections {
+		fmt.Fprintf(stdout, "%-10s  %-20s  items=%d  children=%d\n",
+			collection.Key,
+			collection.Name,
+			collection.NumItems,
+			collection.NumCollections,
+		)
+	}
+	return 0
+}
+
+func runPublications(args []string) int {
+	jsonOutput, ok := parseJSONOnlyArgs(args, usagePublications)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	items, err := client.ListPublicationsItems(context.Background(), zoteroapi.FindOptions{})
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{
+			OK:      true,
+			Command: "publications",
 			Data:    items,
 			Meta: map[string]any{
 				"total": len(items),
