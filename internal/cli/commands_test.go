@@ -1064,6 +1064,59 @@ func TestRunDeleteItemText(t *testing.T) {
 	}
 }
 
+func TestRunCreateItemsFromFileJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	payloadPath := filepath.Join(t.TempDir(), "items.json")
+	if err := os.WriteFile(payloadPath, []byte(`[{"itemType":"book","title":"Book One"},{"itemType":"book","title":"Book Two"}]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"create-items", "--from-file", payloadPath, "--if-unmodified-since-version", "41", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].(map[string]any)
+	if !ok || data["last_modified_version"] != float64(52) {
+		t.Fatalf("unexpected payload: %#v", got["data"])
+	}
+	successful, ok := data["successful"].([]any)
+	if !ok || len(successful) != 2 {
+		t.Fatalf("unexpected successful payload: %#v", data["successful"])
+	}
+}
+
+func TestRunUpdateItemsText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"update-items", "--data", `[{"key":"ITEMA001","version":52,"title":"Updated One"},{"key":"ITEMA002","version":52,"title":"Updated Two"}]`})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "updated 1 items (1 unchanged) at library version 53") {
+		t.Fatalf("unexpected output: %q", got)
+	}
+}
+
 func TestRunCreateItemFromFileText(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

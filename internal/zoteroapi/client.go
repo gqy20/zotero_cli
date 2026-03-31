@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -103,6 +104,13 @@ type ExportResult struct {
 type WriteResult struct {
 	Key                 string `json:"key,omitempty"`
 	LastModifiedVersion int    `json:"last_modified_version,omitempty"`
+}
+
+type BatchWriteResult struct {
+	Successful          []WriteResult  `json:"successful,omitempty"`
+	Unchanged           []string       `json:"unchanged,omitempty"`
+	Failed              map[string]any `json:"failed,omitempty"`
+	LastModifiedVersion int            `json:"last_modified_version,omitempty"`
 }
 
 type LocalizedValue struct {
@@ -267,6 +275,8 @@ type apiGroupData struct {
 
 type apiWriteResponse struct {
 	Successful map[string]apiWriteSuccess `json:"successful"`
+	Unchanged  map[string]int             `json:"unchanged"`
+	Failed     map[string]any             `json:"failed"`
 }
 
 type apiWriteSuccess struct {
@@ -295,6 +305,10 @@ func (e *APIError) Error() string {
 		return "zotero api unauthorized (401): check library id and api key"
 	case http.StatusNotFound:
 		return "zotero api not found (404)"
+	case http.StatusConflict:
+		return formatAPIError("zotero api conflict (409): request conflicts with existing data", e.Body)
+	case http.StatusPreconditionFailed:
+		return formatAPIError("zotero api precondition failed (412): library version changed; refresh and retry", e.Body)
 	case http.StatusTooManyRequests:
 		if e.RetryAfter != "" {
 			return fmt.Sprintf("zotero api rate limited (429): retry after %ss", e.RetryAfter)
@@ -303,6 +317,14 @@ func (e *APIError) Error() string {
 	default:
 		return fmt.Sprintf("zotero api returned status %d", e.StatusCode)
 	}
+}
+
+func formatAPIError(prefix string, body string) string {
+	detail := strings.TrimSpace(body)
+	if detail == "" {
+		return prefix
+	}
+	return fmt.Sprintf("%s: %s", prefix, detail)
 }
 
 var htmlTagRe = regexp.MustCompile(`<[^>]+>`)
@@ -509,28 +531,11 @@ func (c *Client) ExportItems(ctx context.Context, keys []string, opts ExportOpti
 }
 
 func (c *Client) CreateItem(ctx context.Context, data map[string]any, ifUnmodifiedSinceVersion int) (WriteResult, error) {
-	resp, err := c.doWriteRequest(ctx, http.MethodPost, "items", []map[string]any{data}, ifUnmodifiedSinceVersion)
+	result, err := c.CreateItems(ctx, []map[string]any{data}, ifUnmodifiedSinceVersion)
 	if err != nil {
 		return WriteResult{}, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return WriteResult{}, apiErrorFromResponse(resp)
-	}
-
-	var result apiWriteResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return WriteResult{}, err
-	}
-
-	writeResult := WriteResult{
-		LastModifiedVersion: parseLastModifiedVersion(resp.Header.Get("Last-Modified-Version")),
-	}
-	if success, ok := result.Successful["0"]; ok {
-		writeResult.Key = success.Key
-	}
-	return writeResult, nil
+	return firstWriteResult(result), nil
 }
 
 func (c *Client) UpdateItem(ctx context.Context, key string, data map[string]any, ifUnmodifiedSinceVersion int) (WriteResult, error) {
@@ -565,6 +570,44 @@ func (c *Client) DeleteItem(ctx context.Context, key string, ifUnmodifiedSinceVe
 		Key:                 key,
 		LastModifiedVersion: parseLastModifiedVersion(resp.Header.Get("Last-Modified-Version")),
 	}, nil
+}
+
+func (c *Client) CreateItems(ctx context.Context, data []map[string]any, ifUnmodifiedSinceVersion int) (BatchWriteResult, error) {
+	resp, err := c.doWriteRequest(ctx, http.MethodPost, "items", data, ifUnmodifiedSinceVersion)
+	if err != nil {
+		return BatchWriteResult{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return BatchWriteResult{}, apiErrorFromResponse(resp)
+	}
+
+	var result apiWriteResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return BatchWriteResult{}, err
+	}
+
+	return mapBatchWriteResult(result, resp.Header), nil
+}
+
+func (c *Client) UpdateItems(ctx context.Context, data []map[string]any, ifUnmodifiedSinceVersion int) (BatchWriteResult, error) {
+	resp, err := c.doWriteRequest(ctx, http.MethodPatch, "items", data, ifUnmodifiedSinceVersion)
+	if err != nil {
+		return BatchWriteResult{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return BatchWriteResult{}, apiErrorFromResponse(resp)
+	}
+
+	var result apiWriteResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return BatchWriteResult{}, err
+	}
+
+	return mapBatchWriteResult(result, resp.Header), nil
 }
 
 func (c *Client) CreateCollection(ctx context.Context, data map[string]any, ifUnmodifiedSinceVersion int) (WriteResult, error) {
@@ -1167,6 +1210,49 @@ func apiErrorFromResponse(resp *http.Response) error {
 		return errors.New("zotero api request failed")
 	}
 	return apiErr
+}
+
+func mapBatchWriteResult(result apiWriteResponse, header http.Header) BatchWriteResult {
+	writeResult := BatchWriteResult{
+		Failed:              result.Failed,
+		LastModifiedVersion: parseLastModifiedVersion(header.Get("Last-Modified-Version")),
+	}
+
+	for _, index := range sortedMapKeys(result.Successful) {
+		success := result.Successful[index]
+		writeResult.Successful = append(writeResult.Successful, WriteResult{
+			Key:                 success.Key,
+			LastModifiedVersion: success.Version,
+		})
+	}
+	writeResult.Unchanged = append(writeResult.Unchanged, sortedMapKeys(result.Unchanged)...)
+	return writeResult
+}
+
+func firstWriteResult(result BatchWriteResult) WriteResult {
+	writeResult := WriteResult{
+		LastModifiedVersion: result.LastModifiedVersion,
+	}
+	if len(result.Successful) > 0 {
+		writeResult.Key = result.Successful[0].Key
+	}
+	return writeResult
+}
+
+func sortedMapKeys[T any](values map[string]T) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		left, leftErr := strconv.Atoi(keys[i])
+		right, rightErr := strconv.Atoi(keys[j])
+		if leftErr == nil && rightErr == nil {
+			return left < right
+		}
+		return keys[i] < keys[j]
+	})
+	return keys
 }
 
 func parseLastModifiedVersion(value string) int {

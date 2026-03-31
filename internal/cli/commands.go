@@ -36,6 +36,8 @@ const (
 	usageCreateItem           = "usage: zot create-item (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
 	usageUpdateItem           = "usage: zot update-item <item-key> (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
 	usageDeleteItem           = "usage: zot delete-item <item-key> --if-unmodified-since-version N [--json]"
+	usageCreateItems          = "usage: zot create-items (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
+	usageUpdateItems          = "usage: zot update-items (--data JSON | --from-file PATH) [--if-unmodified-since-version N] [--json]"
 	usageCreateCollection     = "usage: zot create-collection (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
 	usageUpdateCollection     = "usage: zot update-collection <collection-key> (--data JSON | --from-file PATH) [--if-unmodified-since-version N] [--json]"
 	usageDeleteCollection     = "usage: zot delete-collection <collection-key> --if-unmodified-since-version N [--json]"
@@ -947,6 +949,52 @@ func runDeleteItem(args []string) int {
 		return writeJSON(jsonResponse{OK: true, Command: "delete-item", Data: result})
 	}
 	fmt.Fprintf(stdout, "deleted item %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	return 0
+}
+
+func runCreateItems(args []string) int {
+	data, version, jsonOutput, ok := parseWriteBatchArgs(args, usageCreateItems, true)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	result, err := client.CreateItems(context.Background(), data, version)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: "create-items", Data: result})
+	}
+	fmt.Fprintf(stdout, "created %d items at library version %d\n", len(result.Successful), result.LastModifiedVersion)
+	return 0
+}
+
+func runUpdateItems(args []string) int {
+	data, version, jsonOutput, ok := parseWriteBatchArgs(args, usageUpdateItems, false)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	result, err := client.UpdateItems(context.Background(), data, version)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: "update-items", Data: result})
+	}
+	fmt.Fprintf(stdout, "updated %d items (%d unchanged) at library version %d\n", len(result.Successful), len(result.Unchanged), result.LastModifiedVersion)
 	return 0
 }
 

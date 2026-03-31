@@ -1723,6 +1723,158 @@ func TestClientFindItemsIncludesRetryAfterForRateLimit(t *testing.T) {
 	}
 }
 
+func TestClientUpdateItemReturnsReadablePreconditionError(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "library version advanced to 88", http.StatusPreconditionFailed)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	_, err := client.UpdateItem(context.Background(), "ABCD2345", map[string]any{"title": "Updated"}, 7)
+	if err == nil {
+		t.Fatal("expected precondition error")
+	}
+	if got := err.Error(); got != "zotero api precondition failed (412): library version changed; refresh and retry: library version advanced to 88" {
+		t.Fatalf("unexpected error: %q", got)
+	}
+}
+
+func TestClientCreateItemReturnsReadableConflictError(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "collection key already exists", http.StatusConflict)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	_, err := client.CreateItem(context.Background(), map[string]any{"itemType": "book"}, 41)
+	if err == nil {
+		t.Fatal("expected conflict error")
+	}
+	if got := err.Error(); got != "zotero api conflict (409): request conflicts with existing data: collection key already exists" {
+		t.Fatalf("unexpected error: %q", got)
+	}
+}
+
+func TestClientCreateItems(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/users/123/items" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("If-Unmodified-Since-Version"); got != "41" {
+			t.Fatalf("unexpected If-Unmodified-Since-Version: %q", got)
+		}
+
+		var body []map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body) != 2 {
+			t.Fatalf("expected 2 items, got %#v", body)
+		}
+
+		w.Header().Set("Last-Modified-Version", "52")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"successful": map[string]any{
+				"0": map[string]any{"key": "ITEMA001", "version": 51},
+				"1": map[string]any{"key": "ITEMA002", "version": 52},
+			},
+			"unchanged": map[string]any{},
+			"failed":    map[string]any{},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.CreateItems(context.Background(), []map[string]any{
+		{"itemType": "book", "title": "Book One"},
+		{"itemType": "book", "title": "Book Two"},
+	}, 41)
+	if err != nil {
+		t.Fatalf("CreateItems returned error: %v", err)
+	}
+	if result.LastModifiedVersion != 52 || len(result.Successful) != 2 || result.Successful[0].Key != "ITEMA001" || result.Successful[1].Key != "ITEMA002" {
+		t.Fatalf("unexpected batch result: %#v", result)
+	}
+}
+
+func TestClientUpdateItems(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/users/123/items" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		var body []map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body) != 2 || body[0]["key"] != "ITEMA001" {
+			t.Fatalf("unexpected body: %#v", body)
+		}
+
+		w.Header().Set("Last-Modified-Version", "53")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"successful": map[string]any{
+				"0": map[string]any{"key": "ITEMA001", "version": 53},
+			},
+			"unchanged": map[string]any{
+				"1": 52,
+			},
+			"failed": map[string]any{},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.UpdateItems(context.Background(), []map[string]any{
+		{"key": "ITEMA001", "version": 52, "title": "Updated One"},
+		{"key": "ITEMA002", "version": 52, "title": "Updated Two"},
+	}, 0)
+	if err != nil {
+		t.Fatalf("UpdateItems returned error: %v", err)
+	}
+	if result.LastModifiedVersion != 53 || len(result.Successful) != 1 || result.Successful[0].Key != "ITEMA001" || len(result.Unchanged) != 1 || result.Unchanged[0] != "1" {
+		t.Fatalf("unexpected batch result: %#v", result)
+	}
+}
+
 func defaultString(value string, fallback string) string {
 	if value == "" {
 		return fallback

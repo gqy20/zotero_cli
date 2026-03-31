@@ -66,6 +66,27 @@ func newTestAPI(t *testing.T) (string, func()) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/users/123456/items" {
+			var body any
+			if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+				if items, ok := body.([]any); ok && len(items) > 1 {
+					w.Header().Set("Last-Modified-Version", "52")
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"successful": map[string]any{
+							"0": map[string]any{
+								"key":     "ITEMA001",
+								"version": 51,
+							},
+							"1": map[string]any{
+								"key":     "ITEMA002",
+								"version": 52,
+							},
+						},
+						"unchanged": map[string]any{},
+						"failed":    map[string]any{},
+					})
+					return
+				}
+			}
 			w.Header().Set("Last-Modified-Version", "42")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"successful": map[string]any{
@@ -76,6 +97,22 @@ func newTestAPI(t *testing.T) (string, func()) {
 				},
 				"unchanged": map[string]any{},
 				"failed":    map[string]any{},
+			})
+			return
+		}
+		if r.Method == http.MethodPatch && r.URL.Path == "/users/123456/items" {
+			w.Header().Set("Last-Modified-Version", "53")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"successful": map[string]any{
+					"0": map[string]any{
+						"key":     "ITEMA001",
+						"version": 53,
+					},
+				},
+				"unchanged": map[string]any{
+					"1": 52,
+				},
+				"failed": map[string]any{},
 			})
 			return
 		}
@@ -648,6 +685,22 @@ func newErrorAPI(t *testing.T, status int, retryAfter string) errorAPIServer {
 			w.Header().Set("Retry-After", retryAfter)
 		}
 		http.Error(w, http.StatusText(status), status)
+	}))
+
+	return errorAPIServer{
+		url:     server.URL,
+		cleanup: server.Close,
+	}
+}
+
+func newErrorAPIWithBody(t *testing.T, status int, retryAfter string, body string) errorAPIServer {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if retryAfter != "" {
+			w.Header().Set("Retry-After", retryAfter)
+		}
+		http.Error(w, body, status)
 	}))
 
 	return errorAPIServer{

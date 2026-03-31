@@ -50,9 +50,14 @@ func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 		{name: "create item", args: []string{"create-item", "--data", `{"itemType":"book"}`, "--if-unmodified-since-version", "1"}},
 		{name: "update item", args: []string{"update-item", "ABCD2345", "--data", `{"title":"Updated"}`, "--if-unmodified-since-version", "1"}},
 		{name: "delete item", args: []string{"delete-item", "ABCD2345", "--if-unmodified-since-version", "1"}},
+		{name: "create items", args: []string{"create-items", "--data", `[{"itemType":"book"}]`, "--if-unmodified-since-version", "1"}},
+		{name: "update items", args: []string{"update-items", "--data", `[{"key":"ABCD2345","version":1,"title":"Updated"}]`}},
 		{name: "create collection", args: []string{"create-collection", "--data", `{"name":"New Collection"}`, "--if-unmodified-since-version", "1"}},
 		{name: "update collection", args: []string{"update-collection", "COLL1234", "--data", `{"key":"COLL1234","version":1,"name":"Renamed"}`}},
 		{name: "delete collection", args: []string{"delete-collection", "COLL1234", "--if-unmodified-since-version", "1"}},
+		{name: "create search", args: []string{"create-search", "--data", `{"name":"Unread PDFs"}`, "--if-unmodified-since-version", "1"}},
+		{name: "update search", args: []string{"update-search", "SCH12345", "--data", `{"key":"SCH12345","version":1,"name":"Renamed Search"}`}},
+		{name: "delete search", args: []string{"delete-search", "SCH12345", "--if-unmodified-since-version", "1"}},
 	}
 
 	for _, tc := range testCases {
@@ -228,6 +233,16 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			wantUsage: usageDeleteItem,
 		},
 		{
+			name:      "create items missing data",
+			args:      []string{"create-items"},
+			wantUsage: usageCreateItems,
+		},
+		{
+			name:      "update items missing data",
+			args:      []string{"update-items"},
+			wantUsage: usageUpdateItems,
+		},
+		{
 			name:      "create collection missing data",
 			args:      []string{"create-collection"},
 			wantUsage: usageCreateCollection,
@@ -318,5 +333,45 @@ func TestRunFindSurfacesRetryAfterOnRateLimit(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "zotero api rate limited (429): retry after 5s") {
 		t.Fatalf("expected readable 429 message, got %q", stderr.String())
+	}
+}
+
+func TestRunUpdateItemSurfacesReadablePreconditionError(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	server := newErrorAPIWithBody(t, http.StatusPreconditionFailed, "", "library version advanced to 88")
+	defer server.cleanup()
+	t.Setenv("ZOT_BASE_URL", server.url)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"update-item", "ABCD2345", "--data", `{"title":"Updated"}`, "--if-unmodified-since-version", "7"})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "zotero api precondition failed (412): library version changed; refresh and retry") {
+		t.Fatalf("expected readable 412 message, got %q", stderr.String())
+	}
+}
+
+func TestRunCreateItemSurfacesReadableConflictError(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	server := newErrorAPIWithBody(t, http.StatusConflict, "", "collection key already exists")
+	defer server.cleanup()
+	t.Setenv("ZOT_BASE_URL", server.url)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"create-item", "--data", `{"itemType":"book"}`, "--if-unmodified-since-version", "41"})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "zotero api conflict (409): request conflicts with existing data") {
+		t.Fatalf("expected readable 409 message, got %q", stderr.String())
 	}
 }
