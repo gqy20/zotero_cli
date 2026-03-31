@@ -12,6 +12,13 @@ It is based on:
 
 The purpose of this document is to serve as the implementation reference for the next phase of the project.
 
+The local backend should optimize for agent-usable CLI behavior:
+
+- stable JSON contracts
+- explicit failure modes
+- deterministic attachment path reporting
+- backend-independent item/domain shapes
+
 
 ## Summary
 
@@ -22,7 +29,7 @@ However, the inspected local Zotero data directory is complete enough to support
 
 - a full main database exists at `D:\zotero\zotero_file\zotero.sqlite`
 - an attachment store exists at `D:\zotero\zotero_file\storage`
-- metadata, collections, tags, notes, attachments, and full-text index tables all exist
+- metadata, collections, tags, notes, attachments, annotations, and full-text index tables all exist
 
 This means a local backend is now realistic and valuable.
 
@@ -37,14 +44,16 @@ The recommended direction is:
 
 The current CLI flow is still single-backend oriented:
 
-- [cli.go](D:/C/Documents/Program/Go/zotero_cli/internal/cli/cli.go) loads config
-- it directly constructs [client.go](D:/C/Documents/Program/Go/zotero_cli/internal/zoteroapi/client.go)
-- internal item models are still defined in the API package
+- [cli.go](D:/C/Documents/Program/Go/zotero_cli/internal/cli/cli.go) dispatches commands
+- [runtime.go](D:/C/Documents/Program/Go/zotero_cli/internal/cli/runtime.go) loads config and directly constructs the Web API client
+- stable item types are still defined in [types.go](D:/C/Documents/Program/Go/zotero_cli/internal/zoteroapi/types.go)
+- default read filtering logic still lives in [filter.go](D:/C/Documents/Program/Go/zotero_cli/internal/cli/filter.go)
 
-This is lightweight and good for the current `web` mode, but it creates a structural limitation:
+This is lightweight and good for the current `web` mode, but it creates structural limitations:
 
 - CLI depends directly on the remote backend
 - item/domain types are coupled to the API package
+- behavior such as default item filtering is not owned by a backend-neutral layer
 - local and hybrid modes cannot be added cleanly without an abstraction layer
 
 Before or alongside local-mode implementation, the project should move toward:
@@ -52,6 +61,7 @@ Before or alongside local-mode implementation, the project should move toward:
 - a backend interface
 - a stable domain model
 - separate mapping layers for `web` and `local`
+- backend-owned read semantics for `find` and `show`
 
 
 ## Real Local Zotero Data Findings
@@ -67,33 +77,33 @@ The inspected Zotero data directory at `D:\zotero\zotero_file` contains:
 
 Important findings from the main local database:
 
-- `items`: `6603`
-- `itemAttachments`: `2973`
-- `itemNotes`: `1401`
+- `itemAttachments`: `3016`
+- `itemNotes`: `1416`
+- `itemAnnotations`: `233`
 - `collections`: `33`
-- `collectionItems`: `1651`
-- `itemTags`: `3063`
-- `syncCache`: `5079`
-- `syncDeleteLog`: `5540`
+- `tags`: `619`
+- top-level primary items are approximately `3286` after excluding attachments, notes, and annotations
 
 Important findings from the full-text subsystem:
 
-- `fulltextItems`: `1683`
-- `fulltextWords`: `480092`
-- `fulltextItemWords`: `3850047`
+- `fulltextItems` exists
+- `fulltextWords` exists
+- `fulltextItemWords` exists
 
 Important findings from attachment storage:
 
 - the standard `storage/` structure exists
 - `itemAttachments.path` includes values such as:
-  - `storage:2014_10.1093-bioinformatics-btt656.pdf`
-  - `attachments:Q_生物科学/.../file.pdf`
+  - `storage:zotero-style.html`
+  - `attachments:<library-relative-path>.pdf`
   - empty values for some `text/html` attachment records
+- observed `storage:` paths can be resolved reliably using `storage/<attachmentKey>/<filename>`
+- observed `attachments:` paths should be treated as best-effort only and not assumed to resolve under `data_dir`
 
 Important findings from attachment link modes:
 
-- `linkMode = 2`: `1616`
-- `linkMode = 3`: `1200`
+- `linkMode = 2`: `1629`
+- `linkMode = 3`: `1230`
 - `linkMode = 1`: `120`
 - `linkMode = 0`: `37`
 
@@ -102,17 +112,20 @@ Important schema signals:
 - top-level items live in `items`
 - attachments are identified via `itemAttachments`
 - notes are identified via `itemNotes`
+- annotations are identified via `itemAnnotations` and `itemType = annotation`
 - metadata fields use the Zotero EAV structure:
   - `itemData`
   - `itemDataValues`
   - `fieldsCombined`
 - collections and tags are fully representable locally
+- item dates are not always normalized and may need cleanup before CLI exposure
 
 Conclusion:
 
 - the local database is good enough for a real read-only backend
 - local `show` is especially attractive because attachment and collection data are already present
 - local search can begin with metadata search before full-text search is added
+- annotation handling and date normalization must be explicit in the design
 
 
 ## Recommended Product Direction
@@ -157,7 +170,7 @@ Where:
 
 - local `find`
 - local `show`
-- top-level item filtering
+- visible-item filtering for primary items
 - local creators, tags, and collections
 - local attachment listing
 - attachment path resolution when possible
@@ -180,6 +193,30 @@ It also matches the current CLI value proposition:
 - fast lookup
 - stable JSON output
 - scriptable read paths
+
+
+## CLI Contract Priorities
+
+The local backend should preserve the current CLI contract shape wherever practical.
+
+Priority rules:
+
+- `find --json` and `show --json` should keep the same top-level response envelope
+- local mode should add fields conservatively rather than redefining existing ones
+- unsupported commands in `local` mode should fail explicitly rather than silently falling back to `web`
+- path resolution failure should not be treated as item lookup failure
+
+For attachments, the local backend should expose enough information for agents to reason about file availability:
+
+- `key`
+- `item_type`
+- `title`
+- `content_type`
+- `link_mode`
+- `filename`
+- `zotero_path`
+- `resolved_path`
+- `resolved`
 
 
 ## Architecture Recommendation
@@ -219,6 +256,11 @@ type Creator struct {
     CreatorType string
 }
 
+type CollectionRef struct {
+    Key  string
+    Name string
+}
+
 type Attachment struct {
     Key          string
     ItemType     string
@@ -227,6 +269,7 @@ type Attachment struct {
     LinkMode     string
     ZoteroPath   string
     ResolvedPath string
+    Resolved     bool
     Filename     string
 }
 ```
@@ -272,6 +315,17 @@ Instead:
 This is the key structural change that makes local mode realistic.
 
 
+### 4. Move read semantics out of the CLI layer
+
+The CLI should not own backend-sensitive read logic such as visible-item filtering.
+
+In particular:
+
+- primary-item filtering should not remain solely in [filter.go](D:/C/Documents/Program/Go/zotero_cli/internal/cli/filter.go)
+- `web`, `local`, and `hybrid` should converge on one semantic contract for `find`
+- backend-specific mapping should happen before rendering, not during rendering
+
+
 ## Local Backend Design
 
 ### Data source
@@ -292,22 +346,25 @@ The local backend should ignore plugin-specific data for the first version unles
 
 ### Configuration
 
-Recommended future config fields:
+Recommended future config fields for the first local version:
 
 ```json
 {
   "mode": "local",
-  "data_dir": "D:\\zotero\\zotero_file",
-  "sqlite_path": "D:\\zotero\\zotero_file\\zotero.sqlite",
-  "storage_dir": "D:\\zotero\\zotero_file\\storage",
-  "prefer_local_reads": true
+  "data_dir": "D:\\zotero\\zotero_file"
 }
 ```
 
-Implementation note:
+Derived values:
+
+- `sqlite_path = <data_dir>\\zotero.sqlite`
+- `storage_dir = <data_dir>\\storage`
+
+Implementation notes:
 
 - first local version should only require `data_dir`
 - `sqlite_path` and `storage_dir` can be derived automatically
+- `prefer_local_reads` should be introduced later with `hybrid`, not in the local MVP
 
 
 ## Table Strategy
@@ -321,10 +378,12 @@ Implementation note:
 - `fieldsCombined`
 - `itemCreators`
 - `creators`
+- `creatorTypes`
 - `itemTags`
 - `tags`
 - `itemAttachments`
 - `itemNotes`
+- `itemAnnotations`
 
 ### Core tables for local `show`
 
@@ -332,7 +391,7 @@ Implementation note:
 - `collections`
 - `collectionItems`
 
-### Core tables for future local attachment behavior
+### Core tables for local attachment behavior
 
 - `itemAttachments`
 - `items`
@@ -347,7 +406,7 @@ Implementation note:
 
 ## Query Design
 
-### Top-level item filtering
+### Visible item policy
 
 Local `find` should not treat every row in `items` as a visible library item.
 
@@ -355,12 +414,14 @@ Default visible items should exclude:
 
 - rows present in `itemAttachments`
 - rows present in `itemNotes`
+- rows present in `itemAnnotations`
+- rows with `itemType = annotation`
 
 Practical rule:
 
-- top-level items are items not represented as attachments and not represented as notes
+- default `find` results should represent primary library records for human and agent workflows
 
-This mirrors the current CLI expectation that `find` returns main library items by default.
+This mirrors the current CLI expectation that `find` returns main library items by default while avoiding noisy result sets.
 
 
 ### Local `find`
@@ -370,7 +431,7 @@ This mirrors the current CLI expectation that `find` returns main library items 
 - search metadata, not full-text
 - support `--item-type`
 - support `--limit`
-- default to top-level items only
+- default to visible primary items only
 
 #### Searchable fields in first version
 
@@ -382,21 +443,21 @@ This mirrors the current CLI expectation that `find` returns main library items 
 - creator names
 - tag names
 - item key
-- optionally year/date
+- date or year
 
 #### Query strategy
 
 Use a base item query that:
 
 - joins `items` to `itemTypes`
-- filters out attachments and notes
+- filters out attachments, notes, and annotations
 - optionally filters by item type
 - applies limit
 
 Then enrich results with:
 
 - title/date/container fields from `itemData` + `itemDataValues`
-- creators from `itemCreators` + `creators`
+- creators from `itemCreators` + `creators` + `creatorTypes`
 - tags from `itemTags` + `tags`
 
 #### Why not one giant SQL query
@@ -407,6 +468,7 @@ For the first version, multiple smaller queries are preferable because they are:
 - easier to test
 - easier to maintain
 - easier to align with the same domain model used by the remote backend
+- less likely to produce row multiplication when item metadata, tags, collections, and attachments are joined together
 
 
 ### Local `show`
@@ -422,10 +484,10 @@ For the first version, multiple smaller queries are preferable because they are:
 #### Suggested query decomposition
 
 1. Main item
-- query `items`, `itemTypes`, `itemData`, `itemDataValues`
+- query `items`, `itemTypes`, `itemData`, `itemDataValues`, `fieldsCombined`
 
 2. Creators
-- query `itemCreators`, `creators`
+- query `itemCreators`, `creators`, `creatorTypes`
 - preserve order
 
 3. Tags
@@ -441,6 +503,31 @@ For the first version, multiple smaller queries are preferable because they are:
 - query `itemNotes`
 
 This decomposition should map naturally into a small local repository layer.
+
+Suggested repository methods:
+
+- `GetCoreItemByKey`
+- `ListCreatorsByItemID`
+- `ListTagsByItemID`
+- `ListAttachmentsByParentItemID`
+- `ListCollectionsByItemID`
+- `ListNotesByParentItemID`
+
+
+### Date normalization
+
+Local date values should not be exposed to the CLI without normalization.
+
+Observed values can contain duplicated or mixed representations such as:
+
+- `2019-03-29 2019-03-29`
+- `2024-01-08 2024-01-08 00:00:00`
+
+Implications:
+
+- local row mapping should normalize date strings before returning domain items
+- date filtering should operate on normalized values
+- web and local backends should converge on the same visible date semantics where practical
 
 
 ## Attachment Path Resolution
@@ -459,7 +546,7 @@ For each attachment:
 
 - return the raw Zotero path string
 - attempt to resolve to a real local filesystem path
-- if resolution fails, keep the raw path and mark resolved path as empty
+- if resolution fails, keep the raw path and mark `resolved = false`
 
 ### Resolution rules
 
@@ -478,6 +565,7 @@ Treat as a separate path family.
 
 Do not assume the same resolution as `storage:`.
 Support can begin as best-effort only.
+Failure to resolve should not fail `show`.
 
 #### empty path
 
@@ -495,7 +583,7 @@ Do not add full-text search in the first local milestone.
 
 Even though `fulltext*` tables exist and are valuable, adding them immediately would require:
 
-- learning Zotero’s full-text layout in detail
+- learning Zotero's full-text layout in detail
 - defining ranking behavior
 - deciding how metadata search and full-text search interact
 
@@ -519,7 +607,6 @@ Future command options:
 - add `/internal/domain`
 - add `/internal/backend`
 - move stable item types out of `zoteroapi`
-- keep existing `web` behavior intact
 
 Deliverable:
 
@@ -527,11 +614,23 @@ Deliverable:
 - codebase is ready for multiple backends
 
 
-### Phase 2: Local `show`
+### Phase 2: Backend selection with web parity
+
+- create a `web` backend adapter over existing Web API behavior
+- move CLI read paths to backend selection
+- keep current `web` behavior intact
+
+Deliverable:
+
+- CLI uses backend abstraction
+- `web` mode behavior remains unchanged
+
+
+### Phase 3: Local `show`
 
 - implement local DB opening in read-only mode
 - fetch one item by key
-- return creators, tags, attachments, collections
+- return creators, tags, attachments, and collections
 - wire `mode=local` into `show`
 
 Deliverable:
@@ -545,9 +644,21 @@ Why this phase first:
 - local value is immediately obvious
 
 
-### Phase 3: Local `find`
+### Phase 4: Attachment path resolution
 
-- implement top-level filtering
+- resolve `storage:` paths to local files
+- expose raw path, resolved path, and resolved status in JSON
+- improve human output for attachments
+
+Deliverable:
+
+- local `show` provides meaningful local file visibility
+
+
+### Phase 5: Local `find`
+
+- implement visible-item filtering
+- exclude attachment, note, and annotation items by default
 - search metadata fields
 - support `--item-type`
 - support `--limit`
@@ -557,18 +668,7 @@ Deliverable:
 - `zot find QUERY` works in local mode
 
 
-### Phase 4: Attachment path resolution
-
-- resolve `storage:` paths to local files
-- expose raw and resolved path in JSON
-- improve human output for attachments
-
-Deliverable:
-
-- local `show` provides meaningful local file visibility
-
-
-### Phase 5: Hybrid mode
+### Phase 6: Hybrid mode
 
 - define read preference behavior
 - use local for primary reads
@@ -579,7 +679,7 @@ Deliverable:
 - offline-friendly but still robust behavior
 
 
-### Phase 6: Full-text search
+### Phase 7: Full-text search
 
 - evaluate query model over `fulltext*`
 - add optional CLI support
@@ -613,6 +713,28 @@ Mitigation:
 - never fail item rendering because a path could not be resolved
 
 
+### Risk: Visible-item rules are noisier locally than they appear remotely
+
+Annotations can leak into local result sets if filtering is too naive.
+
+Mitigation:
+
+- treat visible-item filtering as an explicit policy
+- test attachment, note, and annotation exclusion together
+- avoid relying only on `items` row presence
+
+
+### Risk: Local dates are not normalized
+
+Raw Zotero local date values may not match CLI expectations.
+
+Mitigation:
+
+- normalize date values in one mapper layer
+- test date filtering against observed local variants
+- avoid spreading date cleanup logic across CLI rendering code
+
+
 ### Risk: Local DB differences across machines
 
 Not every user will have the same data directory layout.
@@ -624,13 +746,13 @@ Mitigation:
 - keep `web` mode as the default path
 
 
-### Risk: Coupling implementation to current inspected DB only
+### Risk: Coupling implementation to the current inspected DB only
 
 The inspected DB is real and useful, but it should not be assumed to represent every Zotero installation perfectly.
 
 Mitigation:
 
-- code against Zotero schema patterns, not one sample’s exact values
+- code against Zotero schema patterns, not one sample's exact values
 - test against multiple sample item types
 - isolate DB access in one package
 
@@ -640,24 +762,27 @@ Mitigation:
 ### Unit tests
 
 - local row-to-domain mapping
-- top-level item filtering
+- visible-item filtering
 - attachment path resolution
 - field extraction from EAV structure
+- date normalization
 
 ### Integration tests
 
 - read-only queries against a fixture sqlite DB
 - `find` output parity between web and local backends where practical
 - `show` attachment rendering with representative path variants
+- exclusion of attachment, note, and annotation items from default local `find`
 
 ### Manual checks
 
 - local `show` on items with PDF attachments
 - local `show` on items with HTML snapshot attachments
-- local `find` with creator/title/tag matches
+- local `find` with creator, title, and tag matches
 - local collection visibility
 - behavior when `zotero.sqlite` is missing
 - behavior when `storage/` is missing
+- behavior when an attachment path cannot be resolved
 
 
 ## Recommended Next Step
@@ -666,7 +791,8 @@ The next implementation step should be:
 
 1. define the stable domain model
 2. define the backend interface
-3. implement local `show`
+3. move CLI reads onto the backend abstraction
+4. implement local `show`
 
 This sequence gives the highest value with the lowest architectural risk.
 
