@@ -73,6 +73,12 @@ type Deleted struct {
 	Tags        []string `json:"tags,omitempty"`
 }
 
+type VersionsOptions struct {
+	ObjectType     string
+	Since          int
+	IncludeTrashed bool
+}
+
 type Item struct {
 	Key         string       `json:"key"`
 	ItemType    string       `json:"item_type"`
@@ -420,6 +426,38 @@ func (c *Client) GetDeleted(ctx context.Context) (Deleted, error) {
 	return deleted, nil
 }
 
+func (c *Client) GetVersions(ctx context.Context, opts VersionsOptions) (map[string]int, error) {
+	relativePath, err := versionsPath(opts.ObjectType)
+	if err != nil {
+		return nil, err
+	}
+
+	extra := map[string]string{
+		"format": "versions",
+		"since":  strconv.Itoa(opts.Since),
+	}
+	if opts.IncludeTrashed {
+		extra["includeTrashed"] = "1"
+	}
+
+	resp, err := c.doRequest(ctx, relativePath, FindOptions{}, extra)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, apiErrorFromResponse(resp)
+	}
+
+	var versions map[string]int
+	if err := json.NewDecoder(resp.Body).Decode(&versions); err != nil {
+		return nil, err
+	}
+
+	return versions, nil
+}
+
 func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {
 	return c.fetchAllItems(ctx, relativePath, opts)
 }
@@ -606,6 +644,21 @@ func apiErrorFromResponse(resp *http.Response) error {
 		return errors.New("zotero api request failed")
 	}
 	return apiErr
+}
+
+func versionsPath(objectType string) (string, error) {
+	switch objectType {
+	case "collections":
+		return "collections", nil
+	case "searches":
+		return "searches", nil
+	case "items":
+		return "items", nil
+	case "items-top":
+		return path.Join("items", "top"), nil
+	default:
+		return "", fmt.Errorf("unsupported object type %q", objectType)
+	}
 }
 
 func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOptions, extraQuery map[string]string) (*http.Response, error) {

@@ -75,6 +75,14 @@ func newTestAPI(t *testing.T) (string, func()) {
 			sort := r.URL.Query().Get("sort")
 			direction := r.URL.Query().Get("direction")
 
+			if r.URL.Query().Get("format") == "versions" {
+				_ = json.NewEncoder(w).Encode(map[string]int{
+					"ITEM1234": 90,
+					"ITEM5678": 91,
+				})
+				return
+			}
+
 			if itemType == "note" {
 				_ = json.NewEncoder(w).Encode([]map[string]any{
 					{
@@ -290,6 +298,12 @@ func newTestAPI(t *testing.T) (string, func()) {
 		case "/users/123456/items/ART12345/children":
 			_ = json.NewEncoder(w).Encode([]map[string]any{})
 		case "/users/123456/collections":
+			if r.URL.Query().Get("format") == "versions" {
+				_ = json.NewEncoder(w).Encode(map[string]int{
+					"COLL1234": 9,
+				})
+				return
+			}
 			_ = json.NewEncoder(w).Encode([]map[string]any{
 				{
 					"key": "COLL1234",
@@ -329,7 +343,22 @@ func newTestAPI(t *testing.T) (string, func()) {
 					},
 				},
 			})
+		case "/users/123456/items/top":
+			if r.URL.Query().Get("format") == "versions" {
+				_ = json.NewEncoder(w).Encode(map[string]int{
+					"ITEM1234": 100,
+					"ITEM5678": 101,
+				})
+				return
+			}
+			http.NotFound(w, r)
 		case "/users/123456/searches":
+			if r.URL.Query().Get("format") == "versions" {
+				_ = json.NewEncoder(w).Encode(map[string]int{
+					"SCH12345": 12,
+				})
+				return
+			}
 			_ = json.NewEncoder(w).Encode([]map[string]any{
 				{
 					"key": "SCH12345",

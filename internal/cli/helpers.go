@@ -12,6 +12,11 @@ import (
 	"zotero_cli/internal/zoteroapi"
 )
 
+type versionsArgs struct {
+	Since          int
+	IncludeTrashed bool
+}
+
 type jsonResponse struct {
 	OK      bool           `json:"ok"`
 	Command string         `json:"command"`
@@ -186,6 +191,51 @@ func parseJSONOnlyArgs(args []string, usage string) (bool, bool) {
 		return false, false
 	}
 	return jsonOutput, true
+}
+
+func parseVersionsArgs(args []string) (string, versionsArgs, bool, error) {
+	if len(args) == 0 {
+		return "", versionsArgs{}, false, errors.New("missing object type")
+	}
+
+	objectType := args[0]
+	switch objectType {
+	case "collections", "searches", "items", "items-top":
+	default:
+		return "", versionsArgs{}, false, errors.New("unsupported object type")
+	}
+
+	var opts versionsArgs
+	var jsonOutput bool
+	var sinceSet bool
+
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonOutput = true
+		case "--include-trashed":
+			opts.IncludeTrashed = true
+		case "--since":
+			if i+1 >= len(args) {
+				return "", versionsArgs{}, false, errors.New("missing value for --since")
+			}
+			i++
+			since, err := strconv.Atoi(args[i])
+			if err != nil || since < 0 {
+				return "", versionsArgs{}, false, errors.New("invalid value for --since")
+			}
+			opts.Since = since
+			sinceSet = true
+		default:
+			return "", versionsArgs{}, false, errors.New("too many positional arguments")
+		}
+	}
+
+	if !sinceSet {
+		return "", versionsArgs{}, false, errors.New("missing value for --since")
+	}
+
+	return objectType, opts, jsonOutput, nil
 }
 
 func loadClient() (config.Config, *zoteroapi.Client, int) {

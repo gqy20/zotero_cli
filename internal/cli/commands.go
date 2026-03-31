@@ -21,6 +21,7 @@ const (
 	usageTags        = "usage: zot tags [--json]"
 	usageSearches    = "usage: zot searches [--json]"
 	usageDeleted     = "usage: zot deleted [--json]"
+	usageVersions    = "usage: zot versions <collections|searches|items|items-top> --since N [--include-trashed] [--json]"
 )
 
 func runConfig(args []string) int {
@@ -506,5 +507,45 @@ func runDeleted(args []string) int {
 	fmt.Fprintf(stdout, "searches=%d\n", len(deleted.Searches))
 	fmt.Fprintf(stdout, "items=%d\n", len(deleted.Items))
 	fmt.Fprintf(stdout, "tags=%d\n", len(deleted.Tags))
+	return 0
+}
+
+func runVersions(args []string) int {
+	objectType, opts, jsonOutput, err := parseVersionsArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, usageVersions)
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	versions, err := client.GetVersions(context.Background(), zoteroapi.VersionsOptions{
+		ObjectType:     objectType,
+		Since:          opts.Since,
+		IncludeTrashed: opts.IncludeTrashed,
+	})
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{
+			OK:      true,
+			Command: "versions",
+			Data:    versions,
+			Meta: map[string]any{
+				"object_type": objectType,
+				"total":       len(versions),
+			},
+		})
+	}
+
+	for key, version := range versions {
+		fmt.Fprintf(stdout, "%-10s  %d\n", key, version)
+	}
 	return 0
 }

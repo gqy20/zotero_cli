@@ -49,6 +49,8 @@ func Run(args []string) int {
 		return runSearches(args[1:])
 	case "deleted":
 		return runDeleted(args[1:])
+	case "versions":
+		return runVersions(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -77,6 +79,7 @@ Commands:
   tags           List tags
   searches       List saved searches
   deleted        Show deleted object keys
+  versions       Show changed object versions since a library version
 `, exe, exe)
 }
 

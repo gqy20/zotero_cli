@@ -623,6 +623,99 @@ func TestClientGetDeleted(t *testing.T) {
 	}
 }
 
+func TestClientGetVersionsForItemsTopWithTrashed(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123/items/top" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("since"); got != "42" {
+			t.Fatalf("unexpected since: %q", got)
+		}
+		if got := r.URL.Query().Get("format"); got != "versions" {
+			t.Fatalf("unexpected format: %q", got)
+		}
+		if got := r.URL.Query().Get("includeTrashed"); got != "1" {
+			t.Fatalf("unexpected includeTrashed: %q", got)
+		}
+
+		if err := json.NewEncoder(w).Encode(map[string]int{
+			"ITEM1234": 100,
+			"ITEM5678": 101,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	versions, err := client.GetVersions(context.Background(), VersionsOptions{
+		ObjectType:     "items-top",
+		Since:          42,
+		IncludeTrashed: true,
+	})
+	if err != nil {
+		t.Fatalf("GetVersions returned error: %v", err)
+	}
+
+	if len(versions) != 2 {
+		t.Fatalf("expected 2 versions, got %d", len(versions))
+	}
+	if versions["ITEM5678"] != 101 {
+		t.Fatalf("unexpected versions map: %#v", versions)
+	}
+}
+
+func TestClientGetVersionsForCollections(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123/collections" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("since"); got != "7" {
+			t.Fatalf("unexpected since: %q", got)
+		}
+		if got := r.URL.Query().Get("format"); got != "versions" {
+			t.Fatalf("unexpected format: %q", got)
+		}
+		if got := r.URL.Query().Get("includeTrashed"); got != "" {
+			t.Fatalf("unexpected includeTrashed: %q", got)
+		}
+
+		if err := json.NewEncoder(w).Encode(map[string]int{
+			"COLL1234": 9,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	versions, err := client.GetVersions(context.Background(), VersionsOptions{
+		ObjectType: "collections",
+		Since:      7,
+	})
+	if err != nil {
+		t.Fatalf("GetVersions returned error: %v", err)
+	}
+
+	if versions["COLL1234"] != 9 {
+		t.Fatalf("unexpected versions map: %#v", versions)
+	}
+}
+
 func TestClientFindItemsMapsUnauthorizedError(t *testing.T) {
 	t.Parallel()
 

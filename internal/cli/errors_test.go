@@ -36,6 +36,7 @@ func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 		{name: "tags", args: []string{"tags"}},
 		{name: "searches", args: []string{"searches"}},
 		{name: "deleted", args: []string{"deleted"}},
+		{name: "versions", args: []string{"versions", "items", "--since", "1"}},
 	}
 
 	for _, tc := range testCases {
@@ -124,6 +125,18 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			name:      "deleted extra arg",
 			args:      []string{"deleted", "extra"},
 			wantUsage: usageDeleted,
+		},
+		{
+			name:       "versions missing since",
+			args:       []string{"versions", "items"},
+			wantUsage:  usageVersions,
+			wantStderr: "error: missing value for --since",
+		},
+		{
+			name:       "versions invalid object",
+			args:       []string{"versions", "bad", "--since", "1"},
+			wantUsage:  usageVersions,
+			wantStderr: "error: unsupported object type",
 		},
 	}
 

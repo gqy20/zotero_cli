@@ -558,3 +558,62 @@ func TestRunDeletedText(t *testing.T) {
 		}
 	}
 }
+
+func TestRunVersionsJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"versions", "items-top", "--since", "42", "--include-trashed", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+
+	if got["command"] != "versions" {
+		t.Fatalf("unexpected command: %#v", got["command"])
+	}
+
+	data, ok := got["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected versions payload: %#v", got["data"])
+	}
+	if data["ITEM5678"] != float64(101) {
+		t.Fatalf("unexpected versions payload: %#v", data)
+	}
+}
+
+func TestRunVersionsText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"versions", "collections", "--since", "7"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"COLL1234",
+		"9",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output %q", want, got)
+		}
+	}
+}
