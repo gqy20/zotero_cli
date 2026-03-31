@@ -22,7 +22,7 @@ Workflow: `.github/workflows/ci.yml`
 
 Workflow: `.github/workflows/release.yml`
 
-- Triggers when a tag matching `v*` is pushed, for example `v0.1.0`
+- Triggers when a tag matching `v*` is pushed, for example `v0.0.1`
 - Re-runs the test suite before packaging
 - Builds release archives for the same target platforms
 - Injects version, commit, and build date into the binary at build time
@@ -32,8 +32,8 @@ Workflow: `.github/workflows/release.yml`
 ## Suggested release flow
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.0.1
+git push origin v0.0.1
 ```
 
 If you want to test packaging manually from GitHub without creating a tag, you can use the `workflow_dispatch` trigger on the Release workflow. That manual run will build artifacts but will not publish a GitHub Release unless the workflow is running on a tag.

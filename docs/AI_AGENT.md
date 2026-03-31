@@ -31,8 +31,14 @@ go run .\cmd\zot config validate
 ```powershell
 .\zot.exe find "hybrid speciation" --json
 .\zot.exe show SA6DHVIM --json
+.\zot.exe relate SA6DHVIM --json
 .\zot.exe stats --json
 ```
+
+补充：
+
+- 当你需要精确关系而不是相似性推断时，优先用 `relate --json`
+- 当你运行在有本地 Zotero 数据目录的机器上，优先把 `ZOT_MODE` 设成 `hybrid`
 
 ### 2. 检索尽量一次拿够字段
 
@@ -71,6 +77,24 @@ go run .\cmd\zot config validate
 - 多个 `--tag` 默认是 AND
 - `--tag-any` 把多个标签改成 OR
 - 日期支持 `YYYY`、`YYYY-MM`、`YYYY-MM-DD`
+
+### 4.1 本地与混合模式
+
+推荐：
+
+```powershell
+.\zot.exe config show
+.\zot.exe find "hybrid speciation" --json
+.\zot.exe show KYL55LW2 --json
+.\zot.exe relate BLT3R329 --json
+```
+
+说明：
+
+- `local`：只读本地 SQLite 和 `storage/`
+- `hybrid`：优先本地，部分不支持场景回退 Web
+- 本地 `find` 不支持 `--qmode` 和 `--include-trashed`
+- `relate` 当前依赖本地 SQLite 的 `itemRelations`
 
 ### 5. 批量导出收藏夹
 
@@ -116,6 +140,7 @@ go run .\cmd\zot config validate
 ```powershell
 .\zot.exe find "attention is all you need" --json
 .\zot.exe show X42A7DEE --json
+.\zot.exe relate X42A7DEE --json
 ```
 
 ### 批量打标签
@@ -159,7 +184,7 @@ go run .\cmd\zot config validate
 
 如果你是一个通用 agent，不确定该用哪条命令：
 
-1. 读优先：`find` / `show` / `stats`
+1. 读优先：`find` / `show` / `relate` / `stats`
 2. 导出优先：`export --collection` 或 `export --item-key`
 3. 变更次之：`create-*` / `update-*`
 4. 删除最后：只有在用户明确要求时才考虑

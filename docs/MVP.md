@@ -1,5 +1,12 @@
 # Zotero CLI MVP
 
+Status note:
+
+- `0.0.1` has shipped the practical read-path MVP
+- `local` and `hybrid` read modes are now implemented
+- local `find`, local `show`, and explicit local `relate` are available
+- this document remains useful as product framing, but parts of the original scope are now surpassed
+
 ## 1. Goal
 
 Build a Go-based, AI-era Zotero CLI that is:
@@ -85,7 +92,7 @@ Implication:
 
 ### Out of scope
 
-- local SQLite reads or writes
+- local SQLite writes
 - PDF full-text indexing
 - note editing
 - attachment upload
@@ -170,6 +177,22 @@ Default human output:
 - tags
 - collections if available
 - child attachment summary if retrievable
+
+### `zot relate <item-key>`
+
+Shows explicit Zotero item-to-item relations from the local database.
+
+Initial supported output:
+
+- predicate, such as `dc:relation` or `dc:replaces`
+- direction: `incoming` or `outgoing`
+- target key, item type, and title when resolvable locally
+
+Notes:
+
+- local/hybrid first
+- web support can come later
+- this command is for accurate explicit relations, not inferred similarity
 
 ### `zot cite <item-key|query>`
 

@@ -1,5 +1,25 @@
 # Local Backend Design
 
+## Current Status
+
+This design has now been partially implemented in `0.0.1`.
+
+Implemented:
+
+- `internal/domain` and backend abstraction
+- runtime mode selection for `web`, `local`, and `hybrid`
+- local `show`
+- local `find` MVP
+- attachment path reporting in local `show`
+- note summaries in local `show`
+- explicit local `relate` based on `itemRelations`
+
+Not implemented yet:
+
+- local full-text search
+- web-side `relate`
+- inferred relation layers based on tags / collections / note context
+
 ## Goal
 
 This document defines a practical design for adding a local read-only backend to `zot`.
@@ -38,6 +58,10 @@ The recommended direction is:
 1. Keep `web` as the default portable mode
 2. Add a `local` read-only backend for `find` and `show`
 3. Add `hybrid` later, so local reads can be preferred while remote remains a fallback
+
+Update:
+
+- `hybrid` is now implemented as a pragmatic local-first read path with selective remote fallback
 
 
 ## Current Project State
@@ -183,6 +207,10 @@ Where:
 - local note editing
 - full-text search in the first local milestone
 - real-time watch/sync behavior
+
+Update:
+
+- explicit relation lookup is now in scope for local mode and implemented through `itemRelations`
 
 ### Why this scope
 

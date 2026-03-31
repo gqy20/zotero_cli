@@ -12,7 +12,7 @@ var (
 	stderr = io.Writer(os.Stderr)
 	stdin  = io.Reader(os.Stdin)
 
-	version   = "dev"
+	version   = "0.0.1"
 	commit    = "unknown"
 	buildDate = "unknown"
 )

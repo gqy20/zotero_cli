@@ -1,13 +1,27 @@
 # zot
 
+当前版本：`0.0.1`
+
 一个面向终端、脚本和 AI agent 的 Zotero CLI。
 
-`zot` 现在已经覆盖了比较完整的 Zotero Web API 读能力，并提供了受权限开关保护的常见写操作。它适合这些场景：
+`zot` 现在已经覆盖了较完整的 Zotero Web API 读能力，提供了受权限开关保护的常见写操作，并支持真实 Zotero 本地库上的 `local` / `hybrid` 读路径。它适合这些场景：
 
 - 在终端里快速检索、查看和导出 Zotero 条目
+- 在本地库里离线查看条目、附件、笔记和显式关系
 - 给脚本或 agent 提供稳定的 `--json` 输出
 - 批量给条目打标签、更新、删除
 - 做基础的库统计、版本同步和配置校验
+
+## 0.0.1 范围
+
+`0.0.1` 关注的是“准确读取 Zotero 信息并稳定暴露给人和自动化系统”，当前已实现：
+
+- `web`、`local`、`hybrid` 三种读模式
+- `find` / `show` / `relate` 的稳定 JSON 输出
+- 本地 `show` 的 collections、attachments、notes、路径解析
+- 本地 `find` 的 metadata 查询、tag/date 过滤、排序和分页
+- 基于本地 SQLite `itemRelations` 的显式关系读取
+- 受权限开关保护的常见写操作
 
 ## 快速开始
 
@@ -43,7 +57,9 @@ go build -o zot.exe .\cmd\zot
 - Group IDs: `https://www.zotero.org/groups`
 - Web API basics: `https://www.zotero.org/support/dev/web_api/v3/basics`
 
-也可以手工写 `~/.zot/.env`：
+也可以手工写 `~/.zot/.env`。
+
+Web 模式：
 
 ```env
 ZOT_MODE=web
@@ -57,6 +73,25 @@ ZOT_RETRY_MAX_ATTEMPTS=3
 ZOT_RETRY_BASE_DELAY_MS=250
 ZOT_ALLOW_WRITE=1
 ZOT_ALLOW_DELETE=0
+```
+
+Hybrid 模式：
+
+```env
+ZOT_MODE=hybrid
+ZOT_DATA_DIR=D:\zotero\zotero_file
+ZOT_LIBRARY_TYPE=user
+ZOT_LIBRARY_ID=123456
+ZOT_API_KEY=replace-me
+```
+
+Local 模式：
+
+```env
+ZOT_MODE=local
+ZOT_DATA_DIR=D:\zotero\zotero_file
+ZOT_LIBRARY_TYPE=user
+ZOT_LIBRARY_ID=123456
 ```
 
 默认安全策略：
@@ -105,11 +140,19 @@ ZOT_ALLOW_DELETE=0
 - `--full`
 - `--json`
 
+模式说明：
+
+- `web`：完整支持 Web API 查询语义
+- `local`：支持 metadata 查询、`--item-type`、`--tag`、`--tag-any`、日期过滤、排序、分页
+- `hybrid`：优先走 local；本地不支持的个别场景才回退 Web
+
 ### 查看与导出
 
 ```powershell
 .\zot.exe show SA6DHVIM
 .\zot.exe show SA6DHVIM --json
+.\zot.exe relate SA6DHVIM
+.\zot.exe relate SA6DHVIM --json
 .\zot.exe cite SA6DHVIM
 .\zot.exe cite SA6DHVIM --format bib
 .\zot.exe export --item-key SA6DHVIM --format bibtex
@@ -127,6 +170,20 @@ ZOT_ALLOW_DELETE=0
 - `biblatex`
 - `csljson`
 - `ris`
+
+`show` 当前支持：
+
+- Web / local / hybrid 统一条目详情接口
+- 文本模式显示 creators、tags、collections、attachments、notes
+- 本地模式显示附件 `zotero_path`、`resolved_path`、`resolved`
+- 对重复附件名显示附件 key，便于精确定位
+
+`relate` 当前支持：
+
+- 本地 SQLite `itemRelations` 显式关系读取
+- 当前会返回 `predicate`、`direction`、目标条目简要信息
+- `hybrid` 下优先使用本地关系
+- `web` 模式暂不支持
 
 ### 列表和元数据
 
@@ -172,6 +229,7 @@ ZOT_ALLOW_DELETE=0
 ## AI / Agent 使用建议
 
 - 默认优先加 `--json`
+- 当需要精确文献关系时，优先用 `relate --json`
 - 当需要 DOI、URL、版本号时，优先用 `find --json`，必要时加 `--include-fields` 或 `--full`
 - 批量导出收藏夹优先用 `export --collection`
 - 在首次执行前先跑 `config validate`
@@ -191,6 +249,7 @@ ZOT_ALLOW_DELETE=0
 ```powershell
 go test ./...
 go build -o zot.exe .\cmd\zot
+.\zot.exe version
 ```
 
 ## 文档
