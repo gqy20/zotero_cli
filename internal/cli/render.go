@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"zotero_cli/internal/backend"
 	"zotero_cli/internal/config"
-	"zotero_cli/internal/zoteroapi"
+	"zotero_cli/internal/domain"
 )
 
 func writeJSON(value any) int {
@@ -18,7 +19,7 @@ func writeJSON(value any) int {
 	return 0
 }
 
-func renderFindItemDetailed(item zoteroapi.Item, opts zoteroapi.FindOptions) {
+func renderFindItemDetailed(item domain.Item, opts backend.FindOptions) {
 	fmt.Fprintf(stdout, "Key: %s\n", item.Key)
 	fmt.Fprintf(stdout, "Title: %s\n", item.Title)
 	fmt.Fprintf(stdout, "Type: %s\n", item.ItemType)
@@ -79,7 +80,7 @@ func fieldIncluded(fields []string, target string) bool {
 	return false
 }
 
-func renderCreators(creators []zoteroapi.Creator) string {
+func renderCreators(creators []domain.Creator) string {
 	if len(creators) == 0 {
 		return ""
 	}
@@ -89,7 +90,7 @@ func renderCreators(creators []zoteroapi.Creator) string {
 	return creators[0].Name + " et al."
 }
 
-func joinCreatorNames(creators []zoteroapi.Creator) string {
+func joinCreatorNames(creators []domain.Creator) string {
 	names := make([]string, 0, len(creators))
 	for _, creator := range creators {
 		if creator.Name != "" {
@@ -99,7 +100,7 @@ func joinCreatorNames(creators []zoteroapi.Creator) string {
 	return strings.Join(names, ", ")
 }
 
-func attachmentKind(attachment zoteroapi.Attachment) string {
+func attachmentKind(attachment domain.Attachment) string {
 	if attachment.ContentType == "application/pdf" {
 		return "pdf"
 	}
