@@ -28,6 +28,8 @@ const (
 	usageItemTypeFields       = "usage: zot item-type-fields <item-type> [--json]"
 	usageItemTypeCreatorTypes = "usage: zot item-type-creator-types <item-type> [--json]"
 	usageItemTemplate         = "usage: zot item-template <item-type> [--json]"
+	usageKeyInfo              = "usage: zot key-info <api-key> [--json]"
+	usageGroups               = "usage: zot groups [--json]"
 )
 
 func runConfig(args []string) int {
@@ -690,6 +692,70 @@ func runItemTemplate(args []string) int {
 	}
 
 	return writeJSON(template)
+}
+
+func runKeyInfo(args []string) int {
+	key, jsonOutput, ok := parseSingleValueCommand(args, usageKeyInfo)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	info, err := client.GetKeyInfo(context.Background(), key)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{
+			OK:      true,
+			Command: "key-info",
+			Data:    info,
+		})
+	}
+
+	fmt.Fprintf(stdout, "user_id=%d\n", info.UserID)
+	if len(info.Access) > 0 {
+		return writeJSON(info.Access)
+	}
+	return 0
+}
+
+func runGroups(args []string) int {
+	jsonOutput, ok := parseJSONOnlyArgs(args, usageGroups)
+	if !ok {
+		return 2
+	}
+
+	cfg, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	groups, err := client.ListGroupsForUser(context.Background(), cfg.LibraryID)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{
+			OK:      true,
+			Command: "groups",
+			Data:    groups,
+			Meta: map[string]any{
+				"total": len(groups),
+			},
+		})
+	}
+
+	for _, group := range groups {
+		fmt.Fprintf(stdout, "%-8d  %s\n", group.ID, group.Name)
+	}
+	return 0
 }
 
 func renderLocalizedValues(command string, values []zoteroapi.LocalizedValue, jsonOutput bool) int {

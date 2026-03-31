@@ -418,6 +418,30 @@ func newTestAPI(t *testing.T) (string, func()) {
 				"collections": []any{},
 				"relations":   map[string]any{},
 			})
+		case "/keys/secret":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"userID": 123456,
+				"access": map[string]any{
+					"user": map[string]any{
+						"library": true,
+					},
+				},
+			})
+		case "/users/123456/groups":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"id": 111,
+					"data": map[string]any{
+						"name": "Research Lab",
+					},
+				},
+				{
+					"id": 222,
+					"data": map[string]any{
+						"name": "Paper Club",
+					},
+				},
+			})
 		default:
 			http.NotFound(w, r)
 		}

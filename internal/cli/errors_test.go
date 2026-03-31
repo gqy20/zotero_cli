@@ -43,6 +43,7 @@ func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 		{name: "item type fields", args: []string{"item-type-fields", "book"}},
 		{name: "item type creator types", args: []string{"item-type-creator-types", "book"}},
 		{name: "item template", args: []string{"item-template", "book"}},
+		{name: "groups", args: []string{"groups"}},
 	}
 
 	for _, tc := range testCases {
@@ -164,6 +165,16 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			name:      "item template missing type",
 			args:      []string{"item-template"},
 			wantUsage: usageItemTemplate,
+		},
+		{
+			name:      "key info missing key",
+			args:      []string{"key-info"},
+			wantUsage: usageKeyInfo,
+		},
+		{
+			name:      "groups extra arg",
+			args:      []string{"groups", "extra"},
+			wantUsage: usageGroups,
 		},
 	}
 

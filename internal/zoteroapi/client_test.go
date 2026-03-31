@@ -973,6 +973,81 @@ func TestClientGetItemTemplate(t *testing.T) {
 	}
 }
 
+func TestClientGetKeyInfo(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/keys/secret" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"userID": 123456,
+			"access": map[string]any{
+				"user": map[string]any{
+					"library": true,
+				},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{}, server.URL, server.Client())
+
+	info, err := client.GetKeyInfo(context.Background(), "secret")
+	if err != nil {
+		t.Fatalf("GetKeyInfo returned error: %v", err)
+	}
+
+	if info.UserID != 123456 {
+		t.Fatalf("unexpected key info: %#v", info)
+	}
+	if info.Access["user"] == nil {
+		t.Fatalf("expected access payload: %#v", info)
+	}
+}
+
+func TestClientListGroupsForUser(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123456/groups" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		if err := json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"id": 111,
+				"data": map[string]any{
+					"name": "Research Lab",
+				},
+			},
+			{
+				"id": 222,
+				"data": map[string]any{
+					"name": "Paper Club",
+				},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{}, server.URL, server.Client())
+
+	groups, err := client.ListGroupsForUser(context.Background(), "123456")
+	if err != nil {
+		t.Fatalf("ListGroupsForUser returned error: %v", err)
+	}
+
+	if len(groups) != 2 || groups[0].ID != 111 || groups[0].Name != "Research Lab" {
+		t.Fatalf("unexpected groups: %#v", groups)
+	}
+}
+
 func TestClientFindItemsMapsUnauthorizedError(t *testing.T) {
 	t.Parallel()
 

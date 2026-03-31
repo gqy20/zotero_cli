@@ -91,6 +91,16 @@ type LocalizedValue struct {
 	Localized string `json:"localized"`
 }
 
+type KeyInfo struct {
+	UserID int            `json:"user_id"`
+	Access map[string]any `json:"access,omitempty"`
+}
+
+type GroupInfo struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
 type Item struct {
 	Key         string       `json:"key"`
 	ItemType    string       `json:"item_type"`
@@ -220,6 +230,20 @@ type apiLocalizedField struct {
 type apiLocalizedCreatorType struct {
 	CreatorType string `json:"creatorType"`
 	Localized   string `json:"localized"`
+}
+
+type apiKeyInfo struct {
+	UserID int            `json:"userID"`
+	Access map[string]any `json:"access"`
+}
+
+type apiGroup struct {
+	ID   int          `json:"id"`
+	Data apiGroupData `json:"data"`
+}
+
+type apiGroupData struct {
+	Name string `json:"name"`
 }
 
 type CitationResult struct {
@@ -608,6 +632,34 @@ func (c *Client) GetItemTemplate(ctx context.Context, itemType string) (map[stri
 		return nil, err
 	}
 	return raw, nil
+}
+
+func (c *Client) GetKeyInfo(ctx context.Context, key string) (KeyInfo, error) {
+	var raw apiKeyInfo
+	if err := c.doGlobalJSONRequest(ctx, path.Join("keys", key), nil, &raw); err != nil {
+		return KeyInfo{}, err
+	}
+
+	return KeyInfo{
+		UserID: raw.UserID,
+		Access: raw.Access,
+	}, nil
+}
+
+func (c *Client) ListGroupsForUser(ctx context.Context, userID string) ([]GroupInfo, error) {
+	var raw []apiGroup
+	if err := c.doGlobalJSONRequest(ctx, path.Join("users", userID, "groups"), nil, &raw); err != nil {
+		return nil, err
+	}
+
+	out := make([]GroupInfo, 0, len(raw))
+	for _, group := range raw {
+		out = append(out, GroupInfo{
+			ID:   group.ID,
+			Name: group.Data.Name,
+		})
+	}
+	return out, nil
 }
 
 func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {

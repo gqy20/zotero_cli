@@ -63,6 +63,10 @@ func Run(args []string) int {
 		return runItemTypeCreatorTypes(args[1:])
 	case "item-template":
 		return runItemTemplate(args[1:])
+	case "key-info":
+		return runKeyInfo(args[1:])
+	case "groups":
+		return runGroups(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -98,6 +102,8 @@ Commands:
   item-type-fields          List valid fields for an item type
   item-type-creator-types   List valid creator types for an item type
   item-template             Show template for a new item type
+  key-info      Show the owner and privileges for an API key
+  groups        List groups accessible to a user
 `, exe, exe)
 }
 
