@@ -120,6 +120,24 @@ func attachmentLabel(attachment domain.Attachment) string {
 	return attachment.Key
 }
 
+func attachmentSummary(attachment domain.Attachment) string {
+	label := attachmentLabel(attachment)
+	if attachment.Key == "" {
+		return label
+	}
+	return label + " (" + attachment.Key + ")"
+}
+
+func noteSummary(note domain.Note) string {
+	if note.Preview == "" {
+		return note.Key
+	}
+	if note.Key == "" {
+		return note.Preview
+	}
+	return note.Key + ": " + note.Preview
+}
+
 func attachmentPathLine(attachment domain.Attachment) string {
 	if attachment.Resolved && attachment.ResolvedPath != "" {
 		return "path: " + attachment.ResolvedPath

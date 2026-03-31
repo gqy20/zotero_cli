@@ -382,8 +382,8 @@ func TestRunShowTextOutputFormatsAttachmentsClearly(t *testing.T) {
 	got := stdout.String()
 	for _, want := range []string{
 		"Attachments: 2",
-		"[pdf] attention-is-all-you-need.pdf",
-		"[link] Notion",
+		"[pdf] attention-is-all-you-need.pdf (PDF12345)",
+		"[link] Notion (URL12345)",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in output %q", want, got)
@@ -419,12 +419,12 @@ func TestRunShowLocalTextOutputIncludesCollectionsAndResolvedPaths(t *testing.T)
 		"Date: 2024-01-08",
 		"Collections: Machine Learning",
 		"Attachments: 2",
-		"[pdf] attention.pdf",
+		"[pdf] attention.pdf (ATTACHPDF)",
 		"path: " + filepath.Join(storageDir, "ATTACHPDF", "attention.pdf"),
-		"[link] Web Snapshot",
+		"[link] Web Snapshot (ATTACHURL)",
 		"path: unresolved (attachments:snapshots/page.html)",
 		"Notes: 1",
-		"Local note summary",
+		"NOTE1234: Local note summary",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in output %q", want, got)
