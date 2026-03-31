@@ -239,9 +239,8 @@ func localQueryMatchClause() string {
 			SELECT 1
 			FROM itemCreators ic2
 			JOIN creators c2 ON c2.creatorID = ic2.creatorID
-			JOIN creatorData cd2 ON cd2.creatorDataID = c2.creatorDataID
 			WHERE ic2.itemID = i.itemID
-			AND LOWER(TRIM(COALESCE(cd2.firstName, '') || ' ' || COALESCE(cd2.lastName, ''))) LIKE ?
+			AND LOWER(TRIM(COALESCE(c2.firstName, '') || ' ' || COALESCE(c2.lastName, ''))) LIKE ?
 		)
 		OR EXISTS (
 			SELECT 1
@@ -493,11 +492,10 @@ func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (dom
 func (r *LocalReader) loadCreators(ctx context.Context, db *sql.DB, itemID int64) ([]domain.Creator, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT
-			TRIM(COALESCE(cd.firstName, '') || ' ' || COALESCE(cd.lastName, '')),
-			COALESCE(ct.typeName, '')
+			TRIM(COALESCE(c.firstName, '') || ' ' || COALESCE(c.lastName, '')),
+			COALESCE(ct.creatorType, '')
 		FROM itemCreators ic
 		JOIN creators c ON c.creatorID = ic.creatorID
-		JOIN creatorData cd ON cd.creatorDataID = c.creatorDataID
 		LEFT JOIN creatorTypes ct ON ct.creatorTypeID = ic.creatorTypeID
 		WHERE ic.itemID = ?
 		ORDER BY ic.orderIndex
@@ -624,14 +622,10 @@ func (r *LocalReader) loadNotes(ctx context.Context, db *sql.DB, itemID int64) (
 	rows, err := db.QueryContext(ctx, `
 		SELECT
 			i.key,
-			COALESCE(MAX(CASE WHEN f.fieldName = 'note' THEN v.value END), '')
+			COALESCE(n.note, '')
 		FROM itemNotes n
 		JOIN items i ON i.itemID = n.itemID
-		LEFT JOIN itemData d ON d.itemID = i.itemID
-		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
-		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
 		WHERE n.parentItemID = ?
-		GROUP BY i.itemID, i.key
 		ORDER BY i.key
 	`, itemID)
 	if err != nil {

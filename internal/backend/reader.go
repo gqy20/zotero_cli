@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
@@ -35,6 +36,11 @@ type Reader interface {
 	GetItem(ctx context.Context, key string) (domain.Item, error)
 }
 
+type HybridReader struct {
+	local Reader
+	web   Reader
+}
+
 func NewReader(cfg config.Config, httpClient *http.Client) (Reader, error) {
 	mode := cfg.Mode
 	if mode == "" {
@@ -48,10 +54,52 @@ func NewReader(cfg config.Config, httpClient *http.Client) (Reader, error) {
 	case "local":
 		return NewLocalReader(cfg)
 	case "hybrid":
-		return nil, fmt.Errorf("hybrid mode is not implemented yet")
+		baseURL := os.Getenv("ZOT_BASE_URL")
+		webReader := NewWebReader(zoteroapi.New(cfg, baseURL, httpClient))
+		localReader, err := NewLocalReader(cfg)
+		if err != nil {
+			return &HybridReader{web: webReader}, nil
+		}
+		return &HybridReader{local: localReader, web: webReader}, nil
 	default:
 		return nil, fmt.Errorf("unsupported mode %q", mode)
 	}
+}
+
+func (r *HybridReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
+	if r.local != nil {
+		items, err := r.local.FindItems(ctx, opts)
+		if err == nil {
+			return items, nil
+		}
+		if !shouldFallbackToWeb(err) {
+			return nil, err
+		}
+	}
+	return r.web.FindItems(ctx, opts)
+}
+
+func (r *HybridReader) GetItem(ctx context.Context, key string) (domain.Item, error) {
+	if r.local != nil {
+		item, err := r.local.GetItem(ctx, key)
+		if err == nil {
+			return item, nil
+		}
+		if !shouldFallbackToWeb(err) {
+			return domain.Item{}, err
+		}
+	}
+	return r.web.GetItem(ctx, key)
+}
+
+func shouldFallbackToWeb(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.HasPrefix(msg, "item not found: ") ||
+		strings.Contains(msg, "local find does not support --qmode") ||
+		strings.Contains(msg, "local find does not support --include-trashed")
 }
 
 func toAPIFindOptions(opts FindOptions) zoteroapi.FindOptions {

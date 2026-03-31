@@ -1,12 +1,28 @@
 package backend
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"zotero_cli/internal/config"
+	"zotero_cli/internal/domain"
 )
+
+type stubReader struct {
+	findItems func(context.Context, FindOptions) ([]domain.Item, error)
+	getItem   func(context.Context, string) (domain.Item, error)
+}
+
+func (r stubReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
+	return r.findItems(ctx, opts)
+}
+
+func (r stubReader) GetItem(ctx context.Context, key string) (domain.Item, error) {
+	return r.getItem(ctx, key)
+}
 
 func TestNewReaderDefaultsToWebMode(t *testing.T) {
 	reader, err := NewReader(config.Config{}, nil)
@@ -46,13 +62,13 @@ func TestNewReaderLocalModeBuildsLocalReader(t *testing.T) {
 	}
 }
 
-func TestNewReaderRejectsUnimplementedHybridMode(t *testing.T) {
-	_, err := NewReader(config.Config{Mode: "hybrid"}, nil)
-	if err == nil {
-		t.Fatalf("NewReader() error = nil, want error")
+func TestNewReaderHybridModeBuildsHybridReader(t *testing.T) {
+	reader, err := NewReader(config.Config{Mode: "hybrid"}, nil)
+	if err != nil {
+		t.Fatalf("NewReader() error = %v", err)
 	}
-	if err.Error() != "hybrid mode is not implemented yet" {
-		t.Fatalf("NewReader() error = %q, want hybrid error", err.Error())
+	if _, ok := reader.(*HybridReader); !ok {
+		t.Fatalf("NewReader() returned %T, want *HybridReader", reader)
 	}
 }
 
@@ -63,5 +79,148 @@ func TestNewReaderRejectsUnsupportedMode(t *testing.T) {
 	}
 	if err.Error() != "unsupported mode \"bogus\"" {
 		t.Fatalf("NewReader() error = %q, want unsupported mode error", err.Error())
+	}
+}
+
+func TestHybridReaderFindItemsPrefersLocal(t *testing.T) {
+	want := []domain.Item{{Key: "LOCAL1"}}
+	reader := &HybridReader{
+		local: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return want, nil
+			},
+			getItem: func(context.Context, string) (domain.Item, error) {
+				return domain.Item{}, errors.New("unexpected")
+			},
+		},
+		web: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return nil, errors.New("web should not be used")
+			},
+			getItem: func(context.Context, string) (domain.Item, error) {
+				return domain.Item{}, errors.New("unexpected")
+			},
+		},
+	}
+
+	got, err := reader.FindItems(context.Background(), FindOptions{Query: "test"})
+	if err != nil {
+		t.Fatalf("FindItems() error = %v", err)
+	}
+	if len(got) != 1 || got[0].Key != "LOCAL1" {
+		t.Fatalf("FindItems() = %#v, want local result", got)
+	}
+}
+
+func TestHybridReaderFindItemsFallsBackToWeb(t *testing.T) {
+	reader := &HybridReader{
+		local: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return nil, errors.New("local find does not support --qmode")
+			},
+			getItem: func(context.Context, string) (domain.Item, error) {
+				return domain.Item{}, errors.New("unexpected")
+			},
+		},
+		web: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return []domain.Item{{Key: "WEB1"}}, nil
+			},
+			getItem: func(context.Context, string) (domain.Item, error) {
+				return domain.Item{}, errors.New("unexpected")
+			},
+		},
+	}
+
+	got, err := reader.FindItems(context.Background(), FindOptions{Query: "test"})
+	if err != nil {
+		t.Fatalf("FindItems() error = %v", err)
+	}
+	if len(got) != 1 || got[0].Key != "WEB1" {
+		t.Fatalf("FindItems() = %#v, want web fallback", got)
+	}
+}
+
+func TestHybridReaderGetItemFallsBackToWeb(t *testing.T) {
+	reader := &HybridReader{
+		local: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return nil, errors.New("unexpected")
+			},
+			getItem: func(context.Context, string) (domain.Item, error) {
+				return domain.Item{}, errors.New("item not found: X")
+			},
+		},
+		web: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return nil, errors.New("unexpected")
+			},
+			getItem: func(ctx context.Context, key string) (domain.Item, error) {
+				return domain.Item{Key: key}, nil
+			},
+		},
+	}
+
+	got, err := reader.GetItem(context.Background(), "WEBKEY")
+	if err != nil {
+		t.Fatalf("GetItem() error = %v", err)
+	}
+	if got.Key != "WEBKEY" {
+		t.Fatalf("GetItem() = %#v, want web fallback item", got)
+	}
+}
+
+func TestHybridReaderFindItemsDoesNotHideUnexpectedLocalError(t *testing.T) {
+	reader := &HybridReader{
+		local: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return nil, errors.New("sqlite corrupted")
+			},
+			getItem: func(context.Context, string) (domain.Item, error) {
+				return domain.Item{}, errors.New("unexpected")
+			},
+		},
+		web: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return []domain.Item{{Key: "WEB1"}}, nil
+			},
+			getItem: func(context.Context, string) (domain.Item, error) {
+				return domain.Item{}, errors.New("unexpected")
+			},
+		},
+	}
+
+	_, err := reader.FindItems(context.Background(), FindOptions{Query: "test"})
+	if err == nil || err.Error() != "sqlite corrupted" {
+		t.Fatalf("FindItems() error = %v, want local error", err)
+	}
+}
+
+func TestHybridReaderFindItemsFallsBackForUnsupportedLocalFlags(t *testing.T) {
+	reader := &HybridReader{
+		local: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return nil, errors.New("local find does not support --qmode")
+			},
+			getItem: func(context.Context, string) (domain.Item, error) {
+				return domain.Item{}, errors.New("unexpected")
+			},
+		},
+		web: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return []domain.Item{{Key: "WEB1"}}, nil
+			},
+			getItem: func(context.Context, string) (domain.Item, error) {
+				return domain.Item{}, errors.New("unexpected")
+			},
+		},
+	}
+
+	got, err := reader.FindItems(context.Background(), FindOptions{Query: "test", QMode: "everything"})
+	if err != nil {
+		t.Fatalf("FindItems() error = %v", err)
+	}
+	if len(got) != 1 || got[0].Key != "WEB1" {
+		t.Fatalf("FindItems() = %#v, want web fallback", got)
 	}
 }
