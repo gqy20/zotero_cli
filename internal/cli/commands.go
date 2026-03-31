@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	usageFind                 = "usage: zot find <query> [--json] [--item-type TYPE] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed]"
+	usageFind                 = "usage: zot find <query> [--json] [--item-type TYPE] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed] | zot find --all [--json] [--item-type TYPE] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed]"
 	usageShow                 = "usage: zot show <item-key> [--json]"
 	usageCite                 = "usage: zot cite <item-key> [--format citation|bib] [--style STYLE] [--locale LOCALE] [--json]"
 	usageExport               = "usage: zot export <query> [--limit N] [--format bib|bibtex|biblatex|csljson|ris] [--json] | zot export --item-key KEY [--format bib|bibtex|biblatex|csljson|ris] [--json]"
@@ -21,6 +21,7 @@ const (
 	usageTags                 = "usage: zot tags [--json]"
 	usageSearches             = "usage: zot searches [--json]"
 	usageDeleted              = "usage: zot deleted [--json]"
+	usageStats                = "usage: zot stats [--json]"
 	usageVersions             = "usage: zot versions <collections|searches|items|items-top> --since N [--include-trashed] [--if-modified-since-version N] [--json]"
 	usageItemTypes            = "usage: zot item-types [--json]"
 	usageItemFields           = "usage: zot item-fields [--json]"
@@ -155,7 +156,7 @@ func runFind(args []string) int {
 		return 2
 	}
 
-	if strings.TrimSpace(opts.Query) == "" {
+	if strings.TrimSpace(opts.Query) == "" && !opts.All {
 		fmt.Fprintln(stderr, usageFind)
 		return 2
 	}
@@ -191,6 +192,32 @@ func runFind(args []string) int {
 			item.Title,
 		)
 	}
+	return 0
+}
+
+func runStats(args []string) int {
+	jsonOutput, ok := parseJSONOnlyArgs(args, usageStats)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	stats, err := client.GetLibraryStats(context.Background())
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: "stats", Data: stats})
+	}
+	fmt.Fprintf(stdout, "library=%s:%s\n", stats.LibraryType, stats.LibraryID)
+	fmt.Fprintf(stdout, "items=%d\n", stats.TotalItems)
+	fmt.Fprintf(stdout, "collections=%d\n", stats.TotalCollections)
+	fmt.Fprintf(stdout, "searches=%d\n", stats.TotalSearches)
 	return 0
 }
 

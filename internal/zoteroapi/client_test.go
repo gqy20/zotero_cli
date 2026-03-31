@@ -1865,6 +1865,49 @@ func TestClientValidateLibraryAccessForGroup(t *testing.T) {
 	}
 }
 
+func TestClientGetLibraryStats(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/users/123/items":
+			if r.URL.Query().Get("format") != "versions" || r.URL.Query().Get("since") != "0" {
+				t.Fatalf("unexpected item stats query: %s", r.URL.RawQuery)
+			}
+			w.Header().Set("Last-Modified-Version", "111")
+			_ = json.NewEncoder(w).Encode(map[string]int{
+				"ITEM1234": 90,
+				"ITEM5678": 91,
+			})
+		case "/users/123/collections":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"key": "COLL1234", "data": map[string]any{"name": "Papers"}},
+			})
+		case "/users/123/searches":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"key": "SCH12345", "data": map[string]any{"name": "Unread PDFs"}},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	stats, err := client.GetLibraryStats(context.Background())
+	if err != nil {
+		t.Fatalf("GetLibraryStats returned error: %v", err)
+	}
+	if stats.TotalItems != 2 || stats.TotalCollections != 1 || stats.TotalSearches != 1 {
+		t.Fatalf("unexpected stats: %#v", stats)
+	}
+}
+
 func TestClientUpdateItemReturnsReadablePreconditionError(t *testing.T) {
 	t.Parallel()
 

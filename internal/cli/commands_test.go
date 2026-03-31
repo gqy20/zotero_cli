@@ -72,6 +72,37 @@ func TestRunConfigValidateJSON(t *testing.T) {
 	}
 }
 
+func TestRunStatsJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"stats", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	if got["command"] != "stats" {
+		t.Fatalf("unexpected command: %#v", got["command"])
+	}
+	data, ok := got["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	if data["total_items"] != float64(2) || data["total_collections"] != float64(2) || data["total_searches"] != float64(1) {
+		t.Fatalf("unexpected stats payload: %#v", data)
+	}
+}
+
 func TestRunShowJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

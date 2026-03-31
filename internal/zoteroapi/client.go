@@ -32,6 +32,7 @@ type Client struct {
 
 type FindOptions struct {
 	Query          string
+	All            bool
 	ItemType       string
 	Limit          int
 	Start          int
@@ -136,6 +137,14 @@ type ValidationResult struct {
 	LibraryID   string `json:"library_id"`
 	KeyUserID   int    `json:"key_user_id"`
 	GroupFound  bool   `json:"group_found,omitempty"`
+}
+
+type LibraryStats struct {
+	LibraryType      string `json:"library_type"`
+	LibraryID        string `json:"library_id"`
+	TotalItems       int    `json:"total_items"`
+	TotalCollections int    `json:"total_collections"`
+	TotalSearches    int    `json:"total_searches"`
 }
 
 type Item struct {
@@ -1068,6 +1077,34 @@ func (c *Client) ValidateLibraryAccess(ctx context.Context) (ValidationResult, e
 	default:
 		return ValidationResult{}, fmt.Errorf("unsupported library_type %q", c.cfg.LibraryType)
 	}
+}
+
+func (c *Client) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
+	itemVersions, err := c.GetVersionsResult(ctx, VersionsOptions{
+		ObjectType: "items",
+		Since:      0,
+	})
+	if err != nil {
+		return LibraryStats{}, err
+	}
+
+	collections, err := c.ListCollections(ctx)
+	if err != nil {
+		return LibraryStats{}, err
+	}
+
+	searches, err := c.ListSearches(ctx)
+	if err != nil {
+		return LibraryStats{}, err
+	}
+
+	return LibraryStats{
+		LibraryType:      c.cfg.LibraryType,
+		LibraryID:        c.cfg.LibraryID,
+		TotalItems:       len(itemVersions.Versions),
+		TotalCollections: len(collections),
+		TotalSearches:    len(searches),
+	}, nil
 }
 
 func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {

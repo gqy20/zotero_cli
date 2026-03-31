@@ -49,6 +49,8 @@ func Run(args []string) int {
 		return runSearches(args[1:])
 	case "deleted":
 		return runDeleted(args[1:])
+	case "stats":
+		return runStats(args[1:])
 	case "versions":
 		return runVersions(args[1:])
 	case "item-types":
@@ -124,6 +126,7 @@ Commands:
   tags           List tags
   searches       List saved searches
   deleted        Show deleted object keys
+  stats          Show library item, collection, and search counts
   versions       Show changed object versions since a library version
   item-types     List Zotero item types
   item-fields    List Zotero item fields

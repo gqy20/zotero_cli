@@ -34,6 +34,8 @@ func parseFindArgs(args []string) (zoteroapi.FindOptions, bool, error) {
 		switch args[i] {
 		case "--json":
 			jsonOutput = true
+		case "--all":
+			opts.All = true
 		case "--item-type":
 			if i+1 >= len(args) {
 				return zoteroapi.FindOptions{}, false, errors.New("missing value for --item-type")
