@@ -260,6 +260,54 @@ func TestRunFindLocalJSONSupportsSortingAndPagination(t *testing.T) {
 	}
 }
 
+func TestRunFindLocalRejectsQMode(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed", "--qmode", "everything"})
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "local find does not support --qmode") {
+		t.Fatalf("expected qmode local error, got %q", got)
+	}
+}
+
+func TestRunFindLocalRejectsIncludeTrashed(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed", "--include-trashed"})
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "local find does not support --include-trashed") {
+		t.Fatalf("expected include-trashed local error, got %q", got)
+	}
+}
+
 func TestRunShowRejectsUnsupportedMode(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

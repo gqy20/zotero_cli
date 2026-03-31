@@ -55,6 +55,13 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 }
 
 func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
+	if opts.IncludeTrashed {
+		return nil, fmt.Errorf("local find does not support --include-trashed")
+	}
+	if opts.QMode != "" {
+		return nil, fmt.Errorf("local find does not support --qmode")
+	}
+
 	db, err := sql.Open("sqlite", r.SQLitePath)
 	if err != nil {
 		return nil, err
