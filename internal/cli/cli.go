@@ -36,6 +36,8 @@ func Run(args []string) int {
 		return runFind(args[1:])
 	case "show":
 		return runShow(args[1:])
+	case "relate":
+		return runRelate(args[1:])
 	case "cite":
 		return runCite(args[1:])
 	case "export":
@@ -124,9 +126,10 @@ Commands:
   config init    Interactively create ~/.zot/.env
   config show    Show active config with masked secrets
   config validate  Validate library_id and api_key against Zotero
-  find           Search items in the configured Zotero library
-  show           Show item details
-  cite           Generate a citation or bibliography entry
+	find           Search items in the configured Zotero library
+	show           Show item details
+	relate         Show explicit item relations
+	cite           Generate a citation or bibliography entry
   export         Export bibliography entries
   collections    List collections
   notes          List notes

@@ -3,6 +3,7 @@ package cli
 const (
 	usageFind                 = "usage: zot find <query> [--json] [--full] [--include-fields FIELD[,FIELD...]] [--item-type TYPE] [--tag TAG ...] [--tag-any] [--date-after YYYY[-MM[-DD]]] [--date-before YYYY[-MM[-DD]]] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed] | zot find --all [--json] [--full] [--include-fields FIELD[,FIELD...]] [--item-type TYPE] [--tag TAG ...] [--tag-any] [--date-after YYYY[-MM[-DD]]] [--date-before YYYY[-MM[-DD]]] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed]"
 	usageShow                 = "usage: zot show <item-key> [--json]"
+	usageRelate               = "usage: zot relate <item-key> [--json]"
 	usageCite                 = "usage: zot cite <item-key> [--format citation|bib] [--style STYLE] [--locale LOCALE] [--json]"
 	usageExport               = "usage: zot export <query> [--limit N] [--format bib|bibtex|biblatex|csljson|ris] [--json] | zot export --item-key KEY [--format bib|bibtex|biblatex|csljson|ris] [--json] | zot export --collection KEY [--format bib|bibtex|biblatex|csljson|ris] [--json]"
 	usageCollections          = "usage: zot collections [--json]"

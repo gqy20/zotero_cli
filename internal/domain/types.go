@@ -42,3 +42,15 @@ type Note struct {
 	Key     string `json:"key"`
 	Preview string `json:"preview,omitempty"`
 }
+
+type ItemRef struct {
+	Key      string `json:"key"`
+	ItemType string `json:"item_type,omitempty"`
+	Title    string `json:"title,omitempty"`
+}
+
+type Relation struct {
+	Predicate string  `json:"predicate"`
+	Direction string  `json:"direction"`
+	Target    ItemRef `json:"target"`
+}

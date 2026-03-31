@@ -44,6 +44,7 @@ func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 		{name: "find", args: []string{"find", "attention"}},
 		{name: "config validate", args: []string{"config", "validate"}},
 		{name: "show", args: []string{"show", "X42A7DEE"}},
+		{name: "relate", args: []string{"relate", "X42A7DEE"}},
 		{name: "cite", args: []string{"cite", "X42A7DEE"}},
 		{name: "export query", args: []string{"export", "attention"}},
 		{name: "export item key", args: []string{"export", "--item-key", "X42A7DEE"}},
@@ -114,6 +115,26 @@ func TestRunShowRejectsExtraPositionalArgs(t *testing.T) {
 		t.Fatalf("expected exit code 2, got %d; stderr=%q", exitCode, stderr.String())
 	}
 	if !strings.Contains(stderr.String(), usageShow) {
+		t.Fatalf("expected usage message, got %q", stderr.String())
+	}
+}
+
+func TestRunRelateRejectsExtraPositionalArgs(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"relate", "X42A7DEE", "extra"})
+
+	if exitCode != 2 {
+		t.Fatalf("expected exit code 2, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), usageRelate) {
 		t.Fatalf("expected usage message, got %q", stderr.String())
 	}
 }

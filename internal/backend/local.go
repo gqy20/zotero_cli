@@ -161,6 +161,39 @@ func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, err
 	return item, nil
 }
 
+func (r *LocalReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
+	db, err := sql.Open("sqlite", r.SQLitePath)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	_, itemID, err := r.loadItemRefByKey(ctx, db, key)
+	if err != nil {
+		return nil, err
+	}
+
+	outgoing, err := r.loadOutgoingRelations(ctx, db, itemID)
+	if err != nil {
+		return nil, err
+	}
+	incoming, err := r.loadIncomingRelations(ctx, db, key)
+	if err != nil {
+		return nil, err
+	}
+	relations := append(outgoing, incoming...)
+	sort.SliceStable(relations, func(i int, j int) bool {
+		if relations[i].Predicate != relations[j].Predicate {
+			return relations[i].Predicate < relations[j].Predicate
+		}
+		if relations[i].Direction != relations[j].Direction {
+			return relations[i].Direction < relations[j].Direction
+		}
+		return relations[i].Target.Key < relations[j].Target.Key
+	})
+	return relations, nil
+}
+
 func localFindQuery(opts FindOptions) (string, []any) {
 	query := `
 		SELECT
@@ -487,6 +520,133 @@ func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (dom
 	item.Container = firstNonEmptyString(publicationTitle, proceedingsTitle, bookTitle)
 	item.Date = normalizeLocalDate(item.Date)
 	return item, itemID, nil
+}
+
+func (r *LocalReader) loadItemRefByKey(ctx context.Context, db *sql.DB, key string) (domain.ItemRef, int64, error) {
+	row := db.QueryRowContext(ctx, `
+		SELECT
+			i.itemID,
+			i.key,
+			it.typeName,
+			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), '')
+		FROM items i
+		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
+		LEFT JOIN itemData d ON d.itemID = i.itemID
+		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
+		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
+		WHERE i.key = ?
+		GROUP BY i.itemID, i.key, it.typeName
+	`, key)
+
+	var itemID int64
+	var ref domain.ItemRef
+	if err := row.Scan(&itemID, &ref.Key, &ref.ItemType, &ref.Title); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.ItemRef{}, 0, fmt.Errorf("item not found: %s", key)
+		}
+		return domain.ItemRef{}, 0, err
+	}
+	return ref, itemID, nil
+}
+
+func (r *LocalReader) loadItemRefByID(ctx context.Context, db *sql.DB, itemID int64) (domain.ItemRef, error) {
+	row := db.QueryRowContext(ctx, `
+		SELECT
+			i.key,
+			it.typeName,
+			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), '')
+		FROM items i
+		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
+		LEFT JOIN itemData d ON d.itemID = i.itemID
+		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
+		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
+		WHERE i.itemID = ?
+		GROUP BY i.key, it.typeName
+	`, itemID)
+
+	var ref domain.ItemRef
+	if err := row.Scan(&ref.Key, &ref.ItemType, &ref.Title); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.ItemRef{}, fmt.Errorf("item id not found: %d", itemID)
+		}
+		return domain.ItemRef{}, err
+	}
+	return ref, nil
+}
+
+func (r *LocalReader) loadOutgoingRelations(ctx context.Context, db *sql.DB, itemID int64) ([]domain.Relation, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT rp.predicate, ir.object
+		FROM itemRelations ir
+		JOIN relationPredicates rp ON rp.predicateID = ir.predicateID
+		WHERE ir.itemID = ?
+	`, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	relations := []domain.Relation{}
+	for rows.Next() {
+		var predicate string
+		var object string
+		if err := rows.Scan(&predicate, &object); err != nil {
+			return nil, err
+		}
+		targetKey := relationObjectKey(object)
+		target := domain.ItemRef{Key: targetKey}
+		if targetKey != "" {
+			if ref, _, err := r.loadItemRefByKey(ctx, db, targetKey); err == nil {
+				target = ref
+			}
+		}
+		relations = append(relations, domain.Relation{
+			Predicate: predicate,
+			Direction: "outgoing",
+			Target:    target,
+		})
+	}
+	return relations, rows.Err()
+}
+
+func (r *LocalReader) loadIncomingRelations(ctx context.Context, db *sql.DB, key string) ([]domain.Relation, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT ir.itemID, rp.predicate
+		FROM itemRelations ir
+		JOIN relationPredicates rp ON rp.predicateID = ir.predicateID
+		WHERE ir.object LIKE ?
+	`, "%/items/"+key)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	relations := []domain.Relation{}
+	for rows.Next() {
+		var itemID int64
+		var predicate string
+		if err := rows.Scan(&itemID, &predicate); err != nil {
+			return nil, err
+		}
+		target, err := r.loadItemRefByID(ctx, db, itemID)
+		if err != nil {
+			return nil, err
+		}
+		relations = append(relations, domain.Relation{
+			Predicate: predicate,
+			Direction: "incoming",
+			Target:    target,
+		})
+	}
+	return relations, rows.Err()
+}
+
+func relationObjectKey(value string) string {
+	idx := strings.LastIndex(value, "/items/")
+	if idx < 0 {
+		return ""
+	}
+	return strings.TrimSpace(value[idx+len("/items/"):])
 }
 
 func (r *LocalReader) loadCreators(ctx context.Context, db *sql.DB, itemID int64) ([]domain.Creator, error) {

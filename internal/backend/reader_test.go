@@ -12,8 +12,9 @@ import (
 )
 
 type stubReader struct {
-	findItems func(context.Context, FindOptions) ([]domain.Item, error)
-	getItem   func(context.Context, string) (domain.Item, error)
+	findItems  func(context.Context, FindOptions) ([]domain.Item, error)
+	getItem    func(context.Context, string) (domain.Item, error)
+	getRelated func(context.Context, string) ([]domain.Relation, error)
 }
 
 func (r stubReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
@@ -22,6 +23,10 @@ func (r stubReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.I
 
 func (r stubReader) GetItem(ctx context.Context, key string) (domain.Item, error) {
 	return r.getItem(ctx, key)
+}
+
+func (r stubReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
+	return r.getRelated(ctx, key)
 }
 
 func TestNewReaderDefaultsToWebMode(t *testing.T) {
@@ -92,6 +97,9 @@ func TestHybridReaderFindItemsPrefersLocal(t *testing.T) {
 			getItem: func(context.Context, string) (domain.Item, error) {
 				return domain.Item{}, errors.New("unexpected")
 			},
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("unexpected")
+			},
 		},
 		web: stubReader{
 			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
@@ -99,6 +107,9 @@ func TestHybridReaderFindItemsPrefersLocal(t *testing.T) {
 			},
 			getItem: func(context.Context, string) (domain.Item, error) {
 				return domain.Item{}, errors.New("unexpected")
+			},
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("unexpected")
 			},
 		},
 	}
@@ -121,6 +132,9 @@ func TestHybridReaderFindItemsFallsBackToWeb(t *testing.T) {
 			getItem: func(context.Context, string) (domain.Item, error) {
 				return domain.Item{}, errors.New("unexpected")
 			},
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("unexpected")
+			},
 		},
 		web: stubReader{
 			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
@@ -128,6 +142,9 @@ func TestHybridReaderFindItemsFallsBackToWeb(t *testing.T) {
 			},
 			getItem: func(context.Context, string) (domain.Item, error) {
 				return domain.Item{}, errors.New("unexpected")
+			},
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("unexpected")
 			},
 		},
 	}
@@ -150,6 +167,9 @@ func TestHybridReaderGetItemFallsBackToWeb(t *testing.T) {
 			getItem: func(context.Context, string) (domain.Item, error) {
 				return domain.Item{}, errors.New("item not found: X")
 			},
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("unexpected")
+			},
 		},
 		web: stubReader{
 			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
@@ -157,6 +177,9 @@ func TestHybridReaderGetItemFallsBackToWeb(t *testing.T) {
 			},
 			getItem: func(ctx context.Context, key string) (domain.Item, error) {
 				return domain.Item{Key: key}, nil
+			},
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("unexpected")
 			},
 		},
 	}
@@ -179,6 +202,9 @@ func TestHybridReaderFindItemsDoesNotHideUnexpectedLocalError(t *testing.T) {
 			getItem: func(context.Context, string) (domain.Item, error) {
 				return domain.Item{}, errors.New("unexpected")
 			},
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("unexpected")
+			},
 		},
 		web: stubReader{
 			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
@@ -186,6 +212,9 @@ func TestHybridReaderFindItemsDoesNotHideUnexpectedLocalError(t *testing.T) {
 			},
 			getItem: func(context.Context, string) (domain.Item, error) {
 				return domain.Item{}, errors.New("unexpected")
+			},
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("unexpected")
 			},
 		},
 	}
@@ -205,6 +234,9 @@ func TestHybridReaderFindItemsFallsBackForUnsupportedLocalFlags(t *testing.T) {
 			getItem: func(context.Context, string) (domain.Item, error) {
 				return domain.Item{}, errors.New("unexpected")
 			},
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("unexpected")
+			},
 		},
 		web: stubReader{
 			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
@@ -212,6 +244,9 @@ func TestHybridReaderFindItemsFallsBackForUnsupportedLocalFlags(t *testing.T) {
 			},
 			getItem: func(context.Context, string) (domain.Item, error) {
 				return domain.Item{}, errors.New("unexpected")
+			},
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("unexpected")
 			},
 		},
 	}
@@ -222,5 +257,32 @@ func TestHybridReaderFindItemsFallsBackForUnsupportedLocalFlags(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Key != "WEB1" {
 		t.Fatalf("FindItems() = %#v, want web fallback", got)
+	}
+}
+
+func TestHybridReaderGetRelatedPrefersLocal(t *testing.T) {
+	reader := &HybridReader{
+		local: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
+			getItem:   func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return []domain.Relation{{Predicate: "dc:relation", Direction: "outgoing", Target: domain.ItemRef{Key: "LOCAL1"}}}, nil
+			},
+		},
+		web: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
+			getItem:   func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("web should not be used")
+			},
+		},
+	}
+
+	got, err := reader.GetRelated(context.Background(), "ITEM1")
+	if err != nil {
+		t.Fatalf("GetRelated() error = %v", err)
+	}
+	if len(got) != 1 || got[0].Target.Key != "LOCAL1" {
+		t.Fatalf("GetRelated() = %#v, want local result", got)
 	}
 }

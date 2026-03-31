@@ -34,6 +34,7 @@ type FindOptions struct {
 type Reader interface {
 	FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error)
 	GetItem(ctx context.Context, key string) (domain.Item, error)
+	GetRelated(ctx context.Context, key string) ([]domain.Relation, error)
 }
 
 type HybridReader struct {
@@ -92,6 +93,19 @@ func (r *HybridReader) GetItem(ctx context.Context, key string) (domain.Item, er
 	return r.web.GetItem(ctx, key)
 }
 
+func (r *HybridReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
+	if r.local != nil {
+		relations, err := r.local.GetRelated(ctx, key)
+		if err == nil {
+			return relations, nil
+		}
+		if !shouldFallbackToWeb(err) {
+			return nil, err
+		}
+	}
+	return r.web.GetRelated(ctx, key)
+}
+
 func shouldFallbackToWeb(err error) bool {
 	if err == nil {
 		return false
@@ -99,7 +113,8 @@ func shouldFallbackToWeb(err error) bool {
 	msg := err.Error()
 	return strings.HasPrefix(msg, "item not found: ") ||
 		strings.Contains(msg, "local find does not support --qmode") ||
-		strings.Contains(msg, "local find does not support --include-trashed")
+		strings.Contains(msg, "local find does not support --include-trashed") ||
+		strings.Contains(msg, "local relate is not supported")
 }
 
 func toAPIFindOptions(opts FindOptions) zoteroapi.FindOptions {

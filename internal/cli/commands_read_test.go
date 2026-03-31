@@ -432,6 +432,77 @@ func TestRunShowLocalTextOutputIncludesCollectionsAndResolvedPaths(t *testing.T)
 	}
 }
 
+func TestRunRelateLocalJSONShowsExplicitRelations(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
+	buildLocalRelateFixture(t, sqlitePath, storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"relate", "ITEM1234", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 2 {
+		t.Fatalf("unexpected relate payload: %#v", got["data"])
+	}
+	first := data[0].(map[string]any)
+	if first["predicate"] != "dc:relation" {
+		t.Fatalf("unexpected first relation: %#v", first)
+	}
+}
+
+func TestRunRelateLocalTextOutputShowsDirectionAndTarget(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
+	buildLocalRelateFixture(t, sqlitePath, storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"relate", "ITEM1234"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Item: ITEM1234",
+		"Explicit Relations: 2",
+		"[dc:relation][incoming] RELA1111  journalArticle  Related Incoming",
+		"[dc:relation][outgoing] RELB2222  journalArticle  Related Outgoing",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output %q", want, got)
+		}
+	}
+}
+
 func buildLocalShowFixture(t *testing.T, sqlitePath string, storageDir string) {
 	t.Helper()
 
@@ -491,6 +562,55 @@ func buildLocalShowFixture(t *testing.T, sqlitePath string, storageDir string) {
 	}
 	if err := os.WriteFile(filepath.Join(attachmentDir, "attention.pdf"), []byte("pdf"), 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func buildLocalRelateFixture(t *testing.T, sqlitePath string, storageDir string) {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", sqlitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	statements := []string{
+		`CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName TEXT);`,
+		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER);`,
+		`CREATE TABLE fieldsCombined (fieldID INTEGER PRIMARY KEY, fieldName TEXT);`,
+		`CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT);`,
+		`CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID INTEGER);`,
+		`CREATE TABLE creators (creatorID INTEGER PRIMARY KEY, firstName TEXT, lastName TEXT, fieldMode INT);`,
+		`CREATE TABLE creatorTypes (creatorTypeID INTEGER PRIMARY KEY, creatorType TEXT);`,
+		`CREATE TABLE itemCreators (itemID INTEGER, creatorID INTEGER, creatorTypeID INTEGER, orderIndex INTEGER);`,
+		`CREATE TABLE tags (tagID INTEGER PRIMARY KEY, name TEXT);`,
+		`CREATE TABLE itemTags (itemID INTEGER, tagID INTEGER);`,
+		`CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, key TEXT, collectionName TEXT);`,
+		`CREATE TABLE collectionItems (collectionID INTEGER, itemID INTEGER);`,
+		`CREATE TABLE itemAttachments (itemID INTEGER, parentItemID INTEGER, contentType TEXT, linkMode INTEGER, path TEXT);`,
+		`CREATE TABLE itemNotes (itemID INTEGER, parentItemID INTEGER, note TEXT, title TEXT);`,
+		`CREATE TABLE relationPredicates (predicateID INTEGER PRIMARY KEY, predicate TEXT);`,
+		`CREATE TABLE itemRelations (itemID INTEGER, predicateID INTEGER, object TEXT);`,
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("exec %q: %v", statement, err)
+		}
+	}
+
+	inserts := []string{
+		`INSERT INTO itemTypes(itemTypeID, typeName) VALUES (1, 'journalArticle');`,
+		`INSERT INTO items(itemID, key, version, itemTypeID) VALUES (1, 'ITEM1234', 7, 1), (2, 'RELA1111', 1, 1), (3, 'RELB2222', 1, 1);`,
+		`INSERT INTO fieldsCombined(fieldID, fieldName) VALUES (1, 'title');`,
+		`INSERT INTO itemDataValues(valueID, value) VALUES (1, 'Primary Item'), (2, 'Related Incoming'), (3, 'Related Outgoing');`,
+		`INSERT INTO itemData(itemID, fieldID, valueID) VALUES (1, 1, 1), (2, 1, 2), (3, 1, 3);`,
+		`INSERT INTO relationPredicates(predicateID, predicate) VALUES (1, 'dc:relation');`,
+		`INSERT INTO itemRelations(itemID, predicateID, object) VALUES (1, 1, 'http://zotero.org/users/123456/items/RELB2222'), (2, 1, 'http://zotero.org/users/123456/items/ITEM1234');`,
+	}
+	for _, statement := range inserts {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("exec %q: %v", statement, err)
+		}
 	}
 }
 

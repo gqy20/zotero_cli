@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"zotero_cli/internal/domain"
 	"zotero_cli/internal/zoteroapi"
 )
 
@@ -180,6 +181,70 @@ func runShow(args []string) int {
 		}
 	}
 	return 0
+}
+
+func runRelate(args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, usageRelate)
+		return 2
+	}
+
+	jsonOutput := false
+	key := ""
+	for _, arg := range args {
+		if arg == "--json" {
+			jsonOutput = true
+			continue
+		}
+		if key == "" {
+			key = arg
+			continue
+		}
+		fmt.Fprintln(stderr, usageRelate)
+		return 2
+	}
+
+	if strings.TrimSpace(key) == "" {
+		fmt.Fprintln(stderr, usageRelate)
+		return 2
+	}
+
+	_, reader, exitCode := loadReader()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	relations, err := reader.GetRelated(context.Background(), key)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: "relate", Data: relations})
+	}
+
+	if len(relations) == 0 {
+		fmt.Fprintf(stdout, "Item: %s\n", key)
+		fmt.Fprintln(stdout, "Explicit Relations: 0")
+		return 0
+	}
+
+	fmt.Fprintf(stdout, "Item: %s\n", key)
+	fmt.Fprintf(stdout, "Explicit Relations: %d\n", len(relations))
+	for _, relation := range relations {
+		fmt.Fprintf(stdout, "  - [%s][%s] %s\n", relation.Predicate, relation.Direction, relateSummary(relation.Target))
+	}
+	return 0
+}
+
+func relateSummary(ref domain.ItemRef) string {
+	if ref.Title == "" {
+		return ref.Key
+	}
+	if ref.ItemType == "" {
+		return ref.Key + "  " + ref.Title
+	}
+	return ref.Key + "  " + ref.ItemType + "  " + ref.Title
 }
 
 func runCite(args []string) int {
