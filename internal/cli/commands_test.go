@@ -12,35 +12,90 @@ func TestRunConfigInitCreatesFileWhenOnlyEnvConfigExists(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 
-	envRoot := t.TempDir()
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(envRoot); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = os.Chdir(wd)
-	})
-
-	envBody := "ZOT_LIBRARY_TYPE=user\nZOT_LIBRARY_ID=123456\nZOT_API_KEY=secret\n"
-	if err := os.WriteFile(filepath.Join(envRoot, ".env"), []byte(envBody), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
 	stdout, stderr := captureOutput(t)
+	oldStdin := stdin
+	stdin = strings.NewReader("user\n123456\nsecret\n\n\ny\nn\n")
+	t.Cleanup(func() {
+		stdin = oldStdin
+	})
 	exitCode := Run([]string{"config", "init"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
 
-	configPath := filepath.Join(configRoot, "zotcli", "config.json")
+	configPath := filepath.Join(configRoot, ".zot", ".env")
 	if _, err := os.Stat(configPath); err != nil {
 		t.Fatalf("expected config file to be created, stat err=%v", err)
 	}
 	if !strings.Contains(stdout.String(), "created config at") {
 		t.Fatalf("expected success message, got %q", stdout.String())
+	}
+	for _, want := range []string{
+		"https://www.zotero.org/settings/keys",
+		"https://www.zotero.org/groups",
+		"https://www.zotero.org/support/dev/web_api/v3/basics",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("expected %q in init output, got %q", want, stdout.String())
+		}
+	}
+}
+
+func TestRunDeleteItemBlockedWhenDeleteDisabled(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	envPath := filepath.Join(configRoot, ".zot", ".env")
+	content, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.ReplaceAll(string(content), "ZOT_ALLOW_DELETE=1", "ZOT_ALLOW_DELETE=0")
+	if err := os.WriteFile(envPath, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"delete-item", "ABCD2345", "--if-unmodified-since-version", "8"})
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "delete operations are disabled") {
+		t.Fatalf("expected delete disabled message, got %q", stderr.String())
+	}
+}
+
+func TestRunCreateItemBlockedWhenWriteDisabled(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	envPath := filepath.Join(configRoot, ".zot", ".env")
+	content, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.ReplaceAll(string(content), "ZOT_ALLOW_WRITE=1", "ZOT_ALLOW_WRITE=0")
+	if err := os.WriteFile(envPath, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"create-item", "--data", `{"itemType":"book","title":"My Book"}`, "--if-unmodified-since-version", "41"})
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "writes are disabled") {
+		t.Fatalf("expected write disabled message, got %q", stderr.String())
 	}
 }
 

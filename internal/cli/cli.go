@@ -10,6 +10,7 @@ import (
 var (
 	stdout = io.Writer(os.Stdout)
 	stderr = io.Writer(os.Stderr)
+	stdin  = io.Reader(os.Stdin)
 
 	version   = "dev"
 	commit    = "unknown"
@@ -120,7 +121,7 @@ Usage:
 Commands:
   version        Show CLI version
   config path    Print config path
-  config init    Create a starter config file
+  config init    Interactively create ~/.zot/.env
   config show    Show active config with masked secrets
   config validate  Validate library_id and api_key against Zotero
   find           Search items in the configured Zotero library

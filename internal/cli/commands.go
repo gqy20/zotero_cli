@@ -100,7 +100,21 @@ func runConfigInit(args []string) int {
 		cfg.LibraryType = "user"
 		cfg.LibraryID = "123456"
 		cfg.APIKey = "replace-me"
-		return writeJSON(cfg)
+		fmt.Fprint(stdout, strings.Join([]string{
+			"ZOT_MODE=web",
+			"ZOT_LIBRARY_TYPE=user",
+			"ZOT_LIBRARY_ID=123456",
+			"ZOT_API_KEY=replace-me",
+			"ZOT_STYLE=apa",
+			"ZOT_LOCALE=en-US",
+			fmt.Sprintf("ZOT_TIMEOUT_SECONDS=%d", cfg.TimeoutSeconds),
+			fmt.Sprintf("ZOT_RETRY_MAX_ATTEMPTS=%d", cfg.RetryMaxAttempts),
+			fmt.Sprintf("ZOT_RETRY_BASE_DELAY_MS=%d", cfg.RetryBaseDelayMilliseconds),
+			fmt.Sprintf("ZOT_ALLOW_WRITE=%d", boolToInt(cfg.AllowWrite)),
+			fmt.Sprintf("ZOT_ALLOW_DELETE=%d", boolToInt(cfg.AllowDelete)),
+			"",
+		}, "\n"))
+		return 0
 	}
 
 	if _, err := os.Stat(path); err == nil {
@@ -111,13 +125,16 @@ func runConfigInit(args []string) int {
 		return printErr(err)
 	}
 
-	cfg := config.Default()
+	cfg, err := promptConfigSetup()
+	if err != nil {
+		return printErr(err)
+	}
 	if err := config.Save(cfg); err != nil {
 		return printErr(err)
 	}
 
 	fmt.Fprintf(stdout, "created config at %s\n", path)
-	fmt.Fprintln(stdout, "edit the file and fill in your library_type, library_id, and api_key")
+	fmt.Fprintln(stdout, "you can edit ~/.zot/.env later if you want to change keys or permissions")
 	return 0
 }
 
@@ -125,7 +142,9 @@ func runConfigValidate() int {
 	cfg, _, err := config.Load()
 	if err != nil {
 		if errors.Is(err, config.ErrNotFound) {
-			fmt.Fprintf(stderr, "config not found; run `zot config init` first\n")
+			fmt.Fprintln(stderr, "config not found.")
+			fmt.Fprintln(stderr, "required fields: library_type, library_id, api_key")
+			fmt.Fprintln(stderr, "run `zot config init` to set them up interactively in ~/.zot/.env")
 			return 3
 		}
 		return printErr(err)
@@ -830,8 +849,11 @@ func runTrash(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureWriteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -869,8 +891,11 @@ func runCollectionsTop(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureDeleteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -907,8 +932,11 @@ func runPublications(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureWriteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -946,8 +974,11 @@ func runCreateItem(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureWriteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -969,8 +1000,11 @@ func runUpdateItem(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureWriteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -992,8 +1026,11 @@ func runDeleteItem(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureDeleteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -1015,8 +1052,11 @@ func runCreateItems(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureWriteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -1038,8 +1078,11 @@ func runUpdateItems(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureWriteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -1061,8 +1104,11 @@ func runDeleteItems(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureDeleteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -1092,8 +1138,11 @@ func runUpdateTags(args []string, usage string, command string, add bool) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureWriteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -1134,8 +1183,11 @@ func runCreateCollection(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureWriteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -1157,8 +1209,11 @@ func runUpdateCollection(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureWriteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -1180,8 +1235,11 @@ func runDeleteCollection(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureDeleteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -1203,8 +1261,11 @@ func runCreateSearch(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureWriteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -1226,8 +1287,11 @@ func runUpdateSearch(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureWriteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -1249,8 +1313,11 @@ func runDeleteSearch(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	cfg, client, exitCode := loadClient()
 	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := ensureDeleteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
