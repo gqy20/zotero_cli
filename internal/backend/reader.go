@@ -45,8 +45,10 @@ func NewReader(cfg config.Config, httpClient *http.Client) (Reader, error) {
 	case "web":
 		baseURL := os.Getenv("ZOT_BASE_URL")
 		return NewWebReader(zoteroapi.New(cfg, baseURL, httpClient)), nil
-	case "local", "hybrid":
-		return nil, fmt.Errorf("%s mode is not implemented yet", mode)
+	case "local":
+		return NewLocalReader(cfg)
+	case "hybrid":
+		return nil, fmt.Errorf("hybrid mode is not implemented yet")
 	default:
 		return nil, fmt.Errorf("unsupported mode %q", mode)
 	}

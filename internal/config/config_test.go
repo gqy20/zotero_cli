@@ -25,7 +25,7 @@ func TestLoadReturnsEnvConfigWhenFileMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	envPath := filepath.Join(envDir, ".env")
-	envBody := "ZOT_LIBRARY_TYPE=user\nZOT_LIBRARY_ID=123456\nZOT_API_KEY=secret\nZOT_TIMEOUT_SECONDS=9\nZOT_RETRY_MAX_ATTEMPTS=4\nZOT_RETRY_BASE_DELAY_MS=125\nZOT_ALLOW_WRITE=1\nZOT_ALLOW_DELETE=0\n"
+	envBody := "ZOT_DATA_DIR=D:/zotero\nZOT_LIBRARY_TYPE=user\nZOT_LIBRARY_ID=123456\nZOT_API_KEY=secret\nZOT_TIMEOUT_SECONDS=9\nZOT_RETRY_MAX_ATTEMPTS=4\nZOT_RETRY_BASE_DELAY_MS=125\nZOT_ALLOW_WRITE=1\nZOT_ALLOW_DELETE=0\n"
 	if err := os.WriteFile(envPath, []byte(envBody), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -37,6 +37,9 @@ func TestLoadReturnsEnvConfigWhenFileMissing(t *testing.T) {
 
 	if cfg.LibraryType != "user" || cfg.LibraryID != "123456" || cfg.APIKey != "secret" {
 		t.Fatalf("unexpected loaded config: %+v", cfg)
+	}
+	if cfg.DataDir != "D:/zotero" {
+		t.Fatalf("expected data dir to load, got %q", cfg.DataDir)
 	}
 	if cfg.TimeoutSeconds != 9 {
 		t.Fatalf("expected timeout 9, got %d", cfg.TimeoutSeconds)
@@ -63,6 +66,7 @@ func TestLoadEnvOverridesEnvFile(t *testing.T) {
 
 	configBody := strings.Join([]string{
 		"ZOT_MODE=web",
+		"ZOT_DATA_DIR=D:/file-data",
 		"ZOT_LIBRARY_TYPE=group",
 		"ZOT_LIBRARY_ID=file-id",
 		"ZOT_API_KEY=file-key",
@@ -81,6 +85,7 @@ func TestLoadEnvOverridesEnvFile(t *testing.T) {
 
 	t.Setenv("ZOT_LIBRARY_ID", "env-id")
 	t.Setenv("ZOT_API_KEY", "env-key")
+	t.Setenv("ZOT_DATA_DIR", "D:/env-data")
 	t.Setenv("ZOT_TIMEOUT_SECONDS", "15")
 	t.Setenv("ZOT_RETRY_MAX_ATTEMPTS", "5")
 	t.Setenv("ZOT_ALLOW_WRITE", "1")
@@ -92,6 +97,9 @@ func TestLoadEnvOverridesEnvFile(t *testing.T) {
 
 	if cfg.LibraryType != "group" {
 		t.Fatalf("expected file-backed library type to remain, got %q", cfg.LibraryType)
+	}
+	if cfg.DataDir != "D:/env-data" {
+		t.Fatalf("expected env to override data dir, got %q", cfg.DataDir)
 	}
 	if cfg.LibraryID != "env-id" {
 		t.Fatalf("expected env to override library id, got %q", cfg.LibraryID)

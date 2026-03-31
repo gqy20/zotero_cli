@@ -13,17 +13,18 @@ import (
 var ErrNotFound = errors.New("config not found")
 
 type Config struct {
-	Mode                      string `json:"mode"`
-	LibraryType               string `json:"library_type"`
-	LibraryID                 string `json:"library_id"`
-	APIKey                    string `json:"api_key"`
-	Style                     string `json:"style"`
-	Locale                    string `json:"locale"`
-	TimeoutSeconds            int    `json:"timeout_seconds"`
-	RetryMaxAttempts          int    `json:"retry_max_attempts"`
-	RetryBaseDelayMilliseconds int   `json:"retry_base_delay_ms"`
-	AllowWrite                bool   `json:"allow_write"`
-	AllowDelete               bool   `json:"allow_delete"`
+	Mode                       string `json:"mode"`
+	DataDir                    string `json:"data_dir,omitempty"`
+	LibraryType                string `json:"library_type"`
+	LibraryID                  string `json:"library_id"`
+	APIKey                     string `json:"api_key"`
+	Style                      string `json:"style"`
+	Locale                     string `json:"locale"`
+	TimeoutSeconds             int    `json:"timeout_seconds"`
+	RetryMaxAttempts           int    `json:"retry_max_attempts"`
+	RetryBaseDelayMilliseconds int    `json:"retry_base_delay_ms"`
+	AllowWrite                 bool   `json:"allow_write"`
+	AllowDelete                bool   `json:"allow_delete"`
 }
 
 func Default() Config {
@@ -82,6 +83,7 @@ func Save(cfg Config) error {
 
 	lines := []string{
 		fmt.Sprintf("ZOT_MODE=%s", cfg.Mode),
+		fmt.Sprintf("ZOT_DATA_DIR=%s", cfg.DataDir),
 		fmt.Sprintf("ZOT_LIBRARY_TYPE=%s", cfg.LibraryType),
 		fmt.Sprintf("ZOT_LIBRARY_ID=%s", cfg.LibraryID),
 		fmt.Sprintf("ZOT_API_KEY=%s", cfg.APIKey),
@@ -108,6 +110,10 @@ func loadEnvConfig() (Config, bool, error) {
 
 	if value := firstNonEmpty(os.Getenv("ZOT_MODE"), envFile["ZOT_MODE"]); value != "" {
 		cfg.Mode = value
+		found = true
+	}
+	if value := firstNonEmpty(os.Getenv("ZOT_DATA_DIR"), envFile["ZOT_DATA_DIR"]); value != "" {
+		cfg.DataDir = value
 		found = true
 	}
 	if value := firstNonEmpty(os.Getenv("ZOT_LIBRARY_TYPE"), envFile["ZOT_LIBRARY_TYPE"]); value != "" {

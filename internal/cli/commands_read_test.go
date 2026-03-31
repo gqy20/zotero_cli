@@ -2,11 +2,13 @@ package cli
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestRunFindRejectsUnimplementedLocalMode(t *testing.T) {
+func TestRunFindRejectsLocalModeWithoutDataDir(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -17,8 +19,33 @@ func TestRunFindRejectsUnimplementedLocalMode(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
 	}
-	if got := stderr.String(); !strings.Contains(got, "local mode is not implemented yet") {
+	if got := stderr.String(); !strings.Contains(got, "local mode requires data_dir") {
 		t.Fatalf("expected local mode error, got %q", got)
+	}
+}
+
+func TestRunFindRejectsUnimplementedLocalFind(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dataDir, "zotero.sqlite"), []byte("stub"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dataDir, "storage"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "attention"})
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "local find is not implemented yet") {
+		t.Fatalf("expected local find error, got %q", got)
 	}
 }
 

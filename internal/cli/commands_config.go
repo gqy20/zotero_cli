@@ -63,6 +63,7 @@ func runConfigInit(args []string) int {
 		cfg.APIKey = "replace-me"
 		fmt.Fprint(stdout, strings.Join([]string{
 			"ZOT_MODE=web",
+			"ZOT_DATA_DIR=",
 			"ZOT_LIBRARY_TYPE=user",
 			"ZOT_LIBRARY_ID=123456",
 			"ZOT_API_KEY=replace-me",

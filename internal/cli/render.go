@@ -120,6 +120,7 @@ func attachmentKind(attachment domain.Attachment) string {
 func maskConfig(cfg config.Config) map[string]any {
 	return map[string]any{
 		"mode":                cfg.Mode,
+		"data_dir":            cfg.DataDir,
 		"library_type":        cfg.LibraryType,
 		"library_id":          cfg.LibraryID,
 		"api_key":             maskSecret(cfg.APIKey),

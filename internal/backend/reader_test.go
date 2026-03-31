@@ -1,6 +1,8 @@
 package backend
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"zotero_cli/internal/config"
@@ -26,26 +28,31 @@ func TestNewReaderWebMode(t *testing.T) {
 	}
 }
 
-func TestNewReaderRejectsUnimplementedModes(t *testing.T) {
-	tests := []struct {
-		name string
-		mode string
-	}{
-		{name: "local", mode: "local"},
-		{name: "hybrid", mode: "hybrid"},
+func TestNewReaderLocalModeBuildsLocalReader(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "zotero.sqlite"), []byte("stub"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "storage"), 0o755); err != nil {
+		t.Fatal(err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewReader(config.Config{Mode: tt.mode}, nil)
-			if err == nil {
-				t.Fatalf("NewReader() error = nil, want error")
-			}
-			want := tt.mode + " mode is not implemented yet"
-			if err.Error() != want {
-				t.Fatalf("NewReader() error = %q, want %q", err.Error(), want)
-			}
-		})
+	reader, err := NewReader(config.Config{Mode: "local", DataDir: root}, nil)
+	if err != nil {
+		t.Fatalf("NewReader() error = %v", err)
+	}
+	if _, ok := reader.(*LocalReader); !ok {
+		t.Fatalf("NewReader() returned %T, want *LocalReader", reader)
+	}
+}
+
+func TestNewReaderRejectsUnimplementedHybridMode(t *testing.T) {
+	_, err := NewReader(config.Config{Mode: "hybrid"}, nil)
+	if err == nil {
+		t.Fatalf("NewReader() error = nil, want error")
+	}
+	if err.Error() != "hybrid mode is not implemented yet" {
+		t.Fatalf("NewReader() error = %q, want hybrid error", err.Error())
 	}
 }
 
