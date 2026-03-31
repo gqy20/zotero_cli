@@ -173,6 +173,16 @@ func runShow(args []string) int {
 			}
 		}
 	}
+	if len(item.Notes) > 0 {
+		fmt.Fprintf(stdout, "Notes: %d\n", len(item.Notes))
+		for _, note := range item.Notes {
+			if note.Preview != "" {
+				fmt.Fprintf(stdout, "  - %s\n", note.Preview)
+				continue
+			}
+			fmt.Fprintf(stdout, "  - %s\n", note.Key)
+		}
+	}
 	return 0
 }
 

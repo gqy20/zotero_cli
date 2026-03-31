@@ -13,6 +13,7 @@ type Item struct {
 	Tags        []string     `json:"tags,omitempty"`
 	Collections []Collection `json:"collections,omitempty"`
 	Attachments []Attachment `json:"attachments,omitempty"`
+	Notes       []Note       `json:"notes,omitempty"`
 }
 
 type Creator struct {
@@ -35,4 +36,9 @@ type Attachment struct {
 	ZoteroPath   string `json:"zotero_path,omitempty"`
 	ResolvedPath string `json:"resolved_path,omitempty"`
 	Resolved     bool   `json:"resolved,omitempty"`
+}
+
+type Note struct {
+	Key     string `json:"key"`
+	Preview string `json:"preview,omitempty"`
 }

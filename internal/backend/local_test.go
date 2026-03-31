@@ -41,3 +41,26 @@ func TestNewLocalReaderBuildsDerivedPaths(t *testing.T) {
 		t.Fatalf("StorageDir = %q", reader.StorageDir)
 	}
 }
+
+func TestNormalizeLocalDate(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "empty", input: "", want: ""},
+		{name: "year only", input: "2017", want: "2017"},
+		{name: "date only", input: "2019-03-29", want: "2019-03-29"},
+		{name: "duplicate date", input: "2019-03-29 2019-03-29", want: "2019-03-29"},
+		{name: "duplicate date with time", input: "2024-01-08 2024-01-08 00:00:00", want: "2024-01-08"},
+		{name: "whitespace cleanup", input: " 2024-01-08   2024-01-08 ", want: "2024-01-08"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeLocalDate(tt.input); got != tt.want {
+				t.Fatalf("normalizeLocalDate(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

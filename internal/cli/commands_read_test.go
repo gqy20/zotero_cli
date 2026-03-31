@@ -160,12 +160,15 @@ func TestRunShowLocalTextOutputIncludesCollectionsAndResolvedPaths(t *testing.T)
 	got := stdout.String()
 	for _, want := range []string{
 		"Key: ITEM1234",
+		"Date: 2024-01-08",
 		"Collections: Machine Learning",
 		"Attachments: 2",
 		"[pdf] attention.pdf",
 		"path: " + filepath.Join(storageDir, "ATTACHPDF", "attention.pdf"),
 		"[link] Web Snapshot",
 		"path: unresolved (attachments:snapshots/page.html)",
+		"Notes: 1",
+		"Local note summary",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in output %q", want, got)
@@ -197,6 +200,7 @@ func buildLocalShowFixture(t *testing.T, sqlitePath string, storageDir string) {
 		`CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, key TEXT, collectionName TEXT);`,
 		`CREATE TABLE collectionItems (collectionID INTEGER, itemID INTEGER);`,
 		`CREATE TABLE itemAttachments (itemID INTEGER, parentItemID INTEGER, contentType TEXT, linkMode INTEGER, path TEXT);`,
+		`CREATE TABLE itemNotes (itemID INTEGER, parentItemID INTEGER);`,
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(statement); err != nil {
@@ -206,10 +210,10 @@ func buildLocalShowFixture(t *testing.T, sqlitePath string, storageDir string) {
 
 	inserts := []string{
 		`INSERT INTO itemTypes(itemTypeID, typeName) VALUES (1, 'journalArticle'), (2, 'attachment');`,
-		`INSERT INTO items(itemID, key, version, itemTypeID) VALUES (1, 'ITEM1234', 7, 1), (2, 'ATTACHPDF', 1, 2), (3, 'ATTACHURL', 1, 2);`,
-		`INSERT INTO fieldsCombined(fieldID, fieldName) VALUES (1, 'title'), (2, 'date'), (3, 'publicationTitle'), (4, 'DOI'), (5, 'url'), (6, 'filename');`,
-		`INSERT INTO itemDataValues(valueID, value) VALUES (1, 'Attention Is All You Need'), (2, '2017'), (3, 'NeurIPS'), (4, '10.1/example'), (5, 'https://example.com/paper'), (6, 'attention.pdf'), (7, 'Web Snapshot');`,
-		`INSERT INTO itemData(itemID, fieldID, valueID) VALUES (1, 1, 1), (1, 2, 2), (1, 3, 3), (1, 4, 4), (1, 5, 5), (2, 1, 1), (2, 6, 6), (3, 1, 7);`,
+		`INSERT INTO items(itemID, key, version, itemTypeID) VALUES (1, 'ITEM1234', 7, 1), (2, 'ATTACHPDF', 1, 2), (3, 'ATTACHURL', 1, 2), (4, 'NOTE1234', 1, 2);`,
+		`INSERT INTO fieldsCombined(fieldID, fieldName) VALUES (1, 'title'), (2, 'date'), (3, 'publicationTitle'), (4, 'DOI'), (5, 'url'), (6, 'filename'), (7, 'note');`,
+		`INSERT INTO itemDataValues(valueID, value) VALUES (1, 'Attention Is All You Need'), (2, '2024-01-08 2024-01-08 00:00:00'), (3, 'NeurIPS'), (4, '10.1/example'), (5, 'https://example.com/paper'), (6, 'attention.pdf'), (7, 'Web Snapshot'), (8, '<p>Local note summary</p>');`,
+		`INSERT INTO itemData(itemID, fieldID, valueID) VALUES (1, 1, 1), (1, 2, 2), (1, 3, 3), (1, 4, 4), (1, 5, 5), (2, 1, 1), (2, 6, 6), (3, 1, 7), (4, 7, 8);`,
 		`INSERT INTO creators(creatorID, creatorDataID) VALUES (1, 1);`,
 		`INSERT INTO creatorData(creatorDataID, firstName, lastName) VALUES (1, 'Ashish', 'Vaswani');`,
 		`INSERT INTO creatorTypes(creatorTypeID, typeName) VALUES (1, 'author');`,
@@ -219,6 +223,7 @@ func buildLocalShowFixture(t *testing.T, sqlitePath string, storageDir string) {
 		`INSERT INTO collections(collectionID, key, collectionName) VALUES (1, 'COLL1234', 'Machine Learning');`,
 		`INSERT INTO collectionItems(collectionID, itemID) VALUES (1, 1);`,
 		`INSERT INTO itemAttachments(itemID, parentItemID, contentType, linkMode, path) VALUES (2, 1, 'application/pdf', 0, 'storage:attention.pdf'), (3, 1, 'text/html', 3, 'attachments:snapshots/page.html');`,
+		`INSERT INTO itemNotes(itemID, parentItemID) VALUES (4, 1);`,
 	}
 	for _, statement := range inserts {
 		if _, err := db.Exec(statement); err != nil {

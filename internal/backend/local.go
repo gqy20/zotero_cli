@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -83,11 +84,16 @@ func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, err
 	if err != nil {
 		return domain.Item{}, err
 	}
+	notes, err := r.loadNotes(ctx, db, itemID)
+	if err != nil {
+		return domain.Item{}, err
+	}
 
 	item.Creators = creators
 	item.Tags = tags
 	item.Collections = collections
 	item.Attachments = attachments
+	item.Notes = notes
 	return item, nil
 }
 
@@ -141,6 +147,7 @@ func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (dom
 		return domain.Item{}, 0, err
 	}
 	item.Container = firstNonEmptyString(publicationTitle, proceedingsTitle, bookTitle)
+	item.Date = normalizeLocalDate(item.Date)
 	return item, itemID, nil
 }
 
@@ -274,6 +281,38 @@ func (r *LocalReader) loadAttachments(ctx context.Context, db *sql.DB, itemID in
 	return attachments, rows.Err()
 }
 
+func (r *LocalReader) loadNotes(ctx context.Context, db *sql.DB, itemID int64) ([]domain.Note, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+			i.key,
+			COALESCE(MAX(CASE WHEN f.fieldName = 'note' THEN v.value END), '')
+		FROM itemNotes n
+		JOIN items i ON i.itemID = n.itemID
+		LEFT JOIN itemData d ON d.itemID = i.itemID
+		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
+		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
+		WHERE n.parentItemID = ?
+		GROUP BY i.itemID, i.key
+		ORDER BY i.key
+	`, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	notes := []domain.Note{}
+	for rows.Next() {
+		var note domain.Note
+		var content string
+		if err := rows.Scan(&note.Key, &content); err != nil {
+			return nil, err
+		}
+		note.Preview = notePreview(content)
+		notes = append(notes, note)
+	}
+	return notes, rows.Err()
+}
+
 func (r *LocalReader) resolveAttachmentPath(key string, zoteroPath string, filename string) (string, bool) {
 	if zoteroPath == "" {
 		return "", false
@@ -320,6 +359,58 @@ func firstNonEmptyString(values ...string) string {
 
 func normalizeWhitespace(value string) string {
 	return stringsJoinFields(value)
+}
+
+func notePreview(value string) string {
+	text := stripHTMLTags(value)
+	text = normalizeWhitespace(text)
+	if len(text) <= 80 {
+		return text
+	}
+	return text[:77] + "..."
+}
+
+func stripHTMLTags(value string) string {
+	var b strings.Builder
+	inTag := false
+	for _, r := range value {
+		switch r {
+		case '<':
+			inTag = true
+		case '>':
+			inTag = false
+		case '\n', '\r', '\t':
+			if !inTag {
+				b.WriteRune(' ')
+			}
+		default:
+			if !inTag {
+				b.WriteRune(r)
+			}
+		}
+	}
+	return b.String()
+}
+
+var (
+	localDatePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+	localTimePattern = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}$`)
+)
+
+func normalizeLocalDate(value string) string {
+	value = normalizeWhitespace(value)
+	if value == "" {
+		return ""
+	}
+
+	parts := strings.Fields(value)
+	if len(parts) >= 3 && localDatePattern.MatchString(parts[0]) && parts[1] == parts[0] && localTimePattern.MatchString(parts[2]) {
+		return parts[0]
+	}
+	if len(parts) >= 2 && localDatePattern.MatchString(parts[0]) && parts[1] == parts[0] {
+		return parts[0]
+	}
+	return value
 }
 
 func stringsJoinFields(value string) string {
