@@ -100,6 +100,36 @@ func joinCreatorNames(creators []domain.Creator) string {
 	return strings.Join(names, ", ")
 }
 
+func joinCollectionNames(collections []domain.Collection) string {
+	names := make([]string, 0, len(collections))
+	for _, collection := range collections {
+		if collection.Name != "" {
+			names = append(names, collection.Name)
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+func attachmentLabel(attachment domain.Attachment) string {
+	if attachment.Filename != "" {
+		return attachment.Filename
+	}
+	if attachment.Title != "" {
+		return attachment.Title
+	}
+	return attachment.Key
+}
+
+func attachmentPathLine(attachment domain.Attachment) string {
+	if attachment.Resolved && attachment.ResolvedPath != "" {
+		return "path: " + attachment.ResolvedPath
+	}
+	if attachment.ZoteroPath != "" {
+		return "path: unresolved (" + attachment.ZoteroPath + ")"
+	}
+	return ""
+}
+
 func attachmentKind(attachment domain.Attachment) string {
 	if attachment.ContentType == "application/pdf" {
 		return "pdf"

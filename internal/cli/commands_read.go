@@ -161,17 +161,16 @@ func runShow(args []string) int {
 	if len(item.Tags) > 0 {
 		fmt.Fprintf(stdout, "Tags: %s\n", strings.Join(item.Tags, ", "))
 	}
+	if len(item.Collections) > 0 {
+		fmt.Fprintf(stdout, "Collections: %s\n", joinCollectionNames(item.Collections))
+	}
 	if len(item.Attachments) > 0 {
 		fmt.Fprintf(stdout, "Attachments: %d\n", len(item.Attachments))
 		for _, attachment := range item.Attachments {
-			label := attachment.Title
-			if attachment.Filename != "" {
-				label = attachment.Filename
+			fmt.Fprintf(stdout, "  - [%s] %s\n", attachmentKind(attachment), attachmentLabel(attachment))
+			if pathLine := attachmentPathLine(attachment); pathLine != "" {
+				fmt.Fprintf(stdout, "    %s\n", pathLine)
 			}
-			if label == "" {
-				label = attachment.Key
-			}
-			fmt.Fprintf(stdout, "  - [%s] %s\n", attachmentKind(attachment), label)
 		}
 	}
 	return 0

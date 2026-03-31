@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	_ "modernc.org/sqlite"
 )
 
 func TestRunFindRejectsLocalModeWithoutDataDir(t *testing.T) {
@@ -129,6 +132,106 @@ func TestRunShowTextOutputFormatsAttachmentsClearly(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in output %q", want, got)
 		}
+	}
+}
+
+func TestRunShowLocalTextOutputIncludesCollectionsAndResolvedPaths(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
+	buildLocalShowFixture(t, sqlitePath, storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"show", "ITEM1234"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Key: ITEM1234",
+		"Collections: Machine Learning",
+		"Attachments: 2",
+		"[pdf] attention.pdf",
+		"path: " + filepath.Join(storageDir, "ATTACHPDF", "attention.pdf"),
+		"[link] Web Snapshot",
+		"path: unresolved (attachments:snapshots/page.html)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output %q", want, got)
+		}
+	}
+}
+
+func buildLocalShowFixture(t *testing.T, sqlitePath string, storageDir string) {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", sqlitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	statements := []string{
+		`CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName TEXT);`,
+		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER);`,
+		`CREATE TABLE fieldsCombined (fieldID INTEGER PRIMARY KEY, fieldName TEXT);`,
+		`CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT);`,
+		`CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID INTEGER);`,
+		`CREATE TABLE creators (creatorID INTEGER PRIMARY KEY, creatorDataID INTEGER);`,
+		`CREATE TABLE creatorData (creatorDataID INTEGER PRIMARY KEY, firstName TEXT, lastName TEXT);`,
+		`CREATE TABLE creatorTypes (creatorTypeID INTEGER PRIMARY KEY, typeName TEXT);`,
+		`CREATE TABLE itemCreators (itemID INTEGER, creatorID INTEGER, creatorTypeID INTEGER, orderIndex INTEGER);`,
+		`CREATE TABLE tags (tagID INTEGER PRIMARY KEY, name TEXT);`,
+		`CREATE TABLE itemTags (itemID INTEGER, tagID INTEGER);`,
+		`CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, key TEXT, collectionName TEXT);`,
+		`CREATE TABLE collectionItems (collectionID INTEGER, itemID INTEGER);`,
+		`CREATE TABLE itemAttachments (itemID INTEGER, parentItemID INTEGER, contentType TEXT, linkMode INTEGER, path TEXT);`,
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("exec %q: %v", statement, err)
+		}
+	}
+
+	inserts := []string{
+		`INSERT INTO itemTypes(itemTypeID, typeName) VALUES (1, 'journalArticle'), (2, 'attachment');`,
+		`INSERT INTO items(itemID, key, version, itemTypeID) VALUES (1, 'ITEM1234', 7, 1), (2, 'ATTACHPDF', 1, 2), (3, 'ATTACHURL', 1, 2);`,
+		`INSERT INTO fieldsCombined(fieldID, fieldName) VALUES (1, 'title'), (2, 'date'), (3, 'publicationTitle'), (4, 'DOI'), (5, 'url'), (6, 'filename');`,
+		`INSERT INTO itemDataValues(valueID, value) VALUES (1, 'Attention Is All You Need'), (2, '2017'), (3, 'NeurIPS'), (4, '10.1/example'), (5, 'https://example.com/paper'), (6, 'attention.pdf'), (7, 'Web Snapshot');`,
+		`INSERT INTO itemData(itemID, fieldID, valueID) VALUES (1, 1, 1), (1, 2, 2), (1, 3, 3), (1, 4, 4), (1, 5, 5), (2, 1, 1), (2, 6, 6), (3, 1, 7);`,
+		`INSERT INTO creators(creatorID, creatorDataID) VALUES (1, 1);`,
+		`INSERT INTO creatorData(creatorDataID, firstName, lastName) VALUES (1, 'Ashish', 'Vaswani');`,
+		`INSERT INTO creatorTypes(creatorTypeID, typeName) VALUES (1, 'author');`,
+		`INSERT INTO itemCreators(itemID, creatorID, creatorTypeID, orderIndex) VALUES (1, 1, 1, 0);`,
+		`INSERT INTO tags(tagID, name) VALUES (1, 'transformers');`,
+		`INSERT INTO itemTags(itemID, tagID) VALUES (1, 1);`,
+		`INSERT INTO collections(collectionID, key, collectionName) VALUES (1, 'COLL1234', 'Machine Learning');`,
+		`INSERT INTO collectionItems(collectionID, itemID) VALUES (1, 1);`,
+		`INSERT INTO itemAttachments(itemID, parentItemID, contentType, linkMode, path) VALUES (2, 1, 'application/pdf', 0, 'storage:attention.pdf'), (3, 1, 'text/html', 3, 'attachments:snapshots/page.html');`,
+	}
+	for _, statement := range inserts {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("exec %q: %v", statement, err)
+		}
+	}
+
+	attachmentDir := filepath.Join(storageDir, "ATTACHPDF")
+	if err := os.Mkdir(attachmentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(attachmentDir, "attention.pdf"), []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
