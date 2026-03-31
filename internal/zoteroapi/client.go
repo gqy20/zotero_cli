@@ -66,6 +66,13 @@ type Search struct {
 	NumConditions int    `json:"num_conditions,omitempty"`
 }
 
+type Deleted struct {
+	Collections []string `json:"collections,omitempty"`
+	Searches    []string `json:"searches,omitempty"`
+	Items       []string `json:"items,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+}
+
 type Item struct {
 	Key         string       `json:"key"`
 	ItemType    string       `json:"item_type"`
@@ -392,6 +399,25 @@ func (c *Client) ListSearches(ctx context.Context) ([]Search, error) {
 	}
 
 	return searches, nil
+}
+
+func (c *Client) GetDeleted(ctx context.Context) (Deleted, error) {
+	resp, err := c.doRequest(ctx, "deleted", FindOptions{}, nil)
+	if err != nil {
+		return Deleted{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return Deleted{}, apiErrorFromResponse(resp)
+	}
+
+	var deleted Deleted
+	if err := json.NewDecoder(resp.Body).Decode(&deleted); err != nil {
+		return Deleted{}, err
+	}
+
+	return deleted, nil
 }
 
 func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {

@@ -20,6 +20,7 @@ const (
 	usageNotes       = "usage: zot notes [--json]"
 	usageTags        = "usage: zot tags [--json]"
 	usageSearches    = "usage: zot searches [--json]"
+	usageDeleted     = "usage: zot deleted [--json]"
 )
 
 func runConfig(args []string) int {
@@ -474,5 +475,36 @@ func runSearches(args []string) int {
 	for _, search := range searches {
 		fmt.Fprintf(stdout, "%-10s  %-24s  conditions=%d\n", search.Key, search.Name, search.NumConditions)
 	}
+	return 0
+}
+
+func runDeleted(args []string) int {
+	jsonOutput, ok := parseJSONOnlyArgs(args, usageDeleted)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	deleted, err := client.GetDeleted(context.Background())
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{
+			OK:      true,
+			Command: "deleted",
+			Data:    deleted,
+		})
+	}
+
+	fmt.Fprintf(stdout, "collections=%d\n", len(deleted.Collections))
+	fmt.Fprintf(stdout, "searches=%d\n", len(deleted.Searches))
+	fmt.Fprintf(stdout, "items=%d\n", len(deleted.Items))
+	fmt.Fprintf(stdout, "tags=%d\n", len(deleted.Tags))
 	return 0
 }

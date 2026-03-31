@@ -342,6 +342,13 @@ func newTestAPI(t *testing.T) (string, func()) {
 					},
 				},
 			})
+		case "/users/123456/deleted":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"collections": []string{"COLL1234"},
+				"searches":    []string{"SCH12345"},
+				"items":       []string{"ITEM1234", "ITEM5678"},
+				"tags":        []string{"obsolete"},
+			})
 		default:
 			http.NotFound(w, r)
 		}

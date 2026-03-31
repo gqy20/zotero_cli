@@ -35,6 +35,7 @@ func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 		{name: "notes", args: []string{"notes"}},
 		{name: "tags", args: []string{"tags"}},
 		{name: "searches", args: []string{"searches"}},
+		{name: "deleted", args: []string{"deleted"}},
 	}
 
 	for _, tc := range testCases {
@@ -118,6 +119,11 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			name:      "searches extra arg",
 			args:      []string{"searches", "extra"},
 			wantUsage: usageSearches,
+		},
+		{
+			name:      "deleted extra arg",
+			args:      []string{"deleted", "extra"},
+			wantUsage: usageDeleted,
 		},
 	}
 

@@ -47,6 +47,8 @@ func Run(args []string) int {
 		return runTags(args[1:])
 	case "searches":
 		return runSearches(args[1:])
+	case "deleted":
+		return runDeleted(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -74,6 +76,7 @@ Commands:
   notes          List notes
   tags           List tags
   searches       List saved searches
+  deleted        Show deleted object keys
 `, exe, exe)
 }
 

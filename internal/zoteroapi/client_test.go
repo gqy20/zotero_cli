@@ -585,6 +585,44 @@ func TestClientListSearches(t *testing.T) {
 	}
 }
 
+func TestClientGetDeleted(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123/deleted" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"collections": []string{"COLL1234"},
+			"searches":    []string{"SCH12345"},
+			"items":       []string{"ITEM1234", "ITEM5678"},
+			"tags":        []string{"obsolete"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	deleted, err := client.GetDeleted(context.Background())
+	if err != nil {
+		t.Fatalf("GetDeleted returned error: %v", err)
+	}
+
+	if len(deleted.Items) != 2 || deleted.Items[1] != "ITEM5678" {
+		t.Fatalf("unexpected deleted items: %#v", deleted.Items)
+	}
+	if len(deleted.Tags) != 1 || deleted.Tags[0] != "obsolete" {
+		t.Fatalf("unexpected deleted tags: %#v", deleted.Tags)
+	}
+}
+
 func TestClientFindItemsMapsUnauthorizedError(t *testing.T) {
 	t.Parallel()
 
