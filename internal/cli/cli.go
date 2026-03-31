@@ -67,6 +67,8 @@ func Run(args []string) int {
 		return runKeyInfo(args[1:])
 	case "groups":
 		return runGroups(args[1:])
+	case "trash":
+		return runTrash(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -104,6 +106,7 @@ Commands:
   item-template             Show template for a new item type
   key-info      Show the owner and privileges for an API key
   groups        List groups accessible to a user
+  trash         List items currently in the trash
 `, exe, exe)
 }
 

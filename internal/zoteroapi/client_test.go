@@ -43,6 +43,12 @@ func TestClientFindItems(t *testing.T) {
 		if got := r.URL.Query().Get("direction"); got != "asc" {
 			t.Fatalf("unexpected direction: %q", got)
 		}
+		if got := r.URL.Query().Get("qmode"); got != "everything" {
+			t.Fatalf("unexpected qmode: %q", got)
+		}
+		if got := r.URL.Query().Get("includeTrashed"); got != "1" {
+			t.Fatalf("unexpected includeTrashed: %q", got)
+		}
 
 		items := []map[string]any{
 			{
@@ -75,13 +81,15 @@ func TestClientFindItems(t *testing.T) {
 	}, server.URL, server.Client())
 
 	items, err := client.FindItems(context.Background(), FindOptions{
-		Query:     "attention",
-		ItemType:  "journalArticle",
-		Limit:     5,
-		Tag:       "ml",
-		Start:     10,
-		Sort:      "title",
-		Direction: "asc",
+		Query:          "attention",
+		ItemType:       "journalArticle",
+		Limit:          5,
+		Tag:            "ml",
+		Start:          10,
+		Sort:           "title",
+		Direction:      "asc",
+		QMode:          "everything",
+		IncludeTrashed: true,
 	})
 	if err != nil {
 		t.Fatalf("FindItems returned error: %v", err)
@@ -101,6 +109,45 @@ func TestClientFindItems(t *testing.T) {
 
 	if len(items[0].Creators) != 1 || items[0].Creators[0].Name != "Ashish Vaswani" {
 		t.Fatalf("unexpected creators: %+v", items[0].Creators)
+	}
+}
+
+func TestClientListTrashItems(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123/items/trash" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		if err := json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"key": "TRASH123",
+				"data": map[string]any{
+					"itemType": "journalArticle",
+					"title":    "Removed Paper",
+					"date":     "2022",
+				},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	items, err := client.ListTrashItems(context.Background(), FindOptions{})
+	if err != nil {
+		t.Fatalf("ListTrashItems returned error: %v", err)
+	}
+
+	if len(items) != 1 || items[0].Key != "TRASH123" {
+		t.Fatalf("unexpected trash items: %#v", items)
 	}
 }
 

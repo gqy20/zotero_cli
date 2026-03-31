@@ -44,6 +44,7 @@ func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 		{name: "item type creator types", args: []string{"item-type-creator-types", "book"}},
 		{name: "item template", args: []string{"item-template", "book"}},
 		{name: "groups", args: []string{"groups"}},
+		{name: "trash", args: []string{"trash"}},
 	}
 
 	for _, tc := range testCases {
@@ -175,6 +176,17 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			name:      "groups extra arg",
 			args:      []string{"groups", "extra"},
 			wantUsage: usageGroups,
+		},
+		{
+			name:       "find invalid qmode",
+			args:       []string{"find", "test", "--qmode", "bad"},
+			wantUsage:  usageFind,
+			wantStderr: "error: invalid value for --qmode",
+		},
+		{
+			name:      "trash extra arg",
+			args:      []string{"trash", "extra"},
+			wantUsage: usageTrash,
 		},
 	}
 

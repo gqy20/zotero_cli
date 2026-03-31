@@ -27,13 +27,15 @@ type Client struct {
 }
 
 type FindOptions struct {
-	Query     string
-	ItemType  string
-	Limit     int
-	Start     int
-	Tag       string
-	Sort      string
-	Direction string
+	Query          string
+	ItemType       string
+	Limit          int
+	Start          int
+	Tag            string
+	Sort           string
+	Direction      string
+	QMode          string
+	IncludeTrashed bool
 }
 
 type CitationOptions struct {
@@ -306,6 +308,20 @@ func defaultHTTPClient(cfg config.Config) *http.Client {
 
 func (c *Client) FindItems(ctx context.Context, opts FindOptions) ([]Item, error) {
 	raw, err := c.getItems(ctx, "items", opts)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]Item, 0, len(raw))
+	for _, item := range raw {
+		items = append(items, mapItem(item))
+	}
+
+	return items, nil
+}
+
+func (c *Client) ListTrashItems(ctx context.Context, opts FindOptions) ([]Item, error) {
+	raw, err := c.getItems(ctx, path.Join("items", "trash"), opts)
 	if err != nil {
 		return nil, err
 	}
@@ -917,7 +933,7 @@ func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOp
 		return nil, fmt.Errorf("unsupported library_type %q", c.cfg.LibraryType)
 	}
 
-	if opts.Query != "" || opts.ItemType != "" || opts.Limit > 0 || opts.Start > 0 || opts.Tag != "" || opts.Sort != "" || opts.Direction != "" || len(extraQuery) > 0 {
+	if opts.Query != "" || opts.ItemType != "" || opts.Limit > 0 || opts.Start > 0 || opts.Tag != "" || opts.Sort != "" || opts.Direction != "" || opts.QMode != "" || opts.IncludeTrashed || len(extraQuery) > 0 {
 		values := u.Query()
 		if opts.Query != "" {
 			values.Set("q", opts.Query)
@@ -939,6 +955,12 @@ func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOp
 		}
 		if opts.Direction != "" {
 			values.Set("direction", opts.Direction)
+		}
+		if opts.QMode != "" {
+			values.Set("qmode", opts.QMode)
+		}
+		if opts.IncludeTrashed {
+			values.Set("includeTrashed", "1")
 		}
 		for key, value := range extraQuery {
 			if value != "" {

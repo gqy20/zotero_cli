@@ -74,6 +74,8 @@ func newTestAPI(t *testing.T) (string, func()) {
 			start := r.URL.Query().Get("start")
 			sort := r.URL.Query().Get("sort")
 			direction := r.URL.Query().Get("direction")
+			qmode := r.URL.Query().Get("qmode")
+			includeTrashed := r.URL.Query().Get("includeTrashed")
 
 			if r.URL.Query().Get("format") == "versions" {
 				w.Header().Set("Last-Modified-Version", "111")
@@ -175,6 +177,19 @@ func newTestAPI(t *testing.T) (string, func()) {
 									"lastName":    "Hopper",
 								},
 							},
+						},
+					},
+				}
+			}
+
+			if query == "full text" && qmode == "everything" && includeTrashed == "1" {
+				items = []map[string]any{
+					{
+						"key": "TRASH9000",
+						"data": map[string]any{
+							"itemType": "journalArticle",
+							"title":    "Recovered From Trash Search",
+							"date":     "2021",
 						},
 					},
 				}
@@ -355,6 +370,24 @@ func newTestAPI(t *testing.T) (string, func()) {
 				return
 			}
 			http.NotFound(w, r)
+		case "/users/123456/items/trash":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"key": "TRASH123",
+					"data": map[string]any{
+						"itemType": "journalArticle",
+						"title":    "Removed Paper",
+						"date":     "2022",
+						"creators": []map[string]any{
+							{
+								"creatorType": "author",
+								"firstName":   "Dana",
+								"lastName":    "Scott",
+							},
+						},
+					},
+				},
+			})
 		case "/users/123456/searches":
 			if r.URL.Query().Get("format") == "versions" {
 				w.Header().Set("Last-Modified-Version", "444")

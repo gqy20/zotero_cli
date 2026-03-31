@@ -81,6 +81,17 @@ func parseFindArgs(args []string) (zoteroapi.FindOptions, bool, error) {
 				return zoteroapi.FindOptions{}, false, errors.New("invalid value for --direction")
 			}
 			opts.Direction = args[i]
+		case "--qmode":
+			if i+1 >= len(args) {
+				return zoteroapi.FindOptions{}, false, errors.New("missing value for --qmode")
+			}
+			i++
+			if args[i] != "titleCreatorYear" && args[i] != "everything" {
+				return zoteroapi.FindOptions{}, false, errors.New("invalid value for --qmode")
+			}
+			opts.QMode = args[i]
+		case "--include-trashed":
+			opts.IncludeTrashed = true
 		default:
 			queryParts = append(queryParts, args[i])
 		}

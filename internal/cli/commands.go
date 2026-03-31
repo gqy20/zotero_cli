@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	usageFind                 = "usage: zot find <query> [--json] [--item-type TYPE] [--limit N]"
+	usageFind                 = "usage: zot find <query> [--json] [--item-type TYPE] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed]"
 	usageShow                 = "usage: zot show <item-key> [--json]"
 	usageCite                 = "usage: zot cite <item-key> [--format citation|bib] [--style STYLE] [--locale LOCALE] [--json]"
 	usageExport               = "usage: zot export <query> [--limit N] [--json] | zot export --item-key KEY [--json]"
@@ -30,6 +30,7 @@ const (
 	usageItemTemplate         = "usage: zot item-template <item-type> [--json]"
 	usageKeyInfo              = "usage: zot key-info <api-key> [--json]"
 	usageGroups               = "usage: zot groups [--json]"
+	usageTrash                = "usage: zot trash [--json]"
 )
 
 func runConfig(args []string) int {
@@ -754,6 +755,45 @@ func runGroups(args []string) int {
 
 	for _, group := range groups {
 		fmt.Fprintf(stdout, "%-8d  %s\n", group.ID, group.Name)
+	}
+	return 0
+}
+
+func runTrash(args []string) int {
+	jsonOutput, ok := parseJSONOnlyArgs(args, usageTrash)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	items, err := client.ListTrashItems(context.Background(), zoteroapi.FindOptions{})
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{
+			OK:      true,
+			Command: "trash",
+			Data:    items,
+			Meta: map[string]any{
+				"total": len(items),
+			},
+		})
+	}
+
+	for _, item := range items {
+		fmt.Fprintf(stdout, "%-10s  %-16s  %-6s  %-18s  %s\n",
+			item.Key,
+			item.ItemType,
+			shortDate(item.Date),
+			shortCreators(item.Creators),
+			item.Title,
+		)
 	}
 	return 0
 }
