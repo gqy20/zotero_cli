@@ -494,6 +494,20 @@ func newTestAPI(t *testing.T) (string, func()) {
 				})
 				return
 			}
+			if r.Method == http.MethodPost {
+				w.Header().Set("Last-Modified-Version", "48")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"successful": map[string]any{
+						"0": map[string]any{
+							"key":     "SCH67890",
+							"version": 48,
+						},
+					},
+					"unchanged": map[string]any{},
+					"failed":    map[string]any{},
+				})
+				return
+			}
 			_ = json.NewEncoder(w).Encode([]map[string]any{
 				{
 					"key": "SCH12345",
@@ -506,6 +520,17 @@ func newTestAPI(t *testing.T) (string, func()) {
 					},
 				},
 			})
+		case "/users/123456/searches/SCH12345":
+			switch r.Method {
+			case http.MethodPut:
+				w.Header().Set("Last-Modified-Version", "49")
+				w.WriteHeader(http.StatusOK)
+			case http.MethodDelete:
+				w.Header().Set("Last-Modified-Version", "50")
+				w.WriteHeader(http.StatusNoContent)
+			default:
+				http.NotFound(w, r)
+			}
 		case "/users/123456/deleted":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"collections": []string{"COLL1234"},

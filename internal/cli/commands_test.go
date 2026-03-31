@@ -1186,3 +1186,71 @@ func TestRunDeleteCollectionText(t *testing.T) {
 		t.Fatalf("unexpected output: %q", got)
 	}
 }
+
+func TestRunCreateSearchText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"create-search", "--data", `{"name":"Unread PDFs","conditions":[{"condition":"itemType","operator":"is","value":"attachment"}]}`, "--if-unmodified-since-version", "17"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "created search SCH67890") {
+		t.Fatalf("unexpected output: %q", got)
+	}
+}
+
+func TestRunUpdateSearchFromFileJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	payloadPath := filepath.Join(t.TempDir(), "search.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"key":"SCH12345","version":21,"name":"Important PDFs"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"update-search", "SCH12345", "--from-file", payloadPath, "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].(map[string]any)
+	if !ok || data["last_modified_version"] != float64(49) {
+		t.Fatalf("unexpected payload: %#v", got["data"])
+	}
+}
+
+func TestRunDeleteSearchText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"delete-search", "SCH12345", "--if-unmodified-since-version", "22"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "deleted search SCH12345") {
+		t.Fatalf("unexpected output: %q", got)
+	}
+}

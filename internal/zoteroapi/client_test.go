@@ -571,6 +571,144 @@ func TestClientDeleteCollection(t *testing.T) {
 	}
 }
 
+func TestClientCreateSearch(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/users/123/searches" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("If-Unmodified-Since-Version"); got != "17" {
+			t.Fatalf("unexpected If-Unmodified-Since-Version: %q", got)
+		}
+
+		var body []map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body) != 1 || body[0]["name"] != "Unread PDFs" {
+			t.Fatalf("unexpected request body: %#v", body)
+		}
+
+		w.Header().Set("Last-Modified-Version", "48")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"successful": map[string]any{
+				"0": map[string]any{
+					"key":     "SCH67890",
+					"version": 48,
+				},
+			},
+			"unchanged": map[string]any{},
+			"failed":    map[string]any{},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.CreateSearch(context.Background(), map[string]any{
+		"name": "Unread PDFs",
+		"conditions": []map[string]any{
+			{"condition": "itemType", "operator": "is", "value": "attachment"},
+		},
+	}, 17)
+	if err != nil {
+		t.Fatalf("CreateSearch returned error: %v", err)
+	}
+	if result.Key != "SCH67890" || result.LastModifiedVersion != 48 {
+		t.Fatalf("unexpected create result: %#v", result)
+	}
+}
+
+func TestClientUpdateSearch(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/users/123/searches/SCH12345" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body["name"] != "Important PDFs" {
+			t.Fatalf("unexpected request body: %#v", body)
+		}
+
+		w.Header().Set("Last-Modified-Version", "49")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"key":     "SCH12345",
+			"version": 49,
+			"name":    "Important PDFs",
+		})
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.UpdateSearch(context.Background(), "SCH12345", map[string]any{
+		"key":     "SCH12345",
+		"version": 21,
+		"name":    "Important PDFs",
+	}, 0)
+	if err != nil {
+		t.Fatalf("UpdateSearch returned error: %v", err)
+	}
+	if result.Key != "SCH12345" || result.LastModifiedVersion != 49 {
+		t.Fatalf("unexpected update result: %#v", result)
+	}
+}
+
+func TestClientDeleteSearch(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/users/123/searches/SCH12345" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("If-Unmodified-Since-Version"); got != "22" {
+			t.Fatalf("unexpected If-Unmodified-Since-Version: %q", got)
+		}
+		w.Header().Set("Last-Modified-Version", "50")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.DeleteSearch(context.Background(), "SCH12345", 22)
+	if err != nil {
+		t.Fatalf("DeleteSearch returned error: %v", err)
+	}
+	if result.Key != "SCH12345" || result.LastModifiedVersion != 50 {
+		t.Fatalf("unexpected delete result: %#v", result)
+	}
+}
+
 func TestClientGetItem(t *testing.T) {
 	t.Parallel()
 

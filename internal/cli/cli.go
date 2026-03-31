@@ -85,6 +85,12 @@ func Run(args []string) int {
 		return runUpdateCollection(args[1:])
 	case "delete-collection":
 		return runDeleteCollection(args[1:])
+	case "create-search":
+		return runCreateSearch(args[1:])
+	case "update-search":
+		return runUpdateSearch(args[1:])
+	case "delete-search":
+		return runDeleteSearch(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -131,6 +137,9 @@ Commands:
   create-collection  Create a collection from JSON data
   update-collection  Update a collection from JSON data
   delete-collection  Delete a collection using a version precondition
+  create-search  Create a saved search from JSON data
+  update-search  Update a saved search from JSON data
+  delete-search  Delete a saved search using a version precondition
 `, exe, exe)
 }
 

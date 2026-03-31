@@ -242,6 +242,21 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			args:      []string{"delete-collection", "COLL1234"},
 			wantUsage: usageDeleteCollection,
 		},
+		{
+			name:      "create search missing data",
+			args:      []string{"create-search"},
+			wantUsage: usageCreateSearch,
+		},
+		{
+			name:      "update search missing args",
+			args:      []string{"update-search", "SCH12345"},
+			wantUsage: usageUpdateSearch,
+		},
+		{
+			name:      "delete search missing version",
+			args:      []string{"delete-search", "SCH12345"},
+			wantUsage: usageDeleteSearch,
+		},
 	}
 
 	for _, tc := range testCases {

@@ -39,6 +39,9 @@ const (
 	usageCreateCollection     = "usage: zot create-collection (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
 	usageUpdateCollection     = "usage: zot update-collection <collection-key> (--data JSON | --from-file PATH) [--if-unmodified-since-version N] [--json]"
 	usageDeleteCollection     = "usage: zot delete-collection <collection-key> --if-unmodified-since-version N [--json]"
+	usageCreateSearch         = "usage: zot create-search (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
+	usageUpdateSearch         = "usage: zot update-search <search-key> (--data JSON | --from-file PATH) [--if-unmodified-since-version N] [--json]"
+	usageDeleteSearch         = "usage: zot delete-search <search-key> --if-unmodified-since-version N [--json]"
 )
 
 func runConfig(args []string) int {
@@ -1013,6 +1016,75 @@ func runDeleteCollection(args []string) int {
 		return writeJSON(jsonResponse{OK: true, Command: "delete-collection", Data: result})
 	}
 	fmt.Fprintf(stdout, "deleted collection %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	return 0
+}
+
+func runCreateSearch(args []string) int {
+	data, version, jsonOutput, ok := parseWriteCreateArgs(args, usageCreateSearch)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	result, err := client.CreateSearch(context.Background(), data, version)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: "create-search", Data: result})
+	}
+	fmt.Fprintf(stdout, "created search %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	return 0
+}
+
+func runUpdateSearch(args []string) int {
+	key, data, version, jsonOutput, ok := parseWriteUpdateArgs(args, usageUpdateSearch, false)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	result, err := client.UpdateSearch(context.Background(), key, data, version)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: "update-search", Data: result})
+	}
+	fmt.Fprintf(stdout, "updated search %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	return 0
+}
+
+func runDeleteSearch(args []string) int {
+	key, version, jsonOutput, ok := parseWriteDeleteArgs(args, usageDeleteSearch)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	result, err := client.DeleteSearch(context.Background(), key, version)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: "delete-search", Data: result})
+	}
+	fmt.Fprintf(stdout, "deleted search %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
 }
 
