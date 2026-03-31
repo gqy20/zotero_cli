@@ -76,6 +76,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 			direction := r.URL.Query().Get("direction")
 
 			if r.URL.Query().Get("format") == "versions" {
+				w.Header().Set("Last-Modified-Version", "111")
 				_ = json.NewEncoder(w).Encode(map[string]int{
 					"ITEM1234": 90,
 					"ITEM5678": 91,
@@ -299,6 +300,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 			_ = json.NewEncoder(w).Encode([]map[string]any{})
 		case "/users/123456/collections":
 			if r.URL.Query().Get("format") == "versions" {
+				w.Header().Set("Last-Modified-Version", "333")
 				_ = json.NewEncoder(w).Encode(map[string]int{
 					"COLL1234": 9,
 				})
@@ -345,6 +347,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 			})
 		case "/users/123456/items/top":
 			if r.URL.Query().Get("format") == "versions" {
+				w.Header().Set("Last-Modified-Version", "222")
 				_ = json.NewEncoder(w).Encode(map[string]int{
 					"ITEM1234": 100,
 					"ITEM5678": 101,
@@ -354,6 +357,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 			http.NotFound(w, r)
 		case "/users/123456/searches":
 			if r.URL.Query().Get("format") == "versions" {
+				w.Header().Set("Last-Modified-Version", "444")
 				_ = json.NewEncoder(w).Encode(map[string]int{
 					"SCH12345": 12,
 				})
@@ -434,4 +438,26 @@ func newErrorAPI(t *testing.T, status int, retryAfter string) errorAPIServer {
 		url:     server.URL,
 		cleanup: server.Close,
 	}
+}
+
+func newConditionalVersionsAPI(t *testing.T) (string, func()) {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123456/items" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Query().Get("format") != "versions" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.Header.Get("If-Modified-Since-Version"); got != "88" {
+			t.Fatalf("unexpected If-Modified-Since-Version: %q", got)
+		}
+
+		w.WriteHeader(http.StatusNotModified)
+	}))
+
+	return server.URL, server.Close
 }

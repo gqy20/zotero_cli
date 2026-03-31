@@ -74,9 +74,16 @@ type Deleted struct {
 }
 
 type VersionsOptions struct {
-	ObjectType     string
-	Since          int
-	IncludeTrashed bool
+	ObjectType             string
+	Since                  int
+	IncludeTrashed         bool
+	IfModifiedSinceVersion int
+}
+
+type VersionsResult struct {
+	Versions            map[string]int `json:"versions"`
+	LastModifiedVersion int            `json:"last_modified_version,omitempty"`
+	NotModified         bool           `json:"not_modified,omitempty"`
 }
 
 type Item struct {
@@ -427,9 +434,17 @@ func (c *Client) GetDeleted(ctx context.Context) (Deleted, error) {
 }
 
 func (c *Client) GetVersions(ctx context.Context, opts VersionsOptions) (map[string]int, error) {
-	relativePath, err := versionsPath(opts.ObjectType)
+	result, err := c.GetVersionsResult(ctx, opts)
 	if err != nil {
 		return nil, err
+	}
+	return result.Versions, nil
+}
+
+func (c *Client) GetVersionsResult(ctx context.Context, opts VersionsOptions) (VersionsResult, error) {
+	relativePath, err := versionsPath(opts.ObjectType)
+	if err != nil {
+		return VersionsResult{}, err
 	}
 
 	extra := map[string]string{
@@ -440,22 +455,43 @@ func (c *Client) GetVersions(ctx context.Context, opts VersionsOptions) (map[str
 		extra["includeTrashed"] = "1"
 	}
 
-	resp, err := c.doRequest(ctx, relativePath, FindOptions{}, extra)
+	headers := map[string]string{}
+	if opts.IfModifiedSinceVersion > 0 {
+		headers["If-Modified-Since-Version"] = strconv.Itoa(opts.IfModifiedSinceVersion)
+	}
+
+	resp, err := c.doRequest(ctx, relativePath, FindOptions{}, extra, headers)
 	if err != nil {
-		return nil, err
+		return VersionsResult{}, err
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotModified {
+		return VersionsResult{
+			Versions:    map[string]int{},
+			NotModified: true,
+		}, nil
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, apiErrorFromResponse(resp)
+		return VersionsResult{}, apiErrorFromResponse(resp)
 	}
 
 	var versions map[string]int
 	if err := json.NewDecoder(resp.Body).Decode(&versions); err != nil {
-		return nil, err
+		return VersionsResult{}, err
 	}
 
-	return versions, nil
+	result := VersionsResult{
+		Versions: versions,
+	}
+	if value := resp.Header.Get("Last-Modified-Version"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			result.LastModifiedVersion = parsed
+		}
+	}
+
+	return result, nil
 }
 
 func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {
@@ -661,7 +697,7 @@ func versionsPath(objectType string) (string, error) {
 	}
 }
 
-func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOptions, extraQuery map[string]string) (*http.Response, error) {
+func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOptions, extraQuery map[string]string, extraHeaders ...map[string]string) (*http.Response, error) {
 	if c.cfg.Mode != "" && c.cfg.Mode != "web" {
 		return nil, fmt.Errorf("unsupported mode %q", c.cfg.Mode)
 	}
@@ -717,6 +753,13 @@ func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOp
 	}
 	req.Header.Set("Zotero-API-Key", c.cfg.APIKey)
 	req.Header.Set("Zotero-API-Version", "3")
+	for _, headerSet := range extraHeaders {
+		for key, value := range headerSet {
+			if value != "" {
+				req.Header.Set(key, value)
+			}
+		}
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

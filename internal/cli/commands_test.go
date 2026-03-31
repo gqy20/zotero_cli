@@ -617,3 +617,53 @@ func TestRunVersionsText(t *testing.T) {
 		}
 	}
 }
+
+func TestRunVersionsJSONIncludesLastModifiedVersionMeta(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"versions", "items-top", "--since", "42", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+
+	meta, ok := got["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
+	if meta["last_modified_version"] != float64(222) {
+		t.Fatalf("unexpected meta payload: %#v", meta)
+	}
+}
+
+func TestRunVersionsTextShowsNotModifiedMessageOn304(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newConditionalVersionsAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"versions", "items", "--since", "0", "--if-modified-since-version", "88"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	if !strings.Contains(got, "not modified since version 88") {
+		t.Fatalf("expected not modified message, got %q", got)
+	}
+}

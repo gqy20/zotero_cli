@@ -21,7 +21,7 @@ const (
 	usageTags        = "usage: zot tags [--json]"
 	usageSearches    = "usage: zot searches [--json]"
 	usageDeleted     = "usage: zot deleted [--json]"
-	usageVersions    = "usage: zot versions <collections|searches|items|items-top> --since N [--include-trashed] [--json]"
+	usageVersions    = "usage: zot versions <collections|searches|items|items-top> --since N [--include-trashed] [--if-modified-since-version N] [--json]"
 )
 
 func runConfig(args []string) int {
@@ -523,28 +523,42 @@ func runVersions(args []string) int {
 		return exitCode
 	}
 
-	versions, err := client.GetVersions(context.Background(), zoteroapi.VersionsOptions{
-		ObjectType:     objectType,
-		Since:          opts.Since,
-		IncludeTrashed: opts.IncludeTrashed,
+	result, err := client.GetVersionsResult(context.Background(), zoteroapi.VersionsOptions{
+		ObjectType:             objectType,
+		Since:                  opts.Since,
+		IncludeTrashed:         opts.IncludeTrashed,
+		IfModifiedSinceVersion: opts.IfModifiedSinceVersion,
 	})
 	if err != nil {
 		return printErr(err)
 	}
 
 	if jsonOutput {
+		meta := map[string]any{
+			"object_type": objectType,
+			"total":       len(result.Versions),
+		}
+		if result.LastModifiedVersion > 0 {
+			meta["last_modified_version"] = result.LastModifiedVersion
+		}
+		if result.NotModified {
+			meta["not_modified"] = true
+		}
+
 		return writeJSON(jsonResponse{
 			OK:      true,
 			Command: "versions",
-			Data:    versions,
-			Meta: map[string]any{
-				"object_type": objectType,
-				"total":       len(versions),
-			},
+			Data:    result.Versions,
+			Meta:    meta,
 		})
 	}
 
-	for key, version := range versions {
+	if result.NotModified {
+		fmt.Fprintf(stdout, "not modified since version %d\n", opts.IfModifiedSinceVersion)
+		return 0
+	}
+
+	for key, version := range result.Versions {
 		fmt.Fprintf(stdout, "%-10s  %d\n", key, version)
 	}
 	return 0

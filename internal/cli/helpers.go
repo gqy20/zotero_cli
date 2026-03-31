@@ -13,8 +13,9 @@ import (
 )
 
 type versionsArgs struct {
-	Since          int
-	IncludeTrashed bool
+	Since                  int
+	IncludeTrashed         bool
+	IfModifiedSinceVersion int
 }
 
 type jsonResponse struct {
@@ -226,6 +227,16 @@ func parseVersionsArgs(args []string) (string, versionsArgs, bool, error) {
 			}
 			opts.Since = since
 			sinceSet = true
+		case "--if-modified-since-version":
+			if i+1 >= len(args) {
+				return "", versionsArgs{}, false, errors.New("missing value for --if-modified-since-version")
+			}
+			i++
+			value, err := strconv.Atoi(args[i])
+			if err != nil || value < 0 {
+				return "", versionsArgs{}, false, errors.New("invalid value for --if-modified-since-version")
+			}
+			opts.IfModifiedSinceVersion = value
 		default:
 			return "", versionsArgs{}, false, errors.New("too many positional arguments")
 		}

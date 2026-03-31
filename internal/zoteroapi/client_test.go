@@ -716,6 +716,75 @@ func TestClientGetVersionsForCollections(t *testing.T) {
 	}
 }
 
+func TestClientGetVersionsIncludesLastModifiedVersion(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Last-Modified-Version", "99")
+		if err := json.NewEncoder(w).Encode(map[string]int{
+			"ITEM1234": 100,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.GetVersionsResult(context.Background(), VersionsOptions{
+		ObjectType: "items",
+		Since:      0,
+	})
+	if err != nil {
+		t.Fatalf("GetVersionsResult returned error: %v", err)
+	}
+
+	if result.LastModifiedVersion != 99 {
+		t.Fatalf("unexpected last modified version: %#v", result)
+	}
+	if result.NotModified {
+		t.Fatalf("expected not modified to be false: %#v", result)
+	}
+}
+
+func TestClientGetVersionsReturnsNotModifiedOn304(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("If-Modified-Since-Version"); got != "88" {
+			t.Fatalf("unexpected If-Modified-Since-Version: %q", got)
+		}
+		w.WriteHeader(http.StatusNotModified)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.GetVersionsResult(context.Background(), VersionsOptions{
+		ObjectType:             "items",
+		Since:                  0,
+		IfModifiedSinceVersion: 88,
+	})
+	if err != nil {
+		t.Fatalf("GetVersionsResult returned error: %v", err)
+	}
+
+	if !result.NotModified {
+		t.Fatalf("expected not modified result: %#v", result)
+	}
+	if len(result.Versions) != 0 {
+		t.Fatalf("expected empty versions map: %#v", result)
+	}
+}
+
 func TestClientFindItemsMapsUnauthorizedError(t *testing.T) {
 	t.Parallel()
 

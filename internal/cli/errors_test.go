@@ -138,6 +138,12 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			wantUsage:  usageVersions,
 			wantStderr: "error: unsupported object type",
 		},
+		{
+			name:       "versions invalid if-modified-since-version",
+			args:       []string{"versions", "items", "--since", "1", "--if-modified-since-version", "-1"},
+			wantUsage:  usageVersions,
+			wantStderr: "error: invalid value for --if-modified-since-version",
+		},
 	}
 
 	for _, tc := range testCases {
