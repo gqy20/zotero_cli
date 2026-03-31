@@ -1063,3 +1063,58 @@ func TestRunDeleteItemText(t *testing.T) {
 		t.Fatalf("unexpected delete output: %q", got)
 	}
 }
+
+func TestRunCreateItemFromFileText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	payloadPath := filepath.Join(t.TempDir(), "item.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"itemType":"book","title":"From File"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"create-item", "--from-file", payloadPath, "--if-unmodified-since-version", "41"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "created item NEWA1234") || !strings.Contains(got, "library version 42") {
+		t.Fatalf("unexpected create output: %q", got)
+	}
+}
+
+func TestRunUpdateItemFromFileJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	payloadPath := filepath.Join(t.TempDir(), "patch.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"Updated From File"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"update-item", "ABCD2345", "--from-file", payloadPath, "--if-unmodified-since-version", "7", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].(map[string]any)
+	if !ok || data["last_modified_version"] != float64(8) {
+		t.Fatalf("unexpected update payload: %#v", got["data"])
+	}
+}

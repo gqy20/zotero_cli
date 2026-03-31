@@ -33,8 +33,8 @@ const (
 	usageTrash                = "usage: zot trash [--json]"
 	usageCollectionsTop       = "usage: zot collections-top [--json]"
 	usagePublications         = "usage: zot publications [--json]"
-	usageCreateItem           = "usage: zot create-item --data JSON --if-unmodified-since-version N [--json]"
-	usageUpdateItem           = "usage: zot update-item <item-key> --data JSON --if-unmodified-since-version N [--json]"
+	usageCreateItem           = "usage: zot create-item (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
+	usageUpdateItem           = "usage: zot update-item <item-key> (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
 	usageDeleteItem           = "usage: zot delete-item <item-key> --if-unmodified-since-version N [--json]"
 )
 
@@ -894,7 +894,7 @@ func runCreateItem(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "create-item", Data: result})
 	}
-	fmt.Fprintf(stdout, "created item %s\n", result.Key)
+	fmt.Fprintf(stdout, "created item %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
 }
 
@@ -917,7 +917,7 @@ func runUpdateItem(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "update-item", Data: result})
 	}
-	fmt.Fprintf(stdout, "updated item %s\n", result.Key)
+	fmt.Fprintf(stdout, "updated item %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
 }
 
@@ -940,7 +940,7 @@ func runDeleteItem(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "delete-item", Data: result})
 	}
-	fmt.Fprintf(stdout, "deleted item %s\n", result.Key)
+	fmt.Fprintf(stdout, "deleted item %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
 }
 

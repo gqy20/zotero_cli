@@ -298,6 +298,7 @@ func parseSingleValueCommand(args []string, usage string) (string, bool, bool) {
 
 func parseWriteCreateArgs(args []string, usage string) (map[string]any, int, bool, bool) {
 	var raw string
+	var fromFile string
 	var version int
 	var jsonOutput bool
 	var versionSet bool
@@ -313,6 +314,13 @@ func parseWriteCreateArgs(args []string, usage string) (map[string]any, int, boo
 			}
 			i++
 			raw = args[i]
+		case "--from-file":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, usage)
+				return nil, 0, false, false
+			}
+			i++
+			fromFile = args[i]
 		case "--if-unmodified-since-version":
 			if i+1 >= len(args) {
 				fmt.Fprintln(stderr, usage)
@@ -332,9 +340,18 @@ func parseWriteCreateArgs(args []string, usage string) (map[string]any, int, boo
 		}
 	}
 
-	if raw == "" || !versionSet {
+	if (raw == "" && fromFile == "") || (raw != "" && fromFile != "") || !versionSet {
 		fmt.Fprintln(stderr, usage)
 		return nil, 0, false, false
+	}
+
+	if fromFile != "" {
+		content, err := os.ReadFile(fromFile)
+		if err != nil {
+			fmt.Fprintln(stderr, usage)
+			return nil, 0, false, false
+		}
+		raw = string(content)
 	}
 
 	var data map[string]any
