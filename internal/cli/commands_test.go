@@ -385,6 +385,32 @@ func TestRunExportCSLJSONJSON(t *testing.T) {
 	}
 }
 
+func TestRunExportByCollectionText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"export", "--collection", "COLL1234"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Lovelace, A. (2024). Primary Article.",
+		"Hopper, G. (2023). Secondary Article.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output %q", want, got)
+		}
+	}
+}
+
 func TestRunCollectionsJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

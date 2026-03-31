@@ -15,7 +15,7 @@ const (
 	usageFind                 = "usage: zot find <query> [--json] [--item-type TYPE] [--tag TAG ...] [--date-after YYYY] [--date-before YYYY] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed] | zot find --all [--json] [--item-type TYPE] [--tag TAG ...] [--date-after YYYY] [--date-before YYYY] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed]"
 	usageShow                 = "usage: zot show <item-key> [--json]"
 	usageCite                 = "usage: zot cite <item-key> [--format citation|bib] [--style STYLE] [--locale LOCALE] [--json]"
-	usageExport               = "usage: zot export <query> [--limit N] [--format bib|bibtex|biblatex|csljson|ris] [--json] | zot export --item-key KEY [--format bib|bibtex|biblatex|csljson|ris] [--json]"
+	usageExport               = "usage: zot export <query> [--limit N] [--format bib|bibtex|biblatex|csljson|ris] [--json] | zot export --item-key KEY [--format bib|bibtex|biblatex|csljson|ris] [--json] | zot export --collection KEY [--format bib|bibtex|biblatex|csljson|ris] [--json]"
 	usageCollections          = "usage: zot collections [--json]"
 	usageNotes                = "usage: zot notes [--json]"
 	usageTags                 = "usage: zot tags [--json]"
@@ -171,14 +171,14 @@ func runFind(args []string) int {
 		return 2
 	}
 
-	opts, jsonOutput, err := parseFindArgs(args)
+	opts, jsonOutput, queryProvided, err := parseFindArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		fmt.Fprintln(stderr, usageFind)
 		return 2
 	}
 
-	if strings.TrimSpace(opts.Query) == "" && !opts.All {
+	if strings.TrimSpace(opts.Query) == "" && !opts.All && !queryProvided {
 		fmt.Fprintln(stderr, usageFind)
 		return 2
 	}
@@ -375,7 +375,7 @@ func runExport(args []string) int {
 		return 2
 	}
 
-	itemKey, findOpts, format, jsonOutput, err := parseExportArgs(args)
+	itemKey, collectionKey, findOpts, format, jsonOutput, err := parseExportArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		fmt.Fprintln(stderr, usageExport)
@@ -390,6 +390,15 @@ func runExport(args []string) int {
 	keys := make([]string, 0, 8)
 	if itemKey != "" {
 		keys = append(keys, itemKey)
+	} else if collectionKey != "" {
+		items, err := client.ListCollectionItems(context.Background(), collectionKey, findOpts)
+		if err != nil {
+			return printErr(err)
+		}
+		items = filterDefaultFindItems(items, findOpts)
+		for _, item := range items {
+			keys = append(keys, item.Key)
+		}
 	} else {
 		items, err := client.FindItems(context.Background(), findOpts)
 		if err != nil {

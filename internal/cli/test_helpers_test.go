@@ -478,6 +478,31 @@ func newTestAPI(t *testing.T) (string, func()) {
 					},
 				})
 			}
+		case "/users/123456/items/ART67890":
+			include := r.URL.Query().Get("include")
+			switch include {
+			case "bib":
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"key": "ART67890",
+					"bib": "<div class=\"csl-bib-body\"><div class=\"csl-entry\">Hopper, G. (2023). <i>Secondary Article</i>.</div></div>",
+				})
+			default:
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"key": "ART67890",
+					"data": map[string]any{
+						"itemType": "journalArticle",
+						"title":    "Secondary Article",
+						"date":     "2023",
+						"creators": []map[string]any{
+							{
+								"creatorType": "author",
+								"firstName":   "Grace",
+								"lastName":    "Hopper",
+							},
+						},
+					},
+				})
+			}
 		case "/users/123456/items/X42A7DEE/children":
 			_ = json.NewEncoder(w).Encode([]map[string]any{
 				{
@@ -572,6 +597,44 @@ func newTestAPI(t *testing.T) (string, func()) {
 				return
 			}
 			http.NotFound(w, r)
+		case "/users/123456/collections/COLL1234/items":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"key":     "ART12345",
+					"version": 18,
+					"data": map[string]any{
+						"itemType": "journalArticle",
+						"title":    "Primary Article",
+						"date":     "2024",
+						"url":      "https://example.org/primary",
+						"creators": []map[string]any{
+							{
+								"creatorType": "author",
+								"firstName":   "Ada",
+								"lastName":    "Lovelace",
+							},
+						},
+					},
+				},
+				{
+					"key":     "ART67890",
+					"version": 21,
+					"data": map[string]any{
+						"itemType": "journalArticle",
+						"title":    "Secondary Article",
+						"date":     "2023",
+						"DOI":      "10.5555/secondary",
+						"url":      "https://example.org/secondary",
+						"creators": []map[string]any{
+							{
+								"creatorType": "author",
+								"firstName":   "Grace",
+								"lastName":    "Hopper",
+							},
+						},
+					},
+				},
+			})
 		case "/users/123456/items/trash":
 			_ = json.NewEncoder(w).Encode([]map[string]any{
 				{

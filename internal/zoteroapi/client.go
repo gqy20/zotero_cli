@@ -8,8 +8,8 @@ import (
 	"html"
 	"io"
 	"math"
-	"net/http"
 	"net"
+	"net/http"
 	"net/url"
 	"path"
 	"regexp"
@@ -409,6 +409,20 @@ func (c *Client) ListTrashItems(ctx context.Context, opts FindOptions) ([]Item, 
 
 func (c *Client) ListPublicationsItems(ctx context.Context, opts FindOptions) ([]Item, error) {
 	raw, err := c.getItems(ctx, path.Join("publications", "items"), opts)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]Item, 0, len(raw))
+	for _, item := range raw {
+		items = append(items, mapItem(item))
+	}
+
+	return items, nil
+}
+
+func (c *Client) ListCollectionItems(ctx context.Context, key string, opts FindOptions) ([]Item, error) {
+	raw, err := c.getItems(ctx, path.Join("collections", key, "items"), opts)
 	if err != nil {
 		return nil, err
 	}
