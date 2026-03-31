@@ -479,6 +479,76 @@ func TestClientUsesGroupLibraryPath(t *testing.T) {
 	}
 }
 
+func TestClientFindItemsMapsUnauthorizedError(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "forbidden", http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	_, err := client.FindItems(context.Background(), FindOptions{})
+	if err == nil {
+		t.Fatal("expected unauthorized error")
+	}
+	if got := err.Error(); got != "zotero api unauthorized (401): check library id and api key" {
+		t.Fatalf("unexpected error: %q", got)
+	}
+}
+
+func TestClientGetItemMapsNotFoundError(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	_, err := client.GetItem(context.Background(), "MISSING")
+	if err == nil {
+		t.Fatal("expected not found error")
+	}
+	if got := err.Error(); got != "zotero api not found (404)" {
+		t.Fatalf("unexpected error: %q", got)
+	}
+}
+
+func TestClientFindItemsIncludesRetryAfterForRateLimit(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "7")
+		http.Error(w, "slow down", http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	_, err := client.FindItems(context.Background(), FindOptions{})
+	if err == nil {
+		t.Fatal("expected rate limit error")
+	}
+	if got := err.Error(); got != "zotero api rate limited (429): retry after 7s" {
+		t.Fatalf("unexpected error: %q", got)
+	}
+}
+
 func defaultString(value string, fallback string) string {
 	if value == "" {
 		return fallback

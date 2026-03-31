@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -127,5 +128,45 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 				t.Fatalf("expected usage %q in stderr, got %q", tc.wantUsage, stderr.String())
 			}
 		})
+	}
+}
+
+func TestRunShowSurfacesReadableNotFoundError(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	server := newErrorAPI(t, http.StatusNotFound, "")
+	defer server.cleanup()
+	t.Setenv("ZOT_BASE_URL", server.url)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"show", "MISSING"})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "zotero api not found (404)") {
+		t.Fatalf("expected readable 404 message, got %q", stderr.String())
+	}
+}
+
+func TestRunFindSurfacesRetryAfterOnRateLimit(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	server := newErrorAPI(t, http.StatusTooManyRequests, "5")
+	defer server.cleanup()
+	t.Setenv("ZOT_BASE_URL", server.url)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "attention"})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "zotero api rate limited (429): retry after 5s") {
+		t.Fatalf("expected readable 429 message, got %q", stderr.String())
 	}
 }

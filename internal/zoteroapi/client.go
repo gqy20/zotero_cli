@@ -3,8 +3,10 @@ package zoteroapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"net/url"
 	"path"
@@ -150,6 +152,28 @@ type CitationResult struct {
 	HTML   string `json:"html,omitempty"`
 }
 
+type APIError struct {
+	StatusCode int
+	RetryAfter string
+	Body       string
+}
+
+func (e *APIError) Error() string {
+	switch e.StatusCode {
+	case http.StatusUnauthorized:
+		return "zotero api unauthorized (401): check library id and api key"
+	case http.StatusNotFound:
+		return "zotero api not found (404)"
+	case http.StatusTooManyRequests:
+		if e.RetryAfter != "" {
+			return fmt.Sprintf("zotero api rate limited (429): retry after %ss", e.RetryAfter)
+		}
+		return "zotero api rate limited (429)"
+	default:
+		return fmt.Sprintf("zotero api returned status %d", e.StatusCode)
+	}
+}
+
 var htmlTagRe = regexp.MustCompile(`<[^>]+>`)
 
 func New(cfg config.Config, baseURL string, httpClient *http.Client) *Client {
@@ -199,7 +223,7 @@ func (c *Client) GetItem(ctx context.Context, key string) (Item, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return Item{}, fmt.Errorf("zotero api returned status %d", resp.StatusCode)
+		return Item{}, apiErrorFromResponse(resp)
 	}
 
 	var raw apiItem
@@ -236,7 +260,7 @@ func (c *Client) GetCitation(ctx context.Context, key string, opts CitationOptio
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return CitationResult{}, fmt.Errorf("zotero api returned status %d", resp.StatusCode)
+		return CitationResult{}, apiErrorFromResponse(resp)
 	}
 
 	var raw apiCitationResponse
@@ -384,7 +408,7 @@ func decodeResponseWithTotal[T any](resp *http.Response) ([]T, int, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, 0, fmt.Errorf("zotero api returned status %d", resp.StatusCode)
+		return nil, 0, apiErrorFromResponse(resp)
 	}
 
 	var raw []T
@@ -413,6 +437,19 @@ func shouldContinuePagination(pageLen int, accumulated int, total int, requested
 		return accumulated < total
 	}
 	return pageLen == 25
+}
+
+func apiErrorFromResponse(resp *http.Response) error {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+	apiErr := &APIError{
+		StatusCode: resp.StatusCode,
+		RetryAfter: resp.Header.Get("Retry-After"),
+		Body:       strings.TrimSpace(string(body)),
+	}
+	if apiErr.StatusCode == 0 {
+		return errors.New("zotero api request failed")
+	}
+	return apiErr
 }
 
 func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOptions, extraQuery map[string]string) (*http.Response, error) {
