@@ -9,7 +9,9 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -59,7 +61,8 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 	}
 	defer db.Close()
 
-	rows, err := db.QueryContext(ctx, localFindQuery(opts), localFindArgs(opts)...)
+	query, args := localFindQuery(opts)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +108,8 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	items = localFilterAndOrderItems(items, opts)
+	items = paginateItems(items, opts.Start, opts.Limit)
 	return items, nil
 }
 
@@ -149,7 +154,7 @@ func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, err
 	return item, nil
 }
 
-func localFindQuery(opts FindOptions) string {
+func localFindQuery(opts FindOptions) (string, []any) {
 	query := `
 		SELECT
 			i.itemID,
@@ -170,18 +175,12 @@ func localFindQuery(opts FindOptions) string {
 		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
 		WHERE ` + localVisibleItemClause(opts.ItemType) + `
 		AND ` + localQueryMatchClause() + `
+		` + localTagFilterClause(opts) + `
 		GROUP BY i.itemID, i.key, i.version, it.typeName
 		ORDER BY i.key
 	`
-	if opts.Limit > 0 {
-		query += ` LIMIT ?`
-		if opts.Start > 0 {
-			query += ` OFFSET ?`
-		}
-	} else if opts.Start > 0 {
-		query += ` LIMIT -1 OFFSET ?`
-	}
-	return query
+	args := localFindArgs(opts)
+	return query, args
 }
 
 func localFindArgs(opts FindOptions) []any {
@@ -198,13 +197,8 @@ func localFindArgs(opts FindOptions) []any {
 		queryLike,
 		queryLike,
 	)
-	if opts.Limit > 0 {
-		args = append(args, opts.Limit)
-		if opts.Start > 0 {
-			args = append(args, opts.Start)
-		}
-	} else if opts.Start > 0 {
-		args = append(args, opts.Start)
+	for _, tag := range normalizedTags(opts.Tags) {
+		args = append(args, tag)
 	}
 	return args
 }
@@ -250,6 +244,189 @@ func localQueryMatchClause() string {
 			AND LOWER(t2.name) LIKE ?
 		)
 	)`
+}
+
+func localTagFilterClause(opts FindOptions) string {
+	tags := normalizedTags(opts.Tags)
+	if len(tags) == 0 {
+		return ""
+	}
+	if opts.TagAny {
+		return `
+		AND EXISTS (
+			SELECT 1
+			FROM itemTags it3
+			JOIN tags t3 ON t3.tagID = it3.tagID
+			WHERE it3.itemID = i.itemID
+			AND LOWER(t3.name) IN (` + placeholders(len(tags)) + `)
+		)
+		`
+	}
+	clause := ""
+	for range tags {
+		clause += `
+		AND EXISTS (
+			SELECT 1
+			FROM itemTags it3
+			JOIN tags t3 ON t3.tagID = it3.tagID
+			WHERE it3.itemID = i.itemID
+			AND LOWER(t3.name) = ?
+		)
+		`
+	}
+	return clause
+}
+
+func normalizedTags(tags []string) []string {
+	out := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		normalized := strings.TrimSpace(strings.ToLower(tag))
+		if normalized == "" {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	return out
+}
+
+func placeholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	result := "?"
+	for i := 1; i < n; i++ {
+		result += ", ?"
+	}
+	return result
+}
+
+func localFilterAndOrderItems(items []domain.Item, opts FindOptions) []domain.Item {
+	filtered := make([]domain.Item, 0, len(items))
+	for _, item := range items {
+		if !localMatchesDateRange(item.Date, opts.DateAfter, opts.DateBefore) {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+
+	sort.SliceStable(filtered, func(i int, j int) bool {
+		cmp := compareFindItems(filtered[i], filtered[j], opts.Sort)
+		if opts.Direction == "desc" {
+			return cmp > 0
+		}
+		return cmp < 0
+	})
+	return filtered
+}
+
+func compareFindItems(left domain.Item, right domain.Item, sortBy string) int {
+	switch sortBy {
+	case "title":
+		if cmp := strings.Compare(strings.ToLower(left.Title), strings.ToLower(right.Title)); cmp != 0 {
+			return cmp
+		}
+	case "date":
+		if cmp := compareFindDates(left.Date, right.Date); cmp != 0 {
+			return cmp
+		}
+	}
+	return strings.Compare(left.Key, right.Key)
+}
+
+func compareFindDates(left string, right string) int {
+	leftStart, _, leftOK := localParseDateRange(left)
+	rightStart, _, rightOK := localParseDateRange(right)
+	if leftOK && rightOK {
+		if leftStart.Before(rightStart) {
+			return -1
+		}
+		if leftStart.After(rightStart) {
+			return 1
+		}
+		return 0
+	}
+	if leftOK {
+		return -1
+	}
+	if rightOK {
+		return 1
+	}
+	return strings.Compare(left, right)
+}
+
+func paginateItems(items []domain.Item, start int, limit int) []domain.Item {
+	if start >= len(items) {
+		return []domain.Item{}
+	}
+	if start > 0 {
+		items = items[start:]
+	}
+	if limit > 0 && limit < len(items) {
+		items = items[:limit]
+	}
+	return items
+}
+
+func localMatchesDateRange(itemDate string, after string, before string) bool {
+	if after == "" && before == "" {
+		return true
+	}
+
+	itemStart, itemEnd, ok := localParseDateRange(itemDate)
+	if !ok {
+		return false
+	}
+
+	if after != "" {
+		afterStart, _, ok := localParseDateRange(after)
+		if !ok || itemStart.Before(afterStart) {
+			return false
+		}
+	}
+
+	if before != "" {
+		_, beforeEnd, ok := localParseDateRange(before)
+		if !ok || itemEnd.After(beforeEnd) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func localParseDateRange(value string) (time.Time, time.Time, bool) {
+	value = strings.TrimSpace(value)
+	switch len(value) {
+	case len("2006"):
+		start, err := time.Parse("2006", value)
+		if err != nil {
+			return time.Time{}, time.Time{}, false
+		}
+		end := time.Date(start.Year(), time.December, 31, 23, 59, 59, 0, time.UTC)
+		return start, end, true
+	case len("2006-01"):
+		start, err := time.Parse("2006-01", value)
+		if err != nil {
+			return time.Time{}, time.Time{}, false
+		}
+		end := time.Date(start.Year(), start.Month()+1, 0, 23, 59, 59, 0, time.UTC)
+		return start, end, true
+	default:
+		if len(value) >= len("2006-01-02") {
+			start, err := time.Parse("2006-01-02", value[:10])
+			if err != nil {
+				return time.Time{}, time.Time{}, false
+			}
+			end := time.Date(start.Year(), start.Month(), start.Day(), 23, 59, 59, 0, time.UTC)
+			return start, end, true
+		}
+		return time.Time{}, time.Time{}, false
+	}
 }
 
 func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (domain.Item, int64, error) {

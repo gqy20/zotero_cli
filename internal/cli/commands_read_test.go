@@ -44,7 +44,7 @@ func TestRunFindLocalJSONFiltersNonTopItemsByDefault(t *testing.T) {
 	stdout, stderr := captureOutput(t)
 	exitCode := Run([]string{"find", "mixed", "--json"})
 	if exitCode != 0 {
-		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
 
 	var got map[string]any
@@ -125,6 +125,138 @@ func TestRunFindLocalAllJSON(t *testing.T) {
 	data, ok := got["data"].([]any)
 	if !ok || len(data) != 3 {
 		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+}
+
+func TestRunFindLocalJSONSupportsMultipleTagsWithAndSemantics(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed", "--tag", "ai", "--tag", "survey", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	item := data[0].(map[string]any)
+	if item["key"] != "ART67890" {
+		t.Fatalf("unexpected item payload: %#v", item)
+	}
+}
+
+func TestRunFindLocalJSONSupportsTagAnySemantics(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed", "--tag", "classic", "--tag", "survey", "--tag-any", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 2 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+}
+
+func TestRunFindLocalJSONSupportsDateRangeFiltering(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed", "--date-after", "2024", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	item := data[0].(map[string]any)
+	if item["key"] != "ART67890" {
+		t.Fatalf("unexpected item payload: %#v", item)
+	}
+}
+
+func TestRunFindLocalJSONSupportsSortingAndPagination(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed", "--sort", "title", "--direction", "asc", "--start", "1", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	item := data[0].(map[string]any)
+	if item["key"] != "ART67890" {
+		t.Fatalf("unexpected item payload: %#v", item)
 	}
 }
 
