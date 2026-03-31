@@ -312,7 +312,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 						"data": map[string]any{
 							"itemType": "journalArticle",
 							"title":    "Primary Article",
-							"date":     "2024",
+							"date":     "2024-06-15",
 							"url":      "https://example.org/primary",
 							"creators": []map[string]any{
 								{
@@ -351,7 +351,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 						"data": map[string]any{
 							"itemType": "journalArticle",
 							"title":    "Secondary Article",
-							"date":     "2023",
+							"date":     "2023-02-01",
 							"DOI":      "10.5555/secondary",
 							"url":      "https://example.org/secondary",
 							"creators": []map[string]any{
@@ -467,7 +467,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 					"data": map[string]any{
 						"itemType": "journalArticle",
 						"title":    "Primary Article",
-						"date":     "2024",
+						"date":     "2024-06-15",
 						"creators": []map[string]any{
 							{
 								"creatorType": "author",
@@ -492,7 +492,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 					"data": map[string]any{
 						"itemType": "journalArticle",
 						"title":    "Secondary Article",
-						"date":     "2023",
+						"date":     "2023-02-01",
 						"creators": []map[string]any{
 							{
 								"creatorType": "author",
@@ -605,7 +605,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 					"data": map[string]any{
 						"itemType": "journalArticle",
 						"title":    "Primary Article",
-						"date":     "2024",
+						"date":     "2024-06-15",
 						"url":      "https://example.org/primary",
 						"creators": []map[string]any{
 							{
@@ -622,7 +622,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 					"data": map[string]any{
 						"itemType": "journalArticle",
 						"title":    "Secondary Article",
-						"date":     "2023",
+						"date":     "2023-02-01",
 						"DOI":      "10.5555/secondary",
 						"url":      "https://example.org/secondary",
 						"creators": []map[string]any{

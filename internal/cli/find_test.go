@@ -272,6 +272,44 @@ func TestRunFindJSONSupportsDateRangeFiltering(t *testing.T) {
 	}
 }
 
+func TestRunFindJSONSupportsFullDateFiltering(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{
+		"find", "mixed",
+		"--date-after", "2024-05-01",
+		"--date-before", "2024-12-31",
+		"--json",
+	})
+	restoreOutput()
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+
+	item, ok := data[0].(map[string]any)
+	if !ok || item["key"] != "ART12345" {
+		t.Fatalf("unexpected item payload: %#v", data[0])
+	}
+}
+
 func TestRunFindJSONSupportsMultipleTagsWithAndSemantics(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -306,6 +344,40 @@ func TestRunFindJSONSupportsMultipleTagsWithAndSemantics(t *testing.T) {
 	item, ok := data[0].(map[string]any)
 	if !ok || item["key"] != "ART67890" {
 		t.Fatalf("unexpected item payload: %#v", data[0])
+	}
+}
+
+func TestRunFindJSONSupportsTagAnySemantics(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{
+		"find", "mixed",
+		"--tag", "classic",
+		"--tag", "survey",
+		"--tag-any",
+		"--json",
+	})
+	restoreOutput()
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 2 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
 	}
 }
 
@@ -373,6 +445,65 @@ func TestRunFindTextOutputShowsOnlyTopItems(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "Attachment PDF") || strings.Contains(stdout.String(), "My note") {
 		t.Fatalf("unexpected non-top-level items in output: %q", stdout.String())
+	}
+}
+
+func TestRunFindTextOutputSupportsIncludeFields(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "attention", "--include-fields", "url,version"})
+	restoreOutput()
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Key: X42A7DEE",
+		"Version: 42",
+		"URL: https://example.org/attention",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output %q", want, got)
+		}
+	}
+}
+
+func TestRunFindTextOutputSupportsFullMode(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "attention", "--full"})
+	restoreOutput()
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Key: X42A7DEE",
+		"DOI: 10.5555/attention",
+		"URL: https://example.org/attention",
+		"Tags: transformers, classic",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output %q", want, got)
+		}
 	}
 }
 

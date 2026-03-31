@@ -234,6 +234,12 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			wantStderr: "error: invalid value for --qmode",
 		},
 		{
+			name:       "find invalid include fields",
+			args:       []string{"find", "test", "--include-fields", "url,bad"},
+			wantUsage:  usageFind,
+			wantStderr: "error: invalid value for --include-fields: bad",
+		},
+		{
 			name:      "trash extra arg",
 			args:      []string{"trash", "extra"},
 			wantUsage: usageTrash,

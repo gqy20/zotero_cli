@@ -33,11 +33,14 @@ type Client struct {
 type FindOptions struct {
 	Query          string
 	All            bool
+	Full           bool
 	ItemType       string
 	Limit          int
 	Start          int
 	Tag            string
 	Tags           []string
+	TagAny         bool
+	IncludeFields  []string
 	Sort           string
 	Direction      string
 	QMode          string

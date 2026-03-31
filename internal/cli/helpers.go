@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/zoteroapi"
@@ -39,6 +40,8 @@ func parseFindArgs(args []string) (zoteroapi.FindOptions, bool, bool, error) {
 			jsonOutput = true
 		case "--all":
 			opts.All = true
+		case "--full":
+			opts.Full = true
 		case "--item-type":
 			if i+1 >= len(args) {
 				return zoteroapi.FindOptions{}, false, false, errors.New("missing value for --item-type")
@@ -51,9 +54,18 @@ func parseFindArgs(args []string) (zoteroapi.FindOptions, bool, bool, error) {
 			}
 			i++
 			opts.Tags = append(opts.Tags, args[i])
-			if opts.Tag == "" {
-				opts.Tag = args[i]
+		case "--tag-any":
+			opts.TagAny = true
+		case "--include-fields":
+			if i+1 >= len(args) {
+				return zoteroapi.FindOptions{}, false, false, errors.New("missing value for --include-fields")
 			}
+			i++
+			fields, err := parseFindIncludeFields(args[i])
+			if err != nil {
+				return zoteroapi.FindOptions{}, false, false, err
+			}
+			opts.IncludeFields = append(opts.IncludeFields, fields...)
 		case "--date-after":
 			if i+1 >= len(args) {
 				return zoteroapi.FindOptions{}, false, false, errors.New("missing value for --date-after")
@@ -118,8 +130,43 @@ func parseFindArgs(args []string) (zoteroapi.FindOptions, bool, bool, error) {
 		}
 	}
 
+	if len(opts.Tags) == 1 {
+		opts.Tag = opts.Tags[0]
+	}
+
 	opts.Query = strings.TrimSpace(strings.Join(queryParts, " "))
 	return opts, jsonOutput, queryProvided, nil
+}
+
+func parseFindIncludeFields(value string) ([]string, error) {
+	allowed := map[string]struct{}{
+		"version":   {},
+		"doi":       {},
+		"url":       {},
+		"tags":      {},
+		"container": {},
+		"date":      {},
+		"creators":  {},
+	}
+
+	parts := strings.Split(value, ",")
+	fields := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		field := strings.TrimSpace(strings.ToLower(part))
+		if field == "" {
+			continue
+		}
+		if _, ok := allowed[field]; !ok {
+			return nil, fmt.Errorf("invalid value for --include-fields: %s", field)
+		}
+		if _, ok := seen[field]; ok {
+			continue
+		}
+		seen[field] = struct{}{}
+		fields = append(fields, field)
+	}
+	return fields, nil
 }
 
 func parseExportArgs(args []string) (string, string, zoteroapi.FindOptions, string, bool, error) {
@@ -682,7 +729,7 @@ func filterDefaultFindItems(items []zoteroapi.Item, opts zoteroapi.FindOptions) 
 		if opts.ItemType == "" && (item.ItemType == "attachment" || item.ItemType == "note") {
 			continue
 		}
-		if !matchesAllTags(item.Tags, opts.Tags) {
+		if !matchesTags(item.Tags, opts.Tags, opts.TagAny) {
 			continue
 		}
 		if !matchesDateRange(item.Date, opts.DateAfter, opts.DateBefore) {
@@ -693,7 +740,7 @@ func filterDefaultFindItems(items []zoteroapi.Item, opts zoteroapi.FindOptions) 
 	return filtered
 }
 
-func matchesAllTags(itemTags []string, required []string) bool {
+func matchesTags(itemTags []string, required []string, anyMode bool) bool {
 	if len(required) == 0 {
 		return true
 	}
@@ -711,11 +758,15 @@ func matchesAllTags(itemTags []string, required []string) bool {
 		if normalized == "" {
 			continue
 		}
-		if _, ok := tagSet[normalized]; !ok {
+		_, ok := tagSet[normalized]
+		if anyMode && ok {
+			return true
+		}
+		if !anyMode && !ok {
 			return false
 		}
 	}
-	return true
+	return !anyMode
 }
 
 func matchesDateRange(itemDate string, after string, before string) bool {
@@ -723,21 +774,21 @@ func matchesDateRange(itemDate string, after string, before string) bool {
 		return true
 	}
 
-	itemYear, ok := extractYear(itemDate)
+	itemStart, itemEnd, ok := parseDateRange(itemDate)
 	if !ok {
 		return false
 	}
 
 	if after != "" {
-		afterYear, ok := extractYear(after)
-		if !ok || itemYear < afterYear {
+		afterStart, _, ok := parseDateRange(after)
+		if !ok || itemStart.Before(afterStart) {
 			return false
 		}
 	}
 
 	if before != "" {
-		beforeYear, ok := extractYear(before)
-		if !ok || itemYear > beforeYear {
+		_, beforeEnd, ok := parseDateRange(before)
+		if !ok || itemEnd.After(beforeEnd) {
 			return false
 		}
 	}
@@ -745,17 +796,34 @@ func matchesDateRange(itemDate string, after string, before string) bool {
 	return true
 }
 
-func extractYear(value string) (int, bool) {
+func parseDateRange(value string) (time.Time, time.Time, bool) {
 	value = strings.TrimSpace(value)
-	if len(value) < 4 {
-		return 0, false
+	switch len(value) {
+	case len("2006"):
+		start, err := time.Parse("2006", value)
+		if err != nil {
+			return time.Time{}, time.Time{}, false
+		}
+		end := time.Date(start.Year(), time.December, 31, 23, 59, 59, 0, time.UTC)
+		return start, end, true
+	case len("2006-01"):
+		start, err := time.Parse("2006-01", value)
+		if err != nil {
+			return time.Time{}, time.Time{}, false
+		}
+		end := time.Date(start.Year(), start.Month()+1, 0, 23, 59, 59, 0, time.UTC)
+		return start, end, true
+	default:
+		if len(value) >= len("2006-01-02") {
+			start, err := time.Parse("2006-01-02", value[:10])
+			if err != nil {
+				return time.Time{}, time.Time{}, false
+			}
+			end := time.Date(start.Year(), start.Month(), start.Day(), 23, 59, 59, 0, time.UTC)
+			return start, end, true
+		}
+		return time.Time{}, time.Time{}, false
 	}
-
-	year, err := strconv.Atoi(value[:4])
-	if err != nil {
-		return 0, false
-	}
-	return year, true
 }
 
 func shortDate(value string) string {
@@ -774,6 +842,67 @@ func shortCreators(creators []zoteroapi.Creator) string {
 		return name
 	}
 	return name + " et al."
+}
+
+func renderFindItemDetailed(item zoteroapi.Item, opts zoteroapi.FindOptions) {
+	fmt.Fprintf(stdout, "Key: %s\n", item.Key)
+	fmt.Fprintf(stdout, "Title: %s\n", item.Title)
+	fmt.Fprintf(stdout, "Type: %s\n", item.ItemType)
+	printDate := item.Date != "" && !fieldIncluded(opts.IncludeFields, "date")
+	printCreators := len(item.Creators) > 0 && !fieldIncluded(opts.IncludeFields, "creators")
+	if printDate {
+		fmt.Fprintf(stdout, "Date: %s\n", item.Date)
+	}
+	if printCreators {
+		fmt.Fprintf(stdout, "Creators: %s\n", joinCreatorNames(item.Creators))
+	}
+
+	fields := opts.IncludeFields
+	if opts.Full {
+		fields = []string{"container", "version", "doi", "url", "tags"}
+	}
+
+	for _, field := range fields {
+		switch field {
+		case "container":
+			if item.Container != "" {
+				fmt.Fprintf(stdout, "Container: %s\n", item.Container)
+			}
+		case "version":
+			if item.Version != 0 {
+				fmt.Fprintf(stdout, "Version: %d\n", item.Version)
+			}
+		case "doi":
+			if item.DOI != "" {
+				fmt.Fprintf(stdout, "DOI: %s\n", item.DOI)
+			}
+		case "url":
+			if item.URL != "" {
+				fmt.Fprintf(stdout, "URL: %s\n", item.URL)
+			}
+		case "tags":
+			if len(item.Tags) > 0 {
+				fmt.Fprintf(stdout, "Tags: %s\n", strings.Join(item.Tags, ", "))
+			}
+		case "date":
+			if item.Date != "" {
+				fmt.Fprintf(stdout, "Date: %s\n", item.Date)
+			}
+		case "creators":
+			if len(item.Creators) > 0 {
+				fmt.Fprintf(stdout, "Creators: %s\n", joinCreatorNames(item.Creators))
+			}
+		}
+	}
+}
+
+func fieldIncluded(fields []string, target string) bool {
+	for _, field := range fields {
+		if field == target {
+			return true
+		}
+	}
+	return false
 }
 
 func renderCreators(creators []zoteroapi.Creator) string {

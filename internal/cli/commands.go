@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	usageFind                 = "usage: zot find <query> [--json] [--item-type TYPE] [--tag TAG ...] [--date-after YYYY] [--date-before YYYY] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed] | zot find --all [--json] [--item-type TYPE] [--tag TAG ...] [--date-after YYYY] [--date-before YYYY] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed]"
+	usageFind                 = "usage: zot find <query> [--json] [--full] [--include-fields FIELD[,FIELD...]] [--item-type TYPE] [--tag TAG ...] [--tag-any] [--date-after YYYY[-MM[-DD]]] [--date-before YYYY[-MM[-DD]]] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed] | zot find --all [--json] [--full] [--include-fields FIELD[,FIELD...]] [--item-type TYPE] [--tag TAG ...] [--tag-any] [--date-after YYYY[-MM[-DD]]] [--date-before YYYY[-MM[-DD]]] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed]"
 	usageShow                 = "usage: zot show <item-key> [--json]"
 	usageCite                 = "usage: zot cite <item-key> [--format citation|bib] [--style STYLE] [--locale LOCALE] [--json]"
 	usageExport               = "usage: zot export <query> [--limit N] [--format bib|bibtex|biblatex|csljson|ris] [--json] | zot export --item-key KEY [--format bib|bibtex|biblatex|csljson|ris] [--json] | zot export --collection KEY [--format bib|bibtex|biblatex|csljson|ris] [--json]"
@@ -203,6 +203,16 @@ func runFind(args []string) int {
 				"total": len(items),
 			},
 		})
+	}
+
+	if opts.Full || len(opts.IncludeFields) > 0 {
+		for index, item := range items {
+			renderFindItemDetailed(item, opts)
+			if index < len(items)-1 {
+				fmt.Fprintln(stdout)
+			}
+		}
+		return 0
 	}
 
 	for _, item := range items {
