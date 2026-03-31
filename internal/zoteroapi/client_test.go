@@ -785,6 +785,194 @@ func TestClientGetVersionsReturnsNotModifiedOn304(t *testing.T) {
 	}
 }
 
+func TestClientListItemTypes(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/itemTypes" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("locale"); got != "en-US" {
+			t.Fatalf("unexpected locale: %q", got)
+		}
+
+		if err := json.NewEncoder(w).Encode([]map[string]any{
+			{"itemType": "book", "localized": "Book"},
+			{"itemType": "note", "localized": "Note"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{}, server.URL, server.Client())
+
+	types, err := client.ListItemTypes(context.Background(), "en-US")
+	if err != nil {
+		t.Fatalf("ListItemTypes returned error: %v", err)
+	}
+
+	if len(types) != 2 || types[0].ID != "book" || types[0].Localized != "Book" {
+		t.Fatalf("unexpected item types: %#v", types)
+	}
+}
+
+func TestClientListItemFields(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/itemFields" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewEncoder(w).Encode([]map[string]any{
+			{"field": "title", "localized": "Title"},
+			{"field": "url", "localized": "URL"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{}, server.URL, server.Client())
+
+	fields, err := client.ListItemFields(context.Background(), "")
+	if err != nil {
+		t.Fatalf("ListItemFields returned error: %v", err)
+	}
+
+	if len(fields) != 2 || fields[1].ID != "url" {
+		t.Fatalf("unexpected fields: %#v", fields)
+	}
+}
+
+func TestClientListCreatorFields(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/creatorFields" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewEncoder(w).Encode([]map[string]any{
+			{"field": "firstName", "localized": "First"},
+			{"field": "lastName", "localized": "Last"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{}, server.URL, server.Client())
+
+	fields, err := client.ListCreatorFields(context.Background(), "")
+	if err != nil {
+		t.Fatalf("ListCreatorFields returned error: %v", err)
+	}
+
+	if len(fields) != 2 || fields[0].Localized != "First" {
+		t.Fatalf("unexpected creator fields: %#v", fields)
+	}
+}
+
+func TestClientListItemTypeFields(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/itemTypeFields" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("itemType"); got != "book" {
+			t.Fatalf("unexpected itemType: %q", got)
+		}
+		if err := json.NewEncoder(w).Encode([]map[string]any{
+			{"field": "title", "localized": "Title"},
+			{"field": "abstractNote", "localized": "Abstract"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{}, server.URL, server.Client())
+
+	fields, err := client.ListItemTypeFields(context.Background(), "book", "")
+	if err != nil {
+		t.Fatalf("ListItemTypeFields returned error: %v", err)
+	}
+
+	if len(fields) != 2 || fields[1].ID != "abstractNote" {
+		t.Fatalf("unexpected item type fields: %#v", fields)
+	}
+}
+
+func TestClientListItemTypeCreatorTypes(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/itemTypeCreatorTypes" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("itemType"); got != "book" {
+			t.Fatalf("unexpected itemType: %q", got)
+		}
+		if err := json.NewEncoder(w).Encode([]map[string]any{
+			{"creatorType": "author", "localized": "Author"},
+			{"creatorType": "editor", "localized": "Editor"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{}, server.URL, server.Client())
+
+	types, err := client.ListItemTypeCreatorTypes(context.Background(), "book", "")
+	if err != nil {
+		t.Fatalf("ListItemTypeCreatorTypes returned error: %v", err)
+	}
+
+	if len(types) != 2 || types[0].ID != "author" {
+		t.Fatalf("unexpected creator types: %#v", types)
+	}
+}
+
+func TestClientGetItemTemplate(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/items/new" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("itemType"); got != "book" {
+			t.Fatalf("unexpected itemType: %q", got)
+		}
+
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"itemType": "book",
+			"title":    "",
+			"creators": []map[string]any{
+				{"creatorType": "author", "firstName": "", "lastName": ""},
+			},
+			"tags":        []any{},
+			"collections": []any{},
+			"relations":   map[string]any{},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{}, server.URL, server.Client())
+
+	template, err := client.GetItemTemplate(context.Background(), "book")
+	if err != nil {
+		t.Fatalf("GetItemTemplate returned error: %v", err)
+	}
+
+	if itemType, _ := template["itemType"].(string); itemType != "book" {
+		t.Fatalf("unexpected template: %#v", template)
+	}
+}
+
 func TestClientFindItemsMapsUnauthorizedError(t *testing.T) {
 	t.Parallel()
 

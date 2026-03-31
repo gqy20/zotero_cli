@@ -249,6 +249,31 @@ func parseVersionsArgs(args []string) (string, versionsArgs, bool, error) {
 	return objectType, opts, jsonOutput, nil
 }
 
+func parseSingleValueCommand(args []string, usage string) (string, bool, bool) {
+	jsonOutput := false
+	value := ""
+
+	for _, arg := range args {
+		if arg == "--json" {
+			jsonOutput = true
+			continue
+		}
+		if value == "" {
+			value = arg
+			continue
+		}
+		fmt.Fprintln(stderr, usage)
+		return "", false, false
+	}
+
+	if strings.TrimSpace(value) == "" {
+		fmt.Fprintln(stderr, usage)
+		return "", false, false
+	}
+
+	return value, jsonOutput, true
+}
+
 func loadClient() (config.Config, *zoteroapi.Client, int) {
 	cfg, _, err := config.Load()
 	if err != nil {

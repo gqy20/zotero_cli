@@ -12,16 +12,22 @@ import (
 )
 
 const (
-	usageFind        = "usage: zot find <query> [--json] [--item-type TYPE] [--limit N]"
-	usageShow        = "usage: zot show <item-key> [--json]"
-	usageCite        = "usage: zot cite <item-key> [--format citation|bib] [--style STYLE] [--locale LOCALE] [--json]"
-	usageExport      = "usage: zot export <query> [--limit N] [--json] | zot export --item-key KEY [--json]"
-	usageCollections = "usage: zot collections [--json]"
-	usageNotes       = "usage: zot notes [--json]"
-	usageTags        = "usage: zot tags [--json]"
-	usageSearches    = "usage: zot searches [--json]"
-	usageDeleted     = "usage: zot deleted [--json]"
-	usageVersions    = "usage: zot versions <collections|searches|items|items-top> --since N [--include-trashed] [--if-modified-since-version N] [--json]"
+	usageFind                 = "usage: zot find <query> [--json] [--item-type TYPE] [--limit N]"
+	usageShow                 = "usage: zot show <item-key> [--json]"
+	usageCite                 = "usage: zot cite <item-key> [--format citation|bib] [--style STYLE] [--locale LOCALE] [--json]"
+	usageExport               = "usage: zot export <query> [--limit N] [--json] | zot export --item-key KEY [--json]"
+	usageCollections          = "usage: zot collections [--json]"
+	usageNotes                = "usage: zot notes [--json]"
+	usageTags                 = "usage: zot tags [--json]"
+	usageSearches             = "usage: zot searches [--json]"
+	usageDeleted              = "usage: zot deleted [--json]"
+	usageVersions             = "usage: zot versions <collections|searches|items|items-top> --since N [--include-trashed] [--if-modified-since-version N] [--json]"
+	usageItemTypes            = "usage: zot item-types [--json]"
+	usageItemFields           = "usage: zot item-fields [--json]"
+	usageCreatorFields        = "usage: zot creator-fields [--json]"
+	usageItemTypeFields       = "usage: zot item-type-fields <item-type> [--json]"
+	usageItemTypeCreatorTypes = "usage: zot item-type-creator-types <item-type> [--json]"
+	usageItemTemplate         = "usage: zot item-template <item-type> [--json]"
 )
 
 func runConfig(args []string) int {
@@ -560,6 +566,146 @@ func runVersions(args []string) int {
 
 	for key, version := range result.Versions {
 		fmt.Fprintf(stdout, "%-10s  %d\n", key, version)
+	}
+	return 0
+}
+
+func runItemTypes(args []string) int {
+	jsonOutput, ok := parseJSONOnlyArgs(args, usageItemTypes)
+	if !ok {
+		return 2
+	}
+
+	cfg, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	values, err := client.ListItemTypes(context.Background(), cfg.Locale)
+	if err != nil {
+		return printErr(err)
+	}
+
+	return renderLocalizedValues("item-types", values, jsonOutput)
+}
+
+func runItemFields(args []string) int {
+	jsonOutput, ok := parseJSONOnlyArgs(args, usageItemFields)
+	if !ok {
+		return 2
+	}
+
+	cfg, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	values, err := client.ListItemFields(context.Background(), cfg.Locale)
+	if err != nil {
+		return printErr(err)
+	}
+
+	return renderLocalizedValues("item-fields", values, jsonOutput)
+}
+
+func runCreatorFields(args []string) int {
+	jsonOutput, ok := parseJSONOnlyArgs(args, usageCreatorFields)
+	if !ok {
+		return 2
+	}
+
+	cfg, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	values, err := client.ListCreatorFields(context.Background(), cfg.Locale)
+	if err != nil {
+		return printErr(err)
+	}
+
+	return renderLocalizedValues("creator-fields", values, jsonOutput)
+}
+
+func runItemTypeFields(args []string) int {
+	itemType, jsonOutput, ok := parseSingleValueCommand(args, usageItemTypeFields)
+	if !ok {
+		return 2
+	}
+
+	cfg, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	values, err := client.ListItemTypeFields(context.Background(), itemType, cfg.Locale)
+	if err != nil {
+		return printErr(err)
+	}
+
+	return renderLocalizedValues("item-type-fields", values, jsonOutput)
+}
+
+func runItemTypeCreatorTypes(args []string) int {
+	itemType, jsonOutput, ok := parseSingleValueCommand(args, usageItemTypeCreatorTypes)
+	if !ok {
+		return 2
+	}
+
+	cfg, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	values, err := client.ListItemTypeCreatorTypes(context.Background(), itemType, cfg.Locale)
+	if err != nil {
+		return printErr(err)
+	}
+
+	return renderLocalizedValues("item-type-creator-types", values, jsonOutput)
+}
+
+func runItemTemplate(args []string) int {
+	itemType, jsonOutput, ok := parseSingleValueCommand(args, usageItemTemplate)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	template, err := client.GetItemTemplate(context.Background(), itemType)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{
+			OK:      true,
+			Command: "item-template",
+			Data:    template,
+		})
+	}
+
+	return writeJSON(template)
+}
+
+func renderLocalizedValues(command string, values []zoteroapi.LocalizedValue, jsonOutput bool) int {
+	if jsonOutput {
+		return writeJSON(jsonResponse{
+			OK:      true,
+			Command: command,
+			Data:    values,
+			Meta: map[string]any{
+				"total": len(values),
+			},
+		})
+	}
+
+	for _, value := range values {
+		fmt.Fprintf(stdout, "%-18s  %s\n", value.ID, value.Localized)
 	}
 	return 0
 }

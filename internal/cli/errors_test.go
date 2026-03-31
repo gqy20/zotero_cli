@@ -37,6 +37,12 @@ func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 		{name: "searches", args: []string{"searches"}},
 		{name: "deleted", args: []string{"deleted"}},
 		{name: "versions", args: []string{"versions", "items", "--since", "1"}},
+		{name: "item types", args: []string{"item-types"}},
+		{name: "item fields", args: []string{"item-fields"}},
+		{name: "creator fields", args: []string{"creator-fields"}},
+		{name: "item type fields", args: []string{"item-type-fields", "book"}},
+		{name: "item type creator types", args: []string{"item-type-creator-types", "book"}},
+		{name: "item template", args: []string{"item-template", "book"}},
 	}
 
 	for _, tc := range testCases {
@@ -143,6 +149,21 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			args:       []string{"versions", "items", "--since", "1", "--if-modified-since-version", "-1"},
 			wantUsage:  usageVersions,
 			wantStderr: "error: invalid value for --if-modified-since-version",
+		},
+		{
+			name:      "item type fields missing type",
+			args:      []string{"item-type-fields"},
+			wantUsage: usageItemTypeFields,
+		},
+		{
+			name:      "item type creator types missing type",
+			args:      []string{"item-type-creator-types"},
+			wantUsage: usageItemTypeCreatorTypes,
+		},
+		{
+			name:      "item template missing type",
+			args:      []string{"item-template"},
+			wantUsage: usageItemTemplate,
 		},
 	}
 

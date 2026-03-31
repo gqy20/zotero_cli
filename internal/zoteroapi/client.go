@@ -86,6 +86,11 @@ type VersionsResult struct {
 	NotModified         bool           `json:"not_modified,omitempty"`
 }
 
+type LocalizedValue struct {
+	ID        string `json:"id"`
+	Localized string `json:"localized"`
+}
+
 type Item struct {
 	Key         string       `json:"key"`
 	ItemType    string       `json:"item_type"`
@@ -200,6 +205,21 @@ type apiSearchCondition struct {
 	Condition string `json:"condition"`
 	Operator  string `json:"operator"`
 	Value     string `json:"value"`
+}
+
+type apiLocalizedItemType struct {
+	ItemType  string `json:"itemType"`
+	Localized string `json:"localized"`
+}
+
+type apiLocalizedField struct {
+	Field     string `json:"field"`
+	Localized string `json:"localized"`
+}
+
+type apiLocalizedCreatorType struct {
+	CreatorType string `json:"creatorType"`
+	Localized   string `json:"localized"`
 }
 
 type CitationResult struct {
@@ -494,6 +514,102 @@ func (c *Client) GetVersionsResult(ctx context.Context, opts VersionsOptions) (V
 	return result, nil
 }
 
+func (c *Client) ListItemTypes(ctx context.Context, locale string) ([]LocalizedValue, error) {
+	var raw []apiLocalizedItemType
+	if err := c.doGlobalJSONRequest(ctx, "itemTypes", map[string]string{"locale": locale}, &raw); err != nil {
+		return nil, err
+	}
+
+	out := make([]LocalizedValue, 0, len(raw))
+	for _, value := range raw {
+		out = append(out, LocalizedValue{
+			ID:        value.ItemType,
+			Localized: value.Localized,
+		})
+	}
+	return out, nil
+}
+
+func (c *Client) ListItemFields(ctx context.Context, locale string) ([]LocalizedValue, error) {
+	var raw []apiLocalizedField
+	if err := c.doGlobalJSONRequest(ctx, "itemFields", map[string]string{"locale": locale}, &raw); err != nil {
+		return nil, err
+	}
+
+	out := make([]LocalizedValue, 0, len(raw))
+	for _, value := range raw {
+		out = append(out, LocalizedValue{
+			ID:        value.Field,
+			Localized: value.Localized,
+		})
+	}
+	return out, nil
+}
+
+func (c *Client) ListCreatorFields(ctx context.Context, locale string) ([]LocalizedValue, error) {
+	var raw []apiLocalizedField
+	if err := c.doGlobalJSONRequest(ctx, "creatorFields", map[string]string{"locale": locale}, &raw); err != nil {
+		return nil, err
+	}
+
+	out := make([]LocalizedValue, 0, len(raw))
+	for _, value := range raw {
+		out = append(out, LocalizedValue{
+			ID:        value.Field,
+			Localized: value.Localized,
+		})
+	}
+	return out, nil
+}
+
+func (c *Client) ListItemTypeFields(ctx context.Context, itemType string, locale string) ([]LocalizedValue, error) {
+	var raw []apiLocalizedField
+	if err := c.doGlobalJSONRequest(ctx, "itemTypeFields", map[string]string{
+		"itemType": itemType,
+		"locale":   locale,
+	}, &raw); err != nil {
+		return nil, err
+	}
+
+	out := make([]LocalizedValue, 0, len(raw))
+	for _, value := range raw {
+		out = append(out, LocalizedValue{
+			ID:        value.Field,
+			Localized: value.Localized,
+		})
+	}
+	return out, nil
+}
+
+func (c *Client) ListItemTypeCreatorTypes(ctx context.Context, itemType string, locale string) ([]LocalizedValue, error) {
+	var raw []apiLocalizedCreatorType
+	if err := c.doGlobalJSONRequest(ctx, "itemTypeCreatorTypes", map[string]string{
+		"itemType": itemType,
+		"locale":   locale,
+	}, &raw); err != nil {
+		return nil, err
+	}
+
+	out := make([]LocalizedValue, 0, len(raw))
+	for _, value := range raw {
+		out = append(out, LocalizedValue{
+			ID:        value.CreatorType,
+			Localized: value.Localized,
+		})
+	}
+	return out, nil
+}
+
+func (c *Client) GetItemTemplate(ctx context.Context, itemType string) (map[string]any, error) {
+	var raw map[string]any
+	if err := c.doGlobalJSONRequest(ctx, path.Join("items", "new"), map[string]string{
+		"itemType": itemType,
+	}, &raw); err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
+
 func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {
 	return c.fetchAllItems(ctx, relativePath, opts)
 }
@@ -695,6 +811,39 @@ func versionsPath(objectType string) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported object type %q", objectType)
 	}
+}
+
+func (c *Client) doGlobalJSONRequest(ctx context.Context, relativePath string, query map[string]string, target any) error {
+	u, err := url.Parse(c.baseURL)
+	if err != nil {
+		return err
+	}
+	u.Path = path.Join(u.Path, relativePath)
+
+	values := u.Query()
+	for key, value := range query {
+		if value != "" {
+			values.Set(key, value)
+		}
+	}
+	u.RawQuery = values.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Zotero-API-Version", "3")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return apiErrorFromResponse(resp)
+	}
+	return json.NewDecoder(resp.Body).Decode(target)
 }
 
 func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOptions, extraQuery map[string]string, extraHeaders ...map[string]string) (*http.Response, error) {

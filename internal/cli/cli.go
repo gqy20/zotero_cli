@@ -51,6 +51,18 @@ func Run(args []string) int {
 		return runDeleted(args[1:])
 	case "versions":
 		return runVersions(args[1:])
+	case "item-types":
+		return runItemTypes(args[1:])
+	case "item-fields":
+		return runItemFields(args[1:])
+	case "creator-fields":
+		return runCreatorFields(args[1:])
+	case "item-type-fields":
+		return runItemTypeFields(args[1:])
+	case "item-type-creator-types":
+		return runItemTypeCreatorTypes(args[1:])
+	case "item-template":
+		return runItemTemplate(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -80,6 +92,12 @@ Commands:
   searches       List saved searches
   deleted        Show deleted object keys
   versions       Show changed object versions since a library version
+  item-types     List Zotero item types
+  item-fields    List Zotero item fields
+  creator-fields List Zotero creator fields
+  item-type-fields          List valid fields for an item type
+  item-type-creator-types   List valid creator types for an item type
+  item-template             Show template for a new item type
 `, exe, exe)
 }
 

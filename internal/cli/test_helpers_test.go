@@ -382,6 +382,42 @@ func newTestAPI(t *testing.T) (string, func()) {
 				"items":       []string{"ITEM1234", "ITEM5678"},
 				"tags":        []string{"obsolete"},
 			})
+		case "/itemTypes":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"itemType": "book", "localized": "Book"},
+				{"itemType": "note", "localized": "Note"},
+			})
+		case "/itemFields":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"field": "title", "localized": "Title"},
+				{"field": "url", "localized": "URL"},
+			})
+		case "/creatorFields":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"field": "firstName", "localized": "First"},
+				{"field": "lastName", "localized": "Last"},
+			})
+		case "/itemTypeFields":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"field": "title", "localized": "Title"},
+				{"field": "abstractNote", "localized": "Abstract"},
+			})
+		case "/itemTypeCreatorTypes":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"creatorType": "author", "localized": "Author"},
+				{"creatorType": "editor", "localized": "Editor"},
+			})
+		case "/items/new":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"itemType": "book",
+				"title":    "",
+				"creators": []map[string]any{
+					{"creatorType": "author", "firstName": "", "lastName": ""},
+				},
+				"tags":        []any{},
+				"collections": []any{},
+				"relations":   map[string]any{},
+			})
 		default:
 			http.NotFound(w, r)
 		}
