@@ -53,7 +53,59 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 }
 
 func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
-	return nil, fmt.Errorf("local find is not implemented yet")
+	db, err := sql.Open("sqlite", r.SQLitePath)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.QueryContext(ctx, localFindQuery(opts), localFindArgs(opts)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []domain.Item{}
+	for rows.Next() {
+		var (
+			item             domain.Item
+			itemID           int64
+			publicationTitle string
+			proceedingsTitle string
+			bookTitle        string
+		)
+		if err := rows.Scan(
+			&itemID,
+			&item.Key,
+			&item.Version,
+			&item.ItemType,
+			&item.Title,
+			&item.Date,
+			&item.DOI,
+			&item.URL,
+			&publicationTitle,
+			&proceedingsTitle,
+			&bookTitle,
+		); err != nil {
+			return nil, err
+		}
+		item.Container = firstNonEmptyString(publicationTitle, proceedingsTitle, bookTitle)
+		item.Date = normalizeLocalDate(item.Date)
+
+		item.Creators, err = r.loadCreators(ctx, db, itemID)
+		if err != nil {
+			return nil, err
+		}
+		item.Tags, err = r.loadTags(ctx, db, itemID)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, error) {
@@ -95,6 +147,109 @@ func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, err
 	item.Attachments = attachments
 	item.Notes = notes
 	return item, nil
+}
+
+func localFindQuery(opts FindOptions) string {
+	query := `
+		SELECT
+			i.itemID,
+			i.key,
+			COALESCE(i.version, 0),
+			it.typeName,
+			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'date' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'DOI' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'url' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'publicationTitle' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'proceedingsTitle' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), '')
+		FROM items i
+		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
+		LEFT JOIN itemData d ON d.itemID = i.itemID
+		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
+		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
+		WHERE ` + localVisibleItemClause(opts.ItemType) + `
+		AND ` + localQueryMatchClause() + `
+		GROUP BY i.itemID, i.key, i.version, it.typeName
+		ORDER BY i.key
+	`
+	if opts.Limit > 0 {
+		query += ` LIMIT ?`
+		if opts.Start > 0 {
+			query += ` OFFSET ?`
+		}
+	} else if opts.Start > 0 {
+		query += ` LIMIT -1 OFFSET ?`
+	}
+	return query
+}
+
+func localFindArgs(opts FindOptions) []any {
+	args := []any{}
+	if opts.ItemType != "" {
+		args = append(args, opts.ItemType)
+	}
+	query := strings.TrimSpace(strings.ToLower(opts.Query))
+	queryLike := "%" + query + "%"
+	args = append(args,
+		query,
+		queryLike,
+		queryLike,
+		queryLike,
+		queryLike,
+	)
+	if opts.Limit > 0 {
+		args = append(args, opts.Limit)
+		if opts.Start > 0 {
+			args = append(args, opts.Start)
+		}
+	} else if opts.Start > 0 {
+		args = append(args, opts.Start)
+	}
+	return args
+}
+
+func localVisibleItemClause(itemType string) string {
+	if itemType != "" {
+		return `it.typeName = ?`
+	}
+	return `
+		NOT EXISTS (SELECT 1 FROM itemAttachments ia WHERE ia.itemID = i.itemID)
+		AND NOT EXISTS (SELECT 1 FROM itemNotes n WHERE n.itemID = i.itemID)
+		AND NOT EXISTS (SELECT 1 FROM itemAnnotations a WHERE a.itemID = i.itemID)
+		AND it.typeName <> 'annotation'
+	`
+}
+
+func localQueryMatchClause() string {
+	return `(
+		? = ''
+		OR LOWER(i.key) LIKE ?
+		OR EXISTS (
+			SELECT 1
+			FROM itemData d2
+			JOIN itemDataValues v2 ON v2.valueID = d2.valueID
+			JOIN fieldsCombined f2 ON f2.fieldID = d2.fieldID
+			WHERE d2.itemID = i.itemID
+			AND f2.fieldName IN ('title', 'shortTitle', 'publicationTitle', 'bookTitle', 'proceedingsTitle', 'date')
+			AND LOWER(v2.value) LIKE ?
+		)
+		OR EXISTS (
+			SELECT 1
+			FROM itemCreators ic2
+			JOIN creators c2 ON c2.creatorID = ic2.creatorID
+			JOIN creatorData cd2 ON cd2.creatorDataID = c2.creatorDataID
+			WHERE ic2.itemID = i.itemID
+			AND LOWER(TRIM(COALESCE(cd2.firstName, '') || ' ' || COALESCE(cd2.lastName, ''))) LIKE ?
+		)
+		OR EXISTS (
+			SELECT 1
+			FROM itemTags it2
+			JOIN tags t2 ON t2.tagID = it2.tagID
+			WHERE it2.itemID = i.itemID
+			AND LOWER(t2.name) LIKE ?
+		)
+	)`
 }
 
 func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (domain.Item, int64, error) {
