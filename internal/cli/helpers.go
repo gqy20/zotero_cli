@@ -49,7 +49,22 @@ func parseFindArgs(args []string) (zoteroapi.FindOptions, bool, error) {
 				return zoteroapi.FindOptions{}, false, errors.New("missing value for --tag")
 			}
 			i++
-			opts.Tag = args[i]
+			opts.Tags = append(opts.Tags, args[i])
+			if opts.Tag == "" {
+				opts.Tag = args[i]
+			}
+		case "--date-after":
+			if i+1 >= len(args) {
+				return zoteroapi.FindOptions{}, false, errors.New("missing value for --date-after")
+			}
+			i++
+			opts.DateAfter = strings.TrimSpace(args[i])
+		case "--date-before":
+			if i+1 >= len(args) {
+				return zoteroapi.FindOptions{}, false, errors.New("missing value for --date-before")
+			}
+			i++
+			opts.DateBefore = strings.TrimSpace(args[i])
 		case "--limit":
 			if i+1 >= len(args) {
 				return zoteroapi.FindOptions{}, false, errors.New("missing value for --limit")
@@ -643,18 +658,85 @@ func writeJSON(value any) int {
 }
 
 func filterDefaultFindItems(items []zoteroapi.Item, opts zoteroapi.FindOptions) []zoteroapi.Item {
-	if opts.ItemType != "" {
-		return items
-	}
-
 	filtered := make([]zoteroapi.Item, 0, len(items))
 	for _, item := range items {
-		if item.ItemType == "attachment" || item.ItemType == "note" {
+		if opts.ItemType == "" && (item.ItemType == "attachment" || item.ItemType == "note") {
+			continue
+		}
+		if !matchesAllTags(item.Tags, opts.Tags) {
+			continue
+		}
+		if !matchesDateRange(item.Date, opts.DateAfter, opts.DateBefore) {
 			continue
 		}
 		filtered = append(filtered, item)
 	}
 	return filtered
+}
+
+func matchesAllTags(itemTags []string, required []string) bool {
+	if len(required) == 0 {
+		return true
+	}
+
+	tagSet := make(map[string]struct{}, len(itemTags))
+	for _, tag := range itemTags {
+		normalized := strings.TrimSpace(strings.ToLower(tag))
+		if normalized != "" {
+			tagSet[normalized] = struct{}{}
+		}
+	}
+
+	for _, tag := range required {
+		normalized := strings.TrimSpace(strings.ToLower(tag))
+		if normalized == "" {
+			continue
+		}
+		if _, ok := tagSet[normalized]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func matchesDateRange(itemDate string, after string, before string) bool {
+	if after == "" && before == "" {
+		return true
+	}
+
+	itemYear, ok := extractYear(itemDate)
+	if !ok {
+		return false
+	}
+
+	if after != "" {
+		afterYear, ok := extractYear(after)
+		if !ok || itemYear < afterYear {
+			return false
+		}
+	}
+
+	if before != "" {
+		beforeYear, ok := extractYear(before)
+		if !ok || itemYear > beforeYear {
+			return false
+		}
+	}
+
+	return true
+}
+
+func extractYear(value string) (int, bool) {
+	value = strings.TrimSpace(value)
+	if len(value) < 4 {
+		return 0, false
+	}
+
+	year, err := strconv.Atoi(value[:4])
+	if err != nil {
+		return 0, false
+	}
+	return year, true
 }
 
 func shortDate(value string) string {

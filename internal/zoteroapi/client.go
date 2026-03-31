@@ -37,10 +37,13 @@ type FindOptions struct {
 	Limit          int
 	Start          int
 	Tag            string
+	Tags           []string
 	Sort           string
 	Direction      string
 	QMode          string
 	IncludeTrashed bool
+	DateAfter      string
+	DateBefore     string
 }
 
 type CitationOptions struct {

@@ -281,17 +281,24 @@ func newTestAPI(t *testing.T) (string, func()) {
 
 			items := []map[string]any{
 				{
-					"key": "X42A7DEE",
+					"key":     "X42A7DEE",
+					"version": 42,
 					"data": map[string]any{
 						"itemType": "conferencePaper",
 						"title":    "Attention Is All You Need",
 						"date":     "2017",
+						"DOI":      "10.5555/attention",
+						"url":      "https://example.org/attention",
 						"creators": []map[string]any{
 							{
 								"creatorType": "author",
 								"firstName":   "Ashish",
 								"lastName":    "Vaswani",
 							},
+						},
+						"tags": []map[string]any{
+							{"tag": "transformers"},
+							{"tag": "classic"},
 						},
 					},
 				},
@@ -300,11 +307,13 @@ func newTestAPI(t *testing.T) (string, func()) {
 			if query == "mixed" {
 				items = []map[string]any{
 					{
-						"key": "ART12345",
+						"key":     "ART12345",
+						"version": 18,
 						"data": map[string]any{
 							"itemType": "journalArticle",
 							"title":    "Primary Article",
 							"date":     "2024",
+							"url":      "https://example.org/primary",
 							"creators": []map[string]any{
 								{
 									"creatorType": "author",
@@ -312,10 +321,15 @@ func newTestAPI(t *testing.T) (string, func()) {
 									"lastName":    "Lovelace",
 								},
 							},
+							"tags": []map[string]any{
+								{"tag": "ai"},
+								{"tag": "classic"},
+							},
 						},
 					},
 					{
-						"key": "ATT12345",
+						"key":     "ATT12345",
+						"version": 18,
 						"data": map[string]any{
 							"itemType": "attachment",
 							"title":    "Attachment PDF",
@@ -323,7 +337,8 @@ func newTestAPI(t *testing.T) (string, func()) {
 						},
 					},
 					{
-						"key": "NOTE1234",
+						"key":     "NOTE1234",
+						"version": 18,
 						"data": map[string]any{
 							"itemType": "note",
 							"title":    "My note",
@@ -331,17 +346,24 @@ func newTestAPI(t *testing.T) (string, func()) {
 						},
 					},
 					{
-						"key": "ART67890",
+						"key":     "ART67890",
+						"version": 21,
 						"data": map[string]any{
 							"itemType": "journalArticle",
 							"title":    "Secondary Article",
 							"date":     "2023",
+							"DOI":      "10.5555/secondary",
+							"url":      "https://example.org/secondary",
 							"creators": []map[string]any{
 								{
 									"creatorType": "author",
 									"firstName":   "Grace",
 									"lastName":    "Hopper",
 								},
+							},
+							"tags": []map[string]any{
+								{"tag": "ai"},
+								{"tag": "survey"},
 							},
 						},
 					},

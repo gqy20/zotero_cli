@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	usageFind                 = "usage: zot find <query> [--json] [--item-type TYPE] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed] | zot find --all [--json] [--item-type TYPE] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed]"
+	usageFind                 = "usage: zot find <query> [--json] [--item-type TYPE] [--tag TAG ...] [--date-after YYYY] [--date-before YYYY] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed] | zot find --all [--json] [--item-type TYPE] [--tag TAG ...] [--date-after YYYY] [--date-before YYYY] [--limit N] [--qmode titleCreatorYear|everything] [--include-trashed]"
 	usageShow                 = "usage: zot show <item-key> [--json]"
 	usageCite                 = "usage: zot cite <item-key> [--format citation|bib] [--style STYLE] [--locale LOCALE] [--json]"
 	usageExport               = "usage: zot export <query> [--limit N] [--format bib|bibtex|biblatex|csljson|ris] [--json] | zot export --item-key KEY [--format bib|bibtex|biblatex|csljson|ris] [--json]"
