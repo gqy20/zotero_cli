@@ -6,6 +6,38 @@ import (
 	"testing"
 )
 
+func TestRunFindRejectsUnimplementedLocalMode(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "attention"})
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "local mode is not implemented yet") {
+		t.Fatalf("expected local mode error, got %q", got)
+	}
+}
+
+func TestRunShowRejectsUnsupportedMode(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "bogus")
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"show", "X42A7DEE"})
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "unsupported mode \"bogus\"") {
+		t.Fatalf("expected unsupported mode error, got %q", got)
+	}
+}
+
 func TestRunShowJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

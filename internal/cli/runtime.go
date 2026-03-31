@@ -5,24 +5,46 @@ import (
 	"fmt"
 	"os"
 
+	"zotero_cli/internal/backend"
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/zoteroapi"
 )
 
-func loadClient() (config.Config, *zoteroapi.Client, int) {
+func loadConfig() (config.Config, int) {
 	cfg, _, err := config.Load()
 	if err != nil {
 		if errors.Is(err, config.ErrNotFound) {
 			fmt.Fprintln(stderr, "config not found.")
 			fmt.Fprintln(stderr, "required fields: library_type, library_id, api_key")
 			fmt.Fprintln(stderr, "run `zot config init` to set them up interactively in ~/.zot/.env")
-			return config.Config{}, nil, 3
+			return config.Config{}, 3
 		}
-		return config.Config{}, nil, printErr(err)
+		return config.Config{}, printErr(err)
+	}
+	return cfg, 0
+}
+
+func loadClient() (config.Config, *zoteroapi.Client, int) {
+	cfg, exitCode := loadConfig()
+	if exitCode != 0 {
+		return config.Config{}, nil, exitCode
 	}
 
 	baseURL := os.Getenv("ZOT_BASE_URL")
 	return cfg, zoteroapi.New(cfg, baseURL, nil), 0
+}
+
+func loadReader() (config.Config, backend.Reader, int) {
+	cfg, exitCode := loadConfig()
+	if exitCode != 0 {
+		return config.Config{}, nil, exitCode
+	}
+
+	reader, err := backend.NewReader(cfg, nil)
+	if err != nil {
+		return config.Config{}, nil, printErr(err)
+	}
+	return cfg, reader, 0
 }
 
 func boolToInt(value bool) int {

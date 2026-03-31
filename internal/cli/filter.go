@@ -4,19 +4,15 @@ import (
 	"strings"
 	"time"
 
+	"zotero_cli/internal/backend"
+	"zotero_cli/internal/domain"
 	"zotero_cli/internal/zoteroapi"
 )
 
-func filterDefaultFindItems(items []zoteroapi.Item, opts zoteroapi.FindOptions) []zoteroapi.Item {
-	filtered := make([]zoteroapi.Item, 0, len(items))
+func filterDefaultFindItems(items []domain.Item, opts backend.FindOptions) []domain.Item {
+	filtered := make([]domain.Item, 0, len(items))
 	for _, item := range items {
-		if opts.ItemType == "" && (item.ItemType == "attachment" || item.ItemType == "note") {
-			continue
-		}
-		if !matchesTags(item.Tags, opts.Tags, opts.TagAny) {
-			continue
-		}
-		if !matchesDateRange(item.Date, opts.DateAfter, opts.DateBefore) {
+		if !shouldIncludeFindItem(item.ItemType, item.Tags, item.Date, opts.ItemType, opts.Tags, opts.TagAny, opts.DateAfter, opts.DateBefore) {
 			continue
 		}
 		filtered = append(filtered, item)
@@ -117,12 +113,46 @@ func shortDate(value string) string {
 	return value
 }
 
-func shortCreators(creators []zoteroapi.Creator) string {
+func shortCreators(creators []domain.Creator) string {
 	if len(creators) == 0 {
 		return ""
 	}
-	name := creators[0].Name
-	if len(creators) == 1 {
+	return shortCreatorLabel(creators[0].Name, len(creators))
+}
+
+func shortCreatorsAPI(creators []zoteroapi.Creator) string {
+	if len(creators) == 0 {
+		return ""
+	}
+	return shortCreatorLabel(creators[0].Name, len(creators))
+}
+
+func filterDefaultFindItemsAPI(items []zoteroapi.Item, opts zoteroapi.FindOptions) []zoteroapi.Item {
+	filtered := make([]zoteroapi.Item, 0, len(items))
+	for _, item := range items {
+		if !shouldIncludeFindItem(item.ItemType, item.Tags, item.Date, opts.ItemType, opts.Tags, opts.TagAny, opts.DateAfter, opts.DateBefore) {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	return filtered
+}
+
+func shouldIncludeFindItem(itemType string, itemTags []string, itemDate string, requestedType string, requiredTags []string, anyMode bool, after string, before string) bool {
+	if requestedType == "" && (itemType == "attachment" || itemType == "note" || itemType == "annotation") {
+		return false
+	}
+	if !matchesTags(itemTags, requiredTags, anyMode) {
+		return false
+	}
+	if !matchesDateRange(itemDate, after, before) {
+		return false
+	}
+	return true
+}
+
+func shortCreatorLabel(name string, count int) string {
+	if count <= 1 {
 		return name
 	}
 	return name + " et al."

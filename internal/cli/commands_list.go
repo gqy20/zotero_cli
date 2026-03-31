@@ -456,7 +456,7 @@ func runTrash(args []string) int {
 			item.Key,
 			item.ItemType,
 			shortDate(item.Date),
-			shortCreators(item.Creators),
+			shortCreatorsAPI(item.Creators),
 			item.Title,
 		)
 	}
@@ -539,7 +539,7 @@ func runPublications(args []string) int {
 			item.Key,
 			item.ItemType,
 			shortDate(item.Date),
-			shortCreators(item.Creators),
+			shortCreatorsAPI(item.Creators),
 			item.Title,
 		)
 	}

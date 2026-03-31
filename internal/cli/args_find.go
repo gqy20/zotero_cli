@@ -6,11 +6,12 @@ import (
 	"strconv"
 	"strings"
 
+	"zotero_cli/internal/backend"
 	"zotero_cli/internal/zoteroapi"
 )
 
-func parseFindArgs(args []string) (zoteroapi.FindOptions, bool, bool, error) {
-	opts := zoteroapi.FindOptions{}
+func parseFindArgs(args []string) (backend.FindOptions, bool, bool, error) {
+	opts := backend.FindOptions{}
 	jsonOutput := false
 	queryProvided := false
 	queryParts := make([]string, 0, len(args))
@@ -25,13 +26,13 @@ func parseFindArgs(args []string) (zoteroapi.FindOptions, bool, bool, error) {
 			opts.Full = true
 		case "--item-type":
 			if i+1 >= len(args) {
-				return zoteroapi.FindOptions{}, false, false, errors.New("missing value for --item-type")
+				return backend.FindOptions{}, false, false, errors.New("missing value for --item-type")
 			}
 			i++
 			opts.ItemType = args[i]
 		case "--tag":
 			if i+1 >= len(args) {
-				return zoteroapi.FindOptions{}, false, false, errors.New("missing value for --tag")
+				return backend.FindOptions{}, false, false, errors.New("missing value for --tag")
 			}
 			i++
 			opts.Tags = append(opts.Tags, args[i])
@@ -39,68 +40,68 @@ func parseFindArgs(args []string) (zoteroapi.FindOptions, bool, bool, error) {
 			opts.TagAny = true
 		case "--include-fields":
 			if i+1 >= len(args) {
-				return zoteroapi.FindOptions{}, false, false, errors.New("missing value for --include-fields")
+				return backend.FindOptions{}, false, false, errors.New("missing value for --include-fields")
 			}
 			i++
 			fields, err := parseFindIncludeFields(args[i])
 			if err != nil {
-				return zoteroapi.FindOptions{}, false, false, err
+				return backend.FindOptions{}, false, false, err
 			}
 			opts.IncludeFields = append(opts.IncludeFields, fields...)
 		case "--date-after":
 			if i+1 >= len(args) {
-				return zoteroapi.FindOptions{}, false, false, errors.New("missing value for --date-after")
+				return backend.FindOptions{}, false, false, errors.New("missing value for --date-after")
 			}
 			i++
 			opts.DateAfter = strings.TrimSpace(args[i])
 		case "--date-before":
 			if i+1 >= len(args) {
-				return zoteroapi.FindOptions{}, false, false, errors.New("missing value for --date-before")
+				return backend.FindOptions{}, false, false, errors.New("missing value for --date-before")
 			}
 			i++
 			opts.DateBefore = strings.TrimSpace(args[i])
 		case "--limit":
 			if i+1 >= len(args) {
-				return zoteroapi.FindOptions{}, false, false, errors.New("missing value for --limit")
+				return backend.FindOptions{}, false, false, errors.New("missing value for --limit")
 			}
 			i++
 			limit, err := strconv.Atoi(args[i])
 			if err != nil || limit <= 0 {
-				return zoteroapi.FindOptions{}, false, false, errors.New("invalid value for --limit")
+				return backend.FindOptions{}, false, false, errors.New("invalid value for --limit")
 			}
 			opts.Limit = limit
 		case "--start":
 			if i+1 >= len(args) {
-				return zoteroapi.FindOptions{}, false, false, errors.New("missing value for --start")
+				return backend.FindOptions{}, false, false, errors.New("missing value for --start")
 			}
 			i++
 			start, err := strconv.Atoi(args[i])
 			if err != nil || start < 0 {
-				return zoteroapi.FindOptions{}, false, false, errors.New("invalid value for --start")
+				return backend.FindOptions{}, false, false, errors.New("invalid value for --start")
 			}
 			opts.Start = start
 		case "--sort":
 			if i+1 >= len(args) {
-				return zoteroapi.FindOptions{}, false, false, errors.New("missing value for --sort")
+				return backend.FindOptions{}, false, false, errors.New("missing value for --sort")
 			}
 			i++
 			opts.Sort = args[i]
 		case "--direction":
 			if i+1 >= len(args) {
-				return zoteroapi.FindOptions{}, false, false, errors.New("missing value for --direction")
+				return backend.FindOptions{}, false, false, errors.New("missing value for --direction")
 			}
 			i++
 			if args[i] != "asc" && args[i] != "desc" {
-				return zoteroapi.FindOptions{}, false, false, errors.New("invalid value for --direction")
+				return backend.FindOptions{}, false, false, errors.New("invalid value for --direction")
 			}
 			opts.Direction = args[i]
 		case "--qmode":
 			if i+1 >= len(args) {
-				return zoteroapi.FindOptions{}, false, false, errors.New("missing value for --qmode")
+				return backend.FindOptions{}, false, false, errors.New("missing value for --qmode")
 			}
 			i++
 			if args[i] != "titleCreatorYear" && args[i] != "everything" {
-				return zoteroapi.FindOptions{}, false, false, errors.New("invalid value for --qmode")
+				return backend.FindOptions{}, false, false, errors.New("invalid value for --qmode")
 			}
 			opts.QMode = args[i]
 		case "--include-trashed":

@@ -26,12 +26,12 @@ func runFind(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, reader, exitCode := loadReader()
 	if exitCode != 0 {
 		return exitCode
 	}
 
-	items, err := client.FindItems(context.Background(), opts)
+	items, err := reader.FindItems(context.Background(), opts)
 	if err != nil {
 		return printErr(err)
 	}
@@ -122,12 +122,12 @@ func runShow(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, reader, exitCode := loadReader()
 	if exitCode != 0 {
 		return exitCode
 	}
 
-	item, err := client.GetItem(context.Background(), key)
+	item, err := reader.GetItem(context.Background(), key)
 	if err != nil {
 		return printErr(err)
 	}
@@ -248,7 +248,7 @@ func runExport(args []string) int {
 		if err != nil {
 			return printErr(err)
 		}
-		items = filterDefaultFindItems(items, findOpts)
+		items = filterDefaultFindItemsAPI(items, findOpts)
 		for _, item := range items {
 			keys = append(keys, item.Key)
 		}
@@ -257,7 +257,7 @@ func runExport(args []string) int {
 		if err != nil {
 			return printErr(err)
 		}
-		items = filterDefaultFindItems(items, findOpts)
+		items = filterDefaultFindItemsAPI(items, findOpts)
 		for _, item := range items {
 			keys = append(keys, item.Key)
 		}
