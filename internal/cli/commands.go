@@ -39,6 +39,9 @@ const (
 	usageDeleteItem           = "usage: zot delete-item <item-key> --if-unmodified-since-version N [--json]"
 	usageCreateItems          = "usage: zot create-items (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
 	usageUpdateItems          = "usage: zot update-items (--data JSON | --from-file PATH) [--if-unmodified-since-version N] [--json]"
+	usageDeleteItems          = "usage: zot delete-items --items KEY1,KEY2 [--if-unmodified-since-version N] [--json]"
+	usageAddTag               = "usage: zot add-tag --items KEY1,KEY2 --tag TAG [--if-unmodified-since-version N] [--json]"
+	usageRemoveTag            = "usage: zot remove-tag --items KEY1,KEY2 --tag TAG [--if-unmodified-since-version N] [--json]"
 	usageCreateCollection     = "usage: zot create-collection (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
 	usageUpdateCollection     = "usage: zot update-collection <collection-key> (--data JSON | --from-file PATH) [--if-unmodified-since-version N] [--json]"
 	usageDeleteCollection     = "usage: zot delete-collection <collection-key> --if-unmodified-since-version N [--json]"
@@ -1049,6 +1052,79 @@ func runUpdateItems(args []string) int {
 		return writeJSON(jsonResponse{OK: true, Command: "update-items", Data: result})
 	}
 	fmt.Fprintf(stdout, "updated %d items (%d unchanged) at library version %d\n", len(result.Successful), len(result.Unchanged), result.LastModifiedVersion)
+	return 0
+}
+
+func runDeleteItems(args []string) int {
+	keys, version, _, jsonOutput, ok := parseKeysListArgs(args, usageDeleteItems, false, false)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	result, err := client.DeleteItems(context.Background(), keys, version)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: "delete-items", Data: result})
+	}
+	fmt.Fprintf(stdout, "deleted %d items at library version %d\n", len(result.Successful), result.LastModifiedVersion)
+	return 0
+}
+
+func runAddTag(args []string) int {
+	return runUpdateTags(args, usageAddTag, "add-tag", true)
+}
+
+func runRemoveTag(args []string) int {
+	return runUpdateTags(args, usageRemoveTag, "remove-tag", false)
+}
+
+func runUpdateTags(args []string, usage string, command string, add bool) int {
+	keys, version, tag, jsonOutput, ok := parseKeysListArgs(args, usage, false, true)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	items, err := client.GetItemsByKeys(context.Background(), keys)
+	if err != nil {
+		return printErr(err)
+	}
+
+	payload := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		updatedTags := mutateTags(item.Tags, tag, add)
+		payload = append(payload, map[string]any{
+			"key":     item.Key,
+			"version": item.Version,
+			"tags":    toAPITags(updatedTags),
+		})
+	}
+
+	result, err := client.UpdateItems(context.Background(), payload, version)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: command, Data: result})
+	}
+	action := "added"
+	if !add {
+		action = "removed"
+	}
+	fmt.Fprintf(stdout, "%s tag %q on %d items at library version %d\n", action, tag, len(keys), result.LastModifiedVersion)
 	return 0
 }
 

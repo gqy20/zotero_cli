@@ -2060,6 +2060,96 @@ func TestClientUpdateItems(t *testing.T) {
 	}
 }
 
+func TestClientDeleteItems(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/users/123/items" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("itemKey"); got != "ITEMA001,ITEMA002" {
+			t.Fatalf("unexpected itemKey: %q", got)
+		}
+		if got := r.Header.Get("If-Unmodified-Since-Version"); got != "53" {
+			t.Fatalf("unexpected If-Unmodified-Since-Version: %q", got)
+		}
+		w.Header().Set("Last-Modified-Version", "54")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.DeleteItems(context.Background(), []string{"ITEMA001", "ITEMA002"}, 53)
+	if err != nil {
+		t.Fatalf("DeleteItems returned error: %v", err)
+	}
+	if result.LastModifiedVersion != 54 || len(result.Successful) != 2 || result.Successful[1].Key != "ITEMA002" {
+		t.Fatalf("unexpected delete result: %#v", result)
+	}
+}
+
+func TestClientGetItemsByKeys(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123/items" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("itemKey"); got != "ITEMA001,ITEMA002" {
+			t.Fatalf("unexpected itemKey: %q", got)
+		}
+		if err := json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"key":     "ITEMA001",
+				"version": 52,
+				"data": map[string]any{
+					"itemType": "book",
+					"title":    "Book One",
+					"tags": []map[string]any{
+						{"tag": "ai"},
+					},
+				},
+			},
+			{
+				"key":     "ITEMA002",
+				"version": 53,
+				"data": map[string]any{
+					"itemType": "book",
+					"title":    "Book Two",
+					"tags": []map[string]any{
+						{"tag": "ml"},
+					},
+				},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	items, err := client.GetItemsByKeys(context.Background(), []string{"ITEMA001", "ITEMA002"})
+	if err != nil {
+		t.Fatalf("GetItemsByKeys returned error: %v", err)
+	}
+	if len(items) != 2 || items[0].Version != 52 || len(items[1].Tags) != 1 || items[1].Tags[0] != "ml" {
+		t.Fatalf("unexpected items: %#v", items)
+	}
+}
+
 func defaultString(value string, fallback string) string {
 	if value == "" {
 		return fallback

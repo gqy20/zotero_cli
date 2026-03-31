@@ -85,6 +85,12 @@ func Run(args []string) int {
 		return runCreateItems(args[1:])
 	case "update-items":
 		return runUpdateItems(args[1:])
+	case "delete-items":
+		return runDeleteItems(args[1:])
+	case "add-tag":
+		return runAddTag(args[1:])
+	case "remove-tag":
+		return runRemoveTag(args[1:])
 	case "create-collection":
 		return runCreateCollection(args[1:])
 	case "update-collection":
@@ -144,6 +150,9 @@ Commands:
   delete-item   Delete an item using a version precondition
   create-items  Create multiple items from a JSON array
   update-items  Update multiple items from a JSON array
+  delete-items  Delete multiple items by key
+  add-tag       Add a tag to multiple items
+  remove-tag    Remove a tag from multiple items
   create-collection  Create a collection from JSON data
   update-collection  Update a collection from JSON data
   delete-collection  Delete a collection using a version precondition

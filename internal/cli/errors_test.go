@@ -69,6 +69,9 @@ func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 		{name: "delete item", args: []string{"delete-item", "ABCD2345", "--if-unmodified-since-version", "1"}},
 		{name: "create items", args: []string{"create-items", "--data", `[{"itemType":"book"}]`, "--if-unmodified-since-version", "1"}},
 		{name: "update items", args: []string{"update-items", "--data", `[{"key":"ABCD2345","version":1,"title":"Updated"}]`}},
+		{name: "delete items", args: []string{"delete-items", "--items", "ABCD2345,EFGH6789"}},
+		{name: "add tag", args: []string{"add-tag", "--items", "ABCD2345", "--tag", "ai"}},
+		{name: "remove tag", args: []string{"remove-tag", "--items", "ABCD2345", "--tag", "ai"}},
 		{name: "create collection", args: []string{"create-collection", "--data", `{"name":"New Collection"}`, "--if-unmodified-since-version", "1"}},
 		{name: "update collection", args: []string{"update-collection", "COLL1234", "--data", `{"key":"COLL1234","version":1,"name":"Renamed"}`}},
 		{name: "delete collection", args: []string{"delete-collection", "COLL1234", "--if-unmodified-since-version", "1"}},
@@ -263,6 +266,21 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			name:      "update items missing data",
 			args:      []string{"update-items"},
 			wantUsage: usageUpdateItems,
+		},
+		{
+			name:      "delete items missing keys",
+			args:      []string{"delete-items"},
+			wantUsage: usageDeleteItems,
+		},
+		{
+			name:      "add tag missing tag",
+			args:      []string{"add-tag", "--items", "ITEMA001"},
+			wantUsage: usageAddTag,
+		},
+		{
+			name:      "remove tag missing items",
+			args:      []string{"remove-tag", "--tag", "ai"},
+			wantUsage: usageRemoveTag,
 		},
 		{
 			name:      "create collection missing data",

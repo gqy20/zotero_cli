@@ -1176,6 +1176,72 @@ func TestRunUpdateItemsText(t *testing.T) {
 	}
 }
 
+func TestRunDeleteItemsText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"delete-items", "--items", "ITEMA001,ITEMA002"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "deleted 2 items at library version 54") {
+		t.Fatalf("unexpected output: %q", got)
+	}
+}
+
+func TestRunAddTagJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"add-tag", "--items", "ITEMA001,ITEMA002", "--tag", "paper", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	if got["command"] != "add-tag" {
+		t.Fatalf("unexpected command: %#v", got["command"])
+	}
+	data, ok := got["data"].(map[string]any)
+	if !ok || data["last_modified_version"] != float64(53) {
+		t.Fatalf("unexpected payload: %#v", got["data"])
+	}
+}
+
+func TestRunRemoveTagText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"remove-tag", "--items", "ITEMA001,ITEMA002", "--tag", "ai"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, `removed tag "ai" on 2 items at library version 53`) {
+		t.Fatalf("unexpected output: %q", got)
+	}
+}
+
 func TestRunCreateItemFromFileText(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

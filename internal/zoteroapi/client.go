@@ -148,6 +148,7 @@ type LibraryStats struct {
 }
 
 type Item struct {
+	Version     int          `json:"version,omitempty"`
 	Key         string       `json:"key"`
 	ItemType    string       `json:"item_type"`
 	Title       string       `json:"title"`
@@ -175,8 +176,9 @@ type Attachment struct {
 }
 
 type apiItem struct {
-	Key  string      `json:"key"`
-	Data apiItemData `json:"data"`
+	Key     string      `json:"key"`
+	Version int         `json:"version"`
+	Data    apiItemData `json:"data"`
 }
 
 type apiItemData struct {
@@ -592,6 +594,28 @@ func (c *Client) DeleteItem(ctx context.Context, key string, ifUnmodifiedSinceVe
 	}, nil
 }
 
+func (c *Client) DeleteItems(ctx context.Context, keys []string, ifUnmodifiedSinceVersion int) (BatchWriteResult, error) {
+	resp, err := c.doDeleteByKeysRequest(ctx, "items", keys, ifUnmodifiedSinceVersion)
+	if err != nil {
+		return BatchWriteResult{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		return BatchWriteResult{}, apiErrorFromResponse(resp)
+	}
+
+	successful := make([]WriteResult, 0, len(keys))
+	for _, key := range keys {
+		successful = append(successful, WriteResult{Key: key})
+	}
+
+	return BatchWriteResult{
+		Successful:          successful,
+		LastModifiedVersion: parseLastModifiedVersion(resp.Header.Get("Last-Modified-Version")),
+	}, nil
+}
+
 func (c *Client) CreateItems(ctx context.Context, data []map[string]any, ifUnmodifiedSinceVersion int) (BatchWriteResult, error) {
 	resp, err := c.doWriteRequest(ctx, http.MethodPost, "items", data, ifUnmodifiedSinceVersion)
 	if err != nil {
@@ -628,6 +652,31 @@ func (c *Client) UpdateItems(ctx context.Context, data []map[string]any, ifUnmod
 	}
 
 	return mapBatchWriteResult(result, resp.Header), nil
+}
+
+func (c *Client) GetItemsByKeys(ctx context.Context, keys []string) ([]Item, error) {
+	resp, err := c.doRequest(ctx, "items", FindOptions{}, map[string]string{
+		"itemKey": strings.Join(keys, ","),
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, apiErrorFromResponse(resp)
+	}
+
+	var raw []apiItem
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, err
+	}
+
+	items := make([]Item, 0, len(raw))
+	for _, item := range raw {
+		items = append(items, mapItem(item))
+	}
+	return items, nil
 }
 
 func (c *Client) CreateCollection(ctx context.Context, data map[string]any, ifUnmodifiedSinceVersion int) (WriteResult, error) {
@@ -1509,6 +1558,40 @@ func (c *Client) doWriteRequest(ctx context.Context, method string, relativePath
 	return c.doHTTPRequest(ctx, method, u.String(), payload, false, headers)
 }
 
+func (c *Client) doDeleteByKeysRequest(ctx context.Context, relativePath string, keys []string, ifUnmodifiedSinceVersion int) (*http.Response, error) {
+	if c.cfg.Mode != "" && c.cfg.Mode != "web" {
+		return nil, fmt.Errorf("unsupported mode %q", c.cfg.Mode)
+	}
+
+	u, err := url.Parse(c.baseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	switch c.cfg.LibraryType {
+	case "user":
+		u.Path = path.Join(u.Path, "users", c.cfg.LibraryID, relativePath)
+	case "group":
+		u.Path = path.Join(u.Path, "groups", c.cfg.LibraryID, relativePath)
+	default:
+		return nil, fmt.Errorf("unsupported library_type %q", c.cfg.LibraryType)
+	}
+
+	values := u.Query()
+	values.Set("itemKey", strings.Join(keys, ","))
+	u.RawQuery = values.Encode()
+
+	headers := map[string]string{
+		"Zotero-API-Key":     c.cfg.APIKey,
+		"Zotero-API-Version": "3",
+	}
+	if ifUnmodifiedSinceVersion > 0 {
+		headers["If-Unmodified-Since-Version"] = strconv.Itoa(ifUnmodifiedSinceVersion)
+	}
+
+	return c.doHTTPRequest(ctx, http.MethodDelete, u.String(), nil, false, headers)
+}
+
 func (c *Client) doHTTPRequest(ctx context.Context, method string, rawURL string, body []byte, retryable bool, headers map[string]string) (*http.Response, error) {
 	attempts := 1
 	if retryable && c.cfg.RetryMaxAttempts > 1 {
@@ -1614,6 +1697,7 @@ func compactWhitespace(value string) string {
 
 func mapItem(item apiItem) Item {
 	return Item{
+		Version:   item.Version,
 		Key:       item.Key,
 		ItemType:  item.Data.ItemType,
 		Title:     item.Data.Title,

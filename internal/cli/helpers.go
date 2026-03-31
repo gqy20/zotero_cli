@@ -555,6 +555,66 @@ func parseWriteBatchArgs(args []string, usage string, requireVersion bool) ([]ma
 	return data, version, jsonOutput, true
 }
 
+func parseKeysListArgs(args []string, usage string, requireVersion bool, requireTag bool) ([]string, int, string, bool, bool) {
+	var keysValue string
+	var version int
+	var tag string
+	var jsonOutput bool
+	var versionSet bool
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonOutput = true
+		case "--items":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, usage)
+				return nil, 0, "", false, false
+			}
+			i++
+			keysValue = args[i]
+		case "--tag":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, usage)
+				return nil, 0, "", false, false
+			}
+			i++
+			tag = strings.TrimSpace(args[i])
+		case "--if-unmodified-since-version":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, usage)
+				return nil, 0, "", false, false
+			}
+			i++
+			parsed, err := strconv.Atoi(args[i])
+			if err != nil || parsed <= 0 {
+				fmt.Fprintln(stderr, usage)
+				return nil, 0, "", false, false
+			}
+			version = parsed
+			versionSet = true
+		default:
+			fmt.Fprintln(stderr, usage)
+			return nil, 0, "", false, false
+		}
+	}
+
+	keys := make([]string, 0)
+	for _, key := range strings.Split(keysValue, ",") {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+
+	if len(keys) == 0 || (requireVersion && !versionSet) || (requireTag && tag == "") {
+		fmt.Fprintln(stderr, usage)
+		return nil, 0, "", false, false
+	}
+
+	return keys, version, tag, jsonOutput, true
+}
+
 func loadClient() (config.Config, *zoteroapi.Client, int) {
 	cfg, _, err := config.Load()
 	if err != nil {
@@ -695,4 +755,36 @@ func maskSecret(value string) string {
 		return "****"
 	}
 	return strings.Repeat("*", len(value)-4) + value[len(value)-4:]
+}
+
+func mutateTags(existing []string, tag string, add bool) []string {
+	seen := make(map[string]struct{}, len(existing)+1)
+	out := make([]string, 0, len(existing)+1)
+	for _, current := range existing {
+		if current == "" {
+			continue
+		}
+		if !add && current == tag {
+			continue
+		}
+		if _, ok := seen[current]; ok {
+			continue
+		}
+		seen[current] = struct{}{}
+		out = append(out, current)
+	}
+	if add {
+		if _, ok := seen[tag]; !ok {
+			out = append(out, tag)
+		}
+	}
+	return out
+}
+
+func toAPITags(tags []string) []map[string]string {
+	out := make([]map[string]string, 0, len(tags))
+	for _, tag := range tags {
+		out = append(out, map[string]string{"tag": tag})
+	}
+	return out
 }

@@ -103,7 +103,28 @@ func newTestAPI(t *testing.T) (string, func()) {
 			return
 		}
 		if r.Method == http.MethodPatch && r.URL.Path == "/users/123456/items" {
+			var body []map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
 			w.Header().Set("Last-Modified-Version", "53")
+			if len(body) > 0 {
+				if tags, ok := body[0]["tags"]; ok && tags != nil {
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"successful": map[string]any{
+							"0": map[string]any{
+								"key":     "ITEMA001",
+								"version": 53,
+							},
+							"1": map[string]any{
+								"key":     "ITEMA002",
+								"version": 53,
+							},
+						},
+						"unchanged": map[string]any{},
+						"failed":    map[string]any{},
+					})
+					return
+				}
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"successful": map[string]any{
 					"0": map[string]any{
@@ -116,6 +137,11 @@ func newTestAPI(t *testing.T) (string, func()) {
 				},
 				"failed": map[string]any{},
 			})
+			return
+		}
+		if r.Method == http.MethodDelete && r.URL.Path == "/users/123456/items" {
+			w.Header().Set("Last-Modified-Version", "54")
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		if r.Method == http.MethodPatch && r.URL.Path == "/users/123456/items/ABCD2345" {
@@ -187,6 +213,33 @@ func newTestAPI(t *testing.T) (string, func()) {
 			if itemKey != "" && format == "csljson" {
 				_ = json.NewEncoder(w).Encode([]map[string]any{
 					{"id": "X42A7DEE", "title": "Attention Is All You Need"},
+				})
+				return
+			}
+			if itemKey == "ITEMA001,ITEMA002" {
+				_ = json.NewEncoder(w).Encode([]map[string]any{
+					{
+						"key":     "ITEMA001",
+						"version": 52,
+						"data": map[string]any{
+							"itemType": "book",
+							"title":    "Book One",
+							"tags": []map[string]any{
+								{"tag": "ai"},
+							},
+						},
+					},
+					{
+						"key":     "ITEMA002",
+						"version": 52,
+						"data": map[string]any{
+							"itemType": "book",
+							"title":    "Book Two",
+							"tags": []map[string]any{
+								{"tag": "ml"},
+							},
+						},
+					},
 				})
 				return
 			}
