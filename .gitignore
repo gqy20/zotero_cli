@@ -13,6 +13,7 @@ zot
 *.test
 *.out
 coverage.out
+.gocache/
 
 # Editor and OS noise
 .DS_Store
