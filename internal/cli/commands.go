@@ -18,6 +18,8 @@ const (
 	usageExport      = "usage: zot export <query> [--limit N] [--json] | zot export --item-key KEY [--json]"
 	usageCollections = "usage: zot collections [--json]"
 	usageNotes       = "usage: zot notes [--json]"
+	usageTags        = "usage: zot tags [--json]"
+	usageSearches    = "usage: zot searches [--json]"
 )
 
 func runConfig(args []string) int {
@@ -405,6 +407,72 @@ func runNotes(args []string) int {
 
 	for _, note := range visible {
 		fmt.Fprintf(stdout, "%-10s  %s\n", note.Key, notePreview(note.Content))
+	}
+	return 0
+}
+
+func runTags(args []string) int {
+	jsonOutput, ok := parseJSONOnlyArgs(args, usageTags)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	tags, err := client.ListTags(context.Background())
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{
+			OK:      true,
+			Command: "tags",
+			Data:    tags,
+			Meta: map[string]any{
+				"total": len(tags),
+			},
+		})
+	}
+
+	for _, tag := range tags {
+		fmt.Fprintf(stdout, "%-20s  items=%d\n", tag.Name, tag.NumItems)
+	}
+	return 0
+}
+
+func runSearches(args []string) int {
+	jsonOutput, ok := parseJSONOnlyArgs(args, usageSearches)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	searches, err := client.ListSearches(context.Background())
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{
+			OK:      true,
+			Command: "searches",
+			Data:    searches,
+			Meta: map[string]any{
+				"total": len(searches),
+			},
+		})
+	}
+
+	for _, search := range searches {
+		fmt.Fprintf(stdout, "%-10s  %-24s  conditions=%d\n", search.Key, search.Name, search.NumConditions)
 	}
 	return 0
 }

@@ -382,3 +382,117 @@ func TestRunNotesTextShowsFriendlyMessageWhenOnlyMachineNotesExist(t *testing.T)
 		t.Fatalf("expected machine notes to stay hidden in text output, got %q", got)
 	}
 }
+
+func TestRunTagsJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"tags", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+
+	if got["command"] != "tags" {
+		t.Fatalf("unexpected command: %#v", got["command"])
+	}
+
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 2 {
+		t.Fatalf("unexpected tags payload: %#v", got["data"])
+	}
+}
+
+func TestRunTagsText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"tags"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"transformers",
+		"items=4",
+		"ai",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output %q", want, got)
+		}
+	}
+}
+
+func TestRunSearchesJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"searches", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+
+	if got["command"] != "searches" {
+		t.Fatalf("unexpected command: %#v", got["command"])
+	}
+
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected searches payload: %#v", got["data"])
+	}
+}
+
+func TestRunSearchesText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"searches"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"SCH12345",
+		"Unread PDFs",
+		"conditions=2",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output %q", want, got)
+		}
+	}
+}

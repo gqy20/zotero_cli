@@ -495,6 +495,96 @@ func TestClientUsesGroupLibraryPath(t *testing.T) {
 	}
 }
 
+func TestClientListTags(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123/tags" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		if err := json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"tag": "transformers",
+				"meta": map[string]any{
+					"numItems": 4,
+				},
+			},
+			{
+				"tag": "ai",
+				"meta": map[string]any{
+					"numItems": 2,
+				},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	tags, err := client.ListTags(context.Background())
+	if err != nil {
+		t.Fatalf("ListTags returned error: %v", err)
+	}
+
+	if len(tags) != 2 {
+		t.Fatalf("expected 2 tags, got %d", len(tags))
+	}
+	if tags[0].Name != "transformers" || tags[0].NumItems != 4 {
+		t.Fatalf("unexpected tag: %#v", tags[0])
+	}
+}
+
+func TestClientListSearches(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123/searches" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		if err := json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"key": "SCH12345",
+				"data": map[string]any{
+					"name": "Unread PDFs",
+					"conditions": []map[string]any{
+						{"condition": "itemType", "operator": "is", "value": "attachment"},
+						{"condition": "tag", "operator": "contains", "value": "pdf"},
+					},
+				},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	searches, err := client.ListSearches(context.Background())
+	if err != nil {
+		t.Fatalf("ListSearches returned error: %v", err)
+	}
+
+	if len(searches) != 1 {
+		t.Fatalf("expected 1 search, got %d", len(searches))
+	}
+	if searches[0].Key != "SCH12345" || searches[0].Name != "Unread PDFs" || searches[0].NumConditions != 2 {
+		t.Fatalf("unexpected search: %#v", searches[0])
+	}
+}
+
 func TestClientFindItemsMapsUnauthorizedError(t *testing.T) {
 	t.Parallel()
 

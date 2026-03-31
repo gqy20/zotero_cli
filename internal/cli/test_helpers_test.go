@@ -314,6 +314,34 @@ func newTestAPI(t *testing.T) (string, func()) {
 					},
 				},
 			})
+		case "/users/123456/tags":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"tag": "transformers",
+					"meta": map[string]any{
+						"numItems": 4,
+					},
+				},
+				{
+					"tag": "ai",
+					"meta": map[string]any{
+						"numItems": 2,
+					},
+				},
+			})
+		case "/users/123456/searches":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"key": "SCH12345",
+					"data": map[string]any{
+						"name": "Unread PDFs",
+						"conditions": []map[string]any{
+							{"condition": "itemType", "operator": "is", "value": "attachment"},
+							{"condition": "tag", "operator": "contains", "value": "pdf"},
+						},
+					},
+				},
+			})
 		default:
 			http.NotFound(w, r)
 		}

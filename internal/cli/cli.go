@@ -43,6 +43,10 @@ func Run(args []string) int {
 		return runCollections(args[1:])
 	case "notes":
 		return runNotes(args[1:])
+	case "tags":
+		return runTags(args[1:])
+	case "searches":
+		return runSearches(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -68,6 +72,8 @@ Commands:
   export         Export bibliography entries
   collections    List collections
   notes          List notes
+  tags           List tags
+  searches       List saved searches
 `, exe, exe)
 }
 

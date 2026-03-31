@@ -55,6 +55,17 @@ type Note struct {
 	Content string `json:"content"`
 }
 
+type Tag struct {
+	Name     string `json:"name"`
+	NumItems int    `json:"num_items,omitempty"`
+}
+
+type Search struct {
+	Key           string `json:"key"`
+	Name          string `json:"name"`
+	NumConditions int    `json:"num_conditions,omitempty"`
+}
+
 type Item struct {
 	Key         string       `json:"key"`
 	ItemType    string       `json:"item_type"`
@@ -144,6 +155,31 @@ type apiNoteData struct {
 type apiNoteItem struct {
 	Key  string      `json:"key"`
 	Data apiNoteData `json:"data"`
+}
+
+type apiTagResponse struct {
+	Tag  string     `json:"tag"`
+	Meta apiTagMeta `json:"meta"`
+}
+
+type apiTagMeta struct {
+	NumItems int `json:"numItems"`
+}
+
+type apiSearch struct {
+	Key  string        `json:"key"`
+	Data apiSearchData `json:"data"`
+}
+
+type apiSearchData struct {
+	Name       string               `json:"name"`
+	Conditions []apiSearchCondition `json:"conditions"`
+}
+
+type apiSearchCondition struct {
+	Condition string `json:"condition"`
+	Operator  string `json:"operator"`
+	Value     string `json:"value"`
 }
 
 type CitationResult struct {
@@ -323,6 +359,41 @@ func (c *Client) ListNotes(ctx context.Context) ([]Note, error) {
 	return notes, nil
 }
 
+func (c *Client) ListTags(ctx context.Context) ([]Tag, error) {
+	raw, err := c.getTags(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tags := make([]Tag, 0, len(raw))
+	for _, tag := range raw {
+		tags = append(tags, Tag{
+			Name:     tag.Tag,
+			NumItems: tag.Meta.NumItems,
+		})
+	}
+
+	return tags, nil
+}
+
+func (c *Client) ListSearches(ctx context.Context) ([]Search, error) {
+	raw, err := c.getSearches(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	searches := make([]Search, 0, len(raw))
+	for _, search := range raw {
+		searches = append(searches, Search{
+			Key:           search.Key,
+			Name:          search.Data.Name,
+			NumConditions: len(search.Data.Conditions),
+		})
+	}
+
+	return searches, nil
+}
+
 func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {
 	return c.fetchAllItems(ctx, relativePath, opts)
 }
@@ -333,6 +404,14 @@ func (c *Client) getCollections(ctx context.Context) ([]apiCollection, error) {
 
 func (c *Client) getNotes(ctx context.Context) ([]apiNoteItem, error) {
 	return c.fetchAllNotes(ctx, "items", FindOptions{ItemType: "note"})
+}
+
+func (c *Client) getTags(ctx context.Context) ([]apiTagResponse, error) {
+	return c.fetchAllTags(ctx, "tags")
+}
+
+func (c *Client) getSearches(ctx context.Context) ([]apiSearch, error) {
+	return c.fetchAllSearches(ctx, "searches")
 }
 
 func (c *Client) fetchAllItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {
@@ -404,6 +483,54 @@ func (c *Client) fetchAllNotes(ctx context.Context, relativePath string, opts Fi
 		}
 
 		current.Start += len(page)
+	}
+}
+
+func (c *Client) fetchAllTags(ctx context.Context, relativePath string) ([]apiTagResponse, error) {
+	all := make([]apiTagResponse, 0)
+	opts := FindOptions{}
+
+	for {
+		resp, err := c.doRequest(ctx, relativePath, opts, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		page, total, err := decodeResponseWithTotal[apiTagResponse](resp)
+		if err != nil {
+			return nil, err
+		}
+
+		all = append(all, page...)
+		if !shouldContinuePagination(len(page), len(all), total, 0) {
+			return all, nil
+		}
+
+		opts.Start += len(page)
+	}
+}
+
+func (c *Client) fetchAllSearches(ctx context.Context, relativePath string) ([]apiSearch, error) {
+	all := make([]apiSearch, 0)
+	opts := FindOptions{}
+
+	for {
+		resp, err := c.doRequest(ctx, relativePath, opts, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		page, total, err := decodeResponseWithTotal[apiSearch](resp)
+		if err != nil {
+			return nil, err
+		}
+
+		all = append(all, page...)
+		if !shouldContinuePagination(len(page), len(all), total, 0) {
+			return all, nil
+		}
+
+		opts.Start += len(page)
 	}
 }
 
