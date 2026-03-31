@@ -79,6 +79,12 @@ func Run(args []string) int {
 		return runUpdateItem(args[1:])
 	case "delete-item":
 		return runDeleteItem(args[1:])
+	case "create-collection":
+		return runCreateCollection(args[1:])
+	case "update-collection":
+		return runUpdateCollection(args[1:])
+	case "delete-collection":
+		return runDeleteCollection(args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
@@ -122,6 +128,9 @@ Commands:
   create-item   Create a new item from JSON data
   update-item   Update an existing item from JSON data
   delete-item   Delete an item using a version precondition
+  create-collection  Create a collection from JSON data
+  update-collection  Update a collection from JSON data
+  delete-collection  Delete a collection using a version precondition
 `, exe, exe)
 }
 

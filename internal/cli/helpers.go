@@ -362,13 +362,18 @@ func parseWriteCreateArgs(args []string, usage string) (map[string]any, int, boo
 	return data, version, jsonOutput, true
 }
 
-func parseWriteUpdateArgs(args []string, usage string) (string, map[string]any, int, bool, bool) {
+func parseWriteUpdateArgs(args []string, usage string, requireVersion bool) (string, map[string]any, int, bool, bool) {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, usage)
 		return "", nil, 0, false, false
 	}
 	key := args[0]
 	data, version, jsonOutput, ok := parseWriteCreateArgs(args[1:], usage)
+	if ok {
+		return key, data, version, jsonOutput, true
+	}
+
+	data, version, jsonOutput, ok = parseWriteCreateLikeArgs(args[1:], usage, requireVersion)
 	if !ok {
 		return "", nil, 0, false, false
 	}
@@ -414,6 +419,72 @@ func parseWriteDeleteArgs(args []string, usage string) (string, int, bool, bool)
 	}
 
 	return key, version, jsonOutput, true
+}
+
+func parseWriteCreateLikeArgs(args []string, usage string, requireVersion bool) (map[string]any, int, bool, bool) {
+	var raw string
+	var fromFile string
+	var version int
+	var jsonOutput bool
+	var versionSet bool
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonOutput = true
+		case "--data":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, usage)
+				return nil, 0, false, false
+			}
+			i++
+			raw = args[i]
+		case "--from-file":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, usage)
+				return nil, 0, false, false
+			}
+			i++
+			fromFile = args[i]
+		case "--if-unmodified-since-version":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, usage)
+				return nil, 0, false, false
+			}
+			i++
+			parsed, err := strconv.Atoi(args[i])
+			if err != nil || parsed <= 0 {
+				fmt.Fprintln(stderr, usage)
+				return nil, 0, false, false
+			}
+			version = parsed
+			versionSet = true
+		default:
+			fmt.Fprintln(stderr, usage)
+			return nil, 0, false, false
+		}
+	}
+
+	if (raw == "" && fromFile == "") || (raw != "" && fromFile != "") || (requireVersion && !versionSet) {
+		fmt.Fprintln(stderr, usage)
+		return nil, 0, false, false
+	}
+
+	if fromFile != "" {
+		content, err := os.ReadFile(fromFile)
+		if err != nil {
+			fmt.Fprintln(stderr, usage)
+			return nil, 0, false, false
+		}
+		raw = string(content)
+	}
+
+	var data map[string]any
+	if err := json.Unmarshal([]byte(raw), &data); err != nil {
+		fmt.Fprintln(stderr, usage)
+		return nil, 0, false, false
+	}
+	return data, version, jsonOutput, true
 }
 
 func loadClient() (config.Config, *zoteroapi.Client, int) {

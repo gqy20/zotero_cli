@@ -1118,3 +1118,71 @@ func TestRunUpdateItemFromFileJSON(t *testing.T) {
 		t.Fatalf("unexpected update payload: %#v", got["data"])
 	}
 }
+
+func TestRunCreateCollectionText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"create-collection", "--data", `{"name":"New Collection"}`, "--if-unmodified-since-version", "10"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "created collection COLLNEW1") {
+		t.Fatalf("unexpected output: %q", got)
+	}
+}
+
+func TestRunUpdateCollectionFromFileJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	payloadPath := filepath.Join(t.TempDir(), "collection.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"key":"COLL1234","version":11,"name":"Renamed Collection"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"update-collection", "COLL1234", "--from-file", payloadPath, "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].(map[string]any)
+	if !ok || data["last_modified_version"] != float64(12) {
+		t.Fatalf("unexpected payload: %#v", got["data"])
+	}
+}
+
+func TestRunDeleteCollectionText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"delete-collection", "COLL1234", "--if-unmodified-since-version", "12"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "deleted collection COLL1234") {
+		t.Fatalf("unexpected output: %q", got)
+	}
+}

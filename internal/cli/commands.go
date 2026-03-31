@@ -36,6 +36,9 @@ const (
 	usageCreateItem           = "usage: zot create-item (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
 	usageUpdateItem           = "usage: zot update-item <item-key> (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
 	usageDeleteItem           = "usage: zot delete-item <item-key> --if-unmodified-since-version N [--json]"
+	usageCreateCollection     = "usage: zot create-collection (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
+	usageUpdateCollection     = "usage: zot update-collection <collection-key> (--data JSON | --from-file PATH) [--if-unmodified-since-version N] [--json]"
+	usageDeleteCollection     = "usage: zot delete-collection <collection-key> --if-unmodified-since-version N [--json]"
 )
 
 func runConfig(args []string) int {
@@ -899,7 +902,7 @@ func runCreateItem(args []string) int {
 }
 
 func runUpdateItem(args []string) int {
-	key, data, version, jsonOutput, ok := parseWriteUpdateArgs(args, usageUpdateItem)
+	key, data, version, jsonOutput, ok := parseWriteUpdateArgs(args, usageUpdateItem, true)
 	if !ok {
 		return 2
 	}
@@ -941,6 +944,75 @@ func runDeleteItem(args []string) int {
 		return writeJSON(jsonResponse{OK: true, Command: "delete-item", Data: result})
 	}
 	fmt.Fprintf(stdout, "deleted item %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	return 0
+}
+
+func runCreateCollection(args []string) int {
+	data, version, jsonOutput, ok := parseWriteCreateArgs(args, usageCreateCollection)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	result, err := client.CreateCollection(context.Background(), data, version)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: "create-collection", Data: result})
+	}
+	fmt.Fprintf(stdout, "created collection %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	return 0
+}
+
+func runUpdateCollection(args []string) int {
+	key, data, version, jsonOutput, ok := parseWriteUpdateArgs(args, usageUpdateCollection, false)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	result, err := client.UpdateCollection(context.Background(), key, data, version)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: "update-collection", Data: result})
+	}
+	fmt.Fprintf(stdout, "updated collection %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	return 0
+}
+
+func runDeleteCollection(args []string) int {
+	key, version, jsonOutput, ok := parseWriteDeleteArgs(args, usageDeleteCollection)
+	if !ok {
+		return 2
+	}
+
+	_, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	result, err := client.DeleteCollection(context.Background(), key, version)
+	if err != nil {
+		return printErr(err)
+	}
+
+	if jsonOutput {
+		return writeJSON(jsonResponse{OK: true, Command: "delete-collection", Data: result})
+	}
+	fmt.Fprintf(stdout, "deleted collection %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
 }
 

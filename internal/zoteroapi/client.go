@@ -567,6 +567,65 @@ func (c *Client) DeleteItem(ctx context.Context, key string, ifUnmodifiedSinceVe
 	}, nil
 }
 
+func (c *Client) CreateCollection(ctx context.Context, data map[string]any, ifUnmodifiedSinceVersion int) (WriteResult, error) {
+	resp, err := c.doWriteRequest(ctx, http.MethodPost, "collections", []map[string]any{data}, ifUnmodifiedSinceVersion)
+	if err != nil {
+		return WriteResult{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return WriteResult{}, apiErrorFromResponse(resp)
+	}
+
+	var result apiWriteResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return WriteResult{}, err
+	}
+
+	writeResult := WriteResult{
+		LastModifiedVersion: parseLastModifiedVersion(resp.Header.Get("Last-Modified-Version")),
+	}
+	if success, ok := result.Successful["0"]; ok {
+		writeResult.Key = success.Key
+	}
+	return writeResult, nil
+}
+
+func (c *Client) UpdateCollection(ctx context.Context, key string, data map[string]any, ifUnmodifiedSinceVersion int) (WriteResult, error) {
+	resp, err := c.doWriteRequest(ctx, http.MethodPut, path.Join("collections", key), data, ifUnmodifiedSinceVersion)
+	if err != nil {
+		return WriteResult{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return WriteResult{}, apiErrorFromResponse(resp)
+	}
+
+	return WriteResult{
+		Key:                 key,
+		LastModifiedVersion: parseLastModifiedVersion(resp.Header.Get("Last-Modified-Version")),
+	}, nil
+}
+
+func (c *Client) DeleteCollection(ctx context.Context, key string, ifUnmodifiedSinceVersion int) (WriteResult, error) {
+	resp, err := c.doWriteRequest(ctx, http.MethodDelete, path.Join("collections", key), nil, ifUnmodifiedSinceVersion)
+	if err != nil {
+		return WriteResult{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		return WriteResult{}, apiErrorFromResponse(resp)
+	}
+
+	return WriteResult{
+		Key:                 key,
+		LastModifiedVersion: parseLastModifiedVersion(resp.Header.Get("Last-Modified-Version")),
+	}, nil
+}
+
 func (c *Client) ListCollections(ctx context.Context) ([]Collection, error) {
 	raw, err := c.getCollections(ctx)
 	if err != nil {

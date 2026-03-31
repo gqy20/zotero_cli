@@ -50,6 +50,9 @@ func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 		{name: "create item", args: []string{"create-item", "--data", `{"itemType":"book"}`, "--if-unmodified-since-version", "1"}},
 		{name: "update item", args: []string{"update-item", "ABCD2345", "--data", `{"title":"Updated"}`, "--if-unmodified-since-version", "1"}},
 		{name: "delete item", args: []string{"delete-item", "ABCD2345", "--if-unmodified-since-version", "1"}},
+		{name: "create collection", args: []string{"create-collection", "--data", `{"name":"New Collection"}`, "--if-unmodified-since-version", "1"}},
+		{name: "update collection", args: []string{"update-collection", "COLL1234", "--data", `{"key":"COLL1234","version":1,"name":"Renamed"}`}},
+		{name: "delete collection", args: []string{"delete-collection", "COLL1234", "--if-unmodified-since-version", "1"}},
 	}
 
 	for _, tc := range testCases {
@@ -223,6 +226,21 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			name:      "delete item missing version",
 			args:      []string{"delete-item", "ABCD2345"},
 			wantUsage: usageDeleteItem,
+		},
+		{
+			name:      "create collection missing data",
+			args:      []string{"create-collection"},
+			wantUsage: usageCreateCollection,
+		},
+		{
+			name:      "update collection missing args",
+			args:      []string{"update-collection", "COLL1234"},
+			wantUsage: usageUpdateCollection,
+		},
+		{
+			name:      "delete collection missing version",
+			args:      []string{"delete-collection", "COLL1234"},
+			wantUsage: usageDeleteCollection,
 		},
 	}
 

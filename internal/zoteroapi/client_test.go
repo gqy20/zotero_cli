@@ -436,6 +436,141 @@ func TestClientDeleteItem(t *testing.T) {
 	}
 }
 
+func TestClientCreateCollection(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/users/123/collections" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("If-Unmodified-Since-Version"); got != "10" {
+			t.Fatalf("unexpected If-Unmodified-Since-Version: %q", got)
+		}
+
+		var body []map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body) != 1 || body[0]["name"] != "New Collection" {
+			t.Fatalf("unexpected request body: %#v", body)
+		}
+
+		w.Header().Set("Last-Modified-Version", "11")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"successful": map[string]any{
+				"0": map[string]any{
+					"key":     "COLLNEW1",
+					"version": 11,
+				},
+			},
+			"unchanged": map[string]any{},
+			"failed":    map[string]any{},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.CreateCollection(context.Background(), map[string]any{
+		"name": "New Collection",
+	}, 10)
+	if err != nil {
+		t.Fatalf("CreateCollection returned error: %v", err)
+	}
+	if result.Key != "COLLNEW1" || result.LastModifiedVersion != 11 {
+		t.Fatalf("unexpected create result: %#v", result)
+	}
+}
+
+func TestClientUpdateCollection(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/users/123/collections/COLL1234" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body["name"] != "Renamed Collection" {
+			t.Fatalf("unexpected request body: %#v", body)
+		}
+
+		w.Header().Set("Last-Modified-Version", "12")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"key":     "COLL1234",
+			"version": 12,
+			"name":    "Renamed Collection",
+		})
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.UpdateCollection(context.Background(), "COLL1234", map[string]any{
+		"key":     "COLL1234",
+		"version": 11,
+		"name":    "Renamed Collection",
+	}, 0)
+	if err != nil {
+		t.Fatalf("UpdateCollection returned error: %v", err)
+	}
+	if result.Key != "COLL1234" || result.LastModifiedVersion != 12 {
+		t.Fatalf("unexpected update result: %#v", result)
+	}
+}
+
+func TestClientDeleteCollection(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/users/123/collections/COLL1234" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("If-Unmodified-Since-Version"); got != "12" {
+			t.Fatalf("unexpected If-Unmodified-Since-Version: %q", got)
+		}
+		w.Header().Set("Last-Modified-Version", "13")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	result, err := client.DeleteCollection(context.Background(), "COLL1234", 12)
+	if err != nil {
+		t.Fatalf("DeleteCollection returned error: %v", err)
+	}
+	if result.Key != "COLL1234" || result.LastModifiedVersion != 13 {
+		t.Fatalf("unexpected delete result: %#v", result)
+	}
+}
+
 func TestClientGetItem(t *testing.T) {
 	t.Parallel()
 

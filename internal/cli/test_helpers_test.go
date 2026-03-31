@@ -89,6 +89,34 @@ func newTestAPI(t *testing.T) (string, func()) {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+		if r.Method == http.MethodPost && r.URL.Path == "/users/123456/collections" {
+			w.Header().Set("Last-Modified-Version", "11")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"successful": map[string]any{
+					"0": map[string]any{
+						"key":     "COLLNEW1",
+						"version": 11,
+					},
+				},
+				"unchanged": map[string]any{},
+				"failed":    map[string]any{},
+			})
+			return
+		}
+		if r.Method == http.MethodPut && r.URL.Path == "/users/123456/collections/COLL1234" {
+			w.Header().Set("Last-Modified-Version", "12")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"key":     "COLL1234",
+				"version": 12,
+				"name":    "Renamed Collection",
+			})
+			return
+		}
+		if r.Method == http.MethodDelete && r.URL.Path == "/users/123456/collections/COLL1234" {
+			w.Header().Set("Last-Modified-Version", "13")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 
 		switch r.URL.Path {
 		case "/users/123456/items":
