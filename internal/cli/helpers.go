@@ -34,6 +34,12 @@ func parseFindArgs(args []string) (zoteroapi.FindOptions, bool, error) {
 			}
 			i++
 			opts.ItemType = args[i]
+		case "--tag":
+			if i+1 >= len(args) {
+				return zoteroapi.FindOptions{}, false, errors.New("missing value for --tag")
+			}
+			i++
+			opts.Tag = args[i]
 		case "--limit":
 			if i+1 >= len(args) {
 				return zoteroapi.FindOptions{}, false, errors.New("missing value for --limit")
@@ -44,6 +50,31 @@ func parseFindArgs(args []string) (zoteroapi.FindOptions, bool, error) {
 				return zoteroapi.FindOptions{}, false, errors.New("invalid value for --limit")
 			}
 			opts.Limit = limit
+		case "--start":
+			if i+1 >= len(args) {
+				return zoteroapi.FindOptions{}, false, errors.New("missing value for --start")
+			}
+			i++
+			start, err := strconv.Atoi(args[i])
+			if err != nil || start < 0 {
+				return zoteroapi.FindOptions{}, false, errors.New("invalid value for --start")
+			}
+			opts.Start = start
+		case "--sort":
+			if i+1 >= len(args) {
+				return zoteroapi.FindOptions{}, false, errors.New("missing value for --sort")
+			}
+			i++
+			opts.Sort = args[i]
+		case "--direction":
+			if i+1 >= len(args) {
+				return zoteroapi.FindOptions{}, false, errors.New("missing value for --direction")
+			}
+			i++
+			if args[i] != "asc" && args[i] != "desc" {
+				return zoteroapi.FindOptions{}, false, errors.New("invalid value for --direction")
+			}
+			opts.Direction = args[i]
 		default:
 			queryParts = append(queryParts, args[i])
 		}

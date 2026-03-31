@@ -27,10 +27,13 @@ type Client struct {
 }
 
 type FindOptions struct {
-	Query    string
-	ItemType string
-	Limit    int
-	Start    int
+	Query     string
+	ItemType  string
+	Limit     int
+	Start     int
+	Tag       string
+	Sort      string
+	Direction string
 }
 
 type CitationOptions struct {
@@ -471,7 +474,7 @@ func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOp
 		return nil, fmt.Errorf("unsupported library_type %q", c.cfg.LibraryType)
 	}
 
-	if opts.Query != "" || opts.ItemType != "" || opts.Limit > 0 || opts.Start > 0 || len(extraQuery) > 0 {
+	if opts.Query != "" || opts.ItemType != "" || opts.Limit > 0 || opts.Start > 0 || opts.Tag != "" || opts.Sort != "" || opts.Direction != "" || len(extraQuery) > 0 {
 		values := u.Query()
 		if opts.Query != "" {
 			values.Set("q", opts.Query)
@@ -484,6 +487,15 @@ func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOp
 		}
 		if opts.Start > 0 {
 			values.Set("start", fmt.Sprintf("%d", opts.Start))
+		}
+		if opts.Tag != "" {
+			values.Set("tag", opts.Tag)
+		}
+		if opts.Sort != "" {
+			values.Set("sort", opts.Sort)
+		}
+		if opts.Direction != "" {
+			values.Set("direction", opts.Direction)
 		}
 		for key, value := range extraQuery {
 			if value != "" {

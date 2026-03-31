@@ -157,6 +157,48 @@ func TestRunFindJSONSupportsItemTypeAndLimit(t *testing.T) {
 	}
 }
 
+func TestRunFindJSONSupportsPaginationAndSortingFlags(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{
+		"find", "mixed",
+		"--tag", "ai",
+		"--start", "1",
+		"--sort", "title",
+		"--direction", "asc",
+		"--json",
+	})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+
+	item, ok := data[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected item payload: %#v", data[0])
+	}
+	if item["key"] != "ART67890" {
+		t.Fatalf("unexpected item: %#v", item)
+	}
+}
+
 func TestRunFindTextOutputShowsOnlyTopItems(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

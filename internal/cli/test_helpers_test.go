@@ -70,6 +70,10 @@ func newTestAPI(t *testing.T) (string, func()) {
 			query := r.URL.Query().Get("q")
 			itemType := r.URL.Query().Get("itemType")
 			limit := r.URL.Query().Get("limit")
+			tag := r.URL.Query().Get("tag")
+			start := r.URL.Query().Get("start")
+			sort := r.URL.Query().Get("sort")
+			direction := r.URL.Query().Get("direction")
 
 			if itemType == "note" {
 				_ = json.NewEncoder(w).Encode([]map[string]any{
@@ -176,6 +180,24 @@ func newTestAPI(t *testing.T) (string, func()) {
 					}
 				}
 				items = filtered
+			}
+
+			if tag == "ai" {
+				filtered := make([]map[string]any, 0, len(items))
+				for _, item := range items {
+					if item["key"] == "ART67890" {
+						filtered = append(filtered, item)
+					}
+				}
+				items = filtered
+			}
+
+			if start == "1" && len(items) > 1 {
+				items = items[1:]
+			}
+
+			if sort == "title" && direction == "asc" && len(items) > 1 {
+				items[0], items[1] = items[1], items[0]
 			}
 
 			if limit == "1" && len(items) > 1 {
