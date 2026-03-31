@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ type FindOptions struct {
 	Query    string
 	ItemType string
 	Limit    int
+	Start    int
 }
 
 type CitationOptions struct {
@@ -258,18 +260,8 @@ func (c *Client) GetCitation(ctx context.Context, key string, opts CitationOptio
 }
 
 func (c *Client) ListCollections(ctx context.Context) ([]Collection, error) {
-	resp, err := c.doRequest(ctx, "collections", FindOptions{}, nil)
+	raw, err := c.getCollections(ctx)
 	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("zotero api returned status %d", resp.StatusCode)
-	}
-
-	var raw []apiCollection
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return nil, err
 	}
 
@@ -288,18 +280,8 @@ func (c *Client) ListCollections(ctx context.Context) ([]Collection, error) {
 }
 
 func (c *Client) ListNotes(ctx context.Context) ([]Note, error) {
-	resp, err := c.doRequest(ctx, "items", FindOptions{ItemType: "note"}, nil)
+	raw, err := c.getNotes(ctx)
 	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("zotero api returned status %d", resp.StatusCode)
-	}
-
-	var raw []apiNoteItem
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return nil, err
 	}
 
@@ -315,22 +297,122 @@ func (c *Client) ListNotes(ctx context.Context) ([]Note, error) {
 }
 
 func (c *Client) getItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {
-	resp, err := c.doRequest(ctx, relativePath, opts, nil)
-	if err != nil {
-		return nil, err
+	return c.fetchAllItems(ctx, relativePath, opts)
+}
+
+func (c *Client) getCollections(ctx context.Context) ([]apiCollection, error) {
+	return c.fetchAllCollections(ctx, "collections")
+}
+
+func (c *Client) getNotes(ctx context.Context) ([]apiNoteItem, error) {
+	return c.fetchAllNotes(ctx, "items", FindOptions{ItemType: "note"})
+}
+
+func (c *Client) fetchAllItems(ctx context.Context, relativePath string, opts FindOptions) ([]apiItem, error) {
+	all := make([]apiItem, 0)
+	current := opts
+
+	for {
+		resp, err := c.doRequest(ctx, relativePath, current, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		page, total, err := decodeResponseWithTotal[apiItem](resp)
+		if err != nil {
+			return nil, err
+		}
+
+		all = append(all, page...)
+		if !shouldContinuePagination(len(page), len(all), total, current.Limit) {
+			return all, nil
+		}
+
+		current.Start += len(page)
 	}
+}
+
+func (c *Client) fetchAllCollections(ctx context.Context, relativePath string) ([]apiCollection, error) {
+	all := make([]apiCollection, 0)
+	opts := FindOptions{}
+
+	for {
+		resp, err := c.doRequest(ctx, relativePath, opts, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		page, total, err := decodeResponseWithTotal[apiCollection](resp)
+		if err != nil {
+			return nil, err
+		}
+
+		all = append(all, page...)
+		if !shouldContinuePagination(len(page), len(all), total, 0) {
+			return all, nil
+		}
+
+		opts.Start += len(page)
+	}
+}
+
+func (c *Client) fetchAllNotes(ctx context.Context, relativePath string, opts FindOptions) ([]apiNoteItem, error) {
+	all := make([]apiNoteItem, 0)
+	current := opts
+
+	for {
+		resp, err := c.doRequest(ctx, relativePath, current, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		page, total, err := decodeResponseWithTotal[apiNoteItem](resp)
+		if err != nil {
+			return nil, err
+		}
+
+		all = append(all, page...)
+		if !shouldContinuePagination(len(page), len(all), total, current.Limit) {
+			return all, nil
+		}
+
+		current.Start += len(page)
+	}
+}
+
+func decodeResponseWithTotal[T any](resp *http.Response) ([]T, int, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("zotero api returned status %d", resp.StatusCode)
+		return nil, 0, fmt.Errorf("zotero api returned status %d", resp.StatusCode)
 	}
 
-	var raw []apiItem
+	var raw []T
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return raw, nil
+	total := 0
+	if value := resp.Header.Get("Total-Results"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			total = parsed
+		}
+	}
+
+	return raw, total, nil
+}
+
+func shouldContinuePagination(pageLen int, accumulated int, total int, requestedLimit int) bool {
+	if requestedLimit > 0 {
+		return false
+	}
+	if pageLen == 0 {
+		return false
+	}
+	if total > 0 {
+		return accumulated < total
+	}
+	return pageLen == 25
 }
 
 func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOptions, extraQuery map[string]string) (*http.Response, error) {
@@ -352,7 +434,7 @@ func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOp
 		return nil, fmt.Errorf("unsupported library_type %q", c.cfg.LibraryType)
 	}
 
-	if opts.Query != "" || opts.ItemType != "" || opts.Limit > 0 || len(extraQuery) > 0 {
+	if opts.Query != "" || opts.ItemType != "" || opts.Limit > 0 || opts.Start > 0 || len(extraQuery) > 0 {
 		values := u.Query()
 		if opts.Query != "" {
 			values.Set("q", opts.Query)
@@ -362,6 +444,9 @@ func (c *Client) doRequest(ctx context.Context, relativePath string, opts FindOp
 		}
 		if opts.Limit > 0 {
 			values.Set("limit", fmt.Sprintf("%d", opts.Limit))
+		}
+		if opts.Start > 0 {
+			values.Set("start", fmt.Sprintf("%d", opts.Start))
 		}
 		for key, value := range extraQuery {
 			if value != "" {

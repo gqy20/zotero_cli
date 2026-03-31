@@ -272,8 +272,8 @@ func newTestAPI(t *testing.T) (string, func()) {
 				{
 					"key": "COLL1234",
 					"data": map[string]any{
-						"name":   "Projects",
-						"parent": "",
+						"name":             "Projects",
+						"parentCollection": false,
 					},
 					"meta": map[string]any{
 						"numCollections": 2,
@@ -283,8 +283,8 @@ func newTestAPI(t *testing.T) (string, func()) {
 				{
 					"key": "COLL5678",
 					"data": map[string]any{
-						"name":   "Reading",
-						"parent": "COLL1234",
+						"name":             "Reading",
+						"parentCollection": "COLL1234",
 					},
 					"meta": map[string]any{
 						"numCollections": 0,

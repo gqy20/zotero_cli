@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -270,4 +271,224 @@ func TestClientRejectsUnsupportedMode(t *testing.T) {
 	if got := err.Error(); got != `unsupported mode "local"` {
 		t.Fatalf("unexpected error: %q", got)
 	}
+}
+
+func TestClientFindItemsFollowsPagination(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123/items" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		start, err := strconv.Atoi(defaultString(r.URL.Query().Get("start"), "0"))
+		if err != nil {
+			t.Fatalf("unexpected start value: %v", err)
+		}
+
+		total := 30
+		w.Header().Set("Total-Results", strconv.Itoa(total))
+		if start == 0 {
+			w.Header().Set("Link", `</users/123/items?start=25>; rel="next"`)
+		}
+
+		items := make([]map[string]any, 0, min(25, total-start))
+		end := min(start+25, total)
+		for i := start; i < end; i++ {
+			items = append(items, map[string]any{
+				"key": "ITEM" + strconv.Itoa(i),
+				"data": map[string]any{
+					"itemType": "journalArticle",
+					"title":    "Item " + strconv.Itoa(i),
+				},
+			})
+		}
+
+		if err := json.NewEncoder(w).Encode(items); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	items, err := client.FindItems(context.Background(), FindOptions{})
+	if err != nil {
+		t.Fatalf("FindItems returned error: %v", err)
+	}
+
+	if len(items) != 30 {
+		t.Fatalf("expected 30 items after pagination, got %d", len(items))
+	}
+	if items[29].Key != "ITEM29" {
+		t.Fatalf("unexpected final item: %#v", items[29])
+	}
+}
+
+func TestClientListCollectionsFollowsPaginationAndMapsParentKey(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123/collections" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		start, err := strconv.Atoi(defaultString(r.URL.Query().Get("start"), "0"))
+		if err != nil {
+			t.Fatalf("unexpected start value: %v", err)
+		}
+
+		total := 26
+		w.Header().Set("Total-Results", strconv.Itoa(total))
+		if start == 0 {
+			w.Header().Set("Link", `</users/123/collections?start=25>; rel="next"`)
+		}
+
+		payload := make([]map[string]any, 0, min(25, total-start))
+		end := min(start+25, total)
+		for i := start; i < end; i++ {
+			entry := map[string]any{
+				"key": "COLL" + strconv.Itoa(i),
+				"data": map[string]any{
+					"name":             "Collection " + strconv.Itoa(i),
+					"parentCollection": false,
+				},
+				"meta": map[string]any{
+					"numCollections": 0,
+					"numItems":       i,
+				},
+			}
+			if i == 25 {
+				entry["data"] = map[string]any{
+					"name":             "Collection 25",
+					"parentCollection": "COLL1",
+				}
+			}
+			payload = append(payload, entry)
+		}
+
+		if err := json.NewEncoder(w).Encode(payload); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	collections, err := client.ListCollections(context.Background())
+	if err != nil {
+		t.Fatalf("ListCollections returned error: %v", err)
+	}
+
+	if len(collections) != 26 {
+		t.Fatalf("expected 26 collections after pagination, got %d", len(collections))
+	}
+	if collections[25].ParentKey != "COLL1" {
+		t.Fatalf("unexpected parent key: %#v", collections[25])
+	}
+}
+
+func TestClientListNotesFollowsPagination(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123/items" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("itemType"); got != "note" {
+			t.Fatalf("unexpected itemType: %q", got)
+		}
+
+		start, err := strconv.Atoi(defaultString(r.URL.Query().Get("start"), "0"))
+		if err != nil {
+			t.Fatalf("unexpected start value: %v", err)
+		}
+
+		total := 26
+		w.Header().Set("Total-Results", strconv.Itoa(total))
+		if start == 0 {
+			w.Header().Set("Link", `</users/123/items?itemType=note&start=25>; rel="next"`)
+		}
+
+		payload := make([]map[string]any, 0, min(25, total-start))
+		end := min(start+25, total)
+		for i := start; i < end; i++ {
+			payload = append(payload, map[string]any{
+				"key": "NOTE" + strconv.Itoa(i),
+				"data": map[string]any{
+					"itemType": "note",
+					"note":     "<p>Note " + strconv.Itoa(i) + "</p>",
+				},
+			})
+		}
+
+		if err := json.NewEncoder(w).Encode(payload); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "user",
+		LibraryID:   "123",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	notes, err := client.ListNotes(context.Background())
+	if err != nil {
+		t.Fatalf("ListNotes returned error: %v", err)
+	}
+
+	if len(notes) != 26 {
+		t.Fatalf("expected 26 notes after pagination, got %d", len(notes))
+	}
+	if notes[25].Content != "Note 25" {
+		t.Fatalf("unexpected final note: %#v", notes[25])
+	}
+}
+
+func TestClientUsesGroupLibraryPath(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/groups/456/items" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewEncoder(w).Encode([]map[string]any{}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		LibraryType: "group",
+		LibraryID:   "456",
+		APIKey:      "secret",
+	}, server.URL, server.Client())
+
+	if _, err := client.FindItems(context.Background(), FindOptions{}); err != nil {
+		t.Fatalf("FindItems returned error: %v", err)
+	}
+}
+
+func defaultString(value string, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func min(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

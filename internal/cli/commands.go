@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"zotero_cli/internal/config"
@@ -70,11 +71,11 @@ func runConfigInit(args []string) int {
 		return writeJSON(cfg)
 	}
 
-	if _, _, err := config.Load(); err == nil {
+	if _, err := os.Stat(path); err == nil {
 		fmt.Fprintf(stderr, "config already exists at %s\n", path)
 		fmt.Fprintf(stderr, "edit it manually or remove it before re-running init\n")
 		return 3
-	} else if !errors.Is(err, config.ErrNotFound) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return printErr(err)
 	}
 

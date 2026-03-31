@@ -2,9 +2,47 @@ package cli
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestRunConfigInitCreatesFileWhenOnlyEnvConfigExists(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+
+	envRoot := t.TempDir()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(envRoot); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(wd)
+	})
+
+	envBody := "ZOT_LIBRARY_TYPE=user\nZOT_LIBRARY_ID=123456\nZOT_API_KEY=secret\n"
+	if err := os.WriteFile(filepath.Join(envRoot, ".env"), []byte(envBody), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"config", "init"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	configPath := filepath.Join(configRoot, "zotcli", "config.json")
+	if _, err := os.Stat(configPath); err != nil {
+		t.Fatalf("expected config file to be created, stat err=%v", err)
+	}
+	if !strings.Contains(stdout.String(), "created config at") {
+		t.Fatalf("expected success message, got %q", stdout.String())
+	}
+}
 
 func TestRunShowJSON(t *testing.T) {
 	configRoot := t.TempDir()
