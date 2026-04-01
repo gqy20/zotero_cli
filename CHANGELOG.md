@@ -25,3 +25,13 @@
 - 发布压缩包现在会包含项目 `LICENSE`。
 - 发布流程会在进入构建矩阵前统一执行一次测试。
 - 发布二进制现在会注入稳定的 UTC 构建时间。
+## 0.0.2 Stability Updates (In Progress)
+
+### Changed
+- `hybrid` remote fallback now routes through a normalized web client path, so hybrid read flows can still reach the Zotero Web API when local data is unavailable or unsupported.
+- write command validation now reports specific argument errors for missing precondition versions, conflicting `--data` and `--from-file` flags, unreadable payload files, and invalid JSON payloads.
+- `local` mode now fails fast for Web API-only commands with an explicit mode-boundary error instead of a generic unsupported-mode failure.
+
+### Docs
+- documented the `0.0.2` stability pass progress in `docs/stability-pass-0.0.2.md`
+- documented current mode boundaries in `docs/local-backend-design.md`

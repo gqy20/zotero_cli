@@ -258,3 +258,25 @@ go build -o zot.exe .\cmd\zot
 - [Repo Skill](/d:/C/Documents/Program/Go/zotero_cli/.codex/skills/zotero-cli/SKILL.md)
 - [MVP 设计文档](/d:/C/Documents/Program/Go/zotero_cli/docs/MVP.md)
 - [Rate Limit Optimization Notes](/d:/C/Documents/Program/Go/zotero_cli/docs/rate-limit-optimization.md)
+## 0.0.2 Stability Pass Update
+
+Recent `0.0.2` stability work focuses on making mode behavior and CLI failures
+more predictable rather than adding a large new command surface.
+
+Completed in this pass:
+
+- `hybrid` read flows now normalize remote fallback through the Web API client
+- write commands now return clearer argument-validation errors before usage text
+- current mode boundaries are documented explicitly for `web`, `local`, and `hybrid`
+
+Current mode summary:
+
+- backend-aware commands: `find`, `show`, `relate`
+- Web API commands: `cite`, `export`, list/meta commands, and all write commands
+- `local` mode rejects Web API-only commands with an explicit mode-boundary error
+- `hybrid` mode can still use remote API paths when local support is unavailable
+
+For the detailed design notes, see:
+
+- [0.0.2 Stability Pass](/D:/C/Documents/Program/Go/zotero_cli/docs/stability-pass-0.0.2.md)
+- [Local Backend Design](/D:/C/Documents/Program/Go/zotero_cli/docs/local-backend-design.md)
