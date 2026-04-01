@@ -30,8 +30,13 @@ func loadClient() (config.Config, *zoteroapi.Client, int) {
 		return config.Config{}, nil, exitCode
 	}
 
+	remoteCfg, err := remoteClientConfig(cfg)
+	if err != nil {
+		return config.Config{}, nil, printErr(err)
+	}
+
 	baseURL := os.Getenv("ZOT_BASE_URL")
-	return cfg, zoteroapi.New(cfg, baseURL, nil), 0
+	return cfg, zoteroapi.New(remoteCfg, baseURL, nil), 0
 }
 
 func loadReader() (config.Config, backend.Reader, int) {
@@ -68,4 +73,20 @@ func ensureDeleteAllowed(cfg config.Config) int {
 	}
 	fmt.Fprintln(stderr, "error: delete operations are disabled in ~/.zot/.env; set ZOT_ALLOW_DELETE=1 to enable delete commands")
 	return 1
+}
+
+func remoteClientConfig(cfg config.Config) (config.Config, error) {
+	normalized := cfg
+	switch normalized.Mode {
+	case "", "web":
+		normalized.Mode = "web"
+		return normalized, nil
+	case "hybrid":
+		normalized.Mode = "web"
+		return normalized, nil
+	case "local":
+		return config.Config{}, fmt.Errorf("web API commands are not available in local mode; use web or hybrid mode")
+	default:
+		return config.Config{}, fmt.Errorf("unsupported mode %q", normalized.Mode)
+	}
 }

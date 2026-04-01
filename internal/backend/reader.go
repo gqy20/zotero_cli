@@ -48,15 +48,18 @@ func NewReader(cfg config.Config, httpClient *http.Client) (Reader, error) {
 		mode = "web"
 	}
 
+	remoteCfg := cfg
+	remoteCfg.Mode = "web"
+
 	switch mode {
 	case "web":
 		baseURL := os.Getenv("ZOT_BASE_URL")
-		return NewWebReader(zoteroapi.New(cfg, baseURL, httpClient)), nil
+		return NewWebReader(zoteroapi.New(remoteCfg, baseURL, httpClient)), nil
 	case "local":
 		return NewLocalReader(cfg)
 	case "hybrid":
 		baseURL := os.Getenv("ZOT_BASE_URL")
-		webReader := NewWebReader(zoteroapi.New(cfg, baseURL, httpClient))
+		webReader := NewWebReader(zoteroapi.New(remoteCfg, baseURL, httpClient))
 		localReader, err := NewLocalReader(cfg)
 		if err != nil {
 			return &HybridReader{web: webReader}, nil

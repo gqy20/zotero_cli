@@ -27,6 +27,87 @@ func TestRunFindRejectsLocalModeWithoutDataDir(t *testing.T) {
 	}
 }
 
+func TestRemoteReadCommandsRejectLocalMode(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "stats", args: []string{"stats", "--json"}, want: "web API commands are not available in local mode; use web or hybrid mode"},
+		{name: "cite", args: []string{"cite", "X42A7DEE"}, want: "web API commands are not available in local mode; use web or hybrid mode"},
+		{name: "export", args: []string{"export", "--item-key", "X42A7DEE"}, want: "web API commands are not available in local mode; use web or hybrid mode"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, stderr := captureOutput(t)
+			exitCode := Run(tc.args)
+			if exitCode != 1 {
+				t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+			}
+			if got := stderr.String(); !strings.Contains(got, tc.want) {
+				t.Fatalf("expected local-mode guard %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestRunFindHybridFallsBackToWebWithoutDataDir(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "hybrid")
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) == 0 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+}
+
+func TestRunStatsHybridModeUsesRemoteClient(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "hybrid")
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"stats", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	if got["command"] != "stats" {
+		t.Fatalf("unexpected command: %#v", got["command"])
+	}
+}
+
 func TestRunFindLocalJSONFiltersNonTopItemsByDefault(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

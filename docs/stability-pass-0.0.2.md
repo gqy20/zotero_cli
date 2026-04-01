@@ -138,6 +138,9 @@ Completed slices:
 - shared `find` semantics now live in backend-level reusable helpers
 - write command parsing now returns specific validation errors before printing
   usage text
+- hybrid mode now normalizes remote client calls through the web API path
+- local mode now fails fast for web-only API commands with an explicit mode
+  boundary error
 
 Write validation cases covered by tests now include:
 
