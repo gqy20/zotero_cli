@@ -12,9 +12,10 @@ import (
 )
 
 type stubReader struct {
-	findItems  func(context.Context, FindOptions) ([]domain.Item, error)
-	getItem    func(context.Context, string) (domain.Item, error)
-	getRelated func(context.Context, string) ([]domain.Relation, error)
+	findItems       func(context.Context, FindOptions) ([]domain.Item, error)
+	getItem         func(context.Context, string) (domain.Item, error)
+	getRelated      func(context.Context, string) ([]domain.Relation, error)
+	getLibraryStats func(context.Context) (LibraryStats, error)
 }
 
 func (r stubReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
@@ -27,6 +28,10 @@ func (r stubReader) GetItem(ctx context.Context, key string) (domain.Item, error
 
 func (r stubReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
 	return r.getRelated(ctx, key)
+}
+
+func (r stubReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
+	return r.getLibraryStats(ctx)
 }
 
 func TestNewReaderDefaultsToWebMode(t *testing.T) {
@@ -284,5 +289,63 @@ func TestHybridReaderGetRelatedPrefersLocal(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Target.Key != "LOCAL1" {
 		t.Fatalf("GetRelated() = %#v, want local result", got)
+	}
+}
+
+func TestHybridReaderGetLibraryStatsPrefersLocal(t *testing.T) {
+	reader := &HybridReader{
+		local: stubReader{
+			findItems:  func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
+			getItem:    func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated: func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("unexpected") },
+			getLibraryStats: func(context.Context) (LibraryStats, error) {
+				return LibraryStats{LibraryType: "user", LibraryID: "123", TotalItems: 3}, nil
+			},
+		},
+		web: stubReader{
+			findItems:  func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
+			getItem:    func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated: func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("unexpected") },
+			getLibraryStats: func(context.Context) (LibraryStats, error) {
+				return LibraryStats{}, errors.New("web should not be used")
+			},
+		},
+	}
+
+	got, err := reader.GetLibraryStats(context.Background())
+	if err != nil {
+		t.Fatalf("GetLibraryStats() error = %v", err)
+	}
+	if got.TotalItems != 3 || got.LibraryID != "123" {
+		t.Fatalf("GetLibraryStats() = %#v, want local result", got)
+	}
+}
+
+func TestHybridReaderGetLibraryStatsFallsBackToWeb(t *testing.T) {
+	reader := &HybridReader{
+		local: stubReader{
+			findItems:  func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
+			getItem:    func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated: func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("unexpected") },
+			getLibraryStats: func(context.Context) (LibraryStats, error) {
+				return LibraryStats{}, newUnsupportedFeatureError("local", "stats")
+			},
+		},
+		web: stubReader{
+			findItems:  func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
+			getItem:    func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated: func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("unexpected") },
+			getLibraryStats: func(context.Context) (LibraryStats, error) {
+				return LibraryStats{LibraryType: "user", LibraryID: "123", TotalItems: 9}, nil
+			},
+		},
+	}
+
+	got, err := reader.GetLibraryStats(context.Background())
+	if err != nil {
+		t.Fatalf("GetLibraryStats() error = %v", err)
+	}
+	if got.TotalItems != 9 {
+		t.Fatalf("GetLibraryStats() = %#v, want web fallback result", got)
 	}
 }

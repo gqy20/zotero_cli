@@ -35,6 +35,20 @@ func (r *WebReader) GetRelated(ctx context.Context, key string) ([]domain.Relati
 	return nil, newUnsupportedFeatureError("web", "relate")
 }
 
+func (r *WebReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
+	stats, err := r.client.GetLibraryStats(ctx)
+	if err != nil {
+		return LibraryStats{}, err
+	}
+	return LibraryStats{
+		LibraryType:      stats.LibraryType,
+		LibraryID:        stats.LibraryID,
+		TotalItems:       stats.TotalItems,
+		TotalCollections: stats.TotalCollections,
+		TotalSearches:    stats.TotalSearches,
+	}, nil
+}
+
 func mapItems(items []zoteroapi.Item) []domain.Item {
 	out := make([]domain.Item, 0, len(items))
 	for _, item := range items {
@@ -52,6 +66,9 @@ func mapItem(item zoteroapi.Item) domain.Item {
 		Date:        item.Date,
 		Creators:    mapCreators(item.Creators),
 		Container:   item.Container,
+		Volume:      item.Volume,
+		Issue:       item.Issue,
+		Pages:       item.Pages,
 		DOI:         item.DOI,
 		URL:         item.URL,
 		Tags:        append([]string(nil), item.Tags...),

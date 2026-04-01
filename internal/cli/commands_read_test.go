@@ -38,7 +38,6 @@ func TestRemoteReadCommandsRejectLocalMode(t *testing.T) {
 		args []string
 		want string
 	}{
-		{name: "stats", args: []string{"stats", "--json"}, want: "web API commands are not available in local mode; use web or hybrid mode"},
 		{name: "cite", args: []string{"cite", "X42A7DEE"}, want: "web API commands are not available in local mode; use web or hybrid mode"},
 		{name: "export", args: []string{"export", "--item-key", "X42A7DEE"}, want: "web API commands are not available in local mode; use web or hybrid mode"},
 	}
@@ -105,6 +104,80 @@ func TestRunStatsHybridModeUsesRemoteClient(t *testing.T) {
 	}
 	if got["command"] != "stats" {
 		t.Fatalf("unexpected command: %#v", got["command"])
+	}
+}
+
+func TestRunStatsLocalModeUsesLocalLibrary(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalStatsFixture(t, filepath.Join(dataDir, "zotero.sqlite"))
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"stats", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	if got["command"] != "stats" {
+		t.Fatalf("unexpected command: %#v", got["command"])
+	}
+	data, ok := got["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	for field, want := range map[string]any{
+		"library_type":      "user",
+		"library_id":        "123456",
+		"total_items":       float64(3),
+		"total_collections": float64(2),
+		"total_searches":    float64(1),
+	} {
+		if data[field] != want {
+			t.Fatalf("unexpected %s: %#v", field, data[field])
+		}
+	}
+}
+
+func TestRunStatsHybridModePrefersLocalLibrary(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "hybrid")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalStatsFixture(t, filepath.Join(dataDir, "zotero.sqlite"))
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"stats", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data := got["data"].(map[string]any)
+	if data["total_items"] != float64(3) || data["total_collections"] != float64(2) || data["total_searches"] != float64(1) {
+		t.Fatalf("unexpected stats payload: %#v", data)
 	}
 }
 
@@ -741,6 +814,40 @@ func buildLocalRelateFixture(t *testing.T, sqlitePath string, storageDir string)
 	}
 }
 
+func buildLocalStatsFixture(t *testing.T, sqlitePath string) {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", sqlitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	statements := []string{
+		`CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName TEXT);`,
+		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER);`,
+		`CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, key TEXT, collectionName TEXT);`,
+		`CREATE TABLE savedSearches (savedSearchID INTEGER PRIMARY KEY, savedSearchName TEXT);`,
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("exec %q: %v", statement, err)
+		}
+	}
+
+	inserts := []string{
+		`INSERT INTO itemTypes(itemTypeID, typeName) VALUES (1, 'journalArticle'), (2, 'book');`,
+		`INSERT INTO items(itemID, key, version, itemTypeID) VALUES (1, 'ITEM1234', 7, 1), (2, 'ART67890', 3, 1), (3, 'BOOK1234', 2, 2);`,
+		`INSERT INTO collections(collectionID, key, collectionName) VALUES (1, 'COLL1234', 'Machine Learning'), (2, 'COLL5678', 'Chestnut');`,
+		`INSERT INTO savedSearches(savedSearchID, savedSearchName) VALUES (1, 'Unread PDFs');`,
+	}
+	for _, statement := range inserts {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("exec %q: %v", statement, err)
+		}
+	}
+}
+
 func buildLocalFindFixture(t *testing.T, sqlitePath string, storageDir string) {
 	t.Helper()
 
@@ -761,6 +868,8 @@ func buildLocalFindFixture(t *testing.T, sqlitePath string, storageDir string) {
 		`CREATE TABLE itemCreators (itemID INTEGER, creatorID INTEGER, creatorTypeID INTEGER, orderIndex INTEGER);`,
 		`CREATE TABLE tags (tagID INTEGER PRIMARY KEY, name TEXT);`,
 		`CREATE TABLE itemTags (itemID INTEGER, tagID INTEGER);`,
+		`CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, key TEXT, collectionName TEXT);`,
+		`CREATE TABLE collectionItems (collectionID INTEGER, itemID INTEGER);`,
 		`CREATE TABLE itemAttachments (itemID INTEGER, parentItemID INTEGER, contentType TEXT, linkMode INTEGER, path TEXT);`,
 		`CREATE TABLE itemNotes (itemID INTEGER, parentItemID INTEGER, note TEXT, title TEXT);`,
 		`CREATE TABLE itemAnnotations (itemID INTEGER);`,
@@ -782,6 +891,8 @@ func buildLocalFindFixture(t *testing.T, sqlitePath string, storageDir string) {
 		`INSERT INTO itemCreators(itemID, creatorID, creatorTypeID, orderIndex) VALUES (1, 1, 1, 0), (2, 2, 1, 0), (3, 3, 1, 0);`,
 		`INSERT INTO tags(tagID, name) VALUES (1, 'transformers'), (2, 'ai'), (3, 'survey'), (4, 'classic');`,
 		`INSERT INTO itemTags(itemID, tagID) VALUES (1, 1), (2, 2), (2, 3), (3, 4);`,
+		`INSERT INTO collections(collectionID, key, collectionName) VALUES (1, 'COLL1234', 'Machine Learning'), (2, 'COLL5678', 'Books');`,
+		`INSERT INTO collectionItems(collectionID, itemID) VALUES (1, 1), (1, 2), (2, 3);`,
 		`INSERT INTO itemAttachments(itemID, parentItemID, contentType, linkMode, path) VALUES (4, 2, 'application/pdf', 0, 'storage:mixed.pdf');`,
 		`INSERT INTO itemNotes(itemID, parentItemID, note, title) VALUES (5, 2, '<p>Mixed note</p>', 'Mixed note');`,
 		`INSERT INTO itemAnnotations(itemID) VALUES (6);`,
@@ -958,6 +1069,161 @@ func TestRunExportCSLJSONJSON(t *testing.T) {
 	data, ok := got["data"].(map[string]any)
 	if !ok || data["format"] != "csljson" {
 		t.Fatalf("unexpected export payload: %#v", got["data"])
+	}
+}
+
+func TestRunExportCSLJSONLocalByItemKey(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"export", "--item-key", "ITEM1234", "--format", "csljson", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	if got["command"] != "export" {
+		t.Fatalf("unexpected command: %#v", got["command"])
+	}
+	data, ok := got["data"].(map[string]any)
+	if !ok || data["format"] != "csljson" {
+		t.Fatalf("unexpected export payload: %#v", got["data"])
+	}
+	payload, ok := data["data"].([]any)
+	if !ok || len(payload) != 1 {
+		t.Fatalf("unexpected csljson payload: %#v", data["data"])
+	}
+	item := payload[0].(map[string]any)
+	for field, want := range map[string]any{
+		"id":              "ITEM1234",
+		"title":           "Attention Is All You Need",
+		"container-title": "NeurIPS",
+		"volume":          "37",
+		"issue":           "11",
+		"page":            "1234-1248",
+		"DOI":             "10.1/example",
+		"URL":             "https://example.com/paper",
+	} {
+		if item[field] != want {
+			t.Fatalf("unexpected %s: %#v", field, item[field])
+		}
+	}
+}
+
+func TestRunExportCSLJSONHybridPrefersLocalByItemKey(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "hybrid")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+	t.Setenv("ZOT_BASE_URL", "http://127.0.0.1:1")
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"export", "--item-key", "ITEM1234", "--format", "csljson", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data := got["data"].(map[string]any)
+	payload := data["data"].([]any)
+	item := payload[0].(map[string]any)
+	if item["id"] != "ITEM1234" {
+		t.Fatalf("unexpected hybrid csljson payload: %#v", item)
+	}
+}
+
+func TestRunExportCSLJSONLocalByQuery(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"export", "mixed", "--limit", "1", "--format", "csljson", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data := got["data"].(map[string]any)
+	payload := data["data"].([]any)
+	if len(payload) != 1 {
+		t.Fatalf("unexpected csljson payload: %#v", payload)
+	}
+	item := payload[0].(map[string]any)
+	if item["id"] != "ART67890" {
+		t.Fatalf("unexpected query csljson payload: %#v", item)
+	}
+}
+
+func TestRunExportCSLJSONLocalByCollection(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"export", "--collection", "COLL1234", "--format", "csljson", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data := got["data"].(map[string]any)
+	payload := data["data"].([]any)
+	if len(payload) != 2 {
+		t.Fatalf("unexpected collection csljson payload: %#v", payload)
+	}
+	ids := []string{payload[0].(map[string]any)["id"].(string), payload[1].(map[string]any)["id"].(string)}
+	if !(ids[0] == "ITEM1234" && ids[1] == "ART67890") {
+		t.Fatalf("unexpected collection ids: %#v", ids)
 	}
 }
 

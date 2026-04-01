@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"zotero_cli/internal/backend"
+	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
 	"zotero_cli/internal/zoteroapi"
 )
@@ -77,12 +79,12 @@ func runStats(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, reader, exitCode := loadReader()
 	if exitCode != 0 {
 		return exitCode
 	}
 
-	stats, err := client.GetLibraryStats(context.Background())
+	stats, err := reader.GetLibraryStats(context.Background())
 	if err != nil {
 		return printErr(err)
 	}
@@ -314,12 +316,37 @@ func runExport(args []string) int {
 		return 2
 	}
 
-	cfg, client, exitCode := loadClient()
+	cfg, exitCode := loadConfig()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	keys := make([]string, 0, 8)
+	if format == "csljson" && cfg.Mode != "web" {
+		result, handled, err := tryLocalCSLJSONExport(context.Background(), cfg, itemKey, collectionKey, findOpts)
+		if handled {
+			if err != nil {
+				return printErr(err)
+			}
+			if jsonOutput {
+				return writeJSON(jsonResponse{
+					OK:      true,
+					Command: "export",
+					Data:    result,
+					Meta: map[string]any{
+						"total": len(result.Data.([]map[string]any)),
+					},
+				})
+			}
+			return writeJSON(result.Data)
+		}
+	}
+
+	cfg, client, exitCode := loadClient()
+	if exitCode != 0 {
+		return exitCode
+	}
+
 	if itemKey != "" {
 		keys = append(keys, itemKey)
 	} else if collectionKey != "" {
@@ -367,4 +394,57 @@ func runExport(args []string) int {
 		return 0
 	}
 	return writeJSON(result.Data)
+}
+
+func tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, itemKey string, collectionKey string, findOpts zoteroapi.FindOptions) (zoteroapi.ExportResult, bool, error) {
+	localReader, err := backend.NewLocalReader(cfg)
+	if err != nil {
+		if cfg.Mode == "hybrid" {
+			return zoteroapi.ExportResult{}, false, nil
+		}
+		return zoteroapi.ExportResult{}, true, err
+	}
+
+	keys := make([]string, 0, 8)
+	if itemKey != "" {
+		keys = append(keys, itemKey)
+	} else if collectionKey != "" {
+		keys, err = localReader.CollectionItemKeys(ctx, collectionKey, findOpts.Limit)
+		if err != nil {
+			if cfg.Mode == "hybrid" {
+				return zoteroapi.ExportResult{}, false, nil
+			}
+			return zoteroapi.ExportResult{}, true, err
+		}
+	} else {
+		items, err := localReader.FindItems(ctx, backend.FindOptions{
+			Query: findOpts.Query,
+			Limit: findOpts.Limit,
+		})
+		if err != nil {
+			if cfg.Mode == "hybrid" {
+				return zoteroapi.ExportResult{}, false, nil
+			}
+			return zoteroapi.ExportResult{}, true, err
+		}
+		items = filterDefaultFindItems(items, backend.FindOptions{
+			Query: findOpts.Query,
+			Limit: findOpts.Limit,
+		})
+		for _, item := range items {
+			keys = append(keys, item.Key)
+		}
+	}
+
+	payload, err := localReader.ExportItemsCSLJSON(ctx, keys)
+	if err != nil {
+		if cfg.Mode == "hybrid" {
+			return zoteroapi.ExportResult{}, false, nil
+		}
+		return zoteroapi.ExportResult{}, true, err
+	}
+	return zoteroapi.ExportResult{
+		Format: "csljson",
+		Data:   payload,
+	}, true, nil
 }

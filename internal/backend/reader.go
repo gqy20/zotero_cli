@@ -31,10 +31,19 @@ type FindOptions struct {
 	DateBefore     string
 }
 
+type LibraryStats struct {
+	LibraryType      string `json:"library_type"`
+	LibraryID        string `json:"library_id"`
+	TotalItems       int    `json:"total_items"`
+	TotalCollections int    `json:"total_collections"`
+	TotalSearches    int    `json:"total_searches"`
+}
+
 type Reader interface {
 	FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error)
 	GetItem(ctx context.Context, key string) (domain.Item, error)
 	GetRelated(ctx context.Context, key string) ([]domain.Relation, error)
+	GetLibraryStats(ctx context.Context) (LibraryStats, error)
 }
 
 type HybridReader struct {
@@ -107,6 +116,19 @@ func (r *HybridReader) GetRelated(ctx context.Context, key string) ([]domain.Rel
 		}
 	}
 	return r.web.GetRelated(ctx, key)
+}
+
+func (r *HybridReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
+	if r.local != nil {
+		stats, err := r.local.GetLibraryStats(ctx)
+		if err == nil {
+			return stats, nil
+		}
+		if !shouldFallbackToWeb(err) {
+			return LibraryStats{}, err
+		}
+	}
+	return r.web.GetLibraryStats(ctx)
 }
 
 func shouldFallbackToWeb(err error) bool {

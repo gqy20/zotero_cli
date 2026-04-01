@@ -19,6 +19,8 @@ import (
 )
 
 type LocalReader struct {
+	LibraryType string
+	LibraryID   string
 	DataDir    string
 	SQLitePath string
 	StorageDir string
@@ -47,6 +49,8 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 	}
 
 	return &LocalReader{
+		LibraryType: cfg.LibraryType,
+		LibraryID:   cfg.LibraryID,
 		DataDir:    dataDir,
 		SQLitePath: sqlitePath,
 		StorageDir: storageDir,
@@ -194,6 +198,35 @@ func (r *LocalReader) GetRelated(ctx context.Context, key string) ([]domain.Rela
 		return relations[i].Target.Key < relations[j].Target.Key
 	})
 	return relations, nil
+}
+
+func (r *LocalReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
+	db, err := r.openDB()
+	if err != nil {
+		return LibraryStats{}, err
+	}
+	defer db.Close()
+
+	totalItems, err := countRows(ctx, db, `SELECT COUNT(*) FROM items`)
+	if err != nil {
+		return LibraryStats{}, err
+	}
+	totalCollections, err := countRows(ctx, db, `SELECT COUNT(*) FROM collections`)
+	if err != nil {
+		return LibraryStats{}, err
+	}
+	totalSearches, err := countRows(ctx, db, `SELECT COUNT(*) FROM savedSearches`)
+	if err != nil {
+		return LibraryStats{}, err
+	}
+
+	return LibraryStats{
+		LibraryType:      r.LibraryType,
+		LibraryID:        r.LibraryID,
+		TotalItems:       totalItems,
+		TotalCollections: totalCollections,
+		TotalSearches:    totalSearches,
+	}, nil
 }
 
 func localFindQuery(opts FindOptions) (string, []any) {
@@ -465,6 +498,14 @@ func (r *LocalReader) openDB() (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+func countRows(ctx context.Context, db *sql.DB, query string) (int, error) {
+	var count int
+	if err := db.QueryRowContext(ctx, query).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (r *LocalReader) loadItemRefByKey(ctx context.Context, db *sql.DB, key string) (domain.ItemRef, int64, error) {
