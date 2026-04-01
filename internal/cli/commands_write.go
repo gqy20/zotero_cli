@@ -6,8 +6,10 @@ import (
 )
 
 func runCreateItem(args []string) int {
-	data, version, jsonOutput, ok := parseWriteCreateArgs(args, usageCreateItem)
-	if !ok {
+	data, version, jsonOutput, err := parseWriteCreateArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, usageCreateItem)
 		return 2
 	}
 
@@ -32,8 +34,10 @@ func runCreateItem(args []string) int {
 }
 
 func runUpdateItem(args []string) int {
-	key, data, version, jsonOutput, ok := parseWriteUpdateArgs(args, usageUpdateItem, true)
-	if !ok {
+	key, data, version, jsonOutput, err := parseWriteUpdateArgs(args, true)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, usageUpdateItem)
 		return 2
 	}
 
@@ -58,8 +62,10 @@ func runUpdateItem(args []string) int {
 }
 
 func runDeleteItem(args []string) int {
-	key, version, jsonOutput, ok := parseWriteDeleteArgs(args, usageDeleteItem)
-	if !ok {
+	key, version, jsonOutput, err := parseWriteDeleteArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, usageDeleteItem)
 		return 2
 	}
 
@@ -84,8 +90,10 @@ func runDeleteItem(args []string) int {
 }
 
 func runCreateItems(args []string) int {
-	data, version, jsonOutput, ok := parseWriteBatchArgs(args, usageCreateItems, true)
-	if !ok {
+	data, version, jsonOutput, err := parseWriteBatchArgs(args, true)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, usageCreateItems)
 		return 2
 	}
 
@@ -110,8 +118,10 @@ func runCreateItems(args []string) int {
 }
 
 func runUpdateItems(args []string) int {
-	data, version, jsonOutput, ok := parseWriteBatchArgs(args, usageUpdateItems, false)
-	if !ok {
+	data, version, jsonOutput, err := parseWriteBatchArgs(args, false)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, usageUpdateItems)
 		return 2
 	}
 
@@ -136,8 +146,10 @@ func runUpdateItems(args []string) int {
 }
 
 func runDeleteItems(args []string) int {
-	keys, version, _, jsonOutput, ok := parseKeysListArgs(args, usageDeleteItems, false, false)
-	if !ok {
+	keys, version, _, jsonOutput, err := parseKeysListArgs(args, false, false)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, usageDeleteItems)
 		return 2
 	}
 
@@ -170,8 +182,10 @@ func runRemoveTag(args []string) int {
 }
 
 func runUpdateTags(args []string, usage string, command string, add bool) int {
-	keys, version, tag, jsonOutput, ok := parseKeysListArgs(args, usage, false, true)
-	if !ok {
+	keys, version, tag, jsonOutput, err := parseKeysListArgs(args, false, true)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, usage)
 		return 2
 	}
 
@@ -215,8 +229,10 @@ func runUpdateTags(args []string, usage string, command string, add bool) int {
 }
 
 func runCreateCollection(args []string) int {
-	data, version, jsonOutput, ok := parseWriteCreateArgs(args, usageCreateCollection)
-	if !ok {
+	data, version, jsonOutput, err := parseWriteCreateArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, usageCreateCollection)
 		return 2
 	}
 
@@ -241,8 +257,10 @@ func runCreateCollection(args []string) int {
 }
 
 func runUpdateCollection(args []string) int {
-	key, data, version, jsonOutput, ok := parseWriteUpdateArgs(args, usageUpdateCollection, false)
-	if !ok {
+	key, data, version, jsonOutput, err := parseWriteUpdateArgs(args, false)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, usageUpdateCollection)
 		return 2
 	}
 
@@ -267,8 +285,10 @@ func runUpdateCollection(args []string) int {
 }
 
 func runDeleteCollection(args []string) int {
-	key, version, jsonOutput, ok := parseWriteDeleteArgs(args, usageDeleteCollection)
-	if !ok {
+	key, version, jsonOutput, err := parseWriteDeleteArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, usageDeleteCollection)
 		return 2
 	}
 
@@ -293,8 +313,10 @@ func runDeleteCollection(args []string) int {
 }
 
 func runCreateSearch(args []string) int {
-	data, version, jsonOutput, ok := parseWriteCreateArgs(args, usageCreateSearch)
-	if !ok {
+	data, version, jsonOutput, err := parseWriteCreateArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, usageCreateSearch)
 		return 2
 	}
 
@@ -319,8 +341,10 @@ func runCreateSearch(args []string) int {
 }
 
 func runUpdateSearch(args []string) int {
-	key, data, version, jsonOutput, ok := parseWriteUpdateArgs(args, usageUpdateSearch, false)
-	if !ok {
+	key, data, version, jsonOutput, err := parseWriteUpdateArgs(args, false)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, usageUpdateSearch)
 		return 2
 	}
 
@@ -345,8 +369,10 @@ func runUpdateSearch(args []string) int {
 }
 
 func runDeleteSearch(args []string) int {
-	key, version, jsonOutput, ok := parseWriteDeleteArgs(args, usageDeleteSearch)
-	if !ok {
+	key, version, jsonOutput, err := parseWriteDeleteArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintln(stderr, usageDeleteSearch)
 		return 2
 	}
 

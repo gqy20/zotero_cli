@@ -129,6 +129,23 @@ Implementation should proceed in this order:
 6. implement parser error improvements
 7. run focused tests, then the full suite
 
+## Progress
+
+Completed slices:
+
+- backend fallback now uses explicit backend error markers rather than raw
+  string matching
+- shared `find` semantics now live in backend-level reusable helpers
+- write command parsing now returns specific validation errors before printing
+  usage text
+
+Write validation cases covered by tests now include:
+
+- `--data` and `--from-file` conflicts
+- unreadable `--from-file` paths
+- invalid JSON payloads for single and batch writes
+- missing `--if-unmodified-since-version` where required
+
 ## Definition of Done
 
 `0.0.2` stability work is considered complete when:

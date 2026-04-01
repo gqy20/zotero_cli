@@ -281,9 +281,33 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			wantUsage: usageCreateItem,
 		},
 		{
+			name:       "create item conflicting data sources",
+			args:       []string{"create-item", "--data", `{"itemType":"book"}`, "--from-file", "item.json", "--if-unmodified-since-version", "1"},
+			wantUsage:  usageCreateItem,
+			wantStderr: "error: cannot combine --data and --from-file",
+		},
+		{
+			name:       "create item missing file",
+			args:       []string{"create-item", "--from-file", "missing.json", "--if-unmodified-since-version", "1"},
+			wantUsage:  usageCreateItem,
+			wantStderr: "error: could not read --from-file",
+		},
+		{
+			name:       "create item invalid json",
+			args:       []string{"create-item", "--data", `{"itemType":`, "--if-unmodified-since-version", "1"},
+			wantUsage:  usageCreateItem,
+			wantStderr: "error: invalid JSON payload",
+		},
+		{
 			name:      "update item missing args",
 			args:      []string{"update-item", "ABCD2345"},
 			wantUsage: usageUpdateItem,
+		},
+		{
+			name:       "update item missing version",
+			args:       []string{"update-item", "ABCD2345", "--data", `{"title":"Updated"}`},
+			wantUsage:  usageUpdateItem,
+			wantStderr: "error: missing value for --if-unmodified-since-version",
 		},
 		{
 			name:      "delete item missing version",
@@ -294,6 +318,12 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			name:      "create items missing data",
 			args:      []string{"create-items"},
 			wantUsage: usageCreateItems,
+		},
+		{
+			name:       "create items invalid json",
+			args:       []string{"create-items", "--data", `[`, "--if-unmodified-since-version", "1"},
+			wantUsage:  usageCreateItems,
+			wantStderr: "error: invalid JSON payload",
 		},
 		{
 			name:      "update items missing data",
