@@ -325,6 +325,12 @@ func (e *APIError) Error() string {
 	switch e.StatusCode {
 	case http.StatusUnauthorized:
 		return "zotero api unauthorized (401): check library id and api key"
+	case http.StatusForbidden:
+		detail := strings.TrimSpace(strings.ToLower(e.Body))
+		if strings.Contains(detail, "invalid key") {
+			return formatAPIError("zotero api forbidden (403): invalid api key; update ZOT_API_KEY", e.Body)
+		}
+		return formatAPIError("zotero api forbidden (403)", e.Body)
 	case http.StatusNotFound:
 		return "zotero api not found (404)"
 	case http.StatusConflict:

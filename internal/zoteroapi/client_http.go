@@ -134,6 +134,7 @@ func (c *Client) doGlobalJSONRequest(ctx context.Context, relativePath string, q
 	u.RawQuery = values.Encode()
 
 	resp, err := c.doHTTPRequest(ctx, http.MethodGet, u.String(), nil, true, map[string]string{
+		"Zotero-API-Key":     c.cfg.APIKey,
 		"Zotero-API-Version": "3",
 	})
 	if err != nil {

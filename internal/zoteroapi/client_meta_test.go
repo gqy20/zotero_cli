@@ -93,7 +93,7 @@ func TestClientGetKeyInfo(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(config.Config{}, server.URL, server.Client())
+	client := New(config.Config{APIKey: "secret"}, server.URL, server.Client())
 
 	info, err := client.GetKeyInfo(context.Background(), "secret")
 	if err != nil {
@@ -105,6 +105,42 @@ func TestClientGetKeyInfo(t *testing.T) {
 	}
 	if info.Access["user"] == nil {
 		t.Fatalf("expected access payload: %#v", info)
+	}
+}
+
+func TestClientGetCurrentKeyInfo(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/keys/current" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Zotero-API-Key"); got != "secret" {
+			t.Fatalf("unexpected api key header: %q", got)
+		}
+
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"userID": 123456,
+			"access": map[string]any{
+				"user": map[string]any{
+					"library": true,
+				},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{APIKey: "secret"}, server.URL, server.Client())
+
+	info, err := client.GetCurrentKeyInfo(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentKeyInfo returned error: %v", err)
+	}
+
+	if info.UserID != 123456 {
+		t.Fatalf("unexpected key info: %#v", info)
 	}
 }
 
@@ -158,8 +194,11 @@ func TestClientValidateLibraryAccessForUser(t *testing.T) {
 	client.baseURL = "http://example.test"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/keys/secret" {
+		if r.URL.Path != "/keys/current" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Zotero-API-Key"); got != "secret" {
+			t.Fatalf("unexpected api key header: %q", got)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"userID": 123456,
@@ -184,7 +223,10 @@ func TestClientValidateLibraryAccessForGroup(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/keys/secret":
+		case "/keys/current":
+			if got := r.Header.Get("Zotero-API-Key"); got != "secret" {
+				t.Fatalf("unexpected api key header: %q", got)
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"userID": 123456,
 				"access": map[string]any{"user": map[string]any{"library": true}},

@@ -34,6 +34,27 @@ func TestClientFindItemsMapsUnauthorizedError(t *testing.T) {
 	}
 }
 
+func TestClientGetCurrentKeyInfoMapsInvalidKeyForbiddenError(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Invalid key", http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		APIKey: "secret",
+	}, server.URL, server.Client())
+
+	_, err := client.GetCurrentKeyInfo(context.Background())
+	if err == nil {
+		t.Fatal("expected forbidden error")
+	}
+	if got := err.Error(); got != "zotero api forbidden (403): invalid api key; update ZOT_API_KEY: Invalid key" {
+		t.Fatalf("unexpected error: %q", got)
+	}
+}
+
 func TestClientGetItemMapsNotFoundError(t *testing.T) {
 	t.Parallel()
 

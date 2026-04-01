@@ -394,12 +394,17 @@ func runGroups(args []string) int {
 		return 2
 	}
 
-	cfg, client, exitCode := loadClient()
+	_, client, exitCode := loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
-	groups, err := client.ListGroupsForUser(context.Background(), cfg.LibraryID)
+	keyInfo, err := client.GetCurrentKeyInfo(context.Background())
+	if err != nil {
+		return printErr(err)
+	}
+
+	groups, err := client.ListGroupsForUser(context.Background(), fmt.Sprintf("%d", keyInfo.UserID))
 	if err != nil {
 		return printErr(err)
 	}

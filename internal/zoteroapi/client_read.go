@@ -481,6 +481,18 @@ func (c *Client) GetKeyInfo(ctx context.Context, key string) (KeyInfo, error) {
 	}, nil
 }
 
+func (c *Client) GetCurrentKeyInfo(ctx context.Context) (KeyInfo, error) {
+	var raw apiKeyInfo
+	if err := c.doGlobalJSONRequest(ctx, path.Join("keys", "current"), nil, &raw); err != nil {
+		return KeyInfo{}, err
+	}
+
+	return KeyInfo{
+		UserID: raw.UserID,
+		Access: raw.Access,
+	}, nil
+}
+
 func (c *Client) ListGroupsForUser(ctx context.Context, userID string) ([]GroupInfo, error) {
 	var raw []apiGroup
 	if err := c.doGlobalJSONRequest(ctx, path.Join("users", userID, "groups"), nil, &raw); err != nil {
@@ -498,7 +510,7 @@ func (c *Client) ListGroupsForUser(ctx context.Context, userID string) ([]GroupI
 }
 
 func (c *Client) ValidateLibraryAccess(ctx context.Context) (ValidationResult, error) {
-	info, err := c.GetKeyInfo(ctx, c.cfg.APIKey)
+	info, err := c.GetCurrentKeyInfo(ctx)
 	if err != nil {
 		return ValidationResult{}, err
 	}

@@ -682,7 +682,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 				"collections": []any{},
 				"relations":   map[string]any{},
 			})
-		case "/keys/secret":
+		case "/keys/current", "/keys/secret":
 			writeTestJSON(w, map[string]any{
 				"userID": 123456,
 				"access": map[string]any{
