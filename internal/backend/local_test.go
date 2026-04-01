@@ -1,66 +1,70 @@
 package backend
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"zotero_cli/internal/config"
 )
 
-func TestNewLocalReaderRequiresDataDir(t *testing.T) {
-	_, err := NewLocalReader(config.Config{})
-	if err == nil {
-		t.Fatalf("NewLocalReader() error = nil, want error")
-	}
-	if err.Error() != "local mode requires data_dir" {
-		t.Fatalf("NewLocalReader() error = %q, want data_dir error", err.Error())
-	}
-}
+func TestLocalSQLiteDSNUsesReadOnlyPragmas(t *testing.T) {
+	dsn := localSQLiteDSN(`D:\Zotero\zotero.sqlite`)
 
-func TestNewLocalReaderBuildsDerivedPaths(t *testing.T) {
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "zotero.sqlite"), []byte("stub"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(filepath.Join(root, "storage"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	reader, err := NewLocalReader(config.Config{DataDir: root})
+	u, err := url.Parse(dsn)
 	if err != nil {
-		t.Fatalf("NewLocalReader() error = %v", err)
+		t.Fatalf("parse dsn: %v", err)
 	}
-	if reader.DataDir != root {
-		t.Fatalf("DataDir = %q, want %q", reader.DataDir, root)
+	if u.Scheme != "file" {
+		t.Fatalf("unexpected scheme: %q", u.Scheme)
 	}
-	if reader.SQLitePath != filepath.Join(root, "zotero.sqlite") {
-		t.Fatalf("SQLitePath = %q", reader.SQLitePath)
+	if got := u.Query().Get("mode"); got != "ro" {
+		t.Fatalf("unexpected mode query param: %q", got)
 	}
-	if reader.StorageDir != filepath.Join(root, "storage") {
-		t.Fatalf("StorageDir = %q", reader.StorageDir)
+	pragmas := u.Query()["_pragma"]
+	if len(pragmas) != 2 {
+		t.Fatalf("unexpected pragmas: %#v", pragmas)
+	}
+	if pragmas[0] != "busy_timeout=5000" && pragmas[1] != "busy_timeout=5000" {
+		t.Fatalf("expected busy_timeout pragma, got %#v", pragmas)
+	}
+	if pragmas[0] != "query_only=1" && pragmas[1] != "query_only=1" {
+		t.Fatalf("expected query_only pragma, got %#v", pragmas)
 	}
 }
 
-func TestNormalizeLocalDate(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{name: "empty", input: "", want: ""},
-		{name: "year only", input: "2017", want: "2017"},
-		{name: "date only", input: "2019-03-29", want: "2019-03-29"},
-		{name: "duplicate date", input: "2019-03-29 2019-03-29", want: "2019-03-29"},
-		{name: "duplicate date with time", input: "2024-01-08 2024-01-08 00:00:00", want: "2024-01-08"},
-		{name: "whitespace cleanup", input: " 2024-01-08   2024-01-08 ", want: "2024-01-08"},
+func TestCreateSQLiteSnapshotCopiesDatabaseAndSidecars(t *testing.T) {
+	sourceDir := t.TempDir()
+	sqlitePath := filepath.Join(sourceDir, "zotero.sqlite")
+	journalPath := sqlitePath + "-journal"
+	walPath := sqlitePath + "-wal"
+
+	if err := os.WriteFile(sqlitePath, []byte("db"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(journalPath, []byte("journal"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(walPath, []byte("wal"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := normalizeLocalDate(tt.input); got != tt.want {
-				t.Fatalf("normalizeLocalDate(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
+	snapshotDir, snapshotPath, err := createSQLiteSnapshot(sqlitePath)
+	if err != nil {
+		t.Fatalf("create snapshot: %v", err)
+	}
+	defer os.RemoveAll(snapshotDir)
+
+	for path, want := range map[string]string{
+		snapshotPath:              "db",
+		snapshotPath + "-journal": "journal",
+		snapshotPath + "-wal":     "wal",
+	} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read snapshot file %s: %v", path, err)
+		}
+		if string(data) != want {
+			t.Fatalf("unexpected snapshot contents for %s: %q", path, string(data))
+		}
 	}
 }

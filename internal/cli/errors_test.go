@@ -36,6 +36,37 @@ func TestHelpIncludesDeleteWarnings(t *testing.T) {
 	}
 }
 
+func TestSubcommandHelpSkipsConfigLoading(t *testing.T) {
+	testCases := []struct {
+		name      string
+		args      []string
+		wantUsage string
+	}{
+		{name: "export help", args: []string{"export", "--help"}, wantUsage: usageExport},
+		{name: "stats help", args: []string{"stats", "--help"}, wantUsage: usageStats},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			configRoot := t.TempDir()
+			setTestConfigDir(t, configRoot)
+
+			stdout, stderr := captureOutput(t)
+			exitCode := Run(tc.args)
+
+			if exitCode != 0 {
+				t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+			}
+			if got := stderr.String(); got != "" {
+				t.Fatalf("expected empty stderr, got %q", got)
+			}
+			if !strings.Contains(stdout.String(), tc.wantUsage) {
+				t.Fatalf("expected usage %q in stdout, got %q", tc.wantUsage, stdout.String())
+			}
+		})
+	}
+}
+
 func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 	testCases := []struct {
 		name string

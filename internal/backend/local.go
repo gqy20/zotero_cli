@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -21,9 +22,9 @@ import (
 type LocalReader struct {
 	LibraryType string
 	LibraryID   string
-	DataDir    string
-	SQLitePath string
-	StorageDir string
+	DataDir     string
+	SQLitePath  string
+	StorageDir  string
 }
 
 func NewLocalReader(cfg config.Config) (*LocalReader, error) {
@@ -51,9 +52,9 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 	return &LocalReader{
 		LibraryType: cfg.LibraryType,
 		LibraryID:   cfg.LibraryID,
-		DataDir:    dataDir,
-		SQLitePath: sqlitePath,
-		StorageDir: storageDir,
+		DataDir:     dataDir,
+		SQLitePath:  sqlitePath,
+		StorageDir:  storageDir,
 	}, nil
 }
 
@@ -65,11 +66,12 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 		return nil, newUnsupportedFeatureError("local", "find --qmode")
 	}
 
-	db, err := r.openDB()
+	db, cleanup, err := r.openDB()
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
+	defer cleanup()
 
 	query, args := localFindQuery(opts)
 	rows, err := db.QueryContext(ctx, query, args...)
@@ -127,11 +129,12 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 }
 
 func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, error) {
-	db, err := r.openDB()
+	db, cleanup, err := r.openDB()
 	if err != nil {
 		return domain.Item{}, err
 	}
 	defer db.Close()
+	defer cleanup()
 
 	item, itemID, err := r.loadItem(ctx, db, key)
 	if err != nil {
@@ -168,11 +171,12 @@ func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, err
 }
 
 func (r *LocalReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
-	db, err := r.openDB()
+	db, cleanup, err := r.openDB()
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
+	defer cleanup()
 
 	_, itemID, err := r.loadItemRefByKey(ctx, db, key)
 	if err != nil {
@@ -201,11 +205,12 @@ func (r *LocalReader) GetRelated(ctx context.Context, key string) ([]domain.Rela
 }
 
 func (r *LocalReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
-	db, err := r.openDB()
+	db, cleanup, err := r.openDB()
 	if err != nil {
 		return LibraryStats{}, err
 	}
 	defer db.Close()
+	defer cleanup()
 
 	totalItems, err := countRows(ctx, db, `SELECT COUNT(*) FROM items`)
 	if err != nil {
@@ -488,16 +493,100 @@ func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (dom
 	return item, itemID, nil
 }
 
-func (r *LocalReader) openDB() (*sql.DB, error) {
-	db, err := sql.Open("sqlite", r.SQLitePath)
+func (r *LocalReader) openDB() (*sql.DB, func(), error) {
+	db, err := openSQLiteDB(localSQLiteDSN(r.SQLitePath))
+	if err != nil {
+		if !isSQLiteBusy(err) {
+			return nil, nil, err
+		}
+		snapshotDir, snapshotPath, snapshotErr := createSQLiteSnapshot(r.SQLitePath)
+		if snapshotErr != nil {
+			return nil, nil, err
+		}
+		db, err = openSQLiteDB(localSQLiteDSN(snapshotPath))
+		if err != nil {
+			_ = os.RemoveAll(snapshotDir)
+			return nil, nil, err
+		}
+		return db, func() {
+			_ = os.RemoveAll(snapshotDir)
+		}, nil
+	}
+	return db, func() {}, nil
+}
+
+func localSQLiteDSN(path string) string {
+	uriPath := filepath.ToSlash(path)
+	if !strings.HasPrefix(uriPath, "/") {
+		uriPath = "/" + uriPath
+	}
+	return (&url.URL{
+		Scheme:   "file",
+		Path:     uriPath,
+		RawQuery: "mode=ro&_pragma=busy_timeout=5000&_pragma=query_only=1",
+	}).String()
+}
+
+func openSQLiteDB(dsn string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec(`PRAGMA busy_timeout = 5000`); err != nil {
+	if err := db.Ping(); err != nil {
 		db.Close()
 		return nil, err
 	}
 	return db, nil
+}
+
+func isSQLiteBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "SQLITE_BUSY")
+}
+
+func createSQLiteSnapshot(sqlitePath string) (string, string, error) {
+	snapshotDir, err := os.MkdirTemp("", "zot-local-snapshot-*")
+	if err != nil {
+		return "", "", err
+	}
+
+	snapshotPath := filepath.Join(snapshotDir, filepath.Base(sqlitePath))
+	for _, sourcePath := range []string{
+		sqlitePath,
+		sqlitePath + "-journal",
+		sqlitePath + "-wal",
+		sqlitePath + "-shm",
+	} {
+		if err := copySQLiteFileIfExists(sourcePath, filepath.Join(snapshotDir, filepath.Base(sourcePath))); err != nil {
+			_ = os.RemoveAll(snapshotDir)
+			return "", "", err
+		}
+	}
+	return snapshotDir, snapshotPath, nil
+}
+
+func copySQLiteFileIfExists(sourcePath string, targetPath string) error {
+	source, err := os.Open(sourcePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	defer source.Close()
+
+	target, err := os.Create(targetPath)
+	if err != nil {
+		return err
+	}
+	defer target.Close()
+
+	if _, err := target.ReadFrom(source); err != nil {
+		return err
+	}
+	return target.Close()
 }
 
 func countRows(ctx context.Context, db *sql.DB, query string) (int, error) {

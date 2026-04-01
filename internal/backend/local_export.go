@@ -8,11 +8,12 @@ import (
 )
 
 func (r *LocalReader) ExportItemsCSLJSON(ctx context.Context, keys []string) ([]map[string]any, error) {
-	db, err := r.openDB()
+	db, cleanup, err := r.openDB()
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
+	defer cleanup()
 
 	out := make([]map[string]any, 0, len(keys))
 	for _, key := range keys {
@@ -60,11 +61,12 @@ func (r *LocalReader) ExportItemsCSLJSON(ctx context.Context, keys []string) ([]
 }
 
 func (r *LocalReader) CollectionItemKeys(ctx context.Context, collectionKey string, limit int) ([]string, error) {
-	db, err := r.openDB()
+	db, cleanup, err := r.openDB()
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
+	defer cleanup()
 
 	query := `
 		SELECT i.key

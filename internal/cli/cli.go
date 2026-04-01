@@ -191,3 +191,20 @@ func printErr(err error) int {
 	fmt.Fprintln(stderr, "error:", err)
 	return 1
 }
+
+func isHelpOnly(args []string) bool {
+	if len(args) != 1 {
+		return false
+	}
+	switch args[0] {
+	case "help", "-h", "--help":
+		return true
+	default:
+		return false
+	}
+}
+
+func printCommandUsage(usage string) int {
+	fmt.Fprintln(stdout, usage)
+	return 0
+}

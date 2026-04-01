@@ -12,6 +12,9 @@ import (
 )
 
 func runFind(args []string) int {
+	if isHelpOnly(args) {
+		return printCommandUsage(usageFind)
+	}
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, usageFind)
 		return 2
@@ -74,6 +77,9 @@ func runFind(args []string) int {
 }
 
 func runStats(args []string) int {
+	if isHelpOnly(args) {
+		return printCommandUsage(usageStats)
+	}
 	jsonOutput, ok := parseJSONOnlyArgs(args, usageStats)
 	if !ok {
 		return 2
@@ -100,6 +106,9 @@ func runStats(args []string) int {
 }
 
 func runShow(args []string) int {
+	if isHelpOnly(args) {
+		return printCommandUsage(usageShow)
+	}
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, usageShow)
 		return 2
@@ -195,6 +204,9 @@ func runShow(args []string) int {
 }
 
 func runRelate(args []string) int {
+	if isHelpOnly(args) {
+		return printCommandUsage(usageRelate)
+	}
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, usageRelate)
 		return 2
@@ -259,6 +271,9 @@ func relateSummary(ref domain.ItemRef) string {
 }
 
 func runCite(args []string) int {
+	if isHelpOnly(args) {
+		return printCommandUsage(usageCite)
+	}
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, usageCite)
 		return 2
@@ -304,6 +319,9 @@ func runCite(args []string) int {
 }
 
 func runExport(args []string) int {
+	if isHelpOnly(args) {
+		return printCommandUsage(usageExport)
+	}
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, usageExport)
 		return 2
