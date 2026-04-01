@@ -14,6 +14,7 @@ zot
 *.out
 coverage.out
 .gocache/
+.gomodcache/
 
 # Editor and OS noise
 .DS_Store
@@ -21,3 +22,7 @@ Thumbs.db
 PROFILE
 .env
 .claude/
+
+# Local agent and analysis artifacts
+.codex_*.json
+.codex_*.sqlite
