@@ -238,6 +238,63 @@ Priority rules:
 - unsupported commands in `local` mode should fail explicitly rather than silently falling back to `web`
 - path resolution failure should not be treated as item lookup failure
 
+## Current Mode Boundaries
+
+The command surface is now split into three practical groups.
+
+### Backend-aware read commands
+
+These commands participate in `web` / `local` / `hybrid` mode selection through
+the backend reader:
+
+- `find`
+- `show`
+- `relate`
+
+Behavior summary:
+
+- `web`: remote-only behavior
+- `local`: local SQLite-backed behavior where implemented
+- `hybrid`: prefer local, then fall back to remote for supported cases
+
+### Remote API commands
+
+These commands still depend on the Zotero Web API client:
+
+- `cite`
+- `export`
+- `collections`
+- `collections-top`
+- `notes`
+- `tags`
+- `searches`
+- `deleted`
+- `stats`
+- `versions`
+- `item-types`
+- `item-fields`
+- `creator-fields`
+- `item-type-fields`
+- `item-type-creator-types`
+- `item-template`
+- `key-info`
+- `groups`
+- `trash`
+- `publications`
+- all create/update/delete commands
+
+Behavior summary:
+
+- `web`: supported
+- `hybrid`: supported through the remote client path
+- `local`: explicitly rejected with a mode-boundary error
+
+### Known limitation
+
+`relate` remains local/hybrid only for now.
+Pure `web` mode still reports it as unsupported until a remote relation strategy
+is implemented.
+
 For attachments, the local backend should expose enough information for agents to reason about file availability:
 
 - `key`
