@@ -2,10 +2,10 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
@@ -110,11 +110,7 @@ func shouldFallbackToWeb(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	return strings.HasPrefix(msg, "item not found: ") ||
-		strings.Contains(msg, "local find does not support --qmode") ||
-		strings.Contains(msg, "local find does not support --include-trashed") ||
-		strings.Contains(msg, "local relate is not supported")
+	return errors.Is(err, ErrItemNotFound) || errors.Is(err, ErrUnsupportedFeature)
 }
 
 func toAPIFindOptions(opts FindOptions) zoteroapi.FindOptions {

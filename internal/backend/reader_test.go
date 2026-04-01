@@ -127,7 +127,7 @@ func TestHybridReaderFindItemsFallsBackToWeb(t *testing.T) {
 	reader := &HybridReader{
 		local: stubReader{
 			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
-				return nil, errors.New("local find does not support --qmode")
+				return nil, newUnsupportedFeatureError("local", "find --qmode")
 			},
 			getItem: func(context.Context, string) (domain.Item, error) {
 				return domain.Item{}, errors.New("unexpected")
@@ -165,7 +165,7 @@ func TestHybridReaderGetItemFallsBackToWeb(t *testing.T) {
 				return nil, errors.New("unexpected")
 			},
 			getItem: func(context.Context, string) (domain.Item, error) {
-				return domain.Item{}, errors.New("item not found: X")
+				return domain.Item{}, newItemNotFoundError("item", "X")
 			},
 			getRelated: func(context.Context, string) ([]domain.Relation, error) {
 				return nil, errors.New("unexpected")
@@ -229,7 +229,7 @@ func TestHybridReaderFindItemsFallsBackForUnsupportedLocalFlags(t *testing.T) {
 	reader := &HybridReader{
 		local: stubReader{
 			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
-				return nil, errors.New("local find does not support --qmode")
+				return nil, newUnsupportedFeatureError("local", "find --qmode")
 			},
 			getItem: func(context.Context, string) (domain.Item, error) {
 				return domain.Item{}, errors.New("unexpected")

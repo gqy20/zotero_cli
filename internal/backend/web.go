@@ -2,7 +2,6 @@ package backend
 
 import (
 	"context"
-	"fmt"
 
 	"zotero_cli/internal/domain"
 	"zotero_cli/internal/zoteroapi"
@@ -33,7 +32,7 @@ func (r *WebReader) GetItem(ctx context.Context, key string) (domain.Item, error
 }
 
 func (r *WebReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
-	return nil, fmt.Errorf("web relate is not supported yet")
+	return nil, newUnsupportedFeatureError("web", "relate")
 }
 
 func mapItems(items []zoteroapi.Item) []domain.Item {

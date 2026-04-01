@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -56,10 +55,10 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 
 func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
 	if opts.IncludeTrashed {
-		return nil, fmt.Errorf("local find does not support --include-trashed")
+		return nil, newUnsupportedFeatureError("local", "find --include-trashed")
 	}
 	if opts.QMode != "" {
-		return nil, fmt.Errorf("local find does not support --qmode")
+		return nil, newUnsupportedFeatureError("local", "find --qmode")
 	}
 
 	db, err := sql.Open("sqlite", r.SQLitePath)
@@ -347,7 +346,7 @@ func placeholders(n int) string {
 func localFilterAndOrderItems(items []domain.Item, opts FindOptions) []domain.Item {
 	filtered := make([]domain.Item, 0, len(items))
 	for _, item := range items {
-		if !localMatchesDateRange(item.Date, opts.DateAfter, opts.DateBefore) {
+		if !MatchesDateRange(item.Date, opts.DateAfter, opts.DateBefore) {
 			continue
 		}
 		filtered = append(filtered, item)
@@ -377,27 +376,6 @@ func compareFindItems(left domain.Item, right domain.Item, sortBy string) int {
 	return strings.Compare(left.Key, right.Key)
 }
 
-func compareFindDates(left string, right string) int {
-	leftStart, _, leftOK := localParseDateRange(left)
-	rightStart, _, rightOK := localParseDateRange(right)
-	if leftOK && rightOK {
-		if leftStart.Before(rightStart) {
-			return -1
-		}
-		if leftStart.After(rightStart) {
-			return 1
-		}
-		return 0
-	}
-	if leftOK {
-		return -1
-	}
-	if rightOK {
-		return 1
-	}
-	return strings.Compare(left, right)
-}
-
 func paginateItems(items []domain.Item, start int, limit int) []domain.Item {
 	if start >= len(items) {
 		return []domain.Item{}
@@ -409,63 +387,6 @@ func paginateItems(items []domain.Item, start int, limit int) []domain.Item {
 		items = items[:limit]
 	}
 	return items
-}
-
-func localMatchesDateRange(itemDate string, after string, before string) bool {
-	if after == "" && before == "" {
-		return true
-	}
-
-	itemStart, itemEnd, ok := localParseDateRange(itemDate)
-	if !ok {
-		return false
-	}
-
-	if after != "" {
-		afterStart, _, ok := localParseDateRange(after)
-		if !ok || itemStart.Before(afterStart) {
-			return false
-		}
-	}
-
-	if before != "" {
-		_, beforeEnd, ok := localParseDateRange(before)
-		if !ok || itemEnd.After(beforeEnd) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func localParseDateRange(value string) (time.Time, time.Time, bool) {
-	value = strings.TrimSpace(value)
-	switch len(value) {
-	case len("2006"):
-		start, err := time.Parse("2006", value)
-		if err != nil {
-			return time.Time{}, time.Time{}, false
-		}
-		end := time.Date(start.Year(), time.December, 31, 23, 59, 59, 0, time.UTC)
-		return start, end, true
-	case len("2006-01"):
-		start, err := time.Parse("2006-01", value)
-		if err != nil {
-			return time.Time{}, time.Time{}, false
-		}
-		end := time.Date(start.Year(), start.Month()+1, 0, 23, 59, 59, 0, time.UTC)
-		return start, end, true
-	default:
-		if len(value) >= len("2006-01-02") {
-			start, err := time.Parse("2006-01-02", value[:10])
-			if err != nil {
-				return time.Time{}, time.Time{}, false
-			}
-			end := time.Date(start.Year(), start.Month(), start.Day(), 23, 59, 59, 0, time.UTC)
-			return start, end, true
-		}
-		return time.Time{}, time.Time{}, false
-	}
 }
 
 func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (domain.Item, int64, error) {
@@ -513,7 +434,7 @@ func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (dom
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return domain.Item{}, 0, fmt.Errorf("item not found: %s", key)
+			return domain.Item{}, 0, newItemNotFoundError("item", key)
 		}
 		return domain.Item{}, 0, err
 	}
@@ -542,7 +463,7 @@ func (r *LocalReader) loadItemRefByKey(ctx context.Context, db *sql.DB, key stri
 	var ref domain.ItemRef
 	if err := row.Scan(&itemID, &ref.Key, &ref.ItemType, &ref.Title); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return domain.ItemRef{}, 0, fmt.Errorf("item not found: %s", key)
+			return domain.ItemRef{}, 0, newItemNotFoundError("item", key)
 		}
 		return domain.ItemRef{}, 0, err
 	}

@@ -279,7 +279,7 @@ func TestRunFindLocalRejectsQMode(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
 	}
-	if got := stderr.String(); !strings.Contains(got, "local find does not support --qmode") {
+	if got := stderr.String(); !strings.Contains(got, "local does not support find --qmode") {
 		t.Fatalf("expected qmode local error, got %q", got)
 	}
 }
@@ -303,7 +303,7 @@ func TestRunFindLocalRejectsIncludeTrashed(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
 	}
-	if got := stderr.String(); !strings.Contains(got, "local find does not support --include-trashed") {
+	if got := stderr.String(); !strings.Contains(got, "local does not support find --include-trashed") {
 		t.Fatalf("expected include-trashed local error, got %q", got)
 	}
 }

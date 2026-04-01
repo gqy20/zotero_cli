@@ -4,6 +4,10 @@
 
 This design has now been partially implemented in `0.0.1`.
 
+For the next follow-up iteration, see also:
+
+- [0.0.2 Stability Pass](D:/C/Documents/Program/Go/zotero_cli/docs/stability-pass-0.0.2.md)
+
 Implemented:
 
 - `internal/domain` and backend abstraction
