@@ -445,6 +445,49 @@ func TestRunShowJSON(t *testing.T) {
 	}
 }
 
+func TestRunShowLocalJSONIncludesBibliographicFields(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
+	buildLocalShowFixture(t, sqlitePath, storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"show", "ITEM1234", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+
+	data, ok := got["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+
+	for field, want := range map[string]any{
+		"volume": "37",
+		"issue":  "11",
+		"pages":  "1234-1248",
+	} {
+		if data[field] != want {
+			t.Fatalf("unexpected %s: %#v", field, data[field])
+		}
+	}
+}
+
 func TestRunShowTextOutputFormatsAttachmentsClearly(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -498,6 +541,9 @@ func TestRunShowLocalTextOutputIncludesCollectionsAndResolvedPaths(t *testing.T)
 	for _, want := range []string{
 		"Key: ITEM1234",
 		"Date: 2024-01-08",
+		"Volume: 37",
+		"Issue: 11",
+		"Pages: 1234-1248",
 		"Collections: Machine Learning",
 		"Attachments: 2",
 		"[pdf] attention.pdf (ATTACHPDF)",
@@ -618,9 +664,9 @@ func buildLocalShowFixture(t *testing.T, sqlitePath string, storageDir string) {
 	inserts := []string{
 		`INSERT INTO itemTypes(itemTypeID, typeName) VALUES (1, 'journalArticle'), (2, 'attachment');`,
 		`INSERT INTO items(itemID, key, version, itemTypeID) VALUES (1, 'ITEM1234', 7, 1), (2, 'ATTACHPDF', 1, 2), (3, 'ATTACHURL', 1, 2), (4, 'NOTE1234', 1, 2);`,
-		`INSERT INTO fieldsCombined(fieldID, fieldName) VALUES (1, 'title'), (2, 'date'), (3, 'publicationTitle'), (4, 'DOI'), (5, 'url'), (6, 'filename'), (7, 'note');`,
-		`INSERT INTO itemDataValues(valueID, value) VALUES (1, 'Attention Is All You Need'), (2, '2024-01-08 2024-01-08 00:00:00'), (3, 'NeurIPS'), (4, '10.1/example'), (5, 'https://example.com/paper'), (6, 'attention.pdf'), (7, 'Web Snapshot'), (8, '<p>Local note summary</p>');`,
-		`INSERT INTO itemData(itemID, fieldID, valueID) VALUES (1, 1, 1), (1, 2, 2), (1, 3, 3), (1, 4, 4), (1, 5, 5), (2, 1, 1), (2, 6, 6), (3, 1, 7), (4, 7, 8);`,
+		`INSERT INTO fieldsCombined(fieldID, fieldName) VALUES (1, 'title'), (2, 'date'), (3, 'publicationTitle'), (4, 'DOI'), (5, 'url'), (6, 'filename'), (7, 'note'), (8, 'volume'), (9, 'issue'), (10, 'pages');`,
+		`INSERT INTO itemDataValues(valueID, value) VALUES (1, 'Attention Is All You Need'), (2, '2024-01-08 2024-01-08 00:00:00'), (3, 'NeurIPS'), (4, '10.1/example'), (5, 'https://example.com/paper'), (6, 'attention.pdf'), (7, 'Web Snapshot'), (8, '<p>Local note summary</p>'), (9, '37'), (10, '11'), (11, '1234-1248');`,
+		`INSERT INTO itemData(itemID, fieldID, valueID) VALUES (1, 1, 1), (1, 2, 2), (1, 3, 3), (1, 4, 4), (1, 5, 5), (1, 8, 9), (1, 9, 10), (1, 10, 11), (2, 1, 1), (2, 6, 6), (3, 1, 7), (4, 7, 8);`,
 		`INSERT INTO creators(creatorID, firstName, lastName, fieldMode) VALUES (1, 'Ashish', 'Vaswani', 0);`,
 		`INSERT INTO creatorTypes(creatorTypeID, creatorType) VALUES (1, 'author');`,
 		`INSERT INTO itemCreators(itemID, creatorID, creatorTypeID, orderIndex) VALUES (1, 1, 1, 0);`,
@@ -728,9 +774,9 @@ func buildLocalFindFixture(t *testing.T, sqlitePath string, storageDir string) {
 	inserts := []string{
 		`INSERT INTO itemTypes(itemTypeID, typeName) VALUES (1, 'journalArticle'), (2, 'book'), (3, 'attachment'), (4, 'note'), (5, 'annotation');`,
 		`INSERT INTO items(itemID, key, version, itemTypeID) VALUES (1, 'ITEM1234', 7, 1), (2, 'ART67890', 3, 1), (3, 'BOOK1234', 2, 2), (4, 'ATTA1111', 1, 3), (5, 'NOTE1111', 1, 4), (6, 'ANNO1111', 1, 5);`,
-		`INSERT INTO fieldsCombined(fieldID, fieldName) VALUES (1, 'title'), (2, 'date'), (3, 'publicationTitle'), (4, 'DOI'), (5, 'url'), (6, 'filename'), (7, 'note');`,
-		`INSERT INTO itemDataValues(valueID, value) VALUES (1, 'Attention Is All You Need'), (2, '2024-01-08 2024-01-08 00:00:00'), (3, 'NeurIPS'), (4, '10.1/example'), (5, 'https://example.com/paper'), (6, 'Mixed Survey'), (7, '2024-05-03'), (8, 'Mixed Book'), (9, '2023'), (10, 'mixed.pdf'), (11, '<p>Mixed note</p>'), (12, 'Mixed Attachment');`,
-		`INSERT INTO itemData(itemID, fieldID, valueID) VALUES (1, 1, 1), (1, 2, 2), (1, 3, 3), (1, 4, 4), (1, 5, 5), (2, 1, 6), (2, 2, 7), (3, 1, 8), (3, 2, 9), (4, 1, 12), (4, 6, 10), (5, 7, 11);`,
+		`INSERT INTO fieldsCombined(fieldID, fieldName) VALUES (1, 'title'), (2, 'date'), (3, 'publicationTitle'), (4, 'DOI'), (5, 'url'), (6, 'filename'), (7, 'note'), (8, 'volume'), (9, 'issue'), (10, 'pages');`,
+		`INSERT INTO itemDataValues(valueID, value) VALUES (1, 'Attention Is All You Need'), (2, '2024-01-08 2024-01-08 00:00:00'), (3, 'NeurIPS'), (4, '10.1/example'), (5, 'https://example.com/paper'), (6, 'Mixed Survey'), (7, '2024-05-03'), (8, 'Mixed Book'), (9, '2023'), (10, 'mixed.pdf'), (11, '<p>Mixed note</p>'), (12, 'Mixed Attachment'), (13, '37'), (14, '11'), (15, '1234-1248'), (16, '29'), (17, '20'), (18, 'R1094-R1103');`,
+		`INSERT INTO itemData(itemID, fieldID, valueID) VALUES (1, 1, 1), (1, 2, 2), (1, 3, 3), (1, 4, 4), (1, 5, 5), (1, 8, 13), (1, 9, 14), (1, 10, 15), (2, 1, 6), (2, 2, 7), (2, 8, 16), (2, 9, 17), (2, 10, 18), (3, 1, 8), (3, 2, 9), (4, 1, 12), (4, 6, 10), (5, 7, 11);`,
 		`INSERT INTO creators(creatorID, firstName, lastName, fieldMode) VALUES (1, 'Ashish', 'Vaswani', 0), (2, 'Jane', 'Roe', 0), (3, 'John', 'Doe', 0);`,
 		`INSERT INTO creatorTypes(creatorTypeID, creatorType) VALUES (1, 'author');`,
 		`INSERT INTO itemCreators(itemID, creatorID, creatorTypeID, orderIndex) VALUES (1, 1, 1, 0), (2, 2, 1, 0), (3, 3, 1, 0);`,

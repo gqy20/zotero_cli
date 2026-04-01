@@ -127,6 +127,9 @@ func parseFindIncludeFields(value string) ([]string, error) {
 		"url":       {},
 		"tags":      {},
 		"container": {},
+		"volume":    {},
+		"issue":     {},
+		"pages":     {},
 		"date":      {},
 		"creators":  {},
 	}

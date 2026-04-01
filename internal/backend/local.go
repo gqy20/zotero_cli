@@ -61,7 +61,7 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 		return nil, newUnsupportedFeatureError("local", "find --qmode")
 	}
 
-	db, err := sql.Open("sqlite", r.SQLitePath)
+	db, err := r.openDB()
 	if err != nil {
 		return nil, err
 	}
@@ -90,6 +90,9 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 			&item.ItemType,
 			&item.Title,
 			&item.Date,
+			&item.Volume,
+			&item.Issue,
+			&item.Pages,
 			&item.DOI,
 			&item.URL,
 			&publicationTitle,
@@ -120,7 +123,7 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 }
 
 func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, error) {
-	db, err := sql.Open("sqlite", r.SQLitePath)
+	db, err := r.openDB()
 	if err != nil {
 		return domain.Item{}, err
 	}
@@ -161,7 +164,7 @@ func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, err
 }
 
 func (r *LocalReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
-	db, err := sql.Open("sqlite", r.SQLitePath)
+	db, err := r.openDB()
 	if err != nil {
 		return nil, err
 	}
@@ -202,6 +205,9 @@ func localFindQuery(opts FindOptions) (string, []any) {
 			it.typeName,
 			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'date' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'volume' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'issue' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'pages' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'DOI' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'url' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'publicationTitle' THEN v.value END), ''),
@@ -398,6 +404,9 @@ func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (dom
 			it.typeName,
 			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'date' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'volume' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'issue' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'pages' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'DOI' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'url' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'publicationTitle' THEN v.value END), ''),
@@ -426,6 +435,9 @@ func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (dom
 		&item.ItemType,
 		&item.Title,
 		&item.Date,
+		&item.Volume,
+		&item.Issue,
+		&item.Pages,
 		&item.DOI,
 		&item.URL,
 		&publicationTitle,
@@ -441,6 +453,18 @@ func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (dom
 	item.Container = firstNonEmptyString(publicationTitle, proceedingsTitle, bookTitle)
 	item.Date = normalizeLocalDate(item.Date)
 	return item, itemID, nil
+}
+
+func (r *LocalReader) openDB() (*sql.DB, error) {
+	db, err := sql.Open("sqlite", r.SQLitePath)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := db.Exec(`PRAGMA busy_timeout = 5000`); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return db, nil
 }
 
 func (r *LocalReader) loadItemRefByKey(ctx context.Context, db *sql.DB, key string) (domain.ItemRef, int64, error) {

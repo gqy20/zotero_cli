@@ -34,7 +34,7 @@ func renderFindItemDetailed(item domain.Item, opts backend.FindOptions) {
 
 	fields := opts.IncludeFields
 	if opts.Full {
-		fields = []string{"container", "version", "doi", "url", "tags"}
+		fields = []string{"container", "volume", "issue", "pages", "version", "doi", "url", "tags"}
 	}
 
 	for _, field := range fields {
@@ -46,6 +46,18 @@ func renderFindItemDetailed(item domain.Item, opts backend.FindOptions) {
 		case "version":
 			if item.Version != 0 {
 				fmt.Fprintf(stdout, "Version: %d\n", item.Version)
+			}
+		case "volume":
+			if item.Volume != "" {
+				fmt.Fprintf(stdout, "Volume: %s\n", item.Volume)
+			}
+		case "issue":
+			if item.Issue != "" {
+				fmt.Fprintf(stdout, "Issue: %s\n", item.Issue)
+			}
+		case "pages":
+			if item.Pages != "" {
+				fmt.Fprintf(stdout, "Pages: %s\n", item.Pages)
 			}
 		case "doi":
 			if item.DOI != "" {

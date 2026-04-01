@@ -153,6 +153,15 @@ func runShow(args []string) int {
 	if item.Container != "" {
 		fmt.Fprintf(stdout, "Container: %s\n", item.Container)
 	}
+	if item.Volume != "" {
+		fmt.Fprintf(stdout, "Volume: %s\n", item.Volume)
+	}
+	if item.Issue != "" {
+		fmt.Fprintf(stdout, "Issue: %s\n", item.Issue)
+	}
+	if item.Pages != "" {
+		fmt.Fprintf(stdout, "Pages: %s\n", item.Pages)
+	}
 	if item.DOI != "" {
 		fmt.Fprintf(stdout, "DOI: %s\n", item.DOI)
 	}

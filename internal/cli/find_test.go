@@ -2,6 +2,8 @@ package cli
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -470,6 +472,41 @@ func TestRunFindTextOutputSupportsIncludeFields(t *testing.T) {
 		"Key: X42A7DEE",
 		"Version: 42",
 		"URL: https://example.org/attention",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output %q", want, got)
+		}
+	}
+}
+
+func TestRunFindLocalTextOutputSupportsBibliographicIncludeFields(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "attention", "--include-fields", "volume,issue,pages"})
+	restoreOutput()
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Key: ITEM1234",
+		"Volume: 37",
+		"Issue: 11",
+		"Pages: 1234-1248",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in output %q", want, got)

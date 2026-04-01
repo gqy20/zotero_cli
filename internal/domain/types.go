@@ -8,6 +8,9 @@ type Item struct {
 	Date        string       `json:"date"`
 	Creators    []Creator    `json:"creators"`
 	Container   string       `json:"container,omitempty"`
+	Volume      string       `json:"volume,omitempty"`
+	Issue       string       `json:"issue,omitempty"`
+	Pages       string       `json:"pages,omitempty"`
 	DOI         string       `json:"doi,omitempty"`
 	URL         string       `json:"url,omitempty"`
 	Tags        []string     `json:"tags,omitempty"`

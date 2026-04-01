@@ -150,6 +150,9 @@ type Item struct {
 	Date        string       `json:"date"`
 	Creators    []Creator    `json:"creators"`
 	Container   string       `json:"container,omitempty"`
+	Volume      string       `json:"volume,omitempty"`
+	Issue       string       `json:"issue,omitempty"`
+	Pages       string       `json:"pages,omitempty"`
 	DOI         string       `json:"doi,omitempty"`
 	URL         string       `json:"url,omitempty"`
 	Tags        []string     `json:"tags,omitempty"`
@@ -188,6 +191,9 @@ type apiItemData struct {
 	PublicationTitle string       `json:"publicationTitle"`
 	ProceedingsTitle string       `json:"proceedingsTitle"`
 	BookTitle        string       `json:"bookTitle"`
+	Volume           string       `json:"volume"`
+	Issue            string       `json:"issue"`
+	Pages            string       `json:"pages"`
 	Creators         []apiCreator `json:"creators"`
 	Tags             []apiTag     `json:"tags"`
 }
