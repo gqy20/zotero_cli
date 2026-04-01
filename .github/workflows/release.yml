@@ -152,6 +152,7 @@ jobs:
         run: |
           version="${VERSION#v}"
           notes_file="release-notes.md"
+          binary_name="zot"
 
           awk -v version="$version" '
             $0 ~ "^## \\[" version "\\]" { capture=1; next }
@@ -165,13 +166,25 @@ jobs:
           fi
 
           {
-            echo "## ${VERSION}"
+            echo "# ${VERSION}"
+            echo
+            echo "## 下载"
+            echo
+            echo "- Windows: \`${binary_name}_${VERSION}_windows_amd64.zip\` 或独立可执行文件 \`${binary_name}_${VERSION}_windows_amd64.exe\`"
+            echo "- macOS (Apple Silicon): \`${binary_name}_${VERSION}_darwin_arm64.tar.gz\`"
+            echo "- macOS (Intel): \`${binary_name}_${VERSION}_darwin_amd64.tar.gz\`"
+            echo "- Linux (x86_64): \`${binary_name}_${VERSION}_linux_amd64.tar.gz\`"
+            echo "- Linux (arm64): \`${binary_name}_${VERSION}_linux_arm64.tar.gz\`"
+            echo "- 校验文件: \`checksums.txt\`"
+            echo
+            echo "## 更新内容"
             echo
             cat "${notes_file}"
             echo
             echo "---"
             echo
-            echo "See also: https://github.com/${{ github.repository }}/blob/${VERSION}/CHANGELOG.md"
+            echo "查看完整更新日志："
+            echo "https://github.com/${{ github.repository }}/blob/${VERSION}/CHANGELOG.md"
           } > "${notes_file}.tmp"
 
           mv "${notes_file}.tmp" "${notes_file}"
@@ -179,5 +192,8 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ env.RELEASE_VERSION }} · zot
+          tag_name: ${{ env.RELEASE_VERSION }}
           body_path: release-notes.md
           files: dist/*
+          make_latest: true
