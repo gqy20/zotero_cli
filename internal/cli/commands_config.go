@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"zotero_cli/internal/backend"
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/zoteroapi"
 )
@@ -101,7 +102,7 @@ func runConfigInit(args []string) int {
 }
 
 func runConfigValidate() int {
-	cfg, _, err := config.Load()
+	cfg, path, err := config.Load()
 	if err != nil {
 		if errors.Is(err, config.ErrNotFound) {
 			fmt.Fprintln(stderr, "config not found.")
@@ -124,5 +125,25 @@ func runConfigValidate() int {
 		OK:      true,
 		Command: "config-validate",
 		Data:    result,
+		Meta:    configValidateMeta(cfg, path),
 	})
+}
+
+func configValidateMeta(cfg config.Config, path string) map[string]any {
+	meta := map[string]any{
+		"config_path":         path,
+		"mode":                cfg.Mode,
+		"data_dir_configured": strings.TrimSpace(cfg.DataDir) != "",
+	}
+	if strings.TrimSpace(cfg.DataDir) == "" {
+		return meta
+	}
+
+	if _, err := backend.NewLocalReader(cfg); err != nil {
+		meta["local_reader_available"] = false
+		meta["local_reader_error"] = err.Error()
+		return meta
+	}
+	meta["local_reader_available"] = true
+	return meta
 }

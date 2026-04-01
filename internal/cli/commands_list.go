@@ -34,6 +34,11 @@ func runCollections(args []string) int {
 		})
 	}
 
+	if len(collections) == 0 {
+		fmt.Fprintln(stdout, "no collections found")
+		return 0
+	}
+
 	for _, collection := range collections {
 		fmt.Fprintf(stdout, "%-10s  %-20s  items=%d  children=%d\n",
 			collection.Key,
@@ -111,6 +116,11 @@ func runTags(args []string) int {
 		})
 	}
 
+	if len(tags) == 0 {
+		fmt.Fprintln(stdout, "no tags found")
+		return 0
+	}
+
 	for _, tag := range tags {
 		fmt.Fprintf(stdout, "%-20s  items=%d\n", tag.Name, tag.NumItems)
 	}
@@ -142,6 +152,11 @@ func runSearches(args []string) int {
 				"total": len(searches),
 			},
 		})
+	}
+
+	if len(searches) == 0 {
+		fmt.Fprintln(stdout, "no saved searches found")
+		return 0
 	}
 
 	for _, search := range searches {
@@ -420,6 +435,11 @@ func runGroups(args []string) int {
 		})
 	}
 
+	if len(groups) == 0 {
+		fmt.Fprintln(stdout, "no groups found for the current api key")
+		return 0
+	}
+
 	for _, group := range groups {
 		fmt.Fprintf(stdout, "%-8d  %s\n", group.ID, group.Name)
 	}
@@ -432,11 +452,8 @@ func runTrash(args []string) int {
 		return 2
 	}
 
-	cfg, client, exitCode := loadClient()
+	_, client, exitCode := loadClient()
 	if exitCode != 0 {
-		return exitCode
-	}
-	if exitCode := ensureWriteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -454,6 +471,11 @@ func runTrash(args []string) int {
 				"total": len(items),
 			},
 		})
+	}
+
+	if len(items) == 0 {
+		fmt.Fprintln(stdout, "trash is empty")
+		return 0
 	}
 
 	for _, item := range items {
@@ -474,11 +496,8 @@ func runCollectionsTop(args []string) int {
 		return 2
 	}
 
-	cfg, client, exitCode := loadClient()
+	_, client, exitCode := loadClient()
 	if exitCode != 0 {
-		return exitCode
-	}
-	if exitCode := ensureDeleteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -498,6 +517,11 @@ func runCollectionsTop(args []string) int {
 		})
 	}
 
+	if len(collections) == 0 {
+		fmt.Fprintln(stdout, "no top-level collections found")
+		return 0
+	}
+
 	for _, collection := range collections {
 		fmt.Fprintf(stdout, "%-10s  %-20s  items=%d  children=%d\n",
 			collection.Key,
@@ -515,11 +539,8 @@ func runPublications(args []string) int {
 		return 2
 	}
 
-	cfg, client, exitCode := loadClient()
+	_, client, exitCode := loadClient()
 	if exitCode != 0 {
-		return exitCode
-	}
-	if exitCode := ensureWriteAllowed(cfg); exitCode != 0 {
 		return exitCode
 	}
 
@@ -537,6 +558,11 @@ func runPublications(args []string) int {
 				"total": len(items),
 			},
 		})
+	}
+
+	if len(items) == 0 {
+		fmt.Fprintln(stdout, "no publications found")
+		return 0
 	}
 
 	for _, item := range items {

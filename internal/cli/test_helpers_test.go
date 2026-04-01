@@ -713,3 +713,27 @@ func newTestAPI(t *testing.T) (string, func()) {
 
 	return server.URL, server.Close
 }
+
+func newEmptyListAPI(t *testing.T) (string, func()) {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/keys/current":
+			writeTestJSON(w, map[string]any{
+				"userID": 123456,
+				"access": map[string]any{
+					"user": map[string]any{
+						"library": true,
+					},
+				},
+			})
+		case "/users/123456/collections", "/users/123456/tags", "/users/123456/searches", "/users/123456/groups", "/users/123456/collections/top", "/users/123456/publications/items":
+			writeTestJSON(w, []map[string]any{})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+
+	return server.URL, server.Close
+}

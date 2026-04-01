@@ -2,6 +2,8 @@ package cli
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -61,6 +63,25 @@ func TestRunCollectionsText(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in output %q", want, got)
 		}
+	}
+}
+
+func TestRunCollectionsTextShowsFriendlyMessageWhenNoCollectionsExist(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newEmptyListAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"collections"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "no collections found") {
+		t.Fatalf("expected friendly empty collections message, got %q", got)
 	}
 }
 
@@ -227,6 +248,25 @@ func TestRunTagsText(t *testing.T) {
 	}
 }
 
+func TestRunTagsTextShowsFriendlyMessageWhenNoTagsExist(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newEmptyListAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"tags"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "no tags found") {
+		t.Fatalf("expected friendly empty tags message, got %q", got)
+	}
+}
+
 func TestRunSearchesJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -281,6 +321,25 @@ func TestRunSearchesText(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in output %q", want, got)
 		}
+	}
+}
+
+func TestRunSearchesTextShowsFriendlyMessageWhenNoSearchesExist(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newEmptyListAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"searches"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "no saved searches found") {
+		t.Fatalf("expected friendly empty searches message, got %q", got)
 	}
 }
 
@@ -715,6 +774,35 @@ func TestRunTrashText(t *testing.T) {
 	}
 }
 
+func TestRunTrashReadOnlyDoesNotRequireWritePermission(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	envPath := filepath.Join(configRoot, ".zot", ".env")
+	content, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.ReplaceAll(string(content), "ZOT_ALLOW_WRITE=1", "ZOT_ALLOW_WRITE=0")
+	if err := os.WriteFile(envPath, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"trash"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "TRASH123") {
+		t.Fatalf("expected trash output, got %q", got)
+	}
+}
+
 func TestRunCollectionsTopJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -739,6 +827,35 @@ func TestRunCollectionsTopJSON(t *testing.T) {
 	}
 }
 
+func TestRunCollectionsTopReadOnlyDoesNotRequireDeletePermission(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	envPath := filepath.Join(configRoot, ".zot", ".env")
+	content, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.ReplaceAll(string(content), "ZOT_ALLOW_DELETE=1", "ZOT_ALLOW_DELETE=0")
+	if err := os.WriteFile(envPath, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"collections-top"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "COLLTOP1") {
+		t.Fatalf("expected collections-top output, got %q", got)
+	}
+}
+
 func TestRunPublicationsText(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -759,5 +876,91 @@ func TestRunPublicationsText(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in output %q", want, got)
 		}
+	}
+}
+
+func TestRunPublicationsReadOnlyDoesNotRequireWritePermission(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	envPath := filepath.Join(configRoot, ".zot", ".env")
+	content, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.ReplaceAll(string(content), "ZOT_ALLOW_WRITE=1", "ZOT_ALLOW_WRITE=0")
+	if err := os.WriteFile(envPath, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"publications"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "PUB12345") {
+		t.Fatalf("expected publications output, got %q", got)
+	}
+}
+
+func TestRunGroupsTextShowsFriendlyMessageWhenNoGroupsExist(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newEmptyListAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"groups"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "no groups found") {
+		t.Fatalf("expected friendly empty groups message, got %q", got)
+	}
+}
+
+func TestRunCollectionsTopTextShowsFriendlyMessageWhenNoCollectionsExist(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newEmptyListAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"collections-top"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "no top-level collections found") {
+		t.Fatalf("expected friendly empty collections-top message, got %q", got)
+	}
+}
+
+func TestRunPublicationsTextShowsFriendlyMessageWhenNoPublicationsExist(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newEmptyListAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"publications"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "no publications found") {
+		t.Fatalf("expected friendly empty publications message, got %q", got)
 	}
 }

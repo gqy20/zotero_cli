@@ -128,6 +128,66 @@ func TestRunConfigValidateJSON(t *testing.T) {
 	if data["library_type"] != "user" {
 		t.Fatalf("unexpected library_type: %#v", data["library_type"])
 	}
+
+	meta, ok := got["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
+	if meta["mode"] != "web" {
+		t.Fatalf("unexpected mode meta: %#v", meta["mode"])
+	}
+	if meta["data_dir_configured"] != false {
+		t.Fatalf("unexpected data_dir_configured meta: %#v", meta["data_dir_configured"])
+	}
+	if meta["config_path"] == "" {
+		t.Fatalf("expected config_path meta, got %#v", meta)
+	}
+}
+
+func TestRunConfigValidateJSONReportsUnavailableLocalReader(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	dataDir := t.TempDir()
+	envPath := filepath.Join(configRoot, ".zot", ".env")
+	content, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.ReplaceAll(string(content), "ZOT_TIMEOUT_SECONDS=20", "ZOT_TIMEOUT_SECONDS=20\nZOT_DATA_DIR="+dataDir)
+	if err := os.WriteFile(envPath, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"config", "validate"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+
+	meta, ok := got["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
+	if meta["data_dir_configured"] != true {
+		t.Fatalf("expected data_dir_configured=true, got %#v", meta["data_dir_configured"])
+	}
+	if meta["local_reader_available"] != false {
+		t.Fatalf("expected local_reader_available=false, got %#v", meta["local_reader_available"])
+	}
+	if errMsg, _ := meta["local_reader_error"].(string); !strings.Contains(errMsg, "zotero.sqlite") {
+		t.Fatalf("expected local_reader_error to mention zotero.sqlite, got %#v", meta["local_reader_error"])
+	}
 }
 
 func TestRunStatsJSON(t *testing.T) {
