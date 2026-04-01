@@ -101,6 +101,10 @@ jobs:
           cp README.md "${package_dir}/README.md" 2>/dev/null || true
           cp LICENSE "${package_dir}/LICENSE" 2>/dev/null || true
 
+          if [[ "${GOOS}" == "windows" ]]; then
+            cp "${package_dir}/${BINARY_NAME}${ext}" "dist/${artifact_base}.exe"
+          fi
+
           if [[ "${ARCHIVE_FORMAT}" == "zip" ]]; then
             (
               cd package
