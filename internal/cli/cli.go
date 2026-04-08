@@ -164,6 +164,17 @@ Commands:
   update-search  Update a saved search from JSON data
   delete-search  Delete a saved search using a version precondition
 
+Modes (set via ZOT_MODE env):
+  web      (default)  Cloud-only via Zotero Web API; no local Zotero needed
+  local               Read from local Zotero SQLite (requires ZOT_DATA_DIR)
+  hybrid              Local-first with Web API fallback for unsupported features
+
+Environment (run 'zot config show' for full list):
+  ZOT_MODE         Operating mode: web | local | hybrid   (default: web)
+  ZOT_API_KEY      Zotero Web API key
+  ZOT_LIBRARY_ID   Numeric user or group library ID
+  ZOT_LIBRARY_TYPE Library type: user | group            (default: user)
+
 Delete Warnings:
   Delete commands are destructive. Review the target key, library, and version carefully before running them.
   If you are an agent or automation tool, stop and think before deleting anything.
