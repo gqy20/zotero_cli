@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"os"
@@ -11,9 +12,252 @@ import (
 	"testing"
 
 	"zotero_cli/internal/config"
+	"zotero_cli/internal/domain"
 
 	_ "modernc.org/sqlite"
 )
+
+func TestFullTextCacheSaveAndLoad(t *testing.T) {
+	rootDir := t.TempDir()
+	cache := newFullTextCache(rootDir)
+	sourcePath := filepath.Join(t.TempDir(), "paper.pdf")
+	if err := os.WriteFile(sourcePath, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := fullTextDocument{
+		Text: "normalized text",
+		Meta: fullTextCacheMeta{
+			AttachmentKey:   "ATT123",
+			ParentItemKey:   "ITEM123",
+			ResolvedPath:    sourcePath,
+			ContentType:     "application/pdf",
+			Extractor:       "zotero_ft_cache",
+			SourceMtimeUnix: info.ModTime().Unix(),
+			SourceSize:      info.Size(),
+			TextHash:        "sha256:test",
+			ExtractedAt:     "2026-04-16T00:00:00Z",
+			Chars:           len("normalized text"),
+		},
+	}
+	if err := cache.Save(doc); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	got, ok, err := cache.Load(domain.Attachment{Key: "ATT123", ResolvedPath: sourcePath, Resolved: true, ContentType: "application/pdf"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Load() ok = false, want true")
+	}
+	if got.Text != doc.Text {
+		t.Fatalf("Load() text = %q, want %q", got.Text, doc.Text)
+	}
+	if got.Meta.AttachmentKey != doc.Meta.AttachmentKey {
+		t.Fatalf("Load() meta = %#v, want attachment key %q", got.Meta, doc.Meta.AttachmentKey)
+	}
+}
+
+func TestFullTextCacheLoadRejectsStaleEntry(t *testing.T) {
+	rootDir := t.TempDir()
+	cache := newFullTextCache(rootDir)
+	sourcePath := filepath.Join(t.TempDir(), "paper.pdf")
+	if err := os.WriteFile(sourcePath, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := fullTextDocument{
+		Text: "normalized text",
+		Meta: fullTextCacheMeta{
+			AttachmentKey:   "ATT123",
+			ResolvedPath:    sourcePath,
+			ContentType:     "application/pdf",
+			Extractor:       "zotero_ft_cache",
+			SourceMtimeUnix: info.ModTime().Unix(),
+			SourceSize:      info.Size(),
+		},
+	}
+	if err := cache.Save(doc); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	if err := os.WriteFile(sourcePath, []byte("new content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, ok, err := cache.Load(domain.Attachment{Key: "ATT123", ResolvedPath: sourcePath, Resolved: true, ContentType: "application/pdf"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if ok {
+		t.Fatal("Load() ok = true, want false for stale cache")
+	}
+}
+
+func TestNewLocalReaderConfiguresFullTextCacheDir(t *testing.T) {
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "zotero.sqlite"), []byte("sqlite"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reader, err := NewLocalReader(config.Config{DataDir: dataDir})
+	if err != nil {
+		t.Fatalf("NewLocalReader() error = %v", err)
+	}
+	want := filepath.Join(dataDir, ".zotero_cli", "fulltext")
+	if reader.FullTextCacheDir != want {
+		t.Fatalf("reader.FullTextCacheDir = %q, want %q", reader.FullTextCacheDir, want)
+	}
+}
+
+func TestLocalFullTextPreviewCachesZoteroFTCacheContent(t *testing.T) {
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resolvedPath := filepath.Join(storageDir, "ATT123", "paper.pdf")
+	if err := os.MkdirAll(filepath.Dir(resolvedPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(resolvedPath, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(storageDir, "ATT123", ".zotero-ft-cache"), []byte("cached source text"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := &LocalReader{
+		DataDir:           dataDir,
+		StorageDir:        storageDir,
+		FullTextCacheDir:  filepath.Join(dataDir, ".zotero_cli", "fulltext"),
+		AttachmentBaseDir: "",
+	}
+	item := domain.Item{
+		Key: "ITEM123",
+		Attachments: []domain.Attachment{
+			{Key: "ATT123", ResolvedPath: resolvedPath, Resolved: true, ContentType: "application/pdf"},
+		},
+	}
+
+	preview, err := reader.FullTextPreview(context.Background(), item)
+	if err != nil {
+		t.Fatalf("FullTextPreview() error = %v", err)
+	}
+	if preview != "cached source text" {
+		t.Fatalf("FullTextPreview() = %q, want %q", preview, "cached source text")
+	}
+	readMeta := reader.ConsumeReadMetadata()
+	if readMeta.FullTextSource != "zotero_ft_cache" || readMeta.FullTextAttachmentKey != "ATT123" || readMeta.FullTextCacheHit {
+		t.Fatalf("ConsumeReadMetadata() = %#v, want zotero ft cache metadata", readMeta)
+	}
+
+	contentPath := filepath.Join(reader.FullTextCacheDir, "cache", "ATT123", "content.txt")
+	metaPath := filepath.Join(reader.FullTextCacheDir, "cache", "ATT123", "meta.json")
+	if _, err := os.Stat(contentPath); err != nil {
+		t.Fatalf("content cache missing: %v", err)
+	}
+	metaData, err := os.ReadFile(metaPath)
+	if err != nil {
+		t.Fatalf("read meta: %v", err)
+	}
+	var cacheMeta fullTextCacheMeta
+	if err := json.Unmarshal(metaData, &cacheMeta); err != nil {
+		t.Fatalf("unmarshal meta: %v", err)
+	}
+	if cacheMeta.Extractor != "zotero_ft_cache" {
+		t.Fatalf("meta.Extractor = %q, want zotero_ft_cache", cacheMeta.Extractor)
+	}
+	if err := os.Remove(filepath.Join(storageDir, "ATT123", ".zotero-ft-cache")); err != nil {
+		t.Fatal(err)
+	}
+
+	preview, err = reader.FullTextPreview(context.Background(), item)
+	if err != nil {
+		t.Fatalf("FullTextPreview() second call error = %v", err)
+	}
+	if preview != "cached source text" {
+		t.Fatalf("FullTextPreview() second call = %q, want cached source text", preview)
+	}
+	readMeta = reader.ConsumeReadMetadata()
+	if readMeta.FullTextSource != "zotero_ft_cache" || readMeta.FullTextAttachmentKey != "ATT123" || !readMeta.FullTextCacheHit {
+		t.Fatalf("ConsumeReadMetadata() second call = %#v, want cache-hit metadata", readMeta)
+	}
+}
+
+func TestLocalFullTextPreviewFallsBackToPyMuPDFAndCachesResult(t *testing.T) {
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resolvedPath := filepath.Join(storageDir, "ATT123", "paper.pdf")
+	if err := os.MkdirAll(filepath.Dir(resolvedPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(resolvedPath, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	previous := findPythonCommandFunc
+	t.Cleanup(func() { findPythonCommandFunc = previous })
+	findPythonCommandFunc = func() (string, bool) {
+		return filepath.Join(dataDir, "fake-python.cmd"), true
+	}
+	script := "@echo off\r\n"
+	script += "echo {\"text\":\"pymupdf extracted text\",\"pages\":1,\"chars\":22}\r\n"
+	if err := os.WriteFile(filepath.Join(dataDir, "fake-python.cmd"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := &LocalReader{
+		DataDir:          dataDir,
+		StorageDir:       storageDir,
+		FullTextCacheDir: filepath.Join(dataDir, ".zotero_cli", "fulltext"),
+	}
+	item := domain.Item{
+		Key: "ITEM123",
+		Attachments: []domain.Attachment{
+			{Key: "ATT123", ResolvedPath: resolvedPath, Resolved: true, ContentType: "application/pdf"},
+		},
+	}
+
+	preview, err := reader.FullTextPreview(context.Background(), item)
+	if err != nil {
+		t.Fatalf("FullTextPreview() error = %v", err)
+	}
+	if preview != "pymupdf extracted text" {
+		t.Fatalf("FullTextPreview() = %q, want pymupdf extracted text", preview)
+	}
+	readMeta := reader.ConsumeReadMetadata()
+	if readMeta.FullTextSource != "pymupdf" || readMeta.FullTextAttachmentKey != "ATT123" || readMeta.FullTextCacheHit {
+		t.Fatalf("ConsumeReadMetadata() = %#v, want pymupdf metadata", readMeta)
+	}
+
+	metaPath := filepath.Join(reader.FullTextCacheDir, "cache", "ATT123", "meta.json")
+	metaData, err := os.ReadFile(metaPath)
+	if err != nil {
+		t.Fatalf("read meta: %v", err)
+	}
+	var cacheMeta fullTextCacheMeta
+	if err := json.Unmarshal(metaData, &cacheMeta); err != nil {
+		t.Fatalf("unmarshal meta: %v", err)
+	}
+	if cacheMeta.Extractor != "pymupdf" {
+		t.Fatalf("meta.Extractor = %q, want pymupdf", cacheMeta.Extractor)
+	}
+}
 
 func TestLocalSQLiteDSNUsesReadOnlyPragmas(t *testing.T) {
 	dsn := localSQLiteDSN(`D:\Zotero\zotero.sqlite`)

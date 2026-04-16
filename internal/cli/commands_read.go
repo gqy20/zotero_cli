@@ -201,7 +201,8 @@ func runShow(args []string) int {
 			Meta:    meta,
 		})
 	}
-	warnIfSnapshotRead(consumeReaderReadMetadata(reader))
+	readMeta := consumeReaderReadMetadata(reader)
+	warnIfSnapshotRead(readMeta)
 
 	fmt.Fprintf(stdout, "Key: %s\n", item.Key)
 	fmt.Fprintf(stdout, "Title: %s\n", item.Title)
@@ -253,6 +254,9 @@ func runShow(args []string) int {
 	}
 	if item.FullTextPreview != "" {
 		fmt.Fprintf(stdout, "Full Text Preview: %s\n", item.FullTextPreview)
+		if line := fullTextSourceLine(readMeta); line != "" {
+			fmt.Fprintln(stdout, line)
+		}
 	}
 	return 0
 }
@@ -328,6 +332,15 @@ func appendExplicitReadMetadata(meta map[string]any, readMeta backend.ReadMetada
 	if readMeta.SQLiteFallback {
 		meta["sqlite_fallback"] = true
 	}
+	if readMeta.FullTextSource != "" {
+		meta["full_text_source"] = readMeta.FullTextSource
+	}
+	if readMeta.FullTextAttachmentKey != "" {
+		meta["full_text_attachment_key"] = readMeta.FullTextAttachmentKey
+	}
+	if readMeta.FullTextCacheHit {
+		meta["full_text_cache_hit"] = true
+	}
 }
 
 func consumeReaderReadMetadata(reader backend.Reader) backend.ReadMetadata {
@@ -343,6 +356,20 @@ func warnIfSnapshotRead(readMeta backend.ReadMetadata) {
 		return
 	}
 	fmt.Fprintln(stderr, "note: using snapshot fallback for local Zotero data")
+}
+
+func fullTextSourceLine(readMeta backend.ReadMetadata) string {
+	if readMeta.FullTextSource == "" {
+		return ""
+	}
+	line := "Full Text Source: " + readMeta.FullTextSource
+	if readMeta.FullTextCacheHit {
+		line += " (cache hit)"
+	}
+	if readMeta.FullTextAttachmentKey != "" {
+		line += " [" + readMeta.FullTextAttachmentKey + "]"
+	}
+	return line
 }
 
 func relateSummary(ref domain.ItemRef) string {

@@ -1183,6 +1183,13 @@ func TestRunShowLocalJSONIncludesFullTextPreviewWhenSnippetRequested(t *testing.
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
+	if meta["read_source"] != "live" || meta["full_text_source"] != "zotero_ft_cache" || meta["full_text_attachment_key"] != "ATTACHPDF" {
+		t.Fatalf("unexpected meta payload: %#v", meta)
+	}
 	data, ok := got["data"].(map[string]any)
 	if !ok {
 		t.Fatalf("unexpected data payload: %#v", got["data"])
@@ -1289,6 +1296,9 @@ func TestRunShowLocalTextOutputIncludesFullTextPreviewWhenSnippetRequested(t *te
 	got := stdout.String()
 	if !strings.Contains(got, "Full Text Preview: Attention is all you need") {
 		t.Fatalf("expected full text preview in output %q", got)
+	}
+	if !strings.Contains(got, "Full Text Source: zotero_ft_cache [ATTACHPDF]") {
+		t.Fatalf("expected full text source in output %q", got)
 	}
 }
 

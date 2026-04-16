@@ -47,8 +47,11 @@ type LibraryStats struct {
 }
 
 type ReadMetadata struct {
-	ReadSource     string `json:"read_source,omitempty"`
-	SQLiteFallback bool   `json:"sqlite_fallback,omitempty"`
+	ReadSource            string `json:"read_source,omitempty"`
+	SQLiteFallback        bool   `json:"sqlite_fallback,omitempty"`
+	FullTextSource        string `json:"full_text_source,omitempty"`
+	FullTextAttachmentKey string `json:"full_text_attachment_key,omitempty"`
+	FullTextCacheHit      bool   `json:"full_text_cache_hit,omitempty"`
 }
 
 type Reader interface {
@@ -180,6 +183,25 @@ func consumeReadMetadata(reader Reader) ReadMetadata {
 		return ReadMetadata{}
 	}
 	return reporter.ConsumeReadMetadata()
+}
+
+func mergeReadMetadata(base ReadMetadata, extra ReadMetadata) ReadMetadata {
+	if extra.ReadSource != "" {
+		base.ReadSource = extra.ReadSource
+	}
+	if extra.SQLiteFallback {
+		base.SQLiteFallback = true
+	}
+	if extra.FullTextSource != "" {
+		base.FullTextSource = extra.FullTextSource
+	}
+	if extra.FullTextAttachmentKey != "" {
+		base.FullTextAttachmentKey = extra.FullTextAttachmentKey
+	}
+	if extra.FullTextCacheHit {
+		base.FullTextCacheHit = true
+	}
+	return base
 }
 
 func shouldFallbackToWeb(err error) bool {

@@ -26,6 +26,7 @@ type LocalReader struct {
 	DataDir           string
 	SQLitePath        string
 	StorageDir        string
+	FullTextCacheDir  string
 	AttachmentBaseDir string
 	lastReadMetadata  ReadMetadata
 }
@@ -75,6 +76,7 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 		DataDir:           dataDir,
 		SQLitePath:        sqlitePath,
 		StorageDir:        storageDir,
+		FullTextCacheDir:  filepath.Join(dataDir, ".zotero_cli", "fulltext"),
 		AttachmentBaseDir: attachmentBaseDir,
 	}, nil
 }

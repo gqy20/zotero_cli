@@ -19,6 +19,11 @@ type stubReader struct {
 	consumeReadMetadata func() ReadMetadata
 }
 
+type stubPreviewReader struct {
+	stubReader
+	fullTextPreview func(context.Context, domain.Item) (string, error)
+}
+
 func (r stubReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
 	return r.findItems(ctx, opts)
 }
@@ -40,6 +45,10 @@ func (r stubReader) ConsumeReadMetadata() ReadMetadata {
 		return ReadMetadata{}
 	}
 	return r.consumeReadMetadata()
+}
+
+func (r stubPreviewReader) FullTextPreview(ctx context.Context, item domain.Item) (string, error) {
+	return r.fullTextPreview(ctx, item)
 }
 
 func TestNewReaderDefaultsToWebMode(t *testing.T) {
@@ -382,6 +391,43 @@ func TestHybridReaderConsumeReadMetadataUsesWebMetadataAfterFallback(t *testing.
 	meta := reader.ConsumeReadMetadata()
 	if meta.ReadSource != "web" || meta.SQLiteFallback {
 		t.Fatalf("ConsumeReadMetadata() = %#v, want web metadata", meta)
+	}
+}
+
+func TestHybridReaderFullTextPreviewMergesLocalMetadata(t *testing.T) {
+	reader := &HybridReader{
+		local: stubPreviewReader{
+			stubReader: stubReader{
+				findItems:       func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
+				getItem:         func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+				getRelated:      func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("unexpected") },
+				getLibraryStats: func(context.Context) (LibraryStats, error) { return LibraryStats{}, errors.New("unexpected") },
+				consumeReadMetadata: func() ReadMetadata {
+					return ReadMetadata{
+						FullTextSource:        "pymupdf",
+						FullTextAttachmentKey: "ATT123",
+						FullTextCacheHit:      true,
+					}
+				},
+			},
+			fullTextPreview: func(context.Context, domain.Item) (string, error) {
+				return "preview text", nil
+			},
+		},
+	}
+	reader.lastReadMetadata = ReadMetadata{ReadSource: "live"}
+
+	preview, err := reader.FullTextPreview(context.Background(), domain.Item{Key: "ITEM123"})
+	if err != nil {
+		t.Fatalf("FullTextPreview() error = %v", err)
+	}
+	if preview != "preview text" {
+		t.Fatalf("FullTextPreview() = %q, want preview text", preview)
+	}
+
+	meta := reader.ConsumeReadMetadata()
+	if meta.ReadSource != "live" || meta.FullTextSource != "pymupdf" || meta.FullTextAttachmentKey != "ATT123" || !meta.FullTextCacheHit {
+		t.Fatalf("ConsumeReadMetadata() = %#v, want merged metadata", meta)
 	}
 }
 
