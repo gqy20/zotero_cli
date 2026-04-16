@@ -471,6 +471,66 @@ Rects 数量: 79
 
 这些差异通过简单的后处理即可消除。
 
+#### 页面渲染与图片能力
+
+go-pdfium 除了文本提取外，还具备 **页面渲染为位图** 的能力——这与 pdfcpu 的"提取内嵌 XObject 图片"是两种完全不同的操作：
+
+| 能力 | go-pdfium | pdfcpu |
+|------|-----------|--------|
+| **提取内嵌插图**（Figure 1-6 原始 JPEG/PNG） | ❌ 不支持 | ✅ 直接拷贝原始流 |
+| **整页渲染截图**（文字+图片合成为一张图） | ✅ `FPDF_RenderPageBitmap` | ❌ 不支持 |
+| **输出格式** | RGBA 位图（像素数据） | 原始格式透传（JPEG/PNG） |
+| **文件大小** | 大（解压后像素数据） | 小（原样透传） |
+| **质量** | 有损（经渲染管线） | 无损（原始字节） |
+| **速度** | 慢（需完整渲染） | 快（直接 I/O） |
+
+```go
+// go-pdfium 整页渲染示例
+// 渲染第 1 页为 200x300 缩略图
+bitmap, _ := instance.FPDF_CreateBitmapEx(&requests.FPDF_CreateBitmapEx{
+    Width:  200,
+    Height: 300,
+    Format: requests.FPDFBitmap_BGRA,
+})
+instance.FPDF_RenderPageBitmap(&requests.FPDF_RenderPageBitmap{
+    Bitmap: bitmap.Bitmap,
+    Page:   pageRef,
+})
+
+// 获取渲染后的像素数据
+raw, _ := instance.FPDF_GetBitmapData(&requests.FPDF_GetBitmapData{
+    Bitmap: bitmap.Bitmap,
+})
+// raw.Data 为 []byte，BGRA 格式，可直接编码为 PNG/JPEG
+```
+
+**典型用途对比**：
+
+```
+pdfcpu 输出:              go-pdfium 渲染输出:
+┌──────────────┐          ┌──────────────────────────┐
+│              │          │  论文标题                  │
+│   Figure 3   │          │  作者列表                  │
+│  (原始JPEG)  │          │  ─────────────────        │
+│              │          │                          │
+└──────────────┘          │  [Figure 3 在这里]         │
+ 独立插图文件               │  正文正文正文...           │
+                          │  表格数据...               │
+                          └──────────────────────────┘
+                           整页截图，所有视觉元素合成
+```
+
+在 zotero_cli 中的实际应用场景：
+
+| 场景 | 推荐工具 | 说明 |
+|------|----------|------|
+| 提取论文插图存档 | **pdfcpu** | 获取原始高质量 Figure |
+| 附件首页缩略图预览 | **go-pdfium** | 渲染第一页作为搜索结果封面 |
+| 页面级 OCR / 视觉模型输入 | **go-pdfium** | 将页面转为图像供 AI 分析 |
+| 批量归档论文中的所有图 | **pdfcpu** | 原始格式，体积小 |
+
+> **结论**：go-pdfium 和 pdfcpu 在"图片"上互补而非竞争——pdfcpu 管**原图提取**，go-pdfium 管**页面渲染/预览**。
+
 #### WASM 模式性能实测
 
 | 指标 | 数值 |
@@ -617,15 +677,16 @@ text, _ := ex.ExtractText()  // ← 可读 Unicode 文本
 
 | 功能 | pdfcpu | PyMuPDF | go-pdfium | ledongthuc/pdf |
 |------|--------|---------|-----------|---------------|
-| XObject 图片提取 | ✅ 原始格式 | ✅ 可选格式 | ❌ 无 | ❌ 无 |
+| XObject 图片提取（原图） | ✅ 原始格式透传 | ✅ 可选格式 | ❌ 不支持 | ❌ 无 |
+| 整页渲染为位图（截图） | ❌ | ✅ get_pixmap | ✅ FPDF_RenderPageBitmap | ❌ 无 |
 | 内联图片提取 | ❌ | ✅ | ❌ | ❌ |
-| JPEG 透传（不重编码） | ✅ | ❌ 强制 PNG | N/A | N/A |
-| CMYK 处理 | → TIF | → RGB | N/A | N/A |
-| JPX (JPEG 2000) | ✅ | ✅ | ✅ | ❌ |
+| JPEG 透传（不重编码） | ✅ | ❌ 强制 PNG | N/A（输出 RGBA） | N/A |
+| CMYK 处理 | → TIF | → RGB | → RGBA | N/A |
+| JPX (JPEG 2000) | ✅ | ✅ | ✅（渲染时解码） | ❌ |
 | CCITT (Fax) | ✅ → PNG | ✅ | ✅ | ❌ |
 | 尺寸/格式过滤 | ❌ 需后处理 | ❌ 需后处理 | N/A | N/A |
-| 页面区域裁剪 | ❌ | ✅ get_clip | ✅ | ❌ |
-| 整页渲染截图 | ❌ | ✅ get_pixmap | ✅ render | ❌ |
+| 页面区域裁剪 | ❌ | ✅ get_clip | ✅ FPDF_SetBitmapArea | ❌ |
+| 渲染 DPI 控制 | N/A | ✅ dpi 参数 | ✅ 缩放因子 | N/A |
 | 许可证 | Apache-2.0 | AGPL-3.0 | MIT | BSD-3 |
 | 外部依赖 | 无 | Python+C | 无(WASM) | 无 |
 
@@ -908,11 +969,12 @@ pdftotext -layout -enc UTF-8 input.pdf -
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │                PDF Processing Layer               │   │
 │  │                                                  │   │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────────────┐  │   │
-│  │  │ pdfcpu   │  │go-pdfium│  │ PyMuPDF (可选)  │  │   │
-│  │  │ 图片提取  │  │ 文本提取  │  │ 高级功能       │  │   │
-│  │  │ Apache-2 │  │ MIT      │  │ AGPL (按需)    │  │   │
-│  │  └──────────┘  └──────────┘  └──────────────────┘  │   │
+│  │  ┌──────────┐  ┌──────────────┐  ┌──────────────────┐  │   │
+│  │  │ pdfcpu   │  │  go-pdfium   │  │ PyMuPDF (可选)  │  │   │
+│  │  │ 图片提取  │  │ 文本+渲染    │  │ 高级功能        │  │   │
+│  │  │ (原图透传) │  │ (页面截图)  │  │ 表格/区域裁剪   │  │   │
+│  │  │ Apache-2 │  │ MIT          │  │ AGPL (按需)     │  │   │
+│  │  └──────────┘  └──────────────┘  └──────────────────┘  │   │
 │  │                                                  │   │
 │  │  ┌─────────────────────────────────────────────┐   │   │
 │  │  │         Post-Processing Pipeline          │   │   │
@@ -927,9 +989,13 @@ pdftotext -layout -enc UTF-8 input.pdf -
 │  │                 CLI Commands                       │   │
 │  │                                                  │   │
 │  │  zot extract-images <item-key> [--output DIR]      │   │
+│  │  │  → pdfcpu: 提取内嵌 XObject 图片 (原始格式)     │   │
 │  │  zot extract-text   <item-key> [--structured]      │   │
+│  │  │  → go-pdfium: Unicode 文本 + 结构化信息        │   │
 │  │  zot extract         <item-key> [--full]           │   │
+│  │  │  → pdfcpu(图) + go-pdfium(文本) 组合提取       │   │
 │  │  zot preview         <item-key> [--page N]          │   │
+│  │  │  → go-pdfium: 渲染页面为缩略图/截图             │   │
 │  └──────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -987,7 +1053,9 @@ go-pdfium                 go-pdfium
 | 优先级 | 组合 | 适用场景 | 依赖 |
 |--------|------|----------|------|
 | **P0（必须）** | pdfcpu + go-pdfium | 标准用户，完整功能 | 无（纯 Go） |
-| **P1（增强）** | P0 + PyMuPDF 子进程 | 高级用户，需要截图/表格 | Python 3 |
+| | ├ pdfcpu → 图片提取（内嵌 XObject 原图） | | |
+| | └ go-pdfium → 文本提取 + 页面渲染/缩略图 | | |
+| **P1（增强）** | P0 + PyMuPDF 子进程 | 高级用户，需要表格检测/区域裁剪 | Python 3 |
 | **P2（最小）** | pdfcpu + pdftotext | 极简环境，只要文本 | poppler |
 | **P3（开发）** | 仅 pdfcpu | 只要图片，不要文本 | 无 |
 
@@ -997,7 +1065,7 @@ go-pdfium                 go-pdfium
 
 | 方案 | 不推荐理由 |
 |------|-----------|
-| **go-fitz** (gen2brain) | AGPL-3.0 传染性；且只能整页渲染不能提取内嵌图片 |
+| **go-fitz** (gen2brain) | AGPL-3.0 传染性；整页渲染能力已被 go-pdfium（MIT）替代 |
 | **unidoc/unipdf** | 商业许可，免费层有限制，vendor lock-in |
 | **signintech/gopdf** | 只能创建 PDF，无法读取 |
 | **纯 pdfcpu content 模式** | 输出的是 PDF 操作符而非可读文本 |
