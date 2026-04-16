@@ -14,6 +14,7 @@ import (
 
 type FindOptions struct {
 	Query          string
+	FullText       bool
 	All            bool
 	Full           bool
 	ItemType       string

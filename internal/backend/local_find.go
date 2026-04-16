@@ -11,6 +11,9 @@ import (
 )
 
 func localFindQuery(opts FindOptions) (string, []any) {
+	if opts.FullText {
+		return localFullTextFindQuery(opts)
+	}
 	query := `
 		SELECT
 			i.itemID,
@@ -42,6 +45,43 @@ func localFindQuery(opts FindOptions) (string, []any) {
 	return query, args
 }
 
+func localFullTextFindQuery(opts FindOptions) (string, []any) {
+	tokens := localFullTextTokens(opts.Query)
+	query := `
+		SELECT
+			i.itemID,
+			i.key,
+			COALESCE(i.version, 0),
+			it.typeName,
+			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'date' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'volume' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'issue' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'pages' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'DOI' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'url' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'publicationTitle' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'proceedingsTitle' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), '')
+		FROM items i
+		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
+		LEFT JOIN itemData d ON d.itemID = i.itemID
+		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
+		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
+		JOIN itemAttachments iaf ON iaf.parentItemID = i.itemID
+		JOIN fulltextItemWords fiw ON fiw.itemID = iaf.itemID
+		JOIN fulltextWords fw ON fw.wordID = fiw.wordID
+		WHERE ` + localVisibleItemClause(opts.ItemType) + `
+		` + localFullTextMatchClause(tokens) + `
+		` + localTagFilterClause(opts) + `
+		GROUP BY i.itemID, i.key, i.version, it.typeName
+		` + localFullTextHavingClause(tokens) + `
+		ORDER BY i.key
+	`
+	args := localFullTextArgs(opts, tokens)
+	return query, args
+}
+
 func localFindArgs(opts FindOptions) []any {
 	args := []any{}
 	if opts.ItemType != "" {
@@ -61,6 +101,23 @@ func localFindArgs(opts FindOptions) []any {
 	)
 	for _, tag := range normalizedTags(opts.Tags) {
 		args = append(args, tag)
+	}
+	return args
+}
+
+func localFullTextArgs(opts FindOptions, tokens []string) []any {
+	args := []any{}
+	if opts.ItemType != "" {
+		args = append(args, opts.ItemType)
+	}
+	for _, token := range tokens {
+		args = append(args, token)
+	}
+	for _, tag := range normalizedTags(opts.Tags) {
+		args = append(args, tag)
+	}
+	if len(tokens) > 0 {
+		args = append(args, len(tokens))
 	}
 	return args
 }
@@ -118,6 +175,24 @@ func localQueryMatchClause() string {
 			)
 		)
 	)`
+}
+
+func localFullTextMatchClause(tokens []string) string {
+	if len(tokens) == 0 {
+		return ""
+	}
+	return `
+		AND LOWER(fw.word) IN (` + placeholders(len(tokens)) + `)
+	`
+}
+
+func localFullTextHavingClause(tokens []string) string {
+	if len(tokens) == 0 {
+		return ""
+	}
+	return `
+		HAVING COUNT(DISTINCT LOWER(fw.word)) = ?
+	`
 }
 
 func localTagFilterClause(opts FindOptions) string {
@@ -252,6 +327,9 @@ func localMatchedOn(item domain.Item, opts FindOptions) []string {
 	if query == "" {
 		return nil
 	}
+	if opts.FullText {
+		return []string{"fulltext_attachment"}
+	}
 	matched := []string{}
 	add := func(reason string) {
 		for _, existing := range matched {
@@ -295,6 +373,23 @@ func localMatchedOn(item domain.Item, opts FindOptions) []string {
 		}
 	}
 	return matched
+}
+
+func localFullTextTokens(query string) []string {
+	parts := strings.Fields(strings.ToLower(strings.TrimSpace(query)))
+	tokens := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		if _, ok := seen[part]; ok {
+			continue
+		}
+		seen[part] = struct{}{}
+		tokens = append(tokens, part)
+	}
+	return tokens
 }
 
 func localItemMetadataMatches(item domain.Item, query string) bool {

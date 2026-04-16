@@ -564,6 +564,53 @@ func TestRunFindLocalJSONMatchesAttachmentFilename(t *testing.T) {
 	}
 }
 
+func TestRunFindLocalJSONMatchesFullTextAttachmentTerms(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "speciation genome", "--fulltext", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	item := data[0].(map[string]any)
+	if item["key"] != "ART67890" {
+		t.Fatalf("unexpected item payload: %#v", item)
+	}
+	matchedOn, ok := item["matched_on"].([]any)
+	if !ok || len(matchedOn) == 0 {
+		t.Fatalf("expected matched_on in item payload: %#v", item)
+	}
+	found := false
+	for _, raw := range matchedOn {
+		if raw == "fulltext_attachment" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected fulltext_attachment in matched_on: %#v", matchedOn)
+	}
+}
+
 func TestRunFindLocalJSONMatchesLinkedAttachmentPathFromPrefs(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -915,6 +962,25 @@ func TestRunFindWebRejectsAttachmentFilters(t *testing.T) {
 	}
 }
 
+func TestRunFindWebRejectsFullText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "speciation", "--fulltext"})
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "web does not support find --fulltext") {
+		t.Fatalf("expected web fulltext error, got %q", got)
+	}
+}
+
 func TestRunShowRejectsUnsupportedMode(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -928,6 +994,25 @@ func TestRunShowRejectsUnsupportedMode(t *testing.T) {
 	}
 	if got := stderr.String(); !strings.Contains(got, "unsupported mode \"bogus\"") {
 		t.Fatalf("expected unsupported mode error, got %q", got)
+	}
+}
+
+func TestRunShowWebRejectsSnippet(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"show", "X42A7DEE", "--snippet"})
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "show --snippet requires local or hybrid mode with local data") {
+		t.Fatalf("expected show snippet error, got %q", got)
 	}
 }
 
@@ -1022,6 +1107,42 @@ func TestRunShowLocalJSONIncludesBibliographicFields(t *testing.T) {
 	}
 }
 
+func TestRunShowLocalJSONIncludesFullTextPreviewWhenSnippetRequested(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
+	buildLocalShowFixture(t, sqlitePath, storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"show", "ITEM1234", "--snippet", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	preview, ok := data["full_text_preview"].(string)
+	if !ok || !strings.Contains(preview, "Attention is all you need") {
+		t.Fatalf("unexpected full_text_preview: %#v", data["full_text_preview"])
+	}
+}
+
 func TestRunShowTextOutputFormatsAttachmentsClearly(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -1090,6 +1211,34 @@ func TestRunShowLocalTextOutputIncludesCollectionsAndResolvedPaths(t *testing.T)
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in output %q", want, got)
 		}
+	}
+}
+
+func TestRunShowLocalTextOutputIncludesFullTextPreviewWhenSnippetRequested(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
+	buildLocalShowFixture(t, sqlitePath, storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"show", "ITEM1234", "--snippet"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	if !strings.Contains(got, "Full Text Preview: Attention is all you need") {
+		t.Fatalf("expected full text preview in output %q", got)
 	}
 }
 
@@ -1272,6 +1421,9 @@ func buildLocalShowFixture(t *testing.T, sqlitePath string, storageDir string) {
 	if err := os.WriteFile(filepath.Join(attachmentDir, "attention.pdf"), []byte("pdf"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(attachmentDir, ".zotero-ft-cache"), []byte("Attention is all you need full text preview from zotero cache."), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func buildLocalRelateFixture(t *testing.T, sqlitePath string, storageDir string) {
@@ -1447,6 +1599,9 @@ func buildLocalFindFixture(t *testing.T, sqlitePath string, storageDir string) {
 		`CREATE TABLE itemAttachments (itemID INTEGER, parentItemID INTEGER, contentType TEXT, linkMode INTEGER, path TEXT);`,
 		`CREATE TABLE itemNotes (itemID INTEGER, parentItemID INTEGER, note TEXT, title TEXT);`,
 		`CREATE TABLE itemAnnotations (itemID INTEGER);`,
+		`CREATE TABLE fulltextItems (itemID INTEGER PRIMARY KEY, indexedChars INTEGER, totalChars INTEGER, indexedPages INTEGER, totalPages INTEGER, version INTEGER, synced INTEGER);`,
+		`CREATE TABLE fulltextWords (wordID INTEGER PRIMARY KEY, word TEXT);`,
+		`CREATE TABLE fulltextItemWords (wordID INTEGER, itemID INTEGER);`,
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(statement); err != nil {
@@ -1470,6 +1625,9 @@ func buildLocalFindFixture(t *testing.T, sqlitePath string, storageDir string) {
 		`INSERT INTO itemAttachments(itemID, parentItemID, contentType, linkMode, path) VALUES (4, 2, 'application/pdf', 0, 'storage:mixed.pdf');`,
 		`INSERT INTO itemNotes(itemID, parentItemID, note, title) VALUES (5, 2, '<p>Mixed note</p>', 'Mixed note');`,
 		`INSERT INTO itemAnnotations(itemID) VALUES (6);`,
+		`INSERT INTO fulltextItems(itemID, indexedPages, totalPages, version, synced) VALUES (4, 5, 5, 1, 1);`,
+		`INSERT INTO fulltextWords(wordID, word) VALUES (1, 'speciation'), (2, 'genome');`,
+		`INSERT INTO fulltextItemWords(wordID, itemID) VALUES (1, 4), (2, 4);`,
 	}
 	for _, statement := range inserts {
 		if _, err := db.Exec(statement); err != nil {

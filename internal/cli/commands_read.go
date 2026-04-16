@@ -137,10 +137,15 @@ func runShow(args []string) int {
 	}
 
 	jsonOutput := false
+	snippet := false
 	key := ""
 	for _, arg := range args {
 		if arg == "--json" {
 			jsonOutput = true
+			continue
+		}
+		if arg == "--snippet" {
+			snippet = true
 			continue
 		}
 		if key == "" {
@@ -164,6 +169,19 @@ func runShow(args []string) int {
 	item, err := reader.GetItem(context.Background(), key)
 	if err != nil {
 		return printErr(err)
+	}
+	if snippet {
+		previewer, ok := reader.(interface {
+			FullTextPreview(context.Context, domain.Item) (string, error)
+		})
+		if !ok {
+			return printErr(fmt.Errorf("show --snippet requires local or hybrid mode with local data"))
+		}
+		preview, err := previewer.FullTextPreview(context.Background(), item)
+		if err != nil {
+			return printErr(err)
+		}
+		item.FullTextPreview = preview
 	}
 
 	if jsonOutput {
@@ -227,6 +245,9 @@ func runShow(args []string) int {
 		for _, note := range item.Notes {
 			fmt.Fprintf(stdout, "  - %s\n", noteSummary(note))
 		}
+	}
+	if item.FullTextPreview != "" {
+		fmt.Fprintf(stdout, "Full Text Preview: %s\n", item.FullTextPreview)
 	}
 	return 0
 }

@@ -18,6 +18,9 @@ func NewWebReader(client *zoteroapi.Client) *WebReader {
 }
 
 func (r *WebReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
+	if opts.FullText {
+		return nil, newUnsupportedFeatureErrorWithHint("web", "find --fulltext", "set ZOT_MODE=local or ZOT_MODE=hybrid to use local full-text attachment search")
+	}
 	if hasAttachmentFindFilters(opts) {
 		return nil, newUnsupportedFeatureErrorWithHint("web", "find attachment filters", "set ZOT_MODE=local or ZOT_MODE=hybrid to use attachment-aware local search")
 	}
@@ -65,7 +68,8 @@ func (r *WebReader) ConsumeReadMetadata() ReadMetadata {
 }
 
 func hasAttachmentFindFilters(opts FindOptions) bool {
-	return opts.HasPDF ||
+	return opts.FullText ||
+		opts.HasPDF ||
 		strings.TrimSpace(opts.AttachmentName) != "" ||
 		strings.TrimSpace(opts.AttachmentPath) != "" ||
 		strings.TrimSpace(opts.AttachmentType) != ""

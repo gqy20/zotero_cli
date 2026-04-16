@@ -22,6 +22,8 @@ func parseFindArgs(args []string) (backend.FindOptions, bool, bool, error) {
 			jsonOutput = true
 		case "--all":
 			opts.All = true
+		case "--fulltext":
+			opts.FullText = true
 		case "--full":
 			opts.Full = true
 		case "--item-type":

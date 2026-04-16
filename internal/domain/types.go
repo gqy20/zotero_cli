@@ -1,23 +1,24 @@
 package domain
 
 type Item struct {
-	Version     int          `json:"version,omitempty"`
-	Key         string       `json:"key"`
-	ItemType    string       `json:"item_type"`
-	Title       string       `json:"title"`
-	Date        string       `json:"date"`
-	Creators    []Creator    `json:"creators"`
-	MatchedOn   []string     `json:"matched_on,omitempty"`
-	Container   string       `json:"container,omitempty"`
-	Volume      string       `json:"volume,omitempty"`
-	Issue       string       `json:"issue,omitempty"`
-	Pages       string       `json:"pages,omitempty"`
-	DOI         string       `json:"doi,omitempty"`
-	URL         string       `json:"url,omitempty"`
-	Tags        []string     `json:"tags,omitempty"`
-	Collections []Collection `json:"collections,omitempty"`
-	Attachments []Attachment `json:"attachments,omitempty"`
-	Notes       []Note       `json:"notes,omitempty"`
+	Version         int          `json:"version,omitempty"`
+	Key             string       `json:"key"`
+	ItemType        string       `json:"item_type"`
+	Title           string       `json:"title"`
+	Date            string       `json:"date"`
+	Creators        []Creator    `json:"creators"`
+	MatchedOn       []string     `json:"matched_on,omitempty"`
+	FullTextPreview string       `json:"full_text_preview,omitempty"`
+	Container       string       `json:"container,omitempty"`
+	Volume          string       `json:"volume,omitempty"`
+	Issue           string       `json:"issue,omitempty"`
+	Pages           string       `json:"pages,omitempty"`
+	DOI             string       `json:"doi,omitempty"`
+	URL             string       `json:"url,omitempty"`
+	Tags            []string     `json:"tags,omitempty"`
+	Collections     []Collection `json:"collections,omitempty"`
+	Attachments     []Attachment `json:"attachments,omitempty"`
+	Notes           []Note       `json:"notes,omitempty"`
 }
 
 type Creator struct {
