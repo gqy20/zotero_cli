@@ -549,6 +549,19 @@ func TestRunFindLocalJSONMatchesAttachmentFilename(t *testing.T) {
 	if item["key"] != "ART67890" {
 		t.Fatalf("unexpected item payload: %#v", item)
 	}
+	matchedOn, ok := item["matched_on"].([]any)
+	if !ok || len(matchedOn) == 0 {
+		t.Fatalf("expected matched_on in item payload: %#v", item)
+	}
+	found := false
+	for _, raw := range matchedOn {
+		if raw == "attachment_filename" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected attachment_filename in matched_on: %#v", matchedOn)
+	}
 }
 
 func TestRunFindLocalJSONMatchesLinkedAttachmentPathFromPrefs(t *testing.T) {
@@ -577,6 +590,84 @@ func TestRunFindLocalJSONMatchesLinkedAttachmentPathFromPrefs(t *testing.T) {
 
 	stdout, stderr := captureOutput(t)
 	exitCode := Run([]string{"find", "papers/linked.pdf", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	item := data[0].(map[string]any)
+	if item["key"] != "ITEMLINK" {
+		t.Fatalf("unexpected item payload: %#v", item)
+	}
+}
+
+func TestRunFindLocalJSONSupportsHasPDFAndAttachmentTypeFilters(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "--all", "--has-pdf", "--attachment-type", "application/pdf", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	item := data[0].(map[string]any)
+	if item["key"] != "ART67890" {
+		t.Fatalf("unexpected item payload: %#v", item)
+	}
+}
+
+func TestRunFindLocalJSONSupportsAttachmentPathFilterFromPrefs(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+	t.Setenv("ZOT_DATA_DIR", "")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalLinkedAttachmentFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+
+	baseAttachmentDir := t.TempDir()
+	linkedPDF := filepath.Join(baseAttachmentDir, "papers", "linked.pdf")
+	if err := os.MkdirAll(filepath.Dir(linkedPDF), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(linkedPDF, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeZoteroPrefsFixture(t, configRoot, dataDir, baseAttachmentDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "--all", "--attachment-path", "papers/linked.pdf", "--attachment-name", "linked.pdf", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -802,6 +893,25 @@ func TestRunFindLocalRejectsIncludeTrashed(t *testing.T) {
 	}
 	if got := stderr.String(); !strings.Contains(got, "local does not support find --include-trashed") {
 		t.Fatalf("expected include-trashed local error, got %q", got)
+	}
+}
+
+func TestRunFindWebRejectsAttachmentFilters(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "attention", "--attachment-name", "attention.pdf"})
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "web does not support find attachment filters") {
+		t.Fatalf("expected web attachment filter error, got %q", got)
 	}
 }
 

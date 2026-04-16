@@ -518,6 +518,39 @@ func TestRunFindLocalTextOutputSupportsBibliographicIncludeFields(t *testing.T) 
 	}
 }
 
+func TestRunFindLocalTextOutputShowsMatchedOnInFullMode(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed.pdf", "--full"})
+	restoreOutput()
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Key: ART67890",
+		"Matched On: attachment_filename",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output %q", want, got)
+		}
+	}
+}
+
 func TestRunFindTextOutputSupportsFullMode(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

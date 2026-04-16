@@ -34,7 +34,7 @@ func renderFindItemDetailed(item domain.Item, opts backend.FindOptions) {
 
 	fields := opts.IncludeFields
 	if opts.Full {
-		fields = []string{"container", "volume", "issue", "pages", "version", "doi", "url", "tags"}
+		fields = []string{"container", "volume", "issue", "pages", "version", "doi", "url", "tags", "matched_on"}
 	}
 
 	for _, field := range fields {
@@ -102,6 +102,10 @@ func renderFindItemDetailed(item domain.Item, opts backend.FindOptions) {
 				for _, note := range item.Notes {
 					fmt.Fprintf(stdout, "  - %s\n", noteSummary(note))
 				}
+			}
+		case "matched_on":
+			if len(item.MatchedOn) > 0 {
+				fmt.Fprintf(stdout, "Matched On: %s\n", strings.Join(item.MatchedOn, ", "))
 			}
 		}
 	}

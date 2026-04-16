@@ -7,6 +7,7 @@ type Item struct {
 	Title       string       `json:"title"`
 	Date        string       `json:"date"`
 	Creators    []Creator    `json:"creators"`
+	MatchedOn   []string     `json:"matched_on,omitempty"`
 	Container   string       `json:"container,omitempty"`
 	Volume      string       `json:"volume,omitempty"`
 	Issue       string       `json:"issue,omitempty"`

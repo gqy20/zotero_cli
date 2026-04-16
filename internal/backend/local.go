@@ -275,9 +275,15 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 		if err != nil {
 			return err
 		}
+		attachmentsByParentID, err := r.loadAttachmentsByParentItemIDs(ctx, db, itemIDs)
+		if err != nil {
+			return err
+		}
 		for index, itemID := range itemIDs {
 			items[index].Creators = creatorsByItemID[itemID]
 			items[index].Tags = tagsByItemID[itemID]
+			items[index].Attachments = attachmentsByParentID[itemID]
+			items[index].MatchedOn = localMatchedOn(items[index], opts)
 		}
 		return nil
 	})
@@ -286,6 +292,11 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 	}
 	items = localFilterAndOrderItems(items, opts)
 	items = paginateItems(items, opts.Start, opts.Limit)
+	if !opts.Full && !findFieldIncluded(opts.IncludeFields, "attachments") {
+		for i := range items {
+			items[i].Attachments = nil
+		}
+	}
 	return items, nil
 }
 
@@ -566,10 +577,22 @@ func placeholders(n int) string {
 	return result
 }
 
+func findFieldIncluded(fields []string, target string) bool {
+	for _, field := range fields {
+		if field == target {
+			return true
+		}
+	}
+	return false
+}
+
 func localFilterAndOrderItems(items []domain.Item, opts FindOptions) []domain.Item {
 	filtered := make([]domain.Item, 0, len(items))
 	for _, item := range items {
 		if !MatchesDateRange(item.Date, opts.DateAfter, opts.DateBefore) {
+			continue
+		}
+		if !matchesAttachmentFilters(item.Attachments, opts) {
 			continue
 		}
 		filtered = append(filtered, item)
@@ -583,6 +606,106 @@ func localFilterAndOrderItems(items []domain.Item, opts FindOptions) []domain.It
 		return cmp < 0
 	})
 	return filtered
+}
+
+func matchesAttachmentFilters(attachments []domain.Attachment, opts FindOptions) bool {
+	if !opts.HasPDF && strings.TrimSpace(opts.AttachmentName) == "" && strings.TrimSpace(opts.AttachmentPath) == "" && strings.TrimSpace(opts.AttachmentType) == "" {
+		return true
+	}
+	nameNeedle := strings.ToLower(strings.TrimSpace(opts.AttachmentName))
+	pathNeedle := strings.ToLower(strings.TrimSpace(opts.AttachmentPath))
+	typeNeedle := strings.ToLower(strings.TrimSpace(opts.AttachmentType))
+	for _, attachment := range attachments {
+		if opts.HasPDF && attachment.ContentType != "application/pdf" {
+			continue
+		}
+		if nameNeedle != "" {
+			name := strings.ToLower(firstNonEmptyString(attachment.Filename, attachment.Title))
+			if !strings.Contains(name, nameNeedle) {
+				continue
+			}
+		}
+		if pathNeedle != "" {
+			if !attachmentPathMatchesFilter(attachment, pathNeedle) {
+				continue
+			}
+		}
+		if typeNeedle != "" {
+			if !strings.Contains(strings.ToLower(attachment.ContentType), typeNeedle) {
+				continue
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func attachmentPathMatchesFilter(attachment domain.Attachment, needle string) bool {
+	return strings.Contains(strings.ToLower(attachment.ZoteroPath), needle) ||
+		strings.Contains(strings.ToLower(attachment.ResolvedPath), needle)
+}
+
+func localMatchedOn(item domain.Item, opts FindOptions) []string {
+	query := strings.ToLower(strings.TrimSpace(opts.Query))
+	if query == "" {
+		return nil
+	}
+	matched := []string{}
+	add := func(reason string) {
+		for _, existing := range matched {
+			if existing == reason {
+				return
+			}
+		}
+		matched = append(matched, reason)
+	}
+
+	if strings.Contains(strings.ToLower(item.Key), query) {
+		add("key")
+	}
+	if localItemMetadataMatches(item, query) {
+		add("metadata")
+	}
+	for _, creator := range item.Creators {
+		if strings.Contains(strings.ToLower(strings.TrimSpace(creator.Name)), query) {
+			add("creator")
+			break
+		}
+	}
+	for _, tag := range item.Tags {
+		if strings.Contains(strings.ToLower(tag), query) {
+			add("tag")
+			break
+		}
+	}
+	for _, attachment := range item.Attachments {
+		if strings.Contains(strings.ToLower(attachment.Title), query) {
+			add("attachment_title")
+		}
+		if strings.Contains(strings.ToLower(attachment.Filename), query) {
+			add("attachment_filename")
+		}
+		if strings.Contains(strings.ToLower(attachment.ZoteroPath), query) || strings.Contains(strings.ToLower(attachment.ResolvedPath), query) {
+			add("attachment_path")
+		}
+		if strings.Contains(strings.ToLower(attachment.ContentType), query) {
+			add("attachment_content_type")
+		}
+	}
+	return matched
+}
+
+func localItemMetadataMatches(item domain.Item, query string) bool {
+	for _, value := range []string{
+		item.Title,
+		item.Container,
+		item.Date,
+	} {
+		if strings.Contains(strings.ToLower(value), query) {
+			return true
+		}
+	}
+	return false
 }
 
 func compareFindItems(left domain.Item, right domain.Item, sortBy string) int {
@@ -1113,6 +1236,64 @@ func (r *LocalReader) loadTagsByItemIDs(ctx context.Context, db *sql.DB, itemIDs
 			continue
 		}
 		result[itemID] = append(result[itemID], tag)
+	}
+	return result, rows.Err()
+}
+
+func (r *LocalReader) loadAttachmentsByParentItemIDs(ctx context.Context, db *sql.DB, itemIDs []int64) (map[int64][]domain.Attachment, error) {
+	result := make(map[int64][]domain.Attachment, len(itemIDs))
+	if len(itemIDs) == 0 {
+		return result, nil
+	}
+
+	args := make([]any, 0, len(itemIDs))
+	for _, itemID := range itemIDs {
+		args = append(args, itemID)
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+			ia.parentItemID,
+			i.key,
+			it.typeName,
+			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'filename' THEN v.value END), ''),
+			COALESCE(ia.contentType, ''),
+			COALESCE(ia.linkMode, 0),
+			COALESCE(ia.path, '')
+		FROM itemAttachments ia
+		JOIN items i ON i.itemID = ia.itemID
+		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
+		LEFT JOIN itemData d ON d.itemID = i.itemID
+		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
+		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
+		WHERE ia.parentItemID IN (`+placeholders(len(itemIDs))+`)
+		GROUP BY ia.parentItemID, i.itemID, i.key, it.typeName, ia.contentType, ia.linkMode, ia.path
+		ORDER BY ia.parentItemID, i.key
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var parentItemID int64
+		var attachment domain.Attachment
+		var linkMode int
+		if err := rows.Scan(
+			&parentItemID,
+			&attachment.Key,
+			&attachment.ItemType,
+			&attachment.Title,
+			&attachment.Filename,
+			&attachment.ContentType,
+			&linkMode,
+			&attachment.ZoteroPath,
+		); err != nil {
+			return nil, err
+		}
+		attachment.LinkMode = formatAttachmentLinkMode(linkMode)
+		attachment.ResolvedPath, attachment.Resolved = r.resolveAttachmentPath(attachment.Key, attachment.ZoteroPath, attachment.Filename)
+		result[parentItemID] = append(result[parentItemID], attachment)
 	}
 	return result, rows.Err()
 }

@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"strings"
 
 	"zotero_cli/internal/domain"
 	"zotero_cli/internal/zoteroapi"
@@ -17,6 +18,9 @@ func NewWebReader(client *zoteroapi.Client) *WebReader {
 }
 
 func (r *WebReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
+	if hasAttachmentFindFilters(opts) {
+		return nil, newUnsupportedFeatureErrorWithHint("web", "find attachment filters", "set ZOT_MODE=local or ZOT_MODE=hybrid to use attachment-aware local search")
+	}
 	items, err := r.client.FindItems(ctx, toAPIFindOptions(opts))
 	if err != nil {
 		return nil, err
@@ -45,12 +49,12 @@ func (r *WebReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
 	}
 	r.lastReadMetadata = ReadMetadata{ReadSource: "web"}
 	return LibraryStats{
-		LibraryType:         stats.LibraryType,
-		LibraryID:           stats.LibraryID,
-		TotalItems:          stats.TotalItems,
-		TotalCollections:    stats.TotalCollections,
-		TotalSearches:       stats.TotalSearches,
-		LastLibraryVersion:  stats.LastLibraryVersion,
+		LibraryType:        stats.LibraryType,
+		LibraryID:          stats.LibraryID,
+		TotalItems:         stats.TotalItems,
+		TotalCollections:   stats.TotalCollections,
+		TotalSearches:      stats.TotalSearches,
+		LastLibraryVersion: stats.LastLibraryVersion,
 	}, nil
 }
 
@@ -58,6 +62,13 @@ func (r *WebReader) ConsumeReadMetadata() ReadMetadata {
 	meta := r.lastReadMetadata
 	r.lastReadMetadata = ReadMetadata{}
 	return meta
+}
+
+func hasAttachmentFindFilters(opts FindOptions) bool {
+	return opts.HasPDF ||
+		strings.TrimSpace(opts.AttachmentName) != "" ||
+		strings.TrimSpace(opts.AttachmentPath) != "" ||
+		strings.TrimSpace(opts.AttachmentType) != ""
 }
 
 func mapItems(items []zoteroapi.Item) []domain.Item {

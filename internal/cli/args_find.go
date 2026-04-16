@@ -104,6 +104,26 @@ func parseFindArgs(args []string) (backend.FindOptions, bool, bool, error) {
 				return backend.FindOptions{}, false, false, errors.New("invalid value for --qmode")
 			}
 			opts.QMode = args[i]
+		case "--has-pdf":
+			opts.HasPDF = true
+		case "--attachment-name":
+			if i+1 >= len(args) {
+				return backend.FindOptions{}, false, false, errors.New("missing value for --attachment-name")
+			}
+			i++
+			opts.AttachmentName = strings.TrimSpace(args[i])
+		case "--attachment-path":
+			if i+1 >= len(args) {
+				return backend.FindOptions{}, false, false, errors.New("missing value for --attachment-path")
+			}
+			i++
+			opts.AttachmentPath = strings.TrimSpace(args[i])
+		case "--attachment-type":
+			if i+1 >= len(args) {
+				return backend.FindOptions{}, false, false, errors.New("missing value for --attachment-type")
+			}
+			i++
+			opts.AttachmentType = strings.TrimSpace(args[i])
 		case "--include-trashed":
 			opts.IncludeTrashed = true
 		default:
@@ -122,22 +142,23 @@ func parseFindArgs(args []string) (backend.FindOptions, bool, bool, error) {
 
 func parseFindIncludeFields(value string) ([]string, error) {
 	allowed := map[string]struct{}{
-		"key":        {},
-		"version":    {},
-		"item_type":  {},
-		"title":      {},
-		"date":       {},
-		"creators":   {},
-		"container":  {},
-		"volume":     {},
-		"issue":      {},
-		"pages":      {},
-		"doi":        {},
-		"url":        {},
-		"tags":       {},
-		"collections":{},
-		"attachments":{},
-		"notes":      {},
+		"key":         {},
+		"version":     {},
+		"item_type":   {},
+		"title":       {},
+		"date":        {},
+		"creators":    {},
+		"container":   {},
+		"volume":      {},
+		"issue":       {},
+		"pages":       {},
+		"doi":         {},
+		"url":         {},
+		"tags":        {},
+		"collections": {},
+		"attachments": {},
+		"notes":       {},
+		"matched_on":  {},
 	}
 
 	parts := strings.Split(value, ",")
