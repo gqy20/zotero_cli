@@ -31,7 +31,7 @@ func runFind(args []string) int {
 		return 2
 	}
 
-	opts, jsonOutput, queryProvided, err := parseFindArgs(args)
+	opts, jsonOutput, snippet, queryProvided, err := parseFindArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		fmt.Fprintln(stderr, usageFind)
@@ -53,11 +53,39 @@ func runFind(args []string) int {
 		return exitCode
 	}
 
+	requestedIncludeFields := append([]string(nil), opts.IncludeFields...)
+	injectedAttachments := false
+	if snippet && !fieldIncluded(opts.IncludeFields, "attachments") {
+		opts.IncludeFields = append(opts.IncludeFields, "attachments")
+		injectedAttachments = true
+	}
+
 	items, err := reader.FindItems(context.Background(), opts)
 	if err != nil {
 		return printErr(err)
 	}
 	items = filterDefaultFindItems(items, opts)
+
+	if snippet {
+		previewer, ok := reader.(interface {
+			FullTextPreview(context.Context, domain.Item) (string, error)
+		})
+		if !ok {
+			return printErr(fmt.Errorf("find --snippet requires local or hybrid mode with local data"))
+		}
+		for i := range items {
+			preview, err := previewer.FullTextPreview(context.Background(), items[i])
+			if err != nil {
+				return printErr(err)
+			}
+			items[i].FullTextPreview = preview
+		}
+		if injectedAttachments {
+			for i := range items {
+				items[i].Attachments = nil
+			}
+		}
+	}
 
 	if jsonOutput {
 		meta := map[string]any{
@@ -73,9 +101,14 @@ func runFind(args []string) int {
 	}
 	warnIfSnapshotRead(consumeReaderReadMetadata(reader))
 
-	if opts.Full || len(opts.IncludeFields) > 0 {
+	if opts.Full || len(opts.IncludeFields) > 0 || snippet {
+		renderOpts := opts
+		renderOpts.IncludeFields = append([]string(nil), requestedIncludeFields...)
+		if snippet && !fieldIncluded(renderOpts.IncludeFields, "full_text_preview") {
+			renderOpts.IncludeFields = append(renderOpts.IncludeFields, "full_text_preview")
+		}
 		for index, item := range items {
-			renderFindItemDetailed(item, opts)
+			renderFindItemDetailed(item, renderOpts)
 			if index < len(items)-1 {
 				fmt.Fprintln(stdout)
 			}

@@ -611,6 +611,48 @@ func TestRunFindLocalJSONMatchesFullTextAttachmentTerms(t *testing.T) {
 	}
 }
 
+func TestRunFindLocalJSONIncludesFullTextPreviewWhenSnippetRequested(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed.pdf", "--snippet", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["full_text_source"] != "zotero_ft_cache" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	item := data[0].(map[string]any)
+	preview, ok := item["full_text_preview"].(string)
+	if !ok || !strings.Contains(preview, "Mixed survey full text preview") {
+		t.Fatalf("unexpected full_text_preview: %#v", item["full_text_preview"])
+	}
+	if _, exists := item["attachments"]; exists {
+		t.Fatalf("did not expect attachments to be exposed by snippet-only output: %#v", item["attachments"])
+	}
+}
+
 func TestRunFindLocalJSONSupportsFullTextAnyAndPrefixMatching(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -1700,6 +1742,9 @@ func buildLocalFindFixture(t *testing.T, sqlitePath string, storageDir string) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(attachmentDir, "mixed.pdf"), []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(attachmentDir, ".zotero-ft-cache"), []byte("Mixed survey full text preview from zotero cache."), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	attachmentDir = filepath.Join(storageDir, "ATTB2222")

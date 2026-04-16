@@ -584,6 +584,64 @@ func TestRunFindLocalTextOutputShowsFullTextMatchedOnInFullMode(t *testing.T) {
 	}
 }
 
+func TestRunFindLocalTextOutputIncludesFullTextPreviewWhenSnippetRequested(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed.pdf", "--snippet"})
+	restoreOutput()
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Key: ART67890",
+		"Title: Mixed Survey",
+		"Full Text Preview: Mixed survey full text preview from zotero cache.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output %q", want, got)
+		}
+	}
+	if strings.Contains(got, "Attachments:") {
+		t.Fatalf("did not expect attachments block in snippet-only output %q", got)
+	}
+}
+
+func TestRunFindSnippetRejectsWebMode(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "attention", "--snippet"})
+	restoreOutput()
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "find --snippet requires local or hybrid mode with local data") {
+		t.Fatalf("expected snippet mode error, got %q", got)
+	}
+}
+
 func TestRunFindTextOutputSupportsFullMode(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

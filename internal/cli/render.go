@@ -107,6 +107,10 @@ func renderFindItemDetailed(item domain.Item, opts backend.FindOptions) {
 			if len(item.MatchedOn) > 0 {
 				fmt.Fprintf(stdout, "Matched On: %s\n", strings.Join(item.MatchedOn, ", "))
 			}
+		case "full_text_preview":
+			if item.FullTextPreview != "" {
+				fmt.Fprintf(stdout, "Full Text Preview: %s\n", item.FullTextPreview)
+			}
 		}
 	}
 }
