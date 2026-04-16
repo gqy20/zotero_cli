@@ -741,7 +741,7 @@ func TestRunFindLocalJSONSupportsExperimentalFullTextIndex(t *testing.T) {
 		t.Fatalf("unexpected full_text_preview: %#v", itemData["full_text_preview"])
 	}
 	meta, ok := got["meta"].(map[string]any)
-	if !ok || meta["full_text_source"] != "zotero_ft_cache" {
+	if !ok || meta["full_text_source"] != "zotero_ft_cache" || meta["full_text_engine"] != "index_sqlite" {
 		t.Fatalf("unexpected meta payload: %#v", got["meta"])
 	}
 }

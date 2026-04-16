@@ -183,6 +183,9 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 	if err != nil {
 		return nil, err
 	}
+	if opts.FullText {
+		r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, ReadMetadata{FullTextEngine: "zotero_fulltext"})
+	}
 	items = localFilterAndOrderItems(items, opts)
 	items = paginateItems(items, opts.Start, opts.Limit)
 	if !opts.Full && !findFieldIncluded(opts.IncludeFields, "attachments") {
@@ -242,6 +245,7 @@ func (r *LocalReader) findItemsFromExperimentalIndex(ctx context.Context, opts F
 	if err != nil {
 		return nil, err
 	}
+	r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, ReadMetadata{FullTextEngine: "index_sqlite"})
 
 	items = localFilterAndOrderItems(items, opts)
 	items = paginateItems(items, opts.Start, opts.Limit)

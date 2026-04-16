@@ -36,6 +36,12 @@ func TestFullTextCacheSaveAndLoad(t *testing.T) {
 			ParentItemKey:   "ITEM123",
 			ResolvedPath:    sourcePath,
 			ContentType:     "application/pdf",
+			Title:           "Normalized Title",
+			Creators:        "Alice Bob",
+			Tags:            "genomics plants",
+			AttachmentTitle: "Supplement PDF",
+			AttachmentName:  "paper.pdf",
+			AttachmentPath:  sourcePath,
 			Extractor:       "zotero_ft_cache",
 			SourceMtimeUnix: info.ModTime().Unix(),
 			SourceSize:      info.Size(),
@@ -72,6 +78,13 @@ func TestFullTextCacheSaveAndLoad(t *testing.T) {
 	}
 	if indexed != "normalized text" {
 		t.Fatalf("indexed body = %q, want %q", indexed, "normalized text")
+	}
+	var attachmentName string
+	if err := indexDB.QueryRow(`SELECT attachment_name FROM fulltext_documents WHERE attachment_key = ?`, "ATT123").Scan(&attachmentName); err != nil {
+		t.Fatalf("query attachment_name: %v", err)
+	}
+	if attachmentName != "paper.pdf" {
+		t.Fatalf("indexed attachment_name = %q, want %q", attachmentName, "paper.pdf")
 	}
 }
 
@@ -300,6 +313,12 @@ func TestFullTextCacheSearchReturnsIndexedMatches(t *testing.T) {
 			ParentItemKey:   "ITEM123",
 			ResolvedPath:    sourcePath,
 			ContentType:     "application/pdf",
+			Title:           "Alpine Genome Study",
+			Creators:        "Alice Bob",
+			Tags:            "speciation plants",
+			AttachmentTitle: "Genome Supplement",
+			AttachmentName:  "genome.pdf",
+			AttachmentPath:  sourcePath,
 			Extractor:       "zotero_ft_cache",
 			SourceMtimeUnix: info.ModTime().Unix(),
 			SourceSize:      info.Size(),
@@ -318,6 +337,14 @@ func TestFullTextCacheSearchReturnsIndexedMatches(t *testing.T) {
 	}
 	if matches[0].ParentItemKey != "ITEM123" || matches[0].AttachmentKey != "ATT123" {
 		t.Fatalf("Search() match = %#v, want ITEM123/ATT123", matches[0])
+	}
+
+	matches, err = cache.Search("genome supplement", false, 10)
+	if err != nil {
+		t.Fatalf("Search() field query error = %v", err)
+	}
+	if len(matches) != 1 || matches[0].AttachmentKey != "ATT123" {
+		t.Fatalf("Search() field query matches = %#v, want ATT123", matches)
 	}
 }
 

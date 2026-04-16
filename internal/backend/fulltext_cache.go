@@ -24,6 +24,12 @@ type fullTextCacheMeta struct {
 	ParentItemKey   string `json:"parent_item_key,omitempty"`
 	ResolvedPath    string `json:"resolved_path,omitempty"`
 	ContentType     string `json:"content_type,omitempty"`
+	Title           string `json:"title,omitempty"`
+	Creators        string `json:"creators,omitempty"`
+	Tags            string `json:"tags,omitempty"`
+	AttachmentTitle string `json:"attachment_title,omitempty"`
+	AttachmentName  string `json:"attachment_name,omitempty"`
+	AttachmentPath  string `json:"attachment_path,omitempty"`
 	Extractor       string `json:"extractor,omitempty"`
 	SourceMtimeUnix int64  `json:"source_mtime_unix,omitempty"`
 	SourceSize      int64  `json:"source_size,omitempty"`
@@ -153,6 +159,13 @@ func fullTextAttachmentSourceInfo(attachment domain.Attachment) (string, os.File
 }
 
 func (c fullTextCache) syncIndex(doc fullTextDocument) error {
+	return c.syncIndexWithReset(doc, false)
+}
+
+func (c fullTextCache) syncIndexWithReset(doc fullTextDocument, reset bool) error {
+	if reset {
+		_ = os.Remove(c.indexPath())
+	}
 	if err := os.MkdirAll(c.rootDir, 0o755); err != nil {
 		return err
 	}
@@ -162,32 +175,8 @@ func (c fullTextCache) syncIndex(doc fullTextDocument) error {
 	}
 	defer db.Close()
 
-	schema := []string{
-		`CREATE TABLE IF NOT EXISTS fulltext_meta (
-		 attachment_key TEXT PRIMARY KEY,
-		 parent_item_key TEXT,
-		 resolved_path TEXT,
-		 content_type TEXT,
-		 extractor TEXT,
-		 source_mtime_unix INTEGER,
-		 source_size INTEGER,
-		 text_hash TEXT,
-		 extracted_at TEXT,
-		 pages INTEGER,
-		 chars INTEGER
-		);`,
-		`CREATE VIRTUAL TABLE IF NOT EXISTS fulltext_documents USING fts5(
-		 attachment_key UNINDEXED,
-		 parent_item_key UNINDEXED,
-		 content_type UNINDEXED,
-		 resolved_path UNINDEXED,
-		 body
-		);`,
-	}
-	for _, stmt := range schema {
-		if _, err := db.Exec(stmt); err != nil {
-			return err
-		}
+	if err := ensureFullTextIndexSchema(db); err != nil {
+		return err
 	}
 
 	tx, err := db.Begin()
@@ -201,13 +190,20 @@ func (c fullTextCache) syncIndex(doc fullTextDocument) error {
 	}
 	if _, err := tx.Exec(
 		`INSERT INTO fulltext_meta (
-		 attachment_key, parent_item_key, resolved_path, content_type, extractor,
-		 source_mtime_unix, source_size, text_hash, extracted_at, pages, chars
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 attachment_key, parent_item_key, resolved_path, content_type,
+		 title, creators, tags, attachment_title, attachment_name, attachment_path,
+		 extractor, source_mtime_unix, source_size, text_hash, extracted_at, pages, chars
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		doc.Meta.AttachmentKey,
 		doc.Meta.ParentItemKey,
 		doc.Meta.ResolvedPath,
 		doc.Meta.ContentType,
+		doc.Meta.Title,
+		doc.Meta.Creators,
+		doc.Meta.Tags,
+		doc.Meta.AttachmentTitle,
+		doc.Meta.AttachmentName,
+		doc.Meta.AttachmentPath,
 		doc.Meta.Extractor,
 		doc.Meta.SourceMtimeUnix,
 		doc.Meta.SourceSize,
@@ -223,17 +219,145 @@ func (c fullTextCache) syncIndex(doc fullTextDocument) error {
 	}
 	if _, err := tx.Exec(
 		`INSERT INTO fulltext_documents (
-		 attachment_key, parent_item_key, content_type, resolved_path, body
-		) VALUES (?, ?, ?, ?, ?)`,
+		 attachment_key, parent_item_key, content_type, resolved_path,
+		 title, creators, tags, attachment_title, attachment_name, attachment_path, body
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		doc.Meta.AttachmentKey,
 		doc.Meta.ParentItemKey,
 		doc.Meta.ContentType,
 		doc.Meta.ResolvedPath,
+		doc.Meta.Title,
+		doc.Meta.Creators,
+		doc.Meta.Tags,
+		doc.Meta.AttachmentTitle,
+		doc.Meta.AttachmentName,
+		doc.Meta.AttachmentPath,
 		doc.Text,
 	); err != nil {
+		if !reset && isFullTextIndexSchemaError(err) {
+			_ = tx.Rollback()
+			_ = db.Close()
+			return c.syncIndexWithReset(doc, true)
+		}
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		if !reset && isFullTextIndexSchemaError(err) {
+			_ = db.Close()
+			return c.syncIndexWithReset(doc, true)
+		}
+		return err
+	}
+	return nil
+}
+
+func ensureFullTextIndexSchema(db *sql.DB) error {
+	metaColumns := []string{
+		"attachment_key", "parent_item_key", "resolved_path", "content_type",
+		"title", "creators", "tags", "attachment_title", "attachment_name", "attachment_path",
+		"extractor", "source_mtime_unix", "source_size", "text_hash", "extracted_at", "pages", "chars",
+	}
+	docColumns := []string{
+		"attachment_key", "parent_item_key", "content_type", "resolved_path",
+		"title", "creators", "tags", "attachment_title", "attachment_name", "attachment_path", "body",
+	}
+	metaOk, err := tableHasColumns(db, "fulltext_meta", metaColumns)
+	if err != nil {
+		return err
+	}
+	docOk, err := tableHasColumns(db, "fulltext_documents", docColumns)
+	if err != nil {
+		return err
+	}
+	if !metaOk || !docOk {
+		for _, stmt := range []string{
+			`DROP TABLE IF EXISTS fulltext_documents;`,
+			`DROP TABLE IF EXISTS fulltext_meta;`,
+		} {
+			if _, err := db.Exec(stmt); err != nil {
+				return err
+			}
+		}
+	}
+	for _, stmt := range []string{
+		`CREATE TABLE IF NOT EXISTS fulltext_meta (
+		 attachment_key TEXT PRIMARY KEY,
+		 parent_item_key TEXT,
+		 resolved_path TEXT,
+		 content_type TEXT,
+		 title TEXT,
+		 creators TEXT,
+		 tags TEXT,
+		 attachment_title TEXT,
+		 attachment_name TEXT,
+		 attachment_path TEXT,
+		 extractor TEXT,
+		 source_mtime_unix INTEGER,
+		 source_size INTEGER,
+		 text_hash TEXT,
+		 extracted_at TEXT,
+		 pages INTEGER,
+		 chars INTEGER
+		);`,
+		`CREATE VIRTUAL TABLE IF NOT EXISTS fulltext_documents USING fts5(
+		 attachment_key UNINDEXED,
+		 parent_item_key UNINDEXED,
+		 content_type UNINDEXED,
+		 resolved_path UNINDEXED,
+		 title,
+		 creators,
+		 tags,
+		 attachment_title,
+		 attachment_name,
+		 attachment_path,
+		 body
+		);`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func tableHasColumns(db *sql.DB, table string, required []string) (bool, error) {
+	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	seen := make(map[string]struct{}, len(required))
+	for rows.Next() {
+		var (
+			cid        int
+			name       string
+			columnType string
+			notNull    int
+			defaultVal sql.NullString
+			pk         int
+		)
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultVal, &pk); err != nil {
+			return false, err
+		}
+		seen[name] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	for _, column := range required {
+		if _, ok := seen[column]; !ok {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func isFullTextIndexSchemaError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "no column named") || strings.Contains(message, "has no column named")
 }
 
 func (c fullTextCache) Search(query string, any bool, limit int) ([]fullTextIndexMatch, error) {
@@ -260,10 +384,10 @@ func (c fullTextCache) Search(query string, any bool, limit int) ([]fullTextInde
 		limit = 100
 	}
 	rows, err := db.Query(
-		`SELECT parent_item_key, attachment_key, bm25(fulltext_documents)
+		`SELECT parent_item_key, attachment_key, bm25(fulltext_documents, 8.0, 6.0, 4.0, 5.0, 5.0, 3.0, 1.0)
 		 FROM fulltext_documents
 		 WHERE fulltext_documents MATCH ?
-		 ORDER BY bm25(fulltext_documents)
+		 ORDER BY bm25(fulltext_documents, 8.0, 6.0, 4.0, 5.0, 5.0, 3.0, 1.0)
 		 LIMIT ?`,
 		matchExpr,
 		limit,

@@ -121,6 +121,12 @@ func (r *LocalReader) buildFullTextDocument(item domain.Item, attachment domain.
 				ParentItemKey:   item.Key,
 				ResolvedPath:    sourcePath,
 				ContentType:     attachment.ContentType,
+				Title:           item.Title,
+				Creators:        joinFullTextCreators(item.Creators),
+				Tags:            strings.Join(item.Tags, " "),
+				AttachmentTitle: attachment.Title,
+				AttachmentName:  firstNonEmptyString(attachment.Filename, attachment.Title),
+				AttachmentPath:  firstNonEmptyString(attachment.ResolvedPath, attachment.ZoteroPath),
 				Extractor:       "zotero_ft_cache",
 				SourceMtimeUnix: info.ModTime().Unix(),
 				SourceSize:      info.Size(),
@@ -136,6 +142,12 @@ func (r *LocalReader) buildFullTextDocument(item domain.Item, attachment domain.
 		return fullTextDocument{}, false, nil
 	}
 	doc.Meta.ParentItemKey = item.Key
+	doc.Meta.Title = item.Title
+	doc.Meta.Creators = joinFullTextCreators(item.Creators)
+	doc.Meta.Tags = strings.Join(item.Tags, " ")
+	doc.Meta.AttachmentTitle = attachment.Title
+	doc.Meta.AttachmentName = firstNonEmptyString(attachment.Filename, attachment.Title)
+	doc.Meta.AttachmentPath = firstNonEmptyString(attachment.ResolvedPath, attachment.ZoteroPath)
 	doc.Meta.ExtractedAt = time.Now().UTC().Format(time.RFC3339)
 	return doc, true, nil
 }
@@ -280,6 +292,16 @@ func fullTextAttachmentMatchScore(attachment domain.Attachment, text string, que
 		}
 	}
 	return score
+}
+
+func joinFullTextCreators(creators []domain.Creator) string {
+	names := make([]string, 0, len(creators))
+	for _, creator := range creators {
+		if strings.TrimSpace(creator.Name) != "" {
+			names = append(names, creator.Name)
+		}
+	}
+	return strings.Join(names, " ")
 }
 
 func fullTextQueryTokens(query string) []string {

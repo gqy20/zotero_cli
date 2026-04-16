@@ -365,6 +365,9 @@ func appendExplicitReadMetadata(meta map[string]any, readMeta backend.ReadMetada
 	if readMeta.SQLiteFallback {
 		meta["sqlite_fallback"] = true
 	}
+	if readMeta.FullTextEngine != "" {
+		meta["full_text_engine"] = readMeta.FullTextEngine
+	}
 	if readMeta.FullTextSource != "" {
 		meta["full_text_source"] = readMeta.FullTextSource
 	}

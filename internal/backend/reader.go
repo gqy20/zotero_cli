@@ -49,6 +49,7 @@ type LibraryStats struct {
 type ReadMetadata struct {
 	ReadSource            string `json:"read_source,omitempty"`
 	SQLiteFallback        bool   `json:"sqlite_fallback,omitempty"`
+	FullTextEngine        string `json:"full_text_engine,omitempty"`
 	FullTextSource        string `json:"full_text_source,omitempty"`
 	FullTextAttachmentKey string `json:"full_text_attachment_key,omitempty"`
 	FullTextCacheHit      bool   `json:"full_text_cache_hit,omitempty"`
@@ -194,6 +195,9 @@ func mergeReadMetadata(base ReadMetadata, extra ReadMetadata) ReadMetadata {
 	}
 	if extra.FullTextSource != "" {
 		base.FullTextSource = extra.FullTextSource
+	}
+	if extra.FullTextEngine != "" {
+		base.FullTextEngine = extra.FullTextEngine
 	}
 	if extra.FullTextAttachmentKey != "" {
 		base.FullTextAttachmentKey = extra.FullTextAttachmentKey
