@@ -36,11 +36,12 @@ import sys
 pdf_path = sys.argv[1]
 doc = fitz.open(pdf_path)
 text = "\n".join(page.get_text() for page in doc)
-print(json.dumps({
+payload = json.dumps({
   "text": text,
   "pages": len(doc),
   "chars": len(text)
-}, ensure_ascii=False))
+}, ensure_ascii=False)
+sys.stdout.buffer.write(payload.encode("utf-8"))
 `
 	cmd := exec.CommandContext(ctx, pythonCmd, "-", attachment.ResolvedPath)
 	cmd.Stdin = strings.NewReader(script)

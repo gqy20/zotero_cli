@@ -7,44 +7,70 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"zotero_cli/internal/domain"
 )
 
 const fullTextPreviewLimit = 280
 
-func (r *LocalReader) FullTextPreview(_ context.Context, item domain.Item) (string, error) {
+func (r *LocalReader) FullTextPreview(ctx context.Context, item domain.Item) (string, error) {
+	doc, ok, err := r.loadFullTextDocument(ctx, item)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", nil
+	}
+	return normalizeFullTextPreview(doc.Text), nil
+}
+
+func (r *LocalReader) FullTextSnippet(ctx context.Context, item domain.Item, query string) (string, error) {
+	doc, ok, err := r.loadFullTextDocument(ctx, item)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", nil
+	}
+	return buildFullTextSnippet(doc.Text, query), nil
+}
+
+func (r *LocalReader) loadFullTextDocument(_ context.Context, item domain.Item) (fullTextDocument, bool, error) {
 	cache := newFullTextCache(r.FullTextCacheDir)
 	for _, attachment := range item.Attachments {
 		doc, ok, err := cache.Load(attachment)
 		if err != nil {
-			return "", err
+			return fullTextDocument{}, false, err
 		}
 		if ok && doc.Text != "" {
+			if err := cache.syncIndex(doc); err != nil {
+				return fullTextDocument{}, false, err
+			}
 			r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, ReadMetadata{
 				FullTextSource:        doc.Meta.Extractor,
 				FullTextAttachmentKey: doc.Meta.AttachmentKey,
 				FullTextCacheHit:      true,
 			})
-			return normalizeFullTextPreview(doc.Text), nil
+			return doc, true, nil
 		}
 		doc, ok, err = r.buildFullTextDocument(item, attachment)
 		if err != nil {
-			return "", err
+			return fullTextDocument{}, false, err
 		}
 		if !ok || doc.Text == "" {
 			continue
 		}
 		if err := cache.Save(doc); err != nil {
-			return "", err
+			return fullTextDocument{}, false, err
 		}
 		r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, ReadMetadata{
 			FullTextSource:        doc.Meta.Extractor,
 			FullTextAttachmentKey: doc.Meta.AttachmentKey,
 		})
-		return normalizeFullTextPreview(doc.Text), nil
+		return doc, true, nil
 	}
-	return "", nil
+	return fullTextDocument{}, false, nil
 }
 
 func (r *HybridReader) FullTextPreview(ctx context.Context, item domain.Item) (string, error) {
@@ -60,6 +86,21 @@ func (r *HybridReader) FullTextPreview(ctx context.Context, item domain.Item) (s
 	}
 	r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, consumeReadMetadata(r.local))
 	return preview, nil
+}
+
+func (r *HybridReader) FullTextSnippet(ctx context.Context, item domain.Item, query string) (string, error) {
+	snippeter, ok := r.local.(interface {
+		FullTextSnippet(context.Context, domain.Item, string) (string, error)
+	})
+	if !ok {
+		return "", fmt.Errorf("find --snippet requires local or hybrid mode with local data")
+	}
+	snippet, err := snippeter.FullTextSnippet(ctx, item, query)
+	if err != nil {
+		return "", err
+	}
+	r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, consumeReadMetadata(r.local))
+	return snippet, nil
 }
 
 func (r *LocalReader) buildFullTextDocument(item domain.Item, attachment domain.Attachment) (fullTextDocument, bool, error) {
@@ -135,4 +176,91 @@ func normalizeFullTextPreview(value string) string {
 		return normalized
 	}
 	return string(runes[:fullTextPreviewLimit]) + "..."
+}
+
+func buildFullTextSnippet(text string, query string) string {
+	normalized := strings.Join(strings.Fields(text), " ")
+	if normalized == "" {
+		return ""
+	}
+	tokens := fullTextQueryTokens(query)
+	if len(tokens) == 0 {
+		return normalizeFullTextPreview(normalized)
+	}
+
+	lowerRunes := []rune(strings.ToLower(normalized))
+	textRunes := []rune(normalized)
+	bestIdx := -1
+	bestLen := 0
+	for _, token := range tokens {
+		tokenRunes := []rune(strings.ToLower(token))
+		if len(tokenRunes) == 0 {
+			continue
+		}
+		idx := indexRuneSlice(lowerRunes, tokenRunes)
+		if idx < 0 {
+			continue
+		}
+		if bestIdx == -1 || idx < bestIdx || (idx == bestIdx && len(tokenRunes) > bestLen) {
+			bestIdx = idx
+			bestLen = len(tokenRunes)
+		}
+	}
+	if bestIdx < 0 {
+		return normalizeFullTextPreview(normalized)
+	}
+	const contextRadius = 60
+	start := bestIdx - contextRadius
+	if start < 0 {
+		start = 0
+	}
+	end := bestIdx + bestLen + contextRadius
+	if end > len(textRunes) {
+		end = len(textRunes)
+	}
+	snippet := string(textRunes[start:end])
+	snippet = strings.TrimSpace(snippet)
+	if start > 0 {
+		snippet = "..." + snippet
+	}
+	if end < len(textRunes) {
+		snippet += "..."
+	}
+	return snippet
+}
+
+func fullTextQueryTokens(query string) []string {
+	fields := strings.Fields(strings.ToLower(query))
+	tokens := make([]string, 0, len(fields))
+	seen := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		token := strings.TrimFunc(field, func(r rune) bool {
+			return unicode.IsPunct(r) || unicode.IsSpace(r)
+		})
+		if token == "" {
+			continue
+		}
+		if _, ok := seen[token]; ok {
+			continue
+		}
+		seen[token] = struct{}{}
+		tokens = append(tokens, token)
+	}
+	return tokens
+}
+
+func indexRuneSlice(text []rune, token []rune) int {
+	if len(token) == 0 || len(text) < len(token) {
+		return -1
+	}
+outer:
+	for i := 0; i <= len(text)-len(token); i++ {
+		for j := range token {
+			if text[i+j] != token[j] {
+				continue outer
+			}
+		}
+		return i
+	}
+	return -1
 }

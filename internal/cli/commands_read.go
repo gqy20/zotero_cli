@@ -67,14 +67,14 @@ func runFind(args []string) int {
 	items = filterDefaultFindItems(items, opts)
 
 	if snippet {
-		previewer, ok := reader.(interface {
-			FullTextPreview(context.Context, domain.Item) (string, error)
+		snippeter, ok := reader.(interface {
+			FullTextSnippet(context.Context, domain.Item, string) (string, error)
 		})
 		if !ok {
 			return printErr(fmt.Errorf("find --snippet requires local or hybrid mode with local data"))
 		}
 		for i := range items {
-			preview, err := previewer.FullTextPreview(context.Background(), items[i])
+			preview, err := snippeter.FullTextSnippet(context.Background(), items[i], opts.Query)
 			if err != nil {
 				return printErr(err)
 			}

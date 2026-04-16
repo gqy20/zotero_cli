@@ -61,6 +61,18 @@ func TestFullTextCacheSaveAndLoad(t *testing.T) {
 	if got.Meta.AttachmentKey != doc.Meta.AttachmentKey {
 		t.Fatalf("Load() meta = %#v, want attachment key %q", got.Meta, doc.Meta.AttachmentKey)
 	}
+	indexDB, err := sql.Open("sqlite", cache.indexPath())
+	if err != nil {
+		t.Fatalf("open index: %v", err)
+	}
+	defer indexDB.Close()
+	var indexed string
+	if err := indexDB.QueryRow(`SELECT body FROM fulltext_documents WHERE attachment_key = ?`, "ATT123").Scan(&indexed); err != nil {
+		t.Fatalf("query fulltext_documents: %v", err)
+	}
+	if indexed != "normalized text" {
+		t.Fatalf("indexed body = %q, want %q", indexed, "normalized text")
+	}
 }
 
 func TestFullTextCacheLoadRejectsStaleEntry(t *testing.T) {
@@ -256,6 +268,17 @@ func TestLocalFullTextPreviewFallsBackToPyMuPDFAndCachesResult(t *testing.T) {
 	}
 	if cacheMeta.Extractor != "pymupdf" {
 		t.Fatalf("meta.Extractor = %q, want pymupdf", cacheMeta.Extractor)
+	}
+}
+
+func TestBuildFullTextSnippetCentersMatch(t *testing.T) {
+	text := "Preface words. Mixed survey full text preview from zotero cache. Core section discusses speciation genome patterns in plants and gene flow. Ending notes."
+	got := buildFullTextSnippet(text, "speciation genome")
+	if !strings.Contains(got, "speciation genome patterns in plants") {
+		t.Fatalf("buildFullTextSnippet() = %q, want centered match", got)
+	}
+	if strings.Contains(got, "Preface words.") && strings.Contains(got, "Ending notes.") {
+		t.Fatalf("buildFullTextSnippet() = %q, want trimmed snippet instead of full preview", got)
 	}
 }
 

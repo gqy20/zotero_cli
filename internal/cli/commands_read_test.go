@@ -653,6 +653,44 @@ func TestRunFindLocalJSONIncludesFullTextPreviewWhenSnippetRequested(t *testing.
 	}
 }
 
+func TestRunFindLocalJSONUsesMatchedSnippetForFullTextQuery(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "speciation genome", "--fulltext", "--snippet", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	item := data[0].(map[string]any)
+	preview, ok := item["full_text_preview"].(string)
+	if !ok || !strings.Contains(preview, "speciation genome patterns in plants") {
+		t.Fatalf("unexpected full_text_preview: %#v", item["full_text_preview"])
+	}
+	if strings.Contains(preview, "Mixed survey full text preview from zotero cache.") {
+		t.Fatalf("expected matched snippet instead of leading preview: %q", preview)
+	}
+}
+
 func TestRunFindLocalJSONSupportsFullTextAnyAndPrefixMatching(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -1744,7 +1782,7 @@ func buildLocalFindFixture(t *testing.T, sqlitePath string, storageDir string) {
 	if err := os.WriteFile(filepath.Join(attachmentDir, "mixed.pdf"), []byte("pdf"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(attachmentDir, ".zotero-ft-cache"), []byte("Mixed survey full text preview from zotero cache."), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(attachmentDir, ".zotero-ft-cache"), []byte("Mixed survey full text preview from zotero cache. Core section discusses speciation genome patterns in plants and gene flow."), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	attachmentDir = filepath.Join(storageDir, "ATTB2222")

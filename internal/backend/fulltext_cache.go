@@ -2,6 +2,7 @@ package backend
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"time"
 
 	"zotero_cli/internal/domain"
+
+	_ "modernc.org/sqlite"
 )
 
 type fullTextCache struct {
@@ -49,6 +52,10 @@ func (c fullTextCache) contentPath(attachmentKey string) string {
 
 func (c fullTextCache) metaPath(attachmentKey string) string {
 	return filepath.Join(c.attachmentDir(attachmentKey), "meta.json")
+}
+
+func (c fullTextCache) indexPath() string {
+	return filepath.Join(c.rootDir, "index.sqlite")
 }
 
 func (c fullTextCache) Load(attachment domain.Attachment) (fullTextDocument, bool, error) {
@@ -105,7 +112,10 @@ func (c fullTextCache) Save(doc fullTextDocument) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(c.metaPath(key), metaBytes, 0o600)
+	if err := os.WriteFile(c.metaPath(key), metaBytes, 0o600); err != nil {
+		return err
+	}
+	return c.syncIndex(doc)
 }
 
 func (c fullTextCache) IsFresh(meta fullTextCacheMeta, attachment domain.Attachment) bool {
@@ -133,4 +143,88 @@ func fullTextAttachmentSourceInfo(attachment domain.Attachment) (string, os.File
 		}
 	}
 	return "", nil, false
+}
+
+func (c fullTextCache) syncIndex(doc fullTextDocument) error {
+	if err := os.MkdirAll(c.rootDir, 0o755); err != nil {
+		return err
+	}
+	db, err := sql.Open("sqlite", c.indexPath())
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	schema := []string{
+		`CREATE TABLE IF NOT EXISTS fulltext_meta (
+		 attachment_key TEXT PRIMARY KEY,
+		 parent_item_key TEXT,
+		 resolved_path TEXT,
+		 content_type TEXT,
+		 extractor TEXT,
+		 source_mtime_unix INTEGER,
+		 source_size INTEGER,
+		 text_hash TEXT,
+		 extracted_at TEXT,
+		 pages INTEGER,
+		 chars INTEGER
+		);`,
+		`CREATE VIRTUAL TABLE IF NOT EXISTS fulltext_documents USING fts5(
+		 attachment_key UNINDEXED,
+		 parent_item_key UNINDEXED,
+		 content_type UNINDEXED,
+		 resolved_path UNINDEXED,
+		 body
+		);`,
+	}
+	for _, stmt := range schema {
+		if _, err := db.Exec(stmt); err != nil {
+			return err
+		}
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM fulltext_meta WHERE attachment_key = ?`, doc.Meta.AttachmentKey); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(
+		`INSERT INTO fulltext_meta (
+		 attachment_key, parent_item_key, resolved_path, content_type, extractor,
+		 source_mtime_unix, source_size, text_hash, extracted_at, pages, chars
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		doc.Meta.AttachmentKey,
+		doc.Meta.ParentItemKey,
+		doc.Meta.ResolvedPath,
+		doc.Meta.ContentType,
+		doc.Meta.Extractor,
+		doc.Meta.SourceMtimeUnix,
+		doc.Meta.SourceSize,
+		doc.Meta.TextHash,
+		doc.Meta.ExtractedAt,
+		doc.Meta.Pages,
+		doc.Meta.Chars,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM fulltext_documents WHERE attachment_key = ?`, doc.Meta.AttachmentKey); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(
+		`INSERT INTO fulltext_documents (
+		 attachment_key, parent_item_key, content_type, resolved_path, body
+		) VALUES (?, ?, ?, ?, ?)`,
+		doc.Meta.AttachmentKey,
+		doc.Meta.ParentItemKey,
+		doc.Meta.ContentType,
+		doc.Meta.ResolvedPath,
+		doc.Text,
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
