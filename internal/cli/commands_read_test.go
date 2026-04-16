@@ -691,6 +691,61 @@ func TestRunFindLocalJSONUsesMatchedSnippetForFullTextQuery(t *testing.T) {
 	}
 }
 
+func TestRunFindLocalJSONSupportsExperimentalFullTextIndex(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+	t.Setenv("ZOT_EXPERIMENTAL_FTS", "1")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	reader, err := backend.NewLocalReader(config.Config{DataDir: dataDir})
+	if err != nil {
+		t.Fatalf("NewLocalReader() error = %v", err)
+	}
+	item, err := reader.GetItem(context.Background(), "ART67890")
+	if err != nil {
+		t.Fatalf("GetItem() error = %v", err)
+	}
+	if _, err := reader.FullTextPreview(context.Background(), item); err != nil {
+		t.Fatalf("FullTextPreview() error = %v", err)
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "speciation genome", "--fulltext", "--snippet", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	itemData := data[0].(map[string]any)
+	if itemData["key"] != "ART67890" {
+		t.Fatalf("unexpected item payload: %#v", itemData)
+	}
+	preview, ok := itemData["full_text_preview"].(string)
+	if !ok || !strings.Contains(preview, "speciation genome patterns in plants") {
+		t.Fatalf("unexpected full_text_preview: %#v", itemData["full_text_preview"])
+	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["full_text_source"] != "zotero_ft_cache" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
+}
+
 func TestRunFindLocalJSONSupportsFullTextAnyAndPrefixMatching(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

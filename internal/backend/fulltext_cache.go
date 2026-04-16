@@ -34,8 +34,15 @@ type fullTextCacheMeta struct {
 }
 
 type fullTextDocument struct {
-	Text string
-	Meta fullTextCacheMeta
+	Text     string
+	Meta     fullTextCacheMeta
+	CacheHit bool
+}
+
+type fullTextIndexMatch struct {
+	ParentItemKey string
+	AttachmentKey string
+	Rank          float64
 }
 
 func newFullTextCache(rootDir string) fullTextCache {
@@ -84,7 +91,7 @@ func (c fullTextCache) Load(attachment domain.Attachment) (fullTextDocument, boo
 	if !c.IsFresh(meta, attachment) {
 		return fullTextDocument{}, false, nil
 	}
-	return fullTextDocument{Text: string(content), Meta: meta}, true, nil
+	return fullTextDocument{Text: string(content), Meta: meta, CacheHit: true}, true, nil
 }
 
 func (c fullTextCache) Save(doc fullTextDocument) error {
@@ -227,4 +234,70 @@ func (c fullTextCache) syncIndex(doc fullTextDocument) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+func (c fullTextCache) Search(query string, any bool, limit int) ([]fullTextIndexMatch, error) {
+	if strings.TrimSpace(query) == "" {
+		return nil, nil
+	}
+	if _, err := os.Stat(c.indexPath()); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", c.indexPath())
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	matchExpr := fullTextIndexMatchExpr(query, any)
+	if matchExpr == "" {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := db.Query(
+		`SELECT parent_item_key, attachment_key, bm25(fulltext_documents)
+		 FROM fulltext_documents
+		 WHERE fulltext_documents MATCH ?
+		 ORDER BY bm25(fulltext_documents)
+		 LIMIT ?`,
+		matchExpr,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	matches := make([]fullTextIndexMatch, 0, limit)
+	for rows.Next() {
+		var match fullTextIndexMatch
+		if err := rows.Scan(&match.ParentItemKey, &match.AttachmentKey, &match.Rank); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(match.ParentItemKey) == "" {
+			continue
+		}
+		matches = append(matches, match)
+	}
+	return matches, rows.Err()
+}
+
+func fullTextIndexMatchExpr(query string, any bool) string {
+	tokens := fullTextQueryTokens(query)
+	if len(tokens) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		parts = append(parts, `"`+strings.ReplaceAll(token, `"`, `""`)+`"*`)
+	}
+	if any {
+		return strings.Join(parts, " OR ")
+	}
+	return strings.Join(parts, " ")
 }

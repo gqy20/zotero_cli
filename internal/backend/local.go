@@ -3,10 +3,12 @@ package backend
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	_ "modernc.org/sqlite"
 
@@ -87,6 +89,9 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 	}
 	if opts.QMode != "" {
 		return nil, newUnsupportedFeatureErrorWithHint("local", "find --qmode", "set ZOT_MODE=web or ZOT_MODE=hybrid to use this feature")
+	}
+	if opts.FullText && useExperimentalFullTextIndex() {
+		return r.findItemsFromExperimentalIndex(ctx, opts)
 	}
 
 	items := []domain.Item{}
@@ -178,6 +183,66 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 	if err != nil {
 		return nil, err
 	}
+	items = localFilterAndOrderItems(items, opts)
+	items = paginateItems(items, opts.Start, opts.Limit)
+	if !opts.Full && !findFieldIncluded(opts.IncludeFields, "attachments") {
+		for i := range items {
+			items[i].Attachments = nil
+		}
+	}
+	return items, nil
+}
+
+func useExperimentalFullTextIndex() bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv("ZOT_EXPERIMENTAL_FTS")))
+	return value == "1" || value == "true" || value == "yes"
+}
+
+func (r *LocalReader) findItemsFromExperimentalIndex(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
+	matches, err := newFullTextCache(r.FullTextCacheDir).Search(opts.Query, opts.FullTextAny, opts.Limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(matches) == 0 {
+		return []domain.Item{}, nil
+	}
+
+	items := make([]domain.Item, 0, len(matches))
+	err = r.withReadableDB(ctx, func(db *sql.DB) error {
+		for idx, match := range matches {
+			item, itemID, err := r.loadItem(ctx, db, match.ParentItemKey)
+			if err != nil {
+				if errors.Is(err, ErrItemNotFound) {
+					continue
+				}
+				return err
+			}
+			creators, err := r.loadCreators(ctx, db, itemID)
+			if err != nil {
+				return err
+			}
+			tags, err := r.loadTags(ctx, db, itemID)
+			if err != nil {
+				return err
+			}
+			attachments, err := r.loadAttachments(ctx, db, itemID)
+			if err != nil {
+				return err
+			}
+			item.Creators = creators
+			item.Tags = tags
+			item.Attachments = attachments
+			item.MatchedOn = []string{"fulltext_attachment"}
+			item.SearchScore = len(matches) - idx
+			item.SnippetAttachmentKey = match.AttachmentKey
+			items = append(items, item)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	items = localFilterAndOrderItems(items, opts)
 	items = paginateItems(items, opts.Start, opts.Limit)
 	if !opts.Full && !findFieldIncluded(opts.IncludeFields, "attachments") {

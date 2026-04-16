@@ -282,6 +282,45 @@ func TestBuildFullTextSnippetCentersMatch(t *testing.T) {
 	}
 }
 
+func TestFullTextCacheSearchReturnsIndexedMatches(t *testing.T) {
+	rootDir := t.TempDir()
+	cache := newFullTextCache(rootDir)
+	sourcePath := filepath.Join(t.TempDir(), "paper.pdf")
+	if err := os.WriteFile(sourcePath, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := fullTextDocument{
+		Text: "Core section discusses speciation genome patterns in plants.",
+		Meta: fullTextCacheMeta{
+			AttachmentKey:   "ATT123",
+			ParentItemKey:   "ITEM123",
+			ResolvedPath:    sourcePath,
+			ContentType:     "application/pdf",
+			Extractor:       "zotero_ft_cache",
+			SourceMtimeUnix: info.ModTime().Unix(),
+			SourceSize:      info.Size(),
+		},
+	}
+	if err := cache.Save(doc); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	matches, err := cache.Search("speciation genome", false, 10)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("Search() matches = %#v, want 1 match", matches)
+	}
+	if matches[0].ParentItemKey != "ITEM123" || matches[0].AttachmentKey != "ATT123" {
+		t.Fatalf("Search() match = %#v, want ITEM123/ATT123", matches[0])
+	}
+}
+
 func TestLocalSQLiteDSNUsesReadOnlyPragmas(t *testing.T) {
 	dsn := localSQLiteDSN(`D:\Zotero\zotero.sqlite`)
 

@@ -15,7 +15,7 @@ import (
 const fullTextPreviewLimit = 280
 
 func (r *LocalReader) FullTextPreview(ctx context.Context, item domain.Item) (string, error) {
-	doc, ok, err := r.loadFullTextDocument(ctx, item)
+	doc, ok, err := r.loadFullTextDocument(ctx, item, "")
 	if err != nil {
 		return "", err
 	}
@@ -26,7 +26,7 @@ func (r *LocalReader) FullTextPreview(ctx context.Context, item domain.Item) (st
 }
 
 func (r *LocalReader) FullTextSnippet(ctx context.Context, item domain.Item, query string) (string, error) {
-	doc, ok, err := r.loadFullTextDocument(ctx, item)
+	doc, ok, err := r.loadFullTextDocument(ctx, item, query)
 	if err != nil {
 		return "", err
 	}
@@ -36,41 +36,42 @@ func (r *LocalReader) FullTextSnippet(ctx context.Context, item domain.Item, que
 	return buildFullTextSnippet(doc.Text, query), nil
 }
 
-func (r *LocalReader) loadFullTextDocument(_ context.Context, item domain.Item) (fullTextDocument, bool, error) {
+func (r *LocalReader) loadFullTextDocument(_ context.Context, item domain.Item, query string) (fullTextDocument, bool, error) {
 	cache := newFullTextCache(r.FullTextCacheDir)
+	bestDoc := fullTextDocument{}
+	bestScore := -1
 	for _, attachment := range item.Attachments {
-		doc, ok, err := cache.Load(attachment)
-		if err != nil {
-			return fullTextDocument{}, false, err
-		}
-		if ok && doc.Text != "" {
-			if err := cache.syncIndex(doc); err != nil {
-				return fullTextDocument{}, false, err
-			}
-			r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, ReadMetadata{
-				FullTextSource:        doc.Meta.Extractor,
-				FullTextAttachmentKey: doc.Meta.AttachmentKey,
-				FullTextCacheHit:      true,
-			})
-			return doc, true, nil
-		}
-		doc, ok, err = r.buildFullTextDocument(item, attachment)
+		doc, ok, err := r.loadFullTextDocumentForAttachment(item, attachment, cache)
 		if err != nil {
 			return fullTextDocument{}, false, err
 		}
 		if !ok || doc.Text == "" {
 			continue
 		}
-		if err := cache.Save(doc); err != nil {
-			return fullTextDocument{}, false, err
+		score := fullTextAttachmentMatchScore(attachment, doc.Text, query)
+		if item.SnippetAttachmentKey != "" && item.SnippetAttachmentKey == attachment.Key {
+			score += 100
 		}
-		r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, ReadMetadata{
-			FullTextSource:        doc.Meta.Extractor,
-			FullTextAttachmentKey: doc.Meta.AttachmentKey,
-		})
-		return doc, true, nil
+		if query == "" {
+			score = 0
+		}
+		if bestScore < score || bestScore < 0 {
+			bestDoc = doc
+			bestScore = score
+			if query == "" {
+				break
+			}
+		}
 	}
-	return fullTextDocument{}, false, nil
+	if bestScore < 0 {
+		return fullTextDocument{}, false, nil
+	}
+	r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, ReadMetadata{
+		FullTextSource:        bestDoc.Meta.Extractor,
+		FullTextAttachmentKey: bestDoc.Meta.AttachmentKey,
+		FullTextCacheHit:      bestDoc.CacheHit,
+	})
+	return bestDoc, true, nil
 }
 
 func (r *HybridReader) FullTextPreview(ctx context.Context, item domain.Item) (string, error) {
@@ -136,6 +137,32 @@ func (r *LocalReader) buildFullTextDocument(item domain.Item, attachment domain.
 	}
 	doc.Meta.ParentItemKey = item.Key
 	doc.Meta.ExtractedAt = time.Now().UTC().Format(time.RFC3339)
+	return doc, true, nil
+}
+
+func (r *LocalReader) loadFullTextDocumentForAttachment(item domain.Item, attachment domain.Attachment, cache fullTextCache) (fullTextDocument, bool, error) {
+	doc, ok, err := cache.Load(attachment)
+	if err != nil {
+		return fullTextDocument{}, false, err
+	}
+	if ok && doc.Text != "" {
+		if err := cache.syncIndex(doc); err != nil {
+			return fullTextDocument{}, false, err
+		}
+		doc.Meta.ParentItemKey = firstNonEmptyString(doc.Meta.ParentItemKey, item.Key)
+		doc.CacheHit = true
+		return doc, true, nil
+	}
+	doc, ok, err = r.buildFullTextDocument(item, attachment)
+	if err != nil {
+		return fullTextDocument{}, false, err
+	}
+	if !ok || doc.Text == "" {
+		return fullTextDocument{}, false, nil
+	}
+	if err := cache.Save(doc); err != nil {
+		return fullTextDocument{}, false, err
+	}
 	return doc, true, nil
 }
 
@@ -227,6 +254,32 @@ func buildFullTextSnippet(text string, query string) string {
 		snippet += "..."
 	}
 	return snippet
+}
+
+func fullTextAttachmentMatchScore(attachment domain.Attachment, text string, query string) int {
+	if strings.TrimSpace(query) == "" {
+		return 0
+	}
+	score := 0
+	for _, token := range fullTextQueryTokens(query) {
+		lowerToken := strings.ToLower(token)
+		if strings.Contains(strings.ToLower(text), lowerToken) {
+			score += 10
+		}
+		if strings.Contains(strings.ToLower(attachment.Title), lowerToken) {
+			score += 3
+		}
+		if strings.Contains(strings.ToLower(attachment.Filename), lowerToken) {
+			score += 3
+		}
+		if strings.Contains(strings.ToLower(attachment.ZoteroPath), lowerToken) || strings.Contains(strings.ToLower(attachment.ResolvedPath), lowerToken) {
+			score += 2
+		}
+		if strings.Contains(strings.ToLower(attachment.ContentType), lowerToken) {
+			score++
+		}
+	}
+	return score
 }
 
 func fullTextQueryTokens(query string) []string {
