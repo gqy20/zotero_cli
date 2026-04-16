@@ -17,12 +17,63 @@ Implemented:
 - attachment path reporting in local `show`
 - note summaries in local `show`
 - explicit local `relate` based on `itemRelations`
+- local attachment-aware `find` filters and match reasons
+- Zotero `prefs.js` discovery for `dataDir` and `baseAttachmentPath`
 
 Not implemented yet:
 
 - local full-text search
 - web-side `relate`
 - inferred relation layers based on tags / collections / note context
+
+### Current Backend File Layout
+
+The local backend is no longer intended to grow inside a single `local.go`.
+
+Current file responsibilities:
+
+- `internal/backend/local.go`
+  - `LocalReader` lifecycle and high-level orchestration
+  - `NewLocalReader`
+  - public local read methods such as `FindItems`, `GetItem`, `GetRelated`, and `GetLibraryStats`
+  - read-session behavior such as live DB first and snapshot fallback
+
+- `internal/backend/local_db.go`
+  - SQLite connection setup
+  - busy/locked retry detection
+  - snapshot-copy helpers
+  - low-level DB lifecycle utilities
+
+- `internal/backend/local_find.go`
+  - local `find` SQL construction
+  - local post-filtering, ordering, pagination
+  - attachment-aware local filters
+  - local `matched_on` derivation
+
+- `internal/backend/local_loaders.go`
+  - item loaders
+  - relation loaders
+  - creators / tags / collections / attachments / notes loaders
+  - attachment path resolution
+
+- `internal/backend/local_prefs.go`
+  - Zotero `prefs.js` discovery and parsing
+  - mapping from configured `dataDir` to the matching Zotero profile when possible
+
+- `internal/backend/local_utils.go`
+  - shared local-only formatting and normalization helpers
+  - small path and text helpers used by multiple local backend files
+
+Expansion rule:
+
+- new `find` query semantics should go to `local_find.go`
+- new data loading routines should go to `local_loaders.go`
+- new SQLite/session behavior should go to `local_db.go`
+- new Zotero profile/config discovery should go to `local_prefs.go`
+- `local.go` should stay small and should mostly coordinate the other pieces
+
+This split is intentional.
+It should be treated as part of the local backend design rather than as a temporary refactor.
 
 ## Goal
 
