@@ -517,6 +517,84 @@ func TestRunFindLocalJSONSupportsItemTypeAndLimit(t *testing.T) {
 	}
 }
 
+func TestRunFindLocalJSONMatchesAttachmentFilename(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed.pdf", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	item := data[0].(map[string]any)
+	if item["key"] != "ART67890" {
+		t.Fatalf("unexpected item payload: %#v", item)
+	}
+}
+
+func TestRunFindLocalJSONMatchesLinkedAttachmentPathFromPrefs(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+	t.Setenv("ZOT_DATA_DIR", "")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalLinkedAttachmentFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+
+	baseAttachmentDir := t.TempDir()
+	linkedPDF := filepath.Join(baseAttachmentDir, "papers", "linked.pdf")
+	if err := os.MkdirAll(filepath.Dir(linkedPDF), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(linkedPDF, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeZoteroPrefsFixture(t, configRoot, dataDir, baseAttachmentDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "papers/linked.pdf", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	item := data[0].(map[string]any)
+	if item["key"] != "ITEMLINK" {
+		t.Fatalf("unexpected item payload: %#v", item)
+	}
+}
+
 func TestRunFindLocalAllJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -905,6 +983,49 @@ func TestRunShowLocalTextOutputIncludesCollectionsAndResolvedPaths(t *testing.T)
 	}
 }
 
+func TestRunShowLocalAutoDetectsPrefsAndResolvesLinkedAttachmentPaths(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+	t.Setenv("ZOT_DATA_DIR", "")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
+	buildLocalLinkedAttachmentFixture(t, sqlitePath, storageDir)
+
+	baseAttachmentDir := t.TempDir()
+	linkedPDF := filepath.Join(baseAttachmentDir, "papers", "linked.pdf")
+	if err := os.MkdirAll(filepath.Dir(linkedPDF), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(linkedPDF, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeZoteroPrefsFixture(t, configRoot, dataDir, baseAttachmentDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"show", "ITEMLINK"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Key: ITEMLINK",
+		"[pdf] linked.pdf (ATTLINK)",
+		"path: " + linkedPDF,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output %q", want, got)
+		}
+	}
+}
+
 func TestRunRelateLocalJSONShowsExplicitRelations(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -1004,6 +1125,7 @@ func buildLocalShowFixture(t *testing.T, sqlitePath string, storageDir string) {
 		`CREATE TABLE collectionItems (collectionID INTEGER, itemID INTEGER);`,
 		`CREATE TABLE itemAttachments (itemID INTEGER, parentItemID INTEGER, contentType TEXT, linkMode INTEGER, path TEXT);`,
 		`CREATE TABLE itemNotes (itemID INTEGER, parentItemID INTEGER, note TEXT, title TEXT);`,
+		`CREATE TABLE itemAnnotations (itemID INTEGER);`,
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(statement); err != nil {
@@ -1088,6 +1210,71 @@ func buildLocalRelateFixture(t *testing.T, sqlitePath string, storageDir string)
 		if _, err := db.Exec(statement); err != nil {
 			t.Fatalf("exec %q: %v", statement, err)
 		}
+	}
+}
+
+func buildLocalLinkedAttachmentFixture(t *testing.T, sqlitePath string, storageDir string) {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", sqlitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	statements := []string{
+		`CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName TEXT);`,
+		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER);`,
+		`CREATE TABLE fieldsCombined (fieldID INTEGER PRIMARY KEY, fieldName TEXT);`,
+		`CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT);`,
+		`CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID INTEGER);`,
+		`CREATE TABLE creatorTypes (creatorTypeID INTEGER PRIMARY KEY, creatorType TEXT);`,
+		`CREATE TABLE creators (creatorID INTEGER PRIMARY KEY, firstName TEXT, lastName TEXT, fieldMode INT);`,
+		`CREATE TABLE itemCreators (itemID INTEGER, creatorID INTEGER, creatorTypeID INTEGER, orderIndex INTEGER);`,
+		`CREATE TABLE tags (tagID INTEGER PRIMARY KEY, name TEXT);`,
+		`CREATE TABLE itemTags (itemID INTEGER, tagID INTEGER);`,
+		`CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, key TEXT, collectionName TEXT);`,
+		`CREATE TABLE collectionItems (collectionID INTEGER, itemID INTEGER);`,
+		`CREATE TABLE itemAttachments (itemID INTEGER, parentItemID INTEGER, contentType TEXT, linkMode INTEGER, path TEXT);`,
+		`CREATE TABLE itemNotes (itemID INTEGER, parentItemID INTEGER, note TEXT, title TEXT);`,
+		`CREATE TABLE itemAnnotations (itemID INTEGER);`,
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("exec %q: %v", statement, err)
+		}
+	}
+
+	inserts := []string{
+		`INSERT INTO itemTypes(itemTypeID, typeName) VALUES (1, 'journalArticle'), (2, 'attachment');`,
+		`INSERT INTO items(itemID, key, version, itemTypeID) VALUES (1, 'ITEMLINK', 3, 1), (2, 'ATTLINK', 1, 2);`,
+		`INSERT INTO fieldsCombined(fieldID, fieldName) VALUES (1, 'title'), (2, 'date'), (3, 'filename');`,
+		`INSERT INTO itemDataValues(valueID, value) VALUES (1, 'Linked PDF Item'), (2, '2024-06-01'), (3, 'linked.pdf');`,
+		`INSERT INTO itemData(itemID, fieldID, valueID) VALUES (1, 1, 1), (1, 2, 2), (2, 1, 1), (2, 3, 3);`,
+		`INSERT INTO itemAttachments(itemID, parentItemID, contentType, linkMode, path) VALUES (2, 1, 'application/pdf', 2, 'attachments:papers/linked.pdf');`,
+	}
+	for _, statement := range inserts {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("exec %q: %v", statement, err)
+		}
+	}
+}
+
+func writeZoteroPrefsFixture(t *testing.T, root string, dataDir string, baseAttachmentDir string) {
+	t.Helper()
+
+	prefsPath := filepath.Join(root, "Zotero", "Zotero", "Profiles", "abcd.default", "prefs.js")
+	if err := os.MkdirAll(filepath.Dir(prefsPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := strings.Join([]string{
+		`user_pref("extensions.zotero.baseAttachmentPath", "` + strings.ReplaceAll(baseAttachmentDir, `\`, `\\`) + `");`,
+		`user_pref("extensions.zotero.dataDir", "` + strings.ReplaceAll(dataDir, `\`, `\\`) + `");`,
+		`user_pref("extensions.zotero.saveRelativeAttachmentPath", true);`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(prefsPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

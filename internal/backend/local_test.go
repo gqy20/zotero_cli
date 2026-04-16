@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"zotero_cli/internal/config"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -147,5 +149,81 @@ func TestWithReadableDBFallsBackToSnapshotWhenQueryHitsBusy(t *testing.T) {
 	meta := reader.ConsumeReadMetadata()
 	if meta.ReadSource != "snapshot" || !meta.SQLiteFallback {
 		t.Fatalf("ConsumeReadMetadata() = %#v, want snapshot metadata", meta)
+	}
+}
+
+func TestNewLocalReaderLoadsDataDirAndAttachmentBaseDirFromPrefs(t *testing.T) {
+	appData := t.TempDir()
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
+	if err := os.WriteFile(sqlitePath, []byte("sqlite"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	baseAttachmentDir := t.TempDir()
+	prefsPath := filepath.Join(appData, "Zotero", "Zotero", "Profiles", "abcd.default", "prefs.js")
+	if err := os.MkdirAll(filepath.Dir(prefsPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	prefsContent := strings.Join([]string{
+		`user_pref("extensions.zotero.baseAttachmentPath", "` + strings.ReplaceAll(baseAttachmentDir, `\`, `\\`) + `");`,
+		`user_pref("extensions.zotero.dataDir", "` + strings.ReplaceAll(dataDir, `\`, `\\`) + `");`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(prefsPath, []byte(prefsContent), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("APPDATA", appData)
+	t.Setenv("HOME", t.TempDir())
+
+	reader, err := NewLocalReader(config.Config{})
+	if err != nil {
+		t.Fatalf("NewLocalReader() error = %v", err)
+	}
+	if reader.DataDir != dataDir {
+		t.Fatalf("reader.DataDir = %q, want %q", reader.DataDir, dataDir)
+	}
+	if reader.AttachmentBaseDir != baseAttachmentDir {
+		t.Fatalf("reader.AttachmentBaseDir = %q, want %q", reader.AttachmentBaseDir, baseAttachmentDir)
+	}
+}
+
+func TestResolveAttachmentPathSupportsAttachmentsRelativeBaseDir(t *testing.T) {
+	baseDir := t.TempDir()
+	relativePath := filepath.Join("papers", "example.pdf")
+	absolutePath := filepath.Join(baseDir, relativePath)
+	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(absolutePath, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := &LocalReader{AttachmentBaseDir: baseDir}
+	got, ok := reader.resolveAttachmentPath("ATTACH1", "attachments:papers/example.pdf", "example.pdf")
+	if !ok {
+		t.Fatal("resolveAttachmentPath() did not resolve attachments: path")
+	}
+	if got != absolutePath {
+		t.Fatalf("resolveAttachmentPath() = %q, want %q", got, absolutePath)
+	}
+}
+
+func TestResolveAttachmentPathSupportsAbsolutePaths(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "absolute.pdf")
+	if err := os.WriteFile(path, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := &LocalReader{}
+	got, ok := reader.resolveAttachmentPath("ATTACH1", path, "absolute.pdf")
+	if !ok {
+		t.Fatal("resolveAttachmentPath() did not resolve absolute path")
+	}
+	if got != path {
+		t.Fatalf("resolveAttachmentPath() = %q, want %q", got, path)
 	}
 }

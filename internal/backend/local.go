@@ -23,23 +23,34 @@ import (
 var (
 	openSQLiteDBFunc         = openSQLiteDB
 	createSQLiteSnapshotFunc = createSQLiteSnapshot
+	findZoteroPrefsFunc      = findZoteroPrefs
 )
 
 type LocalReader struct {
-	LibraryType      string
-	LibraryID        string
-	DataDir          string
-	SQLitePath       string
-	StorageDir       string
-	lastReadMetadata ReadMetadata
+	LibraryType       string
+	LibraryID         string
+	DataDir           string
+	SQLitePath        string
+	StorageDir        string
+	AttachmentBaseDir string
+	lastReadMetadata  ReadMetadata
 }
 
 func NewLocalReader(cfg config.Config) (*LocalReader, error) {
-	if cfg.DataDir == "" {
+	prefs, _, err := loadMatchingZoteroPrefs(cfg.DataDir)
+	if err != nil {
+		return nil, err
+	}
+
+	dataDirInput := cfg.DataDir
+	if dataDirInput == "" {
+		dataDirInput = prefs.DataDir
+	}
+	if dataDirInput == "" {
 		return nil, fmt.Errorf("local mode requires data_dir")
 	}
 
-	dataDir, err := filepath.Abs(cfg.DataDir)
+	dataDir, err := filepath.Abs(dataDirInput)
 	if err != nil {
 		return nil, err
 	}
@@ -56,13 +67,150 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 		return nil, err
 	}
 
+	attachmentBaseDir := ""
+	if prefs.BaseAttachmentPath != "" {
+		attachmentBaseDir, err = filepath.Abs(prefs.BaseAttachmentPath)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &LocalReader{
-		LibraryType: cfg.LibraryType,
-		LibraryID:   cfg.LibraryID,
-		DataDir:     dataDir,
-		SQLitePath:  sqlitePath,
-		StorageDir:  storageDir,
+		LibraryType:       cfg.LibraryType,
+		LibraryID:         cfg.LibraryID,
+		DataDir:           dataDir,
+		SQLitePath:        sqlitePath,
+		StorageDir:        storageDir,
+		AttachmentBaseDir: attachmentBaseDir,
 	}, nil
+}
+
+type zoteroPrefs struct {
+	DataDir            string
+	BaseAttachmentPath string
+}
+
+func loadMatchingZoteroPrefs(dataDir string) (zoteroPrefs, string, error) {
+	paths, err := findZoteroPrefsFunc()
+	if err != nil {
+		return zoteroPrefs{}, "", err
+	}
+	if len(paths) == 0 {
+		return zoteroPrefs{}, "", nil
+	}
+
+	targetDataDir := ""
+	if dataDir != "" {
+		targetDataDir, err = filepath.Abs(dataDir)
+		if err != nil {
+			return zoteroPrefs{}, "", err
+		}
+	}
+
+	var fallback zoteroPrefs
+	var fallbackPath string
+	for _, prefsPath := range paths {
+		prefs, err := parseZoteroPrefs(prefsPath)
+		if err != nil {
+			continue
+		}
+		if fallbackPath == "" {
+			fallback = prefs
+			fallbackPath = prefsPath
+		}
+		if targetDataDir == "" {
+			continue
+		}
+		prefsDataDir := prefs.DataDir
+		if prefsDataDir == "" {
+			continue
+		}
+		prefsDataDir, err = filepath.Abs(prefsDataDir)
+		if err != nil {
+			continue
+		}
+		if sameFilePath(prefsDataDir, targetDataDir) {
+			return prefs, prefsPath, nil
+		}
+	}
+	if targetDataDir != "" {
+		return zoteroPrefs{}, "", nil
+	}
+	return fallback, fallbackPath, nil
+}
+
+func findZoteroPrefs() ([]string, error) {
+	patterns := []string{}
+	if appData := os.Getenv("APPDATA"); appData != "" {
+		patterns = append(patterns, filepath.Join(appData, "Zotero", "Zotero", "Profiles", "*", "prefs.js"))
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		patterns = append(patterns,
+			filepath.Join(home, ".zotero", "zotero", "Profiles", "*", "prefs.js"),
+			filepath.Join(home, "Library", "Application Support", "Zotero", "Profiles", "*", "prefs.js"),
+		)
+	}
+	seen := map[string]struct{}{}
+	paths := []string{}
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			return nil, err
+		}
+		for _, match := range matches {
+			if _, ok := seen[match]; ok {
+				continue
+			}
+			seen[match] = struct{}{}
+			paths = append(paths, match)
+		}
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+func parseZoteroPrefs(path string) (zoteroPrefs, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return zoteroPrefs{}, err
+	}
+	prefs := zoteroPrefs{}
+	pattern := regexp.MustCompile(`^user_pref\("([^"]+)",\s*(.+)\);$`)
+	for _, rawLine := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" {
+			continue
+		}
+		matches := pattern.FindStringSubmatch(line)
+		if len(matches) != 3 {
+			continue
+		}
+		key := matches[1]
+		value := strings.TrimSpace(matches[2])
+		switch key {
+		case "extensions.zotero.dataDir":
+			parsed, err := parseZoteroPrefString(value)
+			if err != nil {
+				continue
+			}
+			prefs.DataDir = parsed
+		case "extensions.zotero.baseAttachmentPath":
+			parsed, err := parseZoteroPrefString(value)
+			if err != nil {
+				continue
+			}
+			prefs.BaseAttachmentPath = parsed
+		}
+	}
+	return prefs, nil
+}
+
+func parseZoteroPrefString(value string) (string, error) {
+	return strconv.Unquote(value)
+}
+
+func sameFilePath(left string, right string) bool {
+	return filepath.Clean(left) == filepath.Clean(right)
 }
 
 func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
@@ -294,6 +442,9 @@ func localFindArgs(opts FindOptions) []any {
 		queryLike,
 		queryLike,
 		queryLike,
+		queryLike,
+		queryLike,
+		queryLike,
 	)
 	for _, tag := range normalizedTags(opts.Tags) {
 		args = append(args, tag)
@@ -339,6 +490,19 @@ func localQueryMatchClause() string {
 			JOIN tags t2 ON t2.tagID = it2.tagID
 			WHERE it2.itemID = i.itemID
 			AND LOWER(t2.name) LIKE ?
+		)
+		OR EXISTS (
+			SELECT 1
+			FROM itemAttachments ia2
+			LEFT JOIN itemData d3 ON d3.itemID = ia2.itemID
+			LEFT JOIN itemDataValues v3 ON v3.valueID = d3.valueID
+			LEFT JOIN fieldsCombined f3 ON f3.fieldID = d3.fieldID
+			WHERE (ia2.itemID = i.itemID OR ia2.parentItemID = i.itemID)
+			AND (
+				LOWER(COALESCE(ia2.path, '')) LIKE ?
+				OR LOWER(COALESCE(ia2.contentType, '')) LIKE ?
+				OR (f3.fieldName IN ('title', 'filename') AND LOWER(v3.value) LIKE ?)
+			)
 		)
 	)`
 }
@@ -1067,6 +1231,17 @@ func (r *LocalReader) resolveAttachmentPath(key string, zoteroPath string, filen
 		resolved := filepath.Join(r.StorageDir, key, filepath.FromSlash(name))
 		if _, err := os.Stat(resolved); err == nil {
 			return resolved, true
+		}
+	}
+	if after, ok := stringsCutPrefix(zoteroPath, "attachments:"); ok && r.AttachmentBaseDir != "" {
+		resolved := filepath.Join(r.AttachmentBaseDir, filepath.FromSlash(after))
+		if _, err := os.Stat(resolved); err == nil {
+			return resolved, true
+		}
+	}
+	if filepath.IsAbs(zoteroPath) {
+		if _, err := os.Stat(zoteroPath); err == nil {
+			return zoteroPath, true
 		}
 	}
 	return "", false
