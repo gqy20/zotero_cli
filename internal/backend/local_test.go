@@ -1,10 +1,16 @@
 package backend
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	_ "modernc.org/sqlite"
 )
 
 func TestLocalSQLiteDSNUsesReadOnlyPragmas(t *testing.T) {
@@ -66,5 +72,60 @@ func TestCreateSQLiteSnapshotCopiesDatabaseAndSidecars(t *testing.T) {
 		if string(data) != want {
 			t.Fatalf("unexpected snapshot contents for %s: %q", path, string(data))
 		}
+	}
+}
+
+func TestWithReadableDBFallsBackToSnapshotWhenQueryHitsBusy(t *testing.T) {
+	liveDB, err := sql.Open("sqlite", "file:live-fallback?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer liveDB.Close()
+
+	snapshotDB, err := sql.Open("sqlite", "file:snapshot-fallback?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer snapshotDB.Close()
+
+	previousOpen := openSQLiteDBFunc
+	previousSnapshot := createSQLiteSnapshotFunc
+	t.Cleanup(func() {
+		openSQLiteDBFunc = previousOpen
+		createSQLiteSnapshotFunc = previousSnapshot
+	})
+
+	openSQLiteDBFunc = func(dsn string) (*sql.DB, error) {
+		if strings.Contains(dsn, "snapshot.sqlite") {
+			return snapshotDB, nil
+		}
+		return liveDB, nil
+	}
+	createSQLiteSnapshotFunc = func(string) (string, string, error) {
+		snapshotDir := t.TempDir()
+		return snapshotDir, filepath.Join(snapshotDir, "snapshot.sqlite"), nil
+	}
+
+	reader := &LocalReader{SQLitePath: filepath.Join(t.TempDir(), "zotero.sqlite")}
+	attempts := 0
+	err = reader.withReadableDB(context.Background(), func(db *sql.DB) error {
+		attempts++
+		if db == liveDB {
+			return errors.New("SQLITE_BUSY: database is locked")
+		}
+		if db != snapshotDB {
+			t.Fatalf("unexpected db pointer %p", db)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("withReadableDB() error = %v", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("withReadableDB() attempts = %d, want 2", attempts)
+	}
+	meta := reader.ConsumeReadMetadata()
+	if meta.ReadSource != "snapshot" || !meta.SQLiteFallback {
+		t.Fatalf("ConsumeReadMetadata() = %#v, want snapshot metadata", meta)
 	}
 }

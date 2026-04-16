@@ -3,8 +3,9 @@ package backend
 import "fmt"
 
 var (
-	ErrItemNotFound       = fmt.Errorf("item not found")
-	ErrUnsupportedFeature = fmt.Errorf("unsupported backend feature")
+	ErrItemNotFound                = fmt.Errorf("item not found")
+	ErrLocalTemporarilyUnavailable = fmt.Errorf("local backend temporarily unavailable")
+	ErrUnsupportedFeature          = fmt.Errorf("unsupported backend feature")
 )
 
 type itemNotFoundError struct {
@@ -45,4 +46,23 @@ func (e *unsupportedFeatureError) Error() string {
 
 func (e *unsupportedFeatureError) Unwrap() error {
 	return ErrUnsupportedFeature
+}
+
+type localTemporarilyUnavailableError struct {
+	Cause error
+}
+
+func newLocalTemporarilyUnavailableError(cause error) error {
+	return &localTemporarilyUnavailableError{Cause: cause}
+}
+
+func (e *localTemporarilyUnavailableError) Error() string {
+	if e.Cause == nil {
+		return "local Zotero database is temporarily unavailable"
+	}
+	return fmt.Sprintf("local Zotero database is temporarily unavailable: %v", e.Cause)
+}
+
+func (e *localTemporarilyUnavailableError) Unwrap() error {
+	return ErrLocalTemporarilyUnavailable
 }

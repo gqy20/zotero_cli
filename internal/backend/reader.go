@@ -39,6 +39,11 @@ type LibraryStats struct {
 	TotalSearches    int    `json:"total_searches"`
 }
 
+type ReadMetadata struct {
+	ReadSource     string `json:"read_source,omitempty"`
+	SQLiteFallback bool   `json:"sqlite_fallback,omitempty"`
+}
+
 type Reader interface {
 	FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error)
 	GetItem(ctx context.Context, key string) (domain.Item, error)
@@ -46,9 +51,14 @@ type Reader interface {
 	GetLibraryStats(ctx context.Context) (LibraryStats, error)
 }
 
+type readMetadataReporter interface {
+	ConsumeReadMetadata() ReadMetadata
+}
+
 type HybridReader struct {
-	local Reader
-	web   Reader
+	local            Reader
+	web              Reader
+	lastReadMetadata ReadMetadata
 }
 
 func NewReader(cfg config.Config, httpClient *http.Client) (Reader, error) {
@@ -83,59 +93,93 @@ func (r *HybridReader) FindItems(ctx context.Context, opts FindOptions) ([]domai
 	if r.local != nil {
 		items, err := r.local.FindItems(ctx, opts)
 		if err == nil {
+			r.lastReadMetadata = consumeReadMetadata(r.local)
 			return items, nil
 		}
 		if !shouldFallbackToWeb(err) {
 			return nil, err
 		}
 	}
-	return r.web.FindItems(ctx, opts)
+	items, err := r.web.FindItems(ctx, opts)
+	if err == nil {
+		r.lastReadMetadata = consumeReadMetadata(r.web)
+	}
+	return items, err
 }
 
 func (r *HybridReader) GetItem(ctx context.Context, key string) (domain.Item, error) {
 	if r.local != nil {
 		item, err := r.local.GetItem(ctx, key)
 		if err == nil {
+			r.lastReadMetadata = consumeReadMetadata(r.local)
 			return item, nil
 		}
 		if !shouldFallbackToWeb(err) {
 			return domain.Item{}, err
 		}
 	}
-	return r.web.GetItem(ctx, key)
+	item, err := r.web.GetItem(ctx, key)
+	if err == nil {
+		r.lastReadMetadata = consumeReadMetadata(r.web)
+	}
+	return item, err
 }
 
 func (r *HybridReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
 	if r.local != nil {
 		relations, err := r.local.GetRelated(ctx, key)
 		if err == nil {
+			r.lastReadMetadata = consumeReadMetadata(r.local)
 			return relations, nil
 		}
 		if !shouldFallbackToWeb(err) {
 			return nil, err
 		}
 	}
-	return r.web.GetRelated(ctx, key)
+	relations, err := r.web.GetRelated(ctx, key)
+	if err == nil {
+		r.lastReadMetadata = consumeReadMetadata(r.web)
+	}
+	return relations, err
 }
 
 func (r *HybridReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
 	if r.local != nil {
 		stats, err := r.local.GetLibraryStats(ctx)
 		if err == nil {
+			r.lastReadMetadata = consumeReadMetadata(r.local)
 			return stats, nil
 		}
 		if !shouldFallbackToWeb(err) {
 			return LibraryStats{}, err
 		}
 	}
-	return r.web.GetLibraryStats(ctx)
+	stats, err := r.web.GetLibraryStats(ctx)
+	if err == nil {
+		r.lastReadMetadata = consumeReadMetadata(r.web)
+	}
+	return stats, err
+}
+
+func (r *HybridReader) ConsumeReadMetadata() ReadMetadata {
+	meta := r.lastReadMetadata
+	r.lastReadMetadata = ReadMetadata{}
+	return meta
+}
+
+func consumeReadMetadata(reader Reader) ReadMetadata {
+	reporter, ok := reader.(readMetadataReporter)
+	if !ok {
+		return ReadMetadata{}
+	}
+	return reporter.ConsumeReadMetadata()
 }
 
 func shouldFallbackToWeb(err error) bool {
 	if err == nil {
 		return false
 	}
-	return errors.Is(err, ErrItemNotFound) || errors.Is(err, ErrUnsupportedFeature)
+	return errors.Is(err, ErrItemNotFound) || errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
 }
 
 func toAPIFindOptions(opts FindOptions) zoteroapi.FindOptions {

@@ -64,6 +64,10 @@ func TestRunFindJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["read_source"] != "web" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
 
 	if got["ok"] != true {
 		t.Fatalf("expected ok=true, got %#v", got["ok"])

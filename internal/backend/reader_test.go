@@ -12,10 +12,11 @@ import (
 )
 
 type stubReader struct {
-	findItems       func(context.Context, FindOptions) ([]domain.Item, error)
-	getItem         func(context.Context, string) (domain.Item, error)
-	getRelated      func(context.Context, string) ([]domain.Relation, error)
-	getLibraryStats func(context.Context) (LibraryStats, error)
+	findItems           func(context.Context, FindOptions) ([]domain.Item, error)
+	getItem             func(context.Context, string) (domain.Item, error)
+	getRelated          func(context.Context, string) ([]domain.Relation, error)
+	getLibraryStats     func(context.Context) (LibraryStats, error)
+	consumeReadMetadata func() ReadMetadata
 }
 
 func (r stubReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
@@ -32,6 +33,13 @@ func (r stubReader) GetRelated(ctx context.Context, key string) ([]domain.Relati
 
 func (r stubReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
 	return r.getLibraryStats(ctx)
+}
+
+func (r stubReader) ConsumeReadMetadata() ReadMetadata {
+	if r.consumeReadMetadata == nil {
+		return ReadMetadata{}
+	}
+	return r.consumeReadMetadata()
 }
 
 func TestNewReaderDefaultsToWebMode(t *testing.T) {
@@ -262,6 +270,118 @@ func TestHybridReaderFindItemsFallsBackForUnsupportedLocalFlags(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Key != "WEB1" {
 		t.Fatalf("FindItems() = %#v, want web fallback", got)
+	}
+}
+
+func TestHybridReaderFindItemsFallsBackWhenLocalIsTemporarilyUnavailable(t *testing.T) {
+	reader := &HybridReader{
+		local: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return nil, newLocalTemporarilyUnavailableError(errors.New("SQLITE_BUSY"))
+			},
+			getItem: func(context.Context, string) (domain.Item, error) {
+				return domain.Item{}, errors.New("unexpected")
+			},
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("unexpected")
+			},
+			getLibraryStats: func(context.Context) (LibraryStats, error) {
+				return LibraryStats{}, errors.New("unexpected")
+			},
+		},
+		web: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return []domain.Item{{Key: "WEB1"}}, nil
+			},
+			getItem: func(context.Context, string) (domain.Item, error) {
+				return domain.Item{}, errors.New("unexpected")
+			},
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("unexpected")
+			},
+			getLibraryStats: func(context.Context) (LibraryStats, error) {
+				return LibraryStats{}, errors.New("unexpected")
+			},
+		},
+	}
+
+	got, err := reader.FindItems(context.Background(), FindOptions{Query: "test"})
+	if err != nil {
+		t.Fatalf("FindItems() error = %v", err)
+	}
+	if len(got) != 1 || got[0].Key != "WEB1" {
+		t.Fatalf("FindItems() = %#v, want web fallback", got)
+	}
+}
+
+func TestHybridReaderConsumeReadMetadataUsesLocalMetadata(t *testing.T) {
+	reader := &HybridReader{
+		local: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return []domain.Item{{Key: "LOCAL1"}}, nil
+			},
+			getItem:    func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated: func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("unexpected") },
+			getLibraryStats: func(context.Context) (LibraryStats, error) {
+				return LibraryStats{}, errors.New("unexpected")
+			},
+			consumeReadMetadata: func() ReadMetadata {
+				return ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true}
+			},
+		},
+		web: stubReader{
+			findItems:       func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
+			getItem:         func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated:      func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("unexpected") },
+			getLibraryStats: func(context.Context) (LibraryStats, error) { return LibraryStats{}, errors.New("unexpected") },
+		},
+	}
+
+	_, err := reader.FindItems(context.Background(), FindOptions{Query: "test"})
+	if err != nil {
+		t.Fatalf("FindItems() error = %v", err)
+	}
+	meta := reader.ConsumeReadMetadata()
+	if meta.ReadSource != "snapshot" || !meta.SQLiteFallback {
+		t.Fatalf("ConsumeReadMetadata() = %#v, want snapshot metadata", meta)
+	}
+}
+
+func TestHybridReaderConsumeReadMetadataUsesWebMetadataAfterFallback(t *testing.T) {
+	reader := &HybridReader{
+		local: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return nil, newUnsupportedFeatureError("local", "find --qmode")
+			},
+			getItem:    func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated: func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("unexpected") },
+			getLibraryStats: func(context.Context) (LibraryStats, error) {
+				return LibraryStats{}, errors.New("unexpected")
+			},
+			consumeReadMetadata: func() ReadMetadata {
+				return ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true}
+			},
+		},
+		web: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return []domain.Item{{Key: "WEB1"}}, nil
+			},
+			getItem:         func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated:      func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("unexpected") },
+			getLibraryStats: func(context.Context) (LibraryStats, error) { return LibraryStats{}, errors.New("unexpected") },
+			consumeReadMetadata: func() ReadMetadata {
+				return ReadMetadata{ReadSource: "web"}
+			},
+		},
+	}
+
+	_, err := reader.FindItems(context.Background(), FindOptions{Query: "test", QMode: "everything"})
+	if err != nil {
+		t.Fatalf("FindItems() error = %v", err)
+	}
+	meta := reader.ConsumeReadMetadata()
+	if meta.ReadSource != "web" || meta.SQLiteFallback {
+		t.Fatalf("ConsumeReadMetadata() = %#v, want web metadata", meta)
 	}
 }
 

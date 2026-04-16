@@ -76,6 +76,10 @@ func TestRunFindHybridFallsBackToWebWithoutDataDir(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["read_source"] != "web" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
 	data, ok := got["data"].([]any)
 	if !ok || len(data) == 0 {
 		t.Fatalf("unexpected data payload: %#v", got["data"])
@@ -101,6 +105,10 @@ func TestRunStatsHybridModeUsesRemoteClient(t *testing.T) {
 	var got map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["read_source"] != "web" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
 	}
 	if got["command"] != "stats" {
 		t.Fatalf("unexpected command: %#v", got["command"])
@@ -130,6 +138,10 @@ func TestRunStatsLocalModeUsesLocalLibrary(t *testing.T) {
 	var got map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["read_source"] != "live" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
 	}
 	if got["command"] != "stats" {
 		t.Fatalf("unexpected command: %#v", got["command"])
@@ -204,6 +216,10 @@ func TestRunFindLocalJSONFiltersNonTopItemsByDefault(t *testing.T) {
 	var got map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["read_source"] != "live" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
 	}
 	data, ok := got["data"].([]any)
 	if !ok || len(data) != 2 {
@@ -498,6 +514,10 @@ func TestRunShowJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["read_source"] != "web" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
 
 	data, ok := got["data"].(map[string]any)
 	if !ok {
@@ -543,6 +563,10 @@ func TestRunShowLocalJSONIncludesBibliographicFields(t *testing.T) {
 	var got map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["read_source"] != "live" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
 	}
 
 	data, ok := got["data"].(map[string]any)
@@ -657,6 +681,10 @@ func TestRunRelateLocalJSONShowsExplicitRelations(t *testing.T) {
 	var got map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["read_source"] != "live" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
 	}
 	data, ok := got["data"].([]any)
 	if !ok || len(data) != 2 {
@@ -988,7 +1016,10 @@ func TestRunExportByItemKeyJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
-
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["read_source"] != "web" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
 	if got["command"] != "export" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
@@ -1096,6 +1127,10 @@ func TestRunExportCSLJSONLocalByItemKey(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["read_source"] != "live" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
 	if got["command"] != "export" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
@@ -1148,6 +1183,10 @@ func TestRunExportCSLJSONHybridPrefersLocalByItemKey(t *testing.T) {
 	var got map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["read_source"] != "live" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
 	}
 	data := got["data"].(map[string]any)
 	payload := data["data"].([]any)

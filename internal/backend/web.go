@@ -8,7 +8,8 @@ import (
 )
 
 type WebReader struct {
-	client *zoteroapi.Client
+	client           *zoteroapi.Client
+	lastReadMetadata ReadMetadata
 }
 
 func NewWebReader(client *zoteroapi.Client) *WebReader {
@@ -20,6 +21,7 @@ func (r *WebReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.I
 	if err != nil {
 		return nil, err
 	}
+	r.lastReadMetadata = ReadMetadata{ReadSource: "web"}
 	return mapItems(items), nil
 }
 
@@ -28,6 +30,7 @@ func (r *WebReader) GetItem(ctx context.Context, key string) (domain.Item, error
 	if err != nil {
 		return domain.Item{}, err
 	}
+	r.lastReadMetadata = ReadMetadata{ReadSource: "web"}
 	return mapItem(item), nil
 }
 
@@ -40,6 +43,7 @@ func (r *WebReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
 	if err != nil {
 		return LibraryStats{}, err
 	}
+	r.lastReadMetadata = ReadMetadata{ReadSource: "web"}
 	return LibraryStats{
 		LibraryType:      stats.LibraryType,
 		LibraryID:        stats.LibraryID,
@@ -47,6 +51,12 @@ func (r *WebReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
 		TotalCollections: stats.TotalCollections,
 		TotalSearches:    stats.TotalSearches,
 	}, nil
+}
+
+func (r *WebReader) ConsumeReadMetadata() ReadMetadata {
+	meta := r.lastReadMetadata
+	r.lastReadMetadata = ReadMetadata{}
+	return meta
 }
 
 func mapItems(items []zoteroapi.Item) []domain.Item {

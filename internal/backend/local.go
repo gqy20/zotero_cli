@@ -19,12 +19,18 @@ import (
 	"zotero_cli/internal/domain"
 )
 
+var (
+	openSQLiteDBFunc         = openSQLiteDB
+	createSQLiteSnapshotFunc = createSQLiteSnapshot
+)
+
 type LocalReader struct {
-	LibraryType string
-	LibraryID   string
-	DataDir     string
-	SQLitePath  string
-	StorageDir  string
+	LibraryType      string
+	LibraryID        string
+	DataDir          string
+	SQLitePath       string
+	StorageDir       string
+	lastReadMetadata ReadMetadata
 }
 
 func NewLocalReader(cfg config.Config) (*LocalReader, error) {
@@ -66,61 +72,58 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 		return nil, newUnsupportedFeatureError("local", "find --qmode")
 	}
 
-	db, cleanup, err := r.openDB()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-	defer cleanup()
-
-	query, args := localFindQuery(opts)
-	rows, err := db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	items := []domain.Item{}
-	for rows.Next() {
-		var (
-			item             domain.Item
-			itemID           int64
-			publicationTitle string
-			proceedingsTitle string
-			bookTitle        string
-		)
-		if err := rows.Scan(
-			&itemID,
-			&item.Key,
-			&item.Version,
-			&item.ItemType,
-			&item.Title,
-			&item.Date,
-			&item.Volume,
-			&item.Issue,
-			&item.Pages,
-			&item.DOI,
-			&item.URL,
-			&publicationTitle,
-			&proceedingsTitle,
-			&bookTitle,
-		); err != nil {
-			return nil, err
+	err := r.withReadableDB(ctx, func(db *sql.DB) error {
+		query, args := localFindQuery(opts)
+		rows, err := db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return err
 		}
-		item.Container = firstNonEmptyString(publicationTitle, proceedingsTitle, bookTitle)
-		item.Date = normalizeLocalDate(item.Date)
+		defer rows.Close()
 
-		item.Creators, err = r.loadCreators(ctx, db, itemID)
-		if err != nil {
-			return nil, err
+		items = items[:0]
+		for rows.Next() {
+			var (
+				item             domain.Item
+				itemID           int64
+				publicationTitle string
+				proceedingsTitle string
+				bookTitle        string
+			)
+			if err := rows.Scan(
+				&itemID,
+				&item.Key,
+				&item.Version,
+				&item.ItemType,
+				&item.Title,
+				&item.Date,
+				&item.Volume,
+				&item.Issue,
+				&item.Pages,
+				&item.DOI,
+				&item.URL,
+				&publicationTitle,
+				&proceedingsTitle,
+				&bookTitle,
+			); err != nil {
+				return err
+			}
+			item.Container = firstNonEmptyString(publicationTitle, proceedingsTitle, bookTitle)
+			item.Date = normalizeLocalDate(item.Date)
+
+			item.Creators, err = r.loadCreators(ctx, db, itemID)
+			if err != nil {
+				return err
+			}
+			item.Tags, err = r.loadTags(ctx, db, itemID)
+			if err != nil {
+				return err
+			}
+			items = append(items, item)
 		}
-		item.Tags, err = r.loadTags(ctx, db, itemID)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
+		return rows.Err()
+	})
+	if err != nil {
 		return nil, err
 	}
 	items = localFilterAndOrderItems(items, opts)
@@ -129,109 +132,111 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 }
 
 func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, error) {
-	db, cleanup, err := r.openDB()
-	if err != nil {
-		return domain.Item{}, err
-	}
-	defer db.Close()
-	defer cleanup()
+	var item domain.Item
+	err := r.withReadableDB(ctx, func(db *sql.DB) error {
+		loadedItem, itemID, err := r.loadItem(ctx, db, key)
+		if err != nil {
+			return err
+		}
 
-	item, itemID, err := r.loadItem(ctx, db, key)
-	if err != nil {
-		return domain.Item{}, err
-	}
+		creators, err := r.loadCreators(ctx, db, itemID)
+		if err != nil {
+			return err
+		}
+		tags, err := r.loadTags(ctx, db, itemID)
+		if err != nil {
+			return err
+		}
+		collections, err := r.loadCollections(ctx, db, itemID)
+		if err != nil {
+			return err
+		}
+		attachments, err := r.loadAttachments(ctx, db, itemID)
+		if err != nil {
+			return err
+		}
+		notes, err := r.loadNotes(ctx, db, itemID)
+		if err != nil {
+			return err
+		}
 
-	creators, err := r.loadCreators(ctx, db, itemID)
+		loadedItem.Creators = creators
+		loadedItem.Tags = tags
+		loadedItem.Collections = collections
+		loadedItem.Attachments = attachments
+		loadedItem.Notes = notes
+		item = loadedItem
+		return nil
+	})
 	if err != nil {
 		return domain.Item{}, err
 	}
-	tags, err := r.loadTags(ctx, db, itemID)
-	if err != nil {
-		return domain.Item{}, err
-	}
-	collections, err := r.loadCollections(ctx, db, itemID)
-	if err != nil {
-		return domain.Item{}, err
-	}
-	attachments, err := r.loadAttachments(ctx, db, itemID)
-	if err != nil {
-		return domain.Item{}, err
-	}
-	notes, err := r.loadNotes(ctx, db, itemID)
-	if err != nil {
-		return domain.Item{}, err
-	}
-
-	item.Creators = creators
-	item.Tags = tags
-	item.Collections = collections
-	item.Attachments = attachments
-	item.Notes = notes
 	return item, nil
 }
 
 func (r *LocalReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
-	db, cleanup, err := r.openDB()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-	defer cleanup()
-
-	_, itemID, err := r.loadItemRefByKey(ctx, db, key)
-	if err != nil {
-		return nil, err
-	}
-
-	outgoing, err := r.loadOutgoingRelations(ctx, db, itemID)
-	if err != nil {
-		return nil, err
-	}
-	incoming, err := r.loadIncomingRelations(ctx, db, key)
-	if err != nil {
-		return nil, err
-	}
-	relations := append(outgoing, incoming...)
-	sort.SliceStable(relations, func(i int, j int) bool {
-		if relations[i].Predicate != relations[j].Predicate {
-			return relations[i].Predicate < relations[j].Predicate
+	var relations []domain.Relation
+	err := r.withReadableDB(ctx, func(db *sql.DB) error {
+		_, itemID, err := r.loadItemRefByKey(ctx, db, key)
+		if err != nil {
+			return err
 		}
-		if relations[i].Direction != relations[j].Direction {
-			return relations[i].Direction < relations[j].Direction
+
+		outgoing, err := r.loadOutgoingRelations(ctx, db, itemID)
+		if err != nil {
+			return err
 		}
-		return relations[i].Target.Key < relations[j].Target.Key
+		incoming, err := r.loadIncomingRelations(ctx, db, key)
+		if err != nil {
+			return err
+		}
+		relations = append(outgoing, incoming...)
+		sort.SliceStable(relations, func(i int, j int) bool {
+			if relations[i].Predicate != relations[j].Predicate {
+				return relations[i].Predicate < relations[j].Predicate
+			}
+			if relations[i].Direction != relations[j].Direction {
+				return relations[i].Direction < relations[j].Direction
+			}
+			return relations[i].Target.Key < relations[j].Target.Key
+		})
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 	return relations, nil
 }
 
 func (r *LocalReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
-	db, cleanup, err := r.openDB()
-	if err != nil {
-		return LibraryStats{}, err
-	}
-	defer db.Close()
-	defer cleanup()
+	var stats LibraryStats
+	err := r.withReadableDB(ctx, func(db *sql.DB) error {
+		totalItems, err := countRows(ctx, db, `SELECT COUNT(*) FROM items`)
+		if err != nil {
+			return err
+		}
+		totalCollections, err := countRows(ctx, db, `SELECT COUNT(*) FROM collections`)
+		if err != nil {
+			return err
+		}
+		totalSearches, err := countRows(ctx, db, `SELECT COUNT(*) FROM savedSearches`)
+		if err != nil {
+			return err
+		}
 
-	totalItems, err := countRows(ctx, db, `SELECT COUNT(*) FROM items`)
+		stats = LibraryStats{
+			LibraryType:      r.LibraryType,
+			LibraryID:        r.LibraryID,
+			TotalItems:       totalItems,
+			TotalCollections: totalCollections,
+			TotalSearches:    totalSearches,
+		}
+		return nil
+	})
 	if err != nil {
 		return LibraryStats{}, err
 	}
-	totalCollections, err := countRows(ctx, db, `SELECT COUNT(*) FROM collections`)
-	if err != nil {
-		return LibraryStats{}, err
-	}
-	totalSearches, err := countRows(ctx, db, `SELECT COUNT(*) FROM savedSearches`)
-	if err != nil {
-		return LibraryStats{}, err
-	}
-
-	return LibraryStats{
-		LibraryType:      r.LibraryType,
-		LibraryID:        r.LibraryID,
-		TotalItems:       totalItems,
-		TotalCollections: totalCollections,
-		TotalSearches:    totalSearches,
-	}, nil
+	return stats, nil
 }
 
 func localFindQuery(opts FindOptions) (string, []any) {
@@ -493,26 +498,94 @@ func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (dom
 	return item, itemID, nil
 }
 
-func (r *LocalReader) openDB() (*sql.DB, func(), error) {
-	db, err := openSQLiteDB(localSQLiteDSN(r.SQLitePath))
+func (r *LocalReader) withReadableDB(_ context.Context, fn func(*sql.DB) error) error {
+	db, cleanup, err := r.openLiveDB()
+	if err == nil {
+		runErr := fn(db)
+		closeErr := closeDBAndCleanup(db, cleanup)
+		if runErr == nil {
+			r.lastReadMetadata = ReadMetadata{ReadSource: "live"}
+			return closeErr
+		}
+		if !isSQLiteRetryableReadError(runErr) {
+			return runErr
+		}
+		if closeErr != nil && !isSQLiteRetryableReadError(closeErr) {
+			return closeErr
+		}
+	} else if !isSQLiteRetryableReadError(err) {
+		return err
+	}
+
+	db, cleanup, err = r.openSnapshotDB()
 	if err != nil {
-		if !isSQLiteBusy(err) {
-			return nil, nil, err
+		return newLocalTemporarilyUnavailableError(err)
+	}
+	runErr := fn(db)
+	closeErr := closeDBAndCleanup(db, cleanup)
+	if runErr != nil {
+		if isSQLiteRetryableReadError(runErr) {
+			return newLocalTemporarilyUnavailableError(runErr)
 		}
-		snapshotDir, snapshotPath, snapshotErr := createSQLiteSnapshot(r.SQLitePath)
-		if snapshotErr != nil {
-			return nil, nil, err
-		}
-		db, err = openSQLiteDB(localSQLiteDSN(snapshotPath))
-		if err != nil {
-			_ = os.RemoveAll(snapshotDir)
-			return nil, nil, err
-		}
-		return db, func() {
-			_ = os.RemoveAll(snapshotDir)
-		}, nil
+		return runErr
+	}
+	if closeErr != nil {
+		return newLocalTemporarilyUnavailableError(closeErr)
+	}
+	r.lastReadMetadata = ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true}
+	return nil
+}
+
+func (r *LocalReader) ConsumeReadMetadata() ReadMetadata {
+	meta := r.lastReadMetadata
+	r.lastReadMetadata = ReadMetadata{}
+	return meta
+}
+
+func closeDBAndCleanup(db *sql.DB, cleanup func()) error {
+	err := db.Close()
+	cleanup()
+	return err
+}
+
+func (r *LocalReader) openLiveDB() (*sql.DB, func(), error) {
+	db, err := openSQLiteDBFunc(localSQLiteDSN(r.SQLitePath))
+	if err != nil {
+		return nil, nil, err
 	}
 	return db, func() {}, nil
+}
+
+func (r *LocalReader) openDB() (*sql.DB, func(), error) {
+	db, cleanup, err := r.openLiveDB()
+	if err == nil {
+		r.lastReadMetadata = ReadMetadata{ReadSource: "live"}
+		return db, cleanup, nil
+	}
+	if !isSQLiteRetryableReadError(err) {
+		return nil, nil, err
+	}
+	db, cleanup, err = r.openSnapshotDB()
+	if err != nil {
+		return nil, nil, newLocalTemporarilyUnavailableError(err)
+	}
+	r.lastReadMetadata = ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true}
+	return db, cleanup, nil
+}
+
+func (r *LocalReader) openSnapshotDB() (*sql.DB, func(), error) {
+	snapshotDir, snapshotPath, err := createSQLiteSnapshotFunc(r.SQLitePath)
+	if err != nil {
+		return nil, nil, err
+	}
+	db, err := openSQLiteDBFunc(localSQLiteDSN(snapshotPath))
+	if err != nil {
+		_ = os.RemoveAll(snapshotDir)
+		return nil, nil, err
+	}
+	return db, func() {
+		_ = os.RemoveAll(snapshotDir)
+	}, nil
 }
 
 func localSQLiteDSN(path string) string {
@@ -539,11 +612,15 @@ func openSQLiteDB(dsn string) (*sql.DB, error) {
 	return db, nil
 }
 
-func isSQLiteBusy(err error) bool {
+func isSQLiteRetryableReadError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return strings.Contains(err.Error(), "SQLITE_BUSY")
+	message := err.Error()
+	return strings.Contains(message, "SQLITE_BUSY") ||
+		strings.Contains(message, "SQLITE_LOCKED") ||
+		strings.Contains(strings.ToLower(message), "database is locked") ||
+		strings.Contains(strings.ToLower(message), "database is busy")
 }
 
 func createSQLiteSnapshot(sqlitePath string) (string, string, error) {

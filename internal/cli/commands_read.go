@@ -44,13 +44,15 @@ func runFind(args []string) int {
 	items = filterDefaultFindItems(items, opts)
 
 	if jsonOutput {
+		meta := map[string]any{
+			"total": len(items),
+		}
+		appendReadMetadata(meta, reader)
 		return writeJSON(jsonResponse{
 			OK:      true,
 			Command: "find",
 			Data:    items,
-			Meta: map[string]any{
-				"total": len(items),
-			},
+			Meta:    meta,
 		})
 	}
 
@@ -96,7 +98,9 @@ func runStats(args []string) int {
 	}
 
 	if jsonOutput {
-		return writeJSON(jsonResponse{OK: true, Command: "stats", Data: stats})
+		meta := map[string]any{}
+		appendReadMetadata(meta, reader)
+		return writeJSON(jsonResponse{OK: true, Command: "stats", Data: stats, Meta: meta})
 	}
 	fmt.Fprintf(stdout, "library=%s:%s\n", stats.LibraryType, stats.LibraryID)
 	fmt.Fprintf(stdout, "items=%d\n", stats.TotalItems)
@@ -145,10 +149,13 @@ func runShow(args []string) int {
 	}
 
 	if jsonOutput {
+		meta := map[string]any{}
+		appendReadMetadata(meta, reader)
 		return writeJSON(jsonResponse{
 			OK:      true,
 			Command: "show",
 			Data:    item,
+			Meta:    meta,
 		})
 	}
 
@@ -243,7 +250,9 @@ func runRelate(args []string) int {
 	}
 
 	if jsonOutput {
-		return writeJSON(jsonResponse{OK: true, Command: "relate", Data: relations})
+		meta := map[string]any{}
+		appendReadMetadata(meta, reader)
+		return writeJSON(jsonResponse{OK: true, Command: "relate", Data: relations, Meta: meta})
 	}
 
 	if len(relations) == 0 {
@@ -258,6 +267,23 @@ func runRelate(args []string) int {
 		fmt.Fprintf(stdout, "  - [%s][%s] %s\n", relation.Predicate, relation.Direction, relateSummary(relation.Target))
 	}
 	return 0
+}
+
+func appendReadMetadata(meta map[string]any, reader backend.Reader) {
+	reporter, ok := reader.(interface{ ConsumeReadMetadata() backend.ReadMetadata })
+	if !ok {
+		return
+	}
+	appendExplicitReadMetadata(meta, reporter.ConsumeReadMetadata())
+}
+
+func appendExplicitReadMetadata(meta map[string]any, readMeta backend.ReadMetadata) {
+	if readMeta.ReadSource != "" {
+		meta["read_source"] = readMeta.ReadSource
+	}
+	if readMeta.SQLiteFallback {
+		meta["sqlite_fallback"] = true
+	}
 }
 
 func relateSummary(ref domain.ItemRef) string {
@@ -341,19 +367,21 @@ func runExport(args []string) int {
 
 	keys := make([]string, 0, 8)
 	if format == "csljson" && cfg.Mode != "web" {
-		result, handled, err := tryLocalCSLJSONExport(context.Background(), cfg, itemKey, collectionKey, findOpts)
+		result, readMeta, handled, err := tryLocalCSLJSONExport(context.Background(), cfg, itemKey, collectionKey, findOpts)
 		if handled {
 			if err != nil {
 				return printErr(err)
 			}
 			if jsonOutput {
+				meta := map[string]any{
+					"total": len(result.Data.([]map[string]any)),
+				}
+				appendExplicitReadMetadata(meta, readMeta)
 				return writeJSON(jsonResponse{
 					OK:      true,
 					Command: "export",
 					Data:    result,
-					Meta: map[string]any{
-						"total": len(result.Data.([]map[string]any)),
-					},
+					Meta:    meta,
 				})
 			}
 			return writeJSON(result.Data)
@@ -397,13 +425,15 @@ func runExport(args []string) int {
 	}
 
 	if jsonOutput {
+		meta := map[string]any{
+			"total": len(keys),
+		}
+		appendExplicitReadMetadata(meta, backend.ReadMetadata{ReadSource: "web"})
 		return writeJSON(jsonResponse{
 			OK:      true,
 			Command: "export",
 			Data:    result,
-			Meta: map[string]any{
-				"total": len(keys),
-			},
+			Meta:    meta,
 		})
 	}
 
@@ -414,13 +444,13 @@ func runExport(args []string) int {
 	return writeJSON(result.Data)
 }
 
-func tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, itemKey string, collectionKey string, findOpts zoteroapi.FindOptions) (zoteroapi.ExportResult, bool, error) {
+func tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, itemKey string, collectionKey string, findOpts zoteroapi.FindOptions) (zoteroapi.ExportResult, backend.ReadMetadata, bool, error) {
 	localReader, err := backend.NewLocalReader(cfg)
 	if err != nil {
 		if cfg.Mode == "hybrid" {
-			return zoteroapi.ExportResult{}, false, nil
+			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
 		}
-		return zoteroapi.ExportResult{}, true, err
+		return zoteroapi.ExportResult{}, backend.ReadMetadata{}, true, err
 	}
 
 	keys := make([]string, 0, 8)
@@ -430,9 +460,9 @@ func tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, itemKey strin
 		keys, err = localReader.CollectionItemKeys(ctx, collectionKey, findOpts.Limit)
 		if err != nil {
 			if cfg.Mode == "hybrid" {
-				return zoteroapi.ExportResult{}, false, nil
+				return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
 			}
-			return zoteroapi.ExportResult{}, true, err
+			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, true, err
 		}
 	} else {
 		items, err := localReader.FindItems(ctx, backend.FindOptions{
@@ -441,9 +471,9 @@ func tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, itemKey strin
 		})
 		if err != nil {
 			if cfg.Mode == "hybrid" {
-				return zoteroapi.ExportResult{}, false, nil
+				return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
 			}
-			return zoteroapi.ExportResult{}, true, err
+			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, true, err
 		}
 		items = filterDefaultFindItems(items, backend.FindOptions{
 			Query: findOpts.Query,
@@ -457,12 +487,12 @@ func tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, itemKey strin
 	payload, err := localReader.ExportItemsCSLJSON(ctx, keys)
 	if err != nil {
 		if cfg.Mode == "hybrid" {
-			return zoteroapi.ExportResult{}, false, nil
+			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
 		}
-		return zoteroapi.ExportResult{}, true, err
+		return zoteroapi.ExportResult{}, backend.ReadMetadata{}, true, err
 	}
 	return zoteroapi.ExportResult{
 		Format: "csljson",
 		Data:   payload,
-	}, true, nil
+	}, localReader.ConsumeReadMetadata(), true, nil
 }
