@@ -31,17 +31,30 @@ func (e *itemNotFoundError) Unwrap() error {
 type unsupportedFeatureError struct {
 	Backend string
 	Feature string
+	Hint    string
 }
 
 func newUnsupportedFeatureError(backend string, feature string) error {
 	return &unsupportedFeatureError{Backend: backend, Feature: feature}
 }
 
+func newUnsupportedFeatureErrorWithHint(backend string, feature string, hint string) error {
+	return &unsupportedFeatureError{Backend: backend, Feature: feature, Hint: hint}
+}
+
 func (e *unsupportedFeatureError) Error() string {
 	if e.Backend == "" {
-		return fmt.Sprintf("unsupported feature: %s", e.Feature)
+		msg := fmt.Sprintf("unsupported feature: %s", e.Feature)
+		if e.Hint != "" {
+			msg += "; " + e.Hint
+		}
+		return msg
 	}
-	return fmt.Sprintf("%s does not support %s", e.Backend, e.Feature)
+	msg := fmt.Sprintf("%s does not support %s", e.Backend, e.Feature)
+	if e.Hint != "" {
+		msg += "; " + e.Hint
+	}
+	return msg
 }
 
 func (e *unsupportedFeatureError) Unwrap() error {

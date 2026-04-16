@@ -32,11 +32,12 @@ type FindOptions struct {
 }
 
 type LibraryStats struct {
-	LibraryType      string `json:"library_type"`
-	LibraryID        string `json:"library_id"`
-	TotalItems       int    `json:"total_items"`
-	TotalCollections int    `json:"total_collections"`
-	TotalSearches    int    `json:"total_searches"`
+	LibraryType         string `json:"library_type"`
+	LibraryID           string `json:"library_id"`
+	TotalItems          int    `json:"total_items"`
+	TotalCollections    int    `json:"total_collections"`
+	TotalSearches       int    `json:"total_searches"`
+	LastLibraryVersion  int    `json:"last_library_version,omitempty"`
 }
 
 type ReadMetadata struct {

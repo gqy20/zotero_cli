@@ -8,7 +8,7 @@ import (
 )
 
 func runCollections(args []string) int {
-	jsonOutput, ok := parseJSONOnlyArgs(args, usageCollections)
+	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageCollections)
 	if !ok {
 		return 2
 	}
@@ -23,14 +23,20 @@ func runCollections(args []string) int {
 		return printErr(err)
 	}
 
+	if limit > 0 && len(collections) > limit {
+		collections = collections[:limit]
+	}
+
 	if jsonOutput {
+		meta := map[string]any{
+			"total": len(collections),
+			"read_source": "web",
+		}
 		return writeJSON(jsonResponse{
 			OK:      true,
 			Command: "collections",
 			Data:    collections,
-			Meta: map[string]any{
-				"total": len(collections),
-			},
+			Meta:    meta,
 		})
 	}
 
@@ -51,7 +57,7 @@ func runCollections(args []string) int {
 }
 
 func runNotes(args []string) int {
-	jsonOutput, ok := parseJSONOnlyArgs(args, usageNotes)
+	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageNotes)
 	if !ok {
 		return 2
 	}
@@ -66,14 +72,20 @@ func runNotes(args []string) int {
 		return printErr(err)
 	}
 
+	if limit > 0 && len(notes) > limit {
+		notes = notes[:limit]
+	}
+
 	if jsonOutput {
+		meta := map[string]any{
+			"total": len(notes),
+			"read_source": "web",
+		}
 		return writeJSON(jsonResponse{
 			OK:      true,
 			Command: "notes",
 			Data:    notes,
-			Meta: map[string]any{
-				"total": len(notes),
-			},
+			Meta:    meta,
 		})
 	}
 
@@ -90,7 +102,7 @@ func runNotes(args []string) int {
 }
 
 func runTags(args []string) int {
-	jsonOutput, ok := parseJSONOnlyArgs(args, usageTags)
+	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageTags)
 	if !ok {
 		return 2
 	}
@@ -105,13 +117,18 @@ func runTags(args []string) int {
 		return printErr(err)
 	}
 
+	if limit > 0 && len(tags) > limit {
+		tags = tags[:limit]
+	}
+
 	if jsonOutput {
 		return writeJSON(jsonResponse{
 			OK:      true,
 			Command: "tags",
 			Data:    tags,
 			Meta: map[string]any{
-				"total": len(tags),
+				"total":       len(tags),
+				"read_source": "web",
 			},
 		})
 	}
@@ -128,7 +145,7 @@ func runTags(args []string) int {
 }
 
 func runSearches(args []string) int {
-	jsonOutput, ok := parseJSONOnlyArgs(args, usageSearches)
+	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageSearches)
 	if !ok {
 		return 2
 	}
@@ -143,13 +160,18 @@ func runSearches(args []string) int {
 		return printErr(err)
 	}
 
+	if limit > 0 && len(searches) > limit {
+		searches = searches[:limit]
+	}
+
 	if jsonOutput {
 		return writeJSON(jsonResponse{
 			OK:      true,
 			Command: "searches",
 			Data:    searches,
 			Meta: map[string]any{
-				"total": len(searches),
+				"total":       len(searches),
+				"read_source": "web",
 			},
 		})
 	}
@@ -186,6 +208,10 @@ func runDeleted(args []string) int {
 			OK:      true,
 			Command: "deleted",
 			Data:    deleted,
+			Meta: map[string]any{
+				"total":       len(deleted.Items) + len(deleted.Collections) + len(deleted.Searches) + len(deleted.Tags),
+				"read_source": "web",
+			},
 		})
 	}
 
@@ -447,7 +473,7 @@ func runGroups(args []string) int {
 }
 
 func runTrash(args []string) int {
-	jsonOutput, ok := parseJSONOnlyArgs(args, usageTrash)
+	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageTrash)
 	if !ok {
 		return 2
 	}
@@ -457,7 +483,7 @@ func runTrash(args []string) int {
 		return exitCode
 	}
 
-	items, err := client.ListTrashItems(context.Background(), zoteroapi.FindOptions{})
+	items, err := client.ListTrashItems(context.Background(), zoteroapi.FindOptions{Limit: limit})
 	if err != nil {
 		return printErr(err)
 	}
@@ -468,7 +494,8 @@ func runTrash(args []string) int {
 			Command: "trash",
 			Data:    items,
 			Meta: map[string]any{
-				"total": len(items),
+				"total":       len(items),
+				"read_source": "web",
 			},
 		})
 	}
@@ -512,7 +539,8 @@ func runCollectionsTop(args []string) int {
 			Command: "collections-top",
 			Data:    collections,
 			Meta: map[string]any{
-				"total": len(collections),
+				"total":       len(collections),
+				"read_source": "web",
 			},
 		})
 	}
@@ -534,7 +562,7 @@ func runCollectionsTop(args []string) int {
 }
 
 func runPublications(args []string) int {
-	jsonOutput, ok := parseJSONOnlyArgs(args, usagePublications)
+	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usagePublications)
 	if !ok {
 		return 2
 	}
@@ -544,7 +572,7 @@ func runPublications(args []string) int {
 		return exitCode
 	}
 
-	items, err := client.ListPublicationsItems(context.Background(), zoteroapi.FindOptions{})
+	items, err := client.ListPublicationsItems(context.Background(), zoteroapi.FindOptions{Limit: limit})
 	if err != nil {
 		return printErr(err)
 	}
@@ -555,7 +583,8 @@ func runPublications(args []string) int {
 			Command: "publications",
 			Data:    items,
 			Meta: map[string]any{
-				"total": len(items),
+				"total":       len(items),
+				"read_source": "web",
 			},
 		})
 	}

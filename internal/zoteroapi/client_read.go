@@ -564,10 +564,11 @@ func (c *Client) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
 	}
 
 	return LibraryStats{
-		LibraryType:      c.cfg.LibraryType,
-		LibraryID:        c.cfg.LibraryID,
-		TotalItems:       len(itemVersions.Versions),
-		TotalCollections: len(collections),
-		TotalSearches:    len(searches),
+		LibraryType:         c.cfg.LibraryType,
+		LibraryID:           c.cfg.LibraryID,
+		TotalItems:          len(itemVersions.Versions),
+		TotalCollections:    len(collections),
+		TotalSearches:       len(searches),
+		LastLibraryVersion:  itemVersions.LastModifiedVersion,
 	}, nil
 }

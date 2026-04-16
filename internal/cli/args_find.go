@@ -122,16 +122,22 @@ func parseFindArgs(args []string) (backend.FindOptions, bool, bool, error) {
 
 func parseFindIncludeFields(value string) ([]string, error) {
 	allowed := map[string]struct{}{
-		"version":   {},
-		"doi":       {},
-		"url":       {},
-		"tags":      {},
-		"container": {},
-		"volume":    {},
-		"issue":     {},
-		"pages":     {},
-		"date":      {},
-		"creators":  {},
+		"key":        {},
+		"version":    {},
+		"item_type":  {},
+		"title":      {},
+		"date":       {},
+		"creators":   {},
+		"container":  {},
+		"volume":     {},
+		"issue":      {},
+		"pages":      {},
+		"doi":        {},
+		"url":        {},
+		"tags":       {},
+		"collections":{},
+		"attachments":{},
+		"notes":      {},
 	}
 
 	parts := strings.Split(value, ",")
@@ -284,6 +290,36 @@ func parseJSONOnlyArgs(args []string, usage string) (bool, bool) {
 		return false, false
 	}
 	return jsonOutput, true
+}
+
+func parseJSONAndLimitArgs(args []string, usage string) (bool, int, bool) {
+	jsonOutput := false
+	limit := 0
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonOutput = true
+		case "--limit":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, "error: missing value for --limit")
+				fmt.Fprintln(stderr, usage)
+				return false, 0, false
+			}
+			n, err := strconv.Atoi(args[i+1])
+			if err != nil || n <= 0 {
+				fmt.Fprintln(stderr, "error: invalid value for --limit")
+				fmt.Fprintln(stderr, usage)
+				return false, 0, false
+			}
+			limit = n
+			i++
+		default:
+			fmt.Fprintln(stderr, usage)
+			return false, 0, false
+		}
+	}
+	return jsonOutput, limit, true
 }
 
 func parseVersionsArgs(args []string) (string, versionsArgs, bool, error) {

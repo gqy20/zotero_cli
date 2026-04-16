@@ -35,7 +35,7 @@ func (r *WebReader) GetItem(ctx context.Context, key string) (domain.Item, error
 }
 
 func (r *WebReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
-	return nil, newUnsupportedFeatureError("web", "relate")
+	return nil, newUnsupportedFeatureErrorWithHint("web", "relate", "set ZOT_MODE=local or ZOT_MODE=hybrid to use this feature")
 }
 
 func (r *WebReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
@@ -45,11 +45,12 @@ func (r *WebReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
 	}
 	r.lastReadMetadata = ReadMetadata{ReadSource: "web"}
 	return LibraryStats{
-		LibraryType:      stats.LibraryType,
-		LibraryID:        stats.LibraryID,
-		TotalItems:       stats.TotalItems,
-		TotalCollections: stats.TotalCollections,
-		TotalSearches:    stats.TotalSearches,
+		LibraryType:         stats.LibraryType,
+		LibraryID:           stats.LibraryID,
+		TotalItems:          stats.TotalItems,
+		TotalCollections:    stats.TotalCollections,
+		TotalSearches:       stats.TotalSearches,
+		LastLibraryVersion:  stats.LastLibraryVersion,
 	}, nil
 }
 

@@ -98,7 +98,9 @@ func runStats(args []string) int {
 	}
 
 	if jsonOutput {
-		meta := map[string]any{}
+		meta := map[string]any{
+			"total": stats.TotalItems,
+		}
 		appendReadMetadata(meta, reader)
 		return writeJSON(jsonResponse{OK: true, Command: "stats", Data: stats, Meta: meta})
 	}
@@ -106,6 +108,9 @@ func runStats(args []string) int {
 	fmt.Fprintf(stdout, "items=%d\n", stats.TotalItems)
 	fmt.Fprintf(stdout, "collections=%d\n", stats.TotalCollections)
 	fmt.Fprintf(stdout, "searches=%d\n", stats.TotalSearches)
+	if stats.LastLibraryVersion > 0 {
+		fmt.Fprintf(stdout, "last_library_version=%d\n", stats.LastLibraryVersion)
+	}
 	return 0
 }
 
@@ -149,7 +154,9 @@ func runShow(args []string) int {
 	}
 
 	if jsonOutput {
-		meta := map[string]any{}
+		meta := map[string]any{
+			"total": 1,
+		}
 		appendReadMetadata(meta, reader)
 		return writeJSON(jsonResponse{
 			OK:      true,
@@ -337,6 +344,9 @@ func runCite(args []string) int {
 			OK:      true,
 			Command: "cite",
 			Data:    result,
+			Meta: map[string]any{
+				"total": 1,
+			},
 		})
 	}
 

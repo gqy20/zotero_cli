@@ -66,10 +66,10 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 
 func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
 	if opts.IncludeTrashed {
-		return nil, newUnsupportedFeatureError("local", "find --include-trashed")
+		return nil, newUnsupportedFeatureErrorWithHint("local", "find --include-trashed", "set ZOT_MODE=web or ZOT_MODE=hybrid to use this feature")
 	}
 	if opts.QMode != "" {
-		return nil, newUnsupportedFeatureError("local", "find --qmode")
+		return nil, newUnsupportedFeatureErrorWithHint("local", "find --qmode", "set ZOT_MODE=web or ZOT_MODE=hybrid to use this feature")
 	}
 
 	items := []domain.Item{}

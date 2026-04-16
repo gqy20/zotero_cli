@@ -79,6 +79,30 @@ func renderFindItemDetailed(item domain.Item, opts backend.FindOptions) {
 			if len(item.Creators) > 0 {
 				fmt.Fprintf(stdout, "Creators: %s\n", joinCreatorNames(item.Creators))
 			}
+		case "key":
+			fmt.Fprintf(stdout, "Key: %s\n", item.Key)
+		case "item_type":
+			fmt.Fprintf(stdout, "Type: %s\n", item.ItemType)
+		case "title":
+			fmt.Fprintf(stdout, "Title: %s\n", item.Title)
+		case "collections":
+			if len(item.Collections) > 0 {
+				fmt.Fprintf(stdout, "Collections: %s\n", joinCollectionNames(item.Collections))
+			}
+		case "attachments":
+			if len(item.Attachments) > 0 {
+				fmt.Fprintf(stdout, "Attachments: %d\n", len(item.Attachments))
+				for _, attachment := range item.Attachments {
+					fmt.Fprintf(stdout, "  - [%s] %s\n", attachmentKind(attachment), attachmentSummary(attachment))
+				}
+			}
+		case "notes":
+			if len(item.Notes) > 0 {
+				fmt.Fprintf(stdout, "Notes: %d\n", len(item.Notes))
+				for _, note := range item.Notes {
+					fmt.Fprintf(stdout, "  - %s\n", noteSummary(note))
+				}
+			}
 		}
 	}
 }
