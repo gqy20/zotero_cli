@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -46,9 +47,13 @@ type fullTextDocument struct {
 }
 
 type fullTextIndexMatch struct {
-	ParentItemKey string
-	AttachmentKey string
-	Rank          float64
+	ParentItemKey   string
+	AttachmentKey   string
+	Rank            float64
+	Title           string
+	AttachmentTitle string
+	AttachmentName  string
+	Body            string
 }
 
 func newFullTextCache(rootDir string) fullTextCache {
@@ -383,32 +388,52 @@ func (c fullTextCache) Search(query string, any bool, limit int) ([]fullTextInde
 	if limit <= 0 {
 		limit = 100
 	}
+	fetchLimit := limit * 5
+	if fetchLimit < 50 {
+		fetchLimit = 50
+	}
 	rows, err := db.Query(
-		`SELECT parent_item_key, attachment_key, bm25(fulltext_documents, 8.0, 6.0, 4.0, 5.0, 5.0, 3.0, 1.0)
+		`SELECT parent_item_key, attachment_key,
+		        bm25(fulltext_documents, 8.0, 6.0, 4.0, 5.0, 5.0, 3.0, 1.0),
+		        COALESCE(title, ''),
+		        COALESCE(attachment_title, ''),
+		        COALESCE(attachment_name, ''),
+		        COALESCE(body, '')
 		 FROM fulltext_documents
 		 WHERE fulltext_documents MATCH ?
 		 ORDER BY bm25(fulltext_documents, 8.0, 6.0, 4.0, 5.0, 5.0, 3.0, 1.0)
 		 LIMIT ?`,
 		matchExpr,
-		limit,
+		fetchLimit,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	matches := make([]fullTextIndexMatch, 0, limit)
+	rawMatches := make([]fullTextIndexMatch, 0, fetchLimit)
 	for rows.Next() {
 		var match fullTextIndexMatch
-		if err := rows.Scan(&match.ParentItemKey, &match.AttachmentKey, &match.Rank); err != nil {
+		if err := rows.Scan(
+			&match.ParentItemKey,
+			&match.AttachmentKey,
+			&match.Rank,
+			&match.Title,
+			&match.AttachmentTitle,
+			&match.AttachmentName,
+			&match.Body,
+		); err != nil {
 			return nil, err
 		}
 		if strings.TrimSpace(match.ParentItemKey) == "" {
 			continue
 		}
-		matches = append(matches, match)
+		rawMatches = append(rawMatches, match)
 	}
-	return matches, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return rankAndDedupeFullTextMatches(rawMatches, query, limit), nil
 }
 
 func fullTextIndexMatchExpr(query string, any bool) string {
@@ -424,4 +449,86 @@ func fullTextIndexMatchExpr(query string, any bool) string {
 		return strings.Join(parts, " OR ")
 	}
 	return strings.Join(parts, " ")
+}
+
+func rankAndDedupeFullTextMatches(matches []fullTextIndexMatch, query string, limit int) []fullTextIndexMatch {
+	if len(matches) == 0 {
+		return nil
+	}
+	tokens := fullTextQueryTokens(query)
+	queryLower := strings.ToLower(strings.TrimSpace(query))
+	scored := make([]fullTextIndexMatch, 0, len(matches))
+	for _, match := range matches {
+		score := 1000.0 - match.Rank
+		titleLower := strings.ToLower(match.Title)
+		attachmentTitleLower := strings.ToLower(match.AttachmentTitle)
+		attachmentNameLower := strings.ToLower(match.AttachmentName)
+		bodyLower := strings.ToLower(match.Body)
+
+		if queryLower != "" {
+			switch {
+			case strings.Contains(titleLower, queryLower):
+				score += 500
+			case strings.Contains(attachmentTitleLower, queryLower):
+				score += 320
+			case strings.Contains(attachmentNameLower, queryLower):
+				score += 260
+			case strings.Contains(bodyLower, queryLower):
+				score += 120
+			}
+		}
+
+		distinctCovered := 0
+		for _, token := range tokens {
+			if token == "" {
+				continue
+			}
+			switch {
+			case strings.Contains(titleLower, token):
+				score += 120
+				distinctCovered++
+			case strings.Contains(attachmentTitleLower, token):
+				score += 90
+				distinctCovered++
+			case strings.Contains(attachmentNameLower, token):
+				score += 80
+				distinctCovered++
+			case strings.Contains(bodyLower, token):
+				score += 30
+				distinctCovered++
+			}
+		}
+		score += float64(distinctCovered * 140)
+		match.Rank = -score
+		scored = append(scored, match)
+	}
+
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].Rank != scored[j].Rank {
+			return scored[i].Rank < scored[j].Rank
+		}
+		if scored[i].ParentItemKey != scored[j].ParentItemKey {
+			return scored[i].ParentItemKey < scored[j].ParentItemKey
+		}
+		return scored[i].AttachmentKey < scored[j].AttachmentKey
+	})
+
+	bestByParent := make(map[string]fullTextIndexMatch, len(scored))
+	order := make([]string, 0, len(scored))
+	for _, match := range scored {
+		if _, ok := bestByParent[match.ParentItemKey]; ok {
+			continue
+		}
+		bestByParent[match.ParentItemKey] = match
+		order = append(order, match.ParentItemKey)
+		if limit > 0 && len(order) >= limit {
+			break
+		}
+	}
+
+	result := make([]fullTextIndexMatch, 0, len(order))
+	for _, parentKey := range order {
+		result = append(result, bestByParent[parentKey])
+	}
+	return result
 }

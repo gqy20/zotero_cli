@@ -348,6 +348,145 @@ func TestFullTextCacheSearchReturnsIndexedMatches(t *testing.T) {
 	}
 }
 
+func TestFullTextCacheSearchDedupesParentItems(t *testing.T) {
+	rootDir := t.TempDir()
+	cache := newFullTextCache(rootDir)
+	sourceDir := t.TempDir()
+
+	writeDoc := func(attachmentKey, attachmentName string) {
+		sourcePath := filepath.Join(sourceDir, attachmentKey+".pdf")
+		if err := os.WriteFile(sourcePath, []byte("pdf"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Stat(sourcePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		doc := fullTextDocument{
+			Text: "Hybridization and speciation in plants with genomic evidence.",
+			Meta: fullTextCacheMeta{
+				AttachmentKey:   attachmentKey,
+				ParentItemKey:   "ITEM123",
+				ResolvedPath:    sourcePath,
+				ContentType:     "application/pdf",
+				Title:           "Hybridization and speciation",
+				AttachmentName:  attachmentName,
+				SourceMtimeUnix: info.ModTime().Unix(),
+				SourceSize:      info.Size(),
+			},
+		}
+		if err := cache.Save(doc); err != nil {
+			t.Fatalf("Save(%s) error = %v", attachmentKey, err)
+		}
+	}
+
+	writeDoc("ATT123", "one.pdf")
+	writeDoc("ATT456", "two.pdf")
+
+	matches, err := cache.Search("hybridization speciation", false, 10)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("Search() matches = %#v, want 1 deduped parent match", matches)
+	}
+	if matches[0].ParentItemKey != "ITEM123" {
+		t.Fatalf("Search() parent = %#v, want ITEM123", matches[0])
+	}
+}
+
+func TestFullTextCacheSearchPrefersExactTitlePhrase(t *testing.T) {
+	rootDir := t.TempDir()
+	cache := newFullTextCache(rootDir)
+	sourceDir := t.TempDir()
+
+	writeDoc := func(attachmentKey, parentKey, title, text string) {
+		sourcePath := filepath.Join(sourceDir, attachmentKey+".pdf")
+		if err := os.WriteFile(sourcePath, []byte("pdf"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Stat(sourcePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		doc := fullTextDocument{
+			Text: text,
+			Meta: fullTextCacheMeta{
+				AttachmentKey:   attachmentKey,
+				ParentItemKey:   parentKey,
+				ResolvedPath:    sourcePath,
+				ContentType:     "application/pdf",
+				Title:           title,
+				SourceMtimeUnix: info.ModTime().Unix(),
+				SourceSize:      info.Size(),
+			},
+		}
+		if err := cache.Save(doc); err != nil {
+			t.Fatalf("Save(%s) error = %v", attachmentKey, err)
+		}
+	}
+
+	writeDoc("ATT123", "ITEM123", "Plant extinction in the anthropocene", "Plant extinction in the anthropocene with discussion of extinction rates.")
+	writeDoc("ATT456", "ITEM456", "Coral declines", "Plant extinction in the anthropocene is cited once in a broader coral vulnerability paper.")
+
+	matches, err := cache.Search("Plant extinction in the anthropocene", false, 10)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(matches) == 0 {
+		t.Fatalf("Search() returned no matches")
+	}
+	if matches[0].ParentItemKey != "ITEM123" {
+		t.Fatalf("Search() top match = %#v, want ITEM123 exact title hit first", matches[0])
+	}
+}
+
+func TestFullTextCacheSearchPrefersBalancedTokenCoverage(t *testing.T) {
+	rootDir := t.TempDir()
+	cache := newFullTextCache(rootDir)
+	sourceDir := t.TempDir()
+
+	writeDoc := func(attachmentKey, parentKey, title, text string) {
+		sourcePath := filepath.Join(sourceDir, attachmentKey+".pdf")
+		if err := os.WriteFile(sourcePath, []byte("pdf"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Stat(sourcePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		doc := fullTextDocument{
+			Text: text,
+			Meta: fullTextCacheMeta{
+				AttachmentKey:   attachmentKey,
+				ParentItemKey:   parentKey,
+				ResolvedPath:    sourcePath,
+				ContentType:     "application/pdf",
+				Title:           title,
+				SourceMtimeUnix: info.ModTime().Unix(),
+				SourceSize:      info.Size(),
+			},
+		}
+		if err := cache.Save(doc); err != nil {
+			t.Fatalf("Save(%s) error = %v", attachmentKey, err)
+		}
+	}
+
+	writeDoc("ATT123", "ITEM123", "Genome Architecture and Speciation in Plants and Animals", "Genome architecture and speciation are both central themes in this review.")
+	writeDoc("ATT456", "ITEM456", "Changing views on speciation", "Speciation speciation speciation with no meaningful genome discussion.")
+
+	matches, err := cache.Search("speciation genome", false, 10)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(matches) == 0 {
+		t.Fatalf("Search() returned no matches")
+	}
+	if matches[0].ParentItemKey != "ITEM123" {
+		t.Fatalf("Search() top match = %#v, want ITEM123 balanced two-token hit first", matches[0])
+	}
+}
+
 func TestLocalSQLiteDSNUsesReadOnlyPragmas(t *testing.T) {
 	dsn := localSQLiteDSN(`D:\Zotero\zotero.sqlite`)
 
