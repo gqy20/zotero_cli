@@ -37,6 +37,11 @@ func runFind(args []string) int {
 		fmt.Fprintln(stderr, usageFind)
 		return 2
 	}
+	if opts.FullTextAny && !opts.FullText {
+		fmt.Fprintln(stderr, "error: --fulltext-any requires --fulltext")
+		fmt.Fprintln(stderr, usageFind)
+		return 2
+	}
 
 	if strings.TrimSpace(opts.Query) == "" && !opts.All && !queryProvided {
 		fmt.Fprintln(stderr, usageFind)

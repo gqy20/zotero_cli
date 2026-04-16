@@ -24,6 +24,8 @@ func parseFindArgs(args []string) (backend.FindOptions, bool, bool, error) {
 			opts.All = true
 		case "--fulltext":
 			opts.FullText = true
+		case "--fulltext-any":
+			opts.FullTextAny = true
 		case "--full":
 			opts.Full = true
 		case "--item-type":

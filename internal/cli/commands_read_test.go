@@ -611,6 +611,56 @@ func TestRunFindLocalJSONMatchesFullTextAttachmentTerms(t *testing.T) {
 	}
 }
 
+func TestRunFindLocalJSONSupportsFullTextAnyAndPrefixMatching(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "specia genom", "--fulltext", "--fulltext-any", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 2 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	first := data[0].(map[string]any)
+	second := data[1].(map[string]any)
+	if first["key"] != "ART67890" || second["key"] != "ARTFULL2" {
+		t.Fatalf("unexpected ordering or keys: %#v", got["data"])
+	}
+}
+
+func TestRunFindRejectsFullTextAnyWithoutFullText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "genome", "--fulltext-any"})
+	if exitCode != 2 {
+		t.Fatalf("expected exit code 2, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "--fulltext-any requires --fulltext") {
+		t.Fatalf("expected fulltext-any usage error, got %q", got)
+	}
+}
+
 func TestRunFindLocalJSONMatchesLinkedAttachmentPathFromPrefs(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -758,7 +808,7 @@ func TestRunFindLocalAllJSON(t *testing.T) {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
 	data, ok := got["data"].([]any)
-	if !ok || len(data) != 3 {
+	if !ok || len(data) != 4 {
 		t.Fatalf("unexpected data payload: %#v", got["data"])
 	}
 }
@@ -1611,23 +1661,23 @@ func buildLocalFindFixture(t *testing.T, sqlitePath string, storageDir string) {
 
 	inserts := []string{
 		`INSERT INTO itemTypes(itemTypeID, typeName) VALUES (1, 'journalArticle'), (2, 'book'), (3, 'attachment'), (4, 'note'), (5, 'annotation');`,
-		`INSERT INTO items(itemID, key, version, itemTypeID) VALUES (1, 'ITEM1234', 7, 1), (2, 'ART67890', 3, 1), (3, 'BOOK1234', 2, 2), (4, 'ATTA1111', 1, 3), (5, 'NOTE1111', 1, 4), (6, 'ANNO1111', 1, 5);`,
+		`INSERT INTO items(itemID, key, version, itemTypeID) VALUES (1, 'ITEM1234', 7, 1), (2, 'ART67890', 3, 1), (3, 'BOOK1234', 2, 2), (4, 'ATTA1111', 1, 3), (5, 'NOTE1111', 1, 4), (6, 'ANNO1111', 1, 5), (7, 'ARTFULL2', 4, 1), (8, 'ATTB2222', 1, 3);`,
 		`INSERT INTO fieldsCombined(fieldID, fieldName) VALUES (1, 'title'), (2, 'date'), (3, 'publicationTitle'), (4, 'DOI'), (5, 'url'), (6, 'filename'), (7, 'note'), (8, 'volume'), (9, 'issue'), (10, 'pages');`,
-		`INSERT INTO itemDataValues(valueID, value) VALUES (1, 'Attention Is All You Need'), (2, '2024-01-08 2024-01-08 00:00:00'), (3, 'NeurIPS'), (4, '10.1/example'), (5, 'https://example.com/paper'), (6, 'Mixed Survey'), (7, '2024-05-03'), (8, 'Mixed Book'), (9, '2023'), (10, 'mixed.pdf'), (11, '<p>Mixed note</p>'), (12, 'Mixed Attachment'), (13, '37'), (14, '11'), (15, '1234-1248'), (16, '29'), (17, '20'), (18, 'R1094-R1103');`,
-		`INSERT INTO itemData(itemID, fieldID, valueID) VALUES (1, 1, 1), (1, 2, 2), (1, 3, 3), (1, 4, 4), (1, 5, 5), (1, 8, 13), (1, 9, 14), (1, 10, 15), (2, 1, 6), (2, 2, 7), (2, 8, 16), (2, 9, 17), (2, 10, 18), (3, 1, 8), (3, 2, 9), (4, 1, 12), (4, 6, 10), (5, 7, 11);`,
-		`INSERT INTO creators(creatorID, firstName, lastName, fieldMode) VALUES (1, 'Ashish', 'Vaswani', 0), (2, 'Jane', 'Roe', 0), (3, 'John', 'Doe', 0);`,
+		`INSERT INTO itemDataValues(valueID, value) VALUES (1, 'Attention Is All You Need'), (2, '2024-01-08 2024-01-08 00:00:00'), (3, 'NeurIPS'), (4, '10.1/example'), (5, 'https://example.com/paper'), (6, 'Mixed Survey'), (7, '2024-05-03'), (8, 'Mixed Book'), (9, '2023'), (10, 'mixed.pdf'), (11, '<p>Mixed note</p>'), (12, 'Mixed Attachment'), (13, '37'), (14, '11'), (15, '1234-1248'), (16, '29'), (17, '20'), (18, 'R1094-R1103'), (19, 'Prefix Match Article'), (20, '2024-06-07'), (21, 'prefix.pdf'), (22, 'Prefix Attachment');`,
+		`INSERT INTO itemData(itemID, fieldID, valueID) VALUES (1, 1, 1), (1, 2, 2), (1, 3, 3), (1, 4, 4), (1, 5, 5), (1, 8, 13), (1, 9, 14), (1, 10, 15), (2, 1, 6), (2, 2, 7), (2, 8, 16), (2, 9, 17), (2, 10, 18), (3, 1, 8), (3, 2, 9), (4, 1, 12), (4, 6, 10), (5, 7, 11), (7, 1, 19), (7, 2, 20), (8, 1, 22), (8, 6, 21);`,
+		`INSERT INTO creators(creatorID, firstName, lastName, fieldMode) VALUES (1, 'Ashish', 'Vaswani', 0), (2, 'Jane', 'Roe', 0), (3, 'John', 'Doe', 0), (4, 'Alex', 'Smith', 0);`,
 		`INSERT INTO creatorTypes(creatorTypeID, creatorType) VALUES (1, 'author');`,
-		`INSERT INTO itemCreators(itemID, creatorID, creatorTypeID, orderIndex) VALUES (1, 1, 1, 0), (2, 2, 1, 0), (3, 3, 1, 0);`,
-		`INSERT INTO tags(tagID, name) VALUES (1, 'transformers'), (2, 'ai'), (3, 'survey'), (4, 'classic');`,
-		`INSERT INTO itemTags(itemID, tagID) VALUES (1, 1), (2, 2), (2, 3), (3, 4);`,
+		`INSERT INTO itemCreators(itemID, creatorID, creatorTypeID, orderIndex) VALUES (1, 1, 1, 0), (2, 2, 1, 0), (3, 3, 1, 0), (7, 4, 1, 0);`,
+		`INSERT INTO tags(tagID, name) VALUES (1, 'transformers'), (2, 'ai'), (3, 'survey'), (4, 'classic'), (5, 'genomics');`,
+		`INSERT INTO itemTags(itemID, tagID) VALUES (1, 1), (2, 2), (2, 3), (3, 4), (7, 5);`,
 		`INSERT INTO collections(collectionID, key, collectionName) VALUES (1, 'COLL1234', 'Machine Learning'), (2, 'COLL5678', 'Books');`,
 		`INSERT INTO collectionItems(collectionID, itemID) VALUES (1, 1), (1, 2), (2, 3);`,
-		`INSERT INTO itemAttachments(itemID, parentItemID, contentType, linkMode, path) VALUES (4, 2, 'application/pdf', 0, 'storage:mixed.pdf');`,
+		`INSERT INTO itemAttachments(itemID, parentItemID, contentType, linkMode, path) VALUES (4, 2, 'application/pdf', 0, 'storage:mixed.pdf'), (8, 7, 'text/plain', 0, 'storage:prefix.pdf');`,
 		`INSERT INTO itemNotes(itemID, parentItemID, note, title) VALUES (5, 2, '<p>Mixed note</p>', 'Mixed note');`,
 		`INSERT INTO itemAnnotations(itemID) VALUES (6);`,
-		`INSERT INTO fulltextItems(itemID, indexedPages, totalPages, version, synced) VALUES (4, 5, 5, 1, 1);`,
-		`INSERT INTO fulltextWords(wordID, word) VALUES (1, 'speciation'), (2, 'genome');`,
-		`INSERT INTO fulltextItemWords(wordID, itemID) VALUES (1, 4), (2, 4);`,
+		`INSERT INTO fulltextItems(itemID, indexedPages, totalPages, version, synced) VALUES (4, 5, 5, 1, 1), (8, 4, 4, 1, 1);`,
+		`INSERT INTO fulltextWords(wordID, word) VALUES (1, 'speciation'), (2, 'genome'), (3, 'genomic'), (4, 'species');`,
+		`INSERT INTO fulltextItemWords(wordID, itemID) VALUES (1, 4), (2, 4), (3, 8), (4, 8);`,
 	}
 	for _, statement := range inserts {
 		if _, err := db.Exec(statement); err != nil {
@@ -1640,6 +1690,13 @@ func buildLocalFindFixture(t *testing.T, sqlitePath string, storageDir string) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(attachmentDir, "mixed.pdf"), []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	attachmentDir = filepath.Join(storageDir, "ATTB2222")
+	if err := os.Mkdir(attachmentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(attachmentDir, "prefix.pdf"), []byte("pdf"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

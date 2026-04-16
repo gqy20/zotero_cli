@@ -47,6 +47,7 @@ func localFindQuery(opts FindOptions) (string, []any) {
 
 func localFullTextFindQuery(opts FindOptions) (string, []any) {
 	tokens := localFullTextTokens(opts.Query)
+	scoreExpr := localFullTextScoreExpr(tokens)
 	query := `
 		SELECT
 			i.itemID,
@@ -62,20 +63,17 @@ func localFullTextFindQuery(opts FindOptions) (string, []any) {
 			COALESCE(MAX(CASE WHEN f.fieldName = 'url' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'publicationTitle' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'proceedingsTitle' THEN v.value END), ''),
-			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), '')
+			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), ''),
+			` + scoreExpr + `
 		FROM items i
 		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
 		LEFT JOIN itemData d ON d.itemID = i.itemID
 		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
 		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
-		JOIN itemAttachments iaf ON iaf.parentItemID = i.itemID
-		JOIN fulltextItemWords fiw ON fiw.itemID = iaf.itemID
-		JOIN fulltextWords fw ON fw.wordID = fiw.wordID
 		WHERE ` + localVisibleItemClause(opts.ItemType) + `
-		` + localFullTextMatchClause(tokens) + `
+		` + localFullTextMatchClause(tokens, opts.FullTextAny) + `
 		` + localTagFilterClause(opts) + `
 		GROUP BY i.itemID, i.key, i.version, it.typeName
-		` + localFullTextHavingClause(tokens) + `
 		ORDER BY i.key
 	`
 	args := localFullTextArgs(opts, tokens)
@@ -111,13 +109,13 @@ func localFullTextArgs(opts FindOptions, tokens []string) []any {
 		args = append(args, opts.ItemType)
 	}
 	for _, token := range tokens {
-		args = append(args, token)
+		args = append(args, token+"%")
+	}
+	for _, token := range tokens {
+		args = append(args, token+"%")
 	}
 	for _, tag := range normalizedTags(opts.Tags) {
 		args = append(args, tag)
-	}
-	if len(tokens) > 0 {
-		args = append(args, len(tokens))
 	}
 	return args
 }
@@ -177,21 +175,26 @@ func localQueryMatchClause() string {
 	)`
 }
 
-func localFullTextMatchClause(tokens []string) string {
+func localFullTextMatchClause(tokens []string, any bool) string {
 	if len(tokens) == 0 {
 		return ""
 	}
-	return `
-		AND LOWER(fw.word) IN (` + placeholders(len(tokens)) + `)
-	`
-}
-
-func localFullTextHavingClause(tokens []string) string {
-	if len(tokens) == 0 {
-		return ""
+	if any {
+		parts := make([]string, 0, len(tokens))
+		for _, token := range tokens {
+			parts = append(parts, localFullTextTokenExistsClause(token))
+		}
+		return `
+		AND (` + strings.Join(parts, " OR ") + `)
+		`
+	}
+	parts := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		parts = append(parts, localFullTextTokenExistsClause(token))
 	}
 	return `
-		HAVING COUNT(DISTINCT LOWER(fw.word)) = ?
+		AND ` + strings.Join(parts, `
+		AND `) + `
 	`
 }
 
@@ -406,6 +409,12 @@ func localItemMetadataMatches(item domain.Item, query string) bool {
 }
 
 func compareFindItems(left domain.Item, right domain.Item, sortBy string) int {
+	if sortBy == "" && (left.SearchScore != right.SearchScore) {
+		if left.SearchScore > right.SearchScore {
+			return -1
+		}
+		return 1
+	}
 	switch sortBy {
 	case "title":
 		if cmp := strings.Compare(strings.ToLower(left.Title), strings.ToLower(right.Title)); cmp != 0 {
@@ -417,6 +426,29 @@ func compareFindItems(left domain.Item, right domain.Item, sortBy string) int {
 		}
 	}
 	return strings.Compare(left.Key, right.Key)
+}
+
+func localFullTextScoreExpr(tokens []string) string {
+	if len(tokens) == 0 {
+		return "0"
+	}
+	parts := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		parts = append(parts, `CASE WHEN `+localFullTextTokenExistsClause(token)+` THEN 1 ELSE 0 END`)
+	}
+	return strings.Join(parts, " + ")
+}
+
+func localFullTextTokenExistsClause(token string) string {
+	_ = token
+	return `EXISTS (
+			SELECT 1
+			FROM itemAttachments iaf2
+			JOIN fulltextItemWords fiw2 ON fiw2.itemID = iaf2.itemID
+			JOIN fulltextWords fw2 ON fw2.wordID = fiw2.wordID
+			WHERE iaf2.parentItemID = i.itemID
+			AND LOWER(fw2.word) LIKE ?
+		)`
 }
 
 func paginateItems(items []domain.Item, start int, limit int) []domain.Item {

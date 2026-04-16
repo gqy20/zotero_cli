@@ -106,7 +106,27 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 				proceedingsTitle string
 				bookTitle        string
 			)
-			if err := rows.Scan(
+			if opts.FullText {
+				if err := rows.Scan(
+					&itemID,
+					&item.Key,
+					&item.Version,
+					&item.ItemType,
+					&item.Title,
+					&item.Date,
+					&item.Volume,
+					&item.Issue,
+					&item.Pages,
+					&item.DOI,
+					&item.URL,
+					&publicationTitle,
+					&proceedingsTitle,
+					&bookTitle,
+					&item.SearchScore,
+				); err != nil {
+					return err
+				}
+			} else if err := rows.Scan(
 				&itemID,
 				&item.Key,
 				&item.Version,
@@ -357,5 +377,3 @@ func (r *LocalReader) openSnapshotDB() (*sql.DB, func(), error) {
 		_ = os.RemoveAll(snapshotDir)
 	}, nil
 }
-
-

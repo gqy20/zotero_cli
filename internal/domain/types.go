@@ -6,6 +6,7 @@ type Item struct {
 	ItemType        string       `json:"item_type"`
 	Title           string       `json:"title"`
 	Date            string       `json:"date"`
+	SearchScore     int          `json:"-"`
 	Creators        []Creator    `json:"creators"`
 	MatchedOn       []string     `json:"matched_on,omitempty"`
 	FullTextPreview string       `json:"full_text_preview,omitempty"`
