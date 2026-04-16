@@ -290,3 +290,17 @@ For the detailed design notes, see:
 
 - [0.0.2 Stability Pass](/D:/C/Documents/Program/Go/zotero_cli/docs/stability-pass-0.0.2.md)
 - [Local Backend Design](/D:/C/Documents/Program/Go/zotero_cli/docs/local-backend-design.md)
+
+## Read Source Metadata
+
+Read commands now expose a `meta.read_source` field in JSON output when applicable.
+
+- `live`: direct read from the local Zotero SQLite database
+- `snapshot`: temporary snapshot fallback because the local database was busy or locked
+- `web`: data came from the Zotero Web API
+
+For local text-mode commands, when snapshot fallback is used, `zot` prints a short note on stderr:
+
+```text
+note: using snapshot fallback for local Zotero data
+```

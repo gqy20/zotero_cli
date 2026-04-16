@@ -38,6 +38,26 @@ func TestLocalSQLiteDSNUsesReadOnlyPragmas(t *testing.T) {
 	}
 }
 
+func TestLocalSQLiteDSNRespectsBusyTimeoutOverride(t *testing.T) {
+	t.Setenv("ZOT_LOCAL_BUSY_TIMEOUT_MS", "25")
+
+	dsn := localSQLiteDSN(`D:\Zotero\zotero.sqlite`)
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("parse dsn: %v", err)
+	}
+	pragmas := u.Query()["_pragma"]
+	found := false
+	for _, pragma := range pragmas {
+		if pragma == "busy_timeout=25" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected busy_timeout override, got %#v", pragmas)
+	}
+}
+
 func TestCreateSQLiteSnapshotCopiesDatabaseAndSidecars(t *testing.T) {
 	sourceDir := t.TempDir()
 	sqlitePath := filepath.Join(sourceDir, "zotero.sqlite")

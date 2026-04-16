@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -82,6 +83,7 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 		defer rows.Close()
 
 		items = items[:0]
+		itemIDs := make([]int64, 0, 32)
 		for rows.Next() {
 			var (
 				item             domain.Item
@@ -110,18 +112,26 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 			}
 			item.Container = firstNonEmptyString(publicationTitle, proceedingsTitle, bookTitle)
 			item.Date = normalizeLocalDate(item.Date)
-
-			item.Creators, err = r.loadCreators(ctx, db, itemID)
-			if err != nil {
-				return err
-			}
-			item.Tags, err = r.loadTags(ctx, db, itemID)
-			if err != nil {
-				return err
-			}
 			items = append(items, item)
+			itemIDs = append(itemIDs, itemID)
 		}
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+
+		creatorsByItemID, err := r.loadCreatorsByItemIDs(ctx, db, itemIDs)
+		if err != nil {
+			return err
+		}
+		tagsByItemID, err := r.loadTagsByItemIDs(ctx, db, itemIDs)
+		if err != nil {
+			return err
+		}
+		for index, itemID := range itemIDs {
+			items[index].Creators = creatorsByItemID[itemID]
+			items[index].Tags = tagsByItemID[itemID]
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -593,10 +603,16 @@ func localSQLiteDSN(path string) string {
 	if !strings.HasPrefix(uriPath, "/") {
 		uriPath = "/" + uriPath
 	}
+	busyTimeout := 5000
+	if value := strings.TrimSpace(os.Getenv("ZOT_LOCAL_BUSY_TIMEOUT_MS")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed >= 0 {
+			busyTimeout = parsed
+		}
+	}
 	return (&url.URL{
 		Scheme:   "file",
 		Path:     uriPath,
-		RawQuery: "mode=ro&_pragma=busy_timeout=5000&_pragma=query_only=1",
+		RawQuery: fmt.Sprintf("mode=ro&_pragma=busy_timeout=%d&_pragma=query_only=1", busyTimeout),
 	}).String()
 }
 
@@ -833,6 +849,48 @@ func (r *LocalReader) loadCreators(ctx context.Context, db *sql.DB, itemID int64
 	return creators, rows.Err()
 }
 
+func (r *LocalReader) loadCreatorsByItemIDs(ctx context.Context, db *sql.DB, itemIDs []int64) (map[int64][]domain.Creator, error) {
+	result := make(map[int64][]domain.Creator, len(itemIDs))
+	if len(itemIDs) == 0 {
+		return result, nil
+	}
+
+	args := make([]any, 0, len(itemIDs))
+	for _, itemID := range itemIDs {
+		args = append(args, itemID)
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+			ic.itemID,
+			TRIM(COALESCE(c.firstName, '') || ' ' || COALESCE(c.lastName, '')),
+			COALESCE(ct.creatorType, '')
+		FROM itemCreators ic
+		JOIN creators c ON c.creatorID = ic.creatorID
+		LEFT JOIN creatorTypes ct ON ct.creatorTypeID = ic.creatorTypeID
+		WHERE ic.itemID IN (`+placeholders(len(itemIDs))+`)
+		ORDER BY ic.itemID, ic.orderIndex
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var itemID int64
+		var name string
+		var creatorType string
+		if err := rows.Scan(&itemID, &name, &creatorType); err != nil {
+			return nil, err
+		}
+		name = normalizeWhitespace(name)
+		if name == "" {
+			continue
+		}
+		result[itemID] = append(result[itemID], domain.Creator{Name: name, CreatorType: creatorType})
+	}
+	return result, rows.Err()
+}
+
 func (r *LocalReader) loadTags(ctx context.Context, db *sql.DB, itemID int64) ([]string, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT t.name
@@ -857,6 +915,42 @@ func (r *LocalReader) loadTags(ctx context.Context, db *sql.DB, itemID int64) ([
 		}
 	}
 	return tags, rows.Err()
+}
+
+func (r *LocalReader) loadTagsByItemIDs(ctx context.Context, db *sql.DB, itemIDs []int64) (map[int64][]string, error) {
+	result := make(map[int64][]string, len(itemIDs))
+	if len(itemIDs) == 0 {
+		return result, nil
+	}
+
+	args := make([]any, 0, len(itemIDs))
+	for _, itemID := range itemIDs {
+		args = append(args, itemID)
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT it.itemID, t.name
+		FROM itemTags it
+		JOIN tags t ON t.tagID = it.tagID
+		WHERE it.itemID IN (`+placeholders(len(itemIDs))+`)
+		ORDER BY it.itemID, t.name
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var itemID int64
+		var tag string
+		if err := rows.Scan(&itemID, &tag); err != nil {
+			return nil, err
+		}
+		if tag == "" {
+			continue
+		}
+		result[itemID] = append(result[itemID], tag)
+	}
+	return result, rows.Err()
 }
 
 func (r *LocalReader) loadCollections(ctx context.Context, db *sql.DB, itemID int64) ([]domain.Collection, error) {

@@ -10,6 +10,8 @@ import (
 	"zotero_cli/internal/zoteroapi"
 )
 
+var backendNewReader = backend.NewReader
+
 func loadConfig() (config.Config, int) {
 	cfg, _, err := config.Load()
 	if err != nil {
@@ -45,7 +47,7 @@ func loadReader() (config.Config, backend.Reader, int) {
 		return config.Config{}, nil, exitCode
 	}
 
-	reader, err := backend.NewReader(cfg, nil)
+	reader, err := backendNewReader(cfg, nil)
 	if err != nil {
 		return config.Config{}, nil, printErr(err)
 	}

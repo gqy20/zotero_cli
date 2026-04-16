@@ -1,15 +1,162 @@
 package cli
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"zotero_cli/internal/backend"
+	"zotero_cli/internal/config"
+	"zotero_cli/internal/domain"
 
 	_ "modernc.org/sqlite"
 )
+
+type stubMetadataReader struct {
+	items     []domain.Item
+	item      domain.Item
+	relations []domain.Relation
+	stats     backend.LibraryStats
+	meta      backend.ReadMetadata
+}
+
+func (r stubMetadataReader) FindItems(context.Context, backend.FindOptions) ([]domain.Item, error) {
+	return append([]domain.Item(nil), r.items...), nil
+}
+
+func (r stubMetadataReader) GetItem(context.Context, string) (domain.Item, error) {
+	return r.item, nil
+}
+
+func (r stubMetadataReader) GetRelated(context.Context, string) ([]domain.Relation, error) {
+	return append([]domain.Relation(nil), r.relations...), nil
+}
+
+func (r stubMetadataReader) GetLibraryStats(context.Context) (backend.LibraryStats, error) {
+	return r.stats, nil
+}
+
+func (r stubMetadataReader) ConsumeReadMetadata() backend.ReadMetadata {
+	return r.meta
+}
+
+type stubLocalExportReader struct {
+	keys    []string
+	payload []map[string]any
+	meta    backend.ReadMetadata
+}
+
+func (r stubLocalExportReader) FindItems(context.Context, backend.FindOptions) ([]domain.Item, error) {
+	items := make([]domain.Item, 0, len(r.keys))
+	for _, key := range r.keys {
+		items = append(items, domain.Item{Key: key})
+	}
+	return items, nil
+}
+
+func (r stubLocalExportReader) CollectionItemKeys(context.Context, string, int) ([]string, error) {
+	return append([]string(nil), r.keys...), nil
+}
+
+func (r stubLocalExportReader) ExportItemsCSLJSON(context.Context, []string) ([]map[string]any, error) {
+	return append([]map[string]any(nil), r.payload...), nil
+}
+
+func (r stubLocalExportReader) ConsumeReadMetadata() backend.ReadMetadata {
+	return r.meta
+}
+
+func TestHoldSQLiteExclusiveLockHelper(t *testing.T) {
+	if os.Getenv("GO_WANT_SQLITE_LOCK_HELPER") != "1" {
+		return
+	}
+	dbPath := os.Getenv("LOCK_DB_PATH")
+	readyPath := os.Getenv("LOCK_READY_PATH")
+	releasePath := os.Getenv("LOCK_RELEASE_PATH")
+	if dbPath == "" || readyPath == "" || releasePath == "" {
+		os.Exit(2)
+	}
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`PRAGMA locking_mode=EXCLUSIVE;`); err != nil {
+		panic(err)
+	}
+	if _, err := db.Exec(`BEGIN EXCLUSIVE;`); err != nil {
+		panic(err)
+	}
+	if err := os.WriteFile(readyPath, []byte("ready"), 0o600); err != nil {
+		panic(err)
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		if _, err := os.Stat(releasePath); err == nil || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if _, err := db.Exec(`ROLLBACK;`); err != nil {
+		panic(err)
+	}
+	os.Exit(0)
+}
+
+func startSQLiteLockHelper(t *testing.T, sqlitePath string) func() {
+	t.Helper()
+
+	readyPath := filepath.Join(t.TempDir(), "ready")
+	releasePath := filepath.Join(t.TempDir(), "release")
+	cmd := exec.Command(os.Args[0], "-test.run=TestHoldSQLiteExclusiveLockHelper")
+	cmd.Env = append(os.Environ(),
+		"GO_WANT_SQLITE_LOCK_HELPER=1",
+		"LOCK_DB_PATH="+sqlitePath,
+		"LOCK_READY_PATH="+readyPath,
+		"LOCK_RELEASE_PATH="+releasePath,
+	)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start lock helper: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(readyPath); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			_ = cmd.Process.Kill()
+			t.Fatalf("lock helper did not become ready")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	return func() {
+		_ = os.WriteFile(releasePath, []byte("release"), 0o600)
+		done := make(chan error, 1)
+		go func() {
+			done <- cmd.Wait()
+		}()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("lock helper wait: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			_ = cmd.Process.Kill()
+			t.Fatalf("lock helper did not exit")
+		}
+	}
+}
 
 func TestRunFindRejectsLocalModeWithoutDataDir(t *testing.T) {
 	configRoot := t.TempDir()
@@ -83,6 +230,108 @@ func TestRunFindHybridFallsBackToWebWithoutDataDir(t *testing.T) {
 	data, ok := got["data"].([]any)
 	if !ok || len(data) == 0 {
 		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+}
+
+func TestRunFindJSONReportsSnapshotReadSource(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	previousNewReader := backendNewReader
+	t.Cleanup(func() {
+		backendNewReader = previousNewReader
+	})
+	backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
+		return stubMetadataReader{
+			items: []domain.Item{{Key: "SNAP1", ItemType: "journalArticle", Title: "Snapshot Item"}},
+			meta:  backend.ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true},
+		}, nil
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
+	if meta["read_source"] != "snapshot" || meta["sqlite_fallback"] != true {
+		t.Fatalf("unexpected snapshot meta: %#v", meta)
+	}
+}
+
+func TestRunFindTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	previousNewReader := backendNewReader
+	t.Cleanup(func() {
+		backendNewReader = previousNewReader
+	})
+	backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
+		return stubMetadataReader{
+			items: []domain.Item{{Key: "SNAP1", ItemType: "journalArticle", Title: "Snapshot Item"}},
+			meta:  backend.ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true},
+		}, nil
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "using snapshot fallback") {
+		t.Fatalf("expected snapshot warning in stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "SNAP1") {
+		t.Fatalf("expected find output to include item, got %q", stdout.String())
+	}
+}
+
+func TestRunFindLocalJSONUsesSnapshotFallbackUnderRealLock(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+	t.Setenv("ZOT_LOCAL_BUSY_TIMEOUT_MS", "25")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
+	buildLocalFindFixture(t, sqlitePath, storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stopHelper := startSQLiteLockHelper(t, sqlitePath)
+	defer stopHelper()
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "mixed", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
+	if meta["read_source"] != "snapshot" || meta["sqlite_fallback"] != true {
+		t.Fatalf("unexpected snapshot meta: %#v", meta)
 	}
 }
 
@@ -1263,6 +1512,126 @@ func TestRunExportCSLJSONLocalByCollection(t *testing.T) {
 	ids := []string{payload[0].(map[string]any)["id"].(string), payload[1].(map[string]any)["id"].(string)}
 	if !(ids[0] == "ITEM1234" && ids[1] == "ART67890") {
 		t.Fatalf("unexpected collection ids: %#v", ids)
+	}
+}
+
+func TestRunExportCSLJSONTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	previousLocalExportReader := newLocalExportReader
+	t.Cleanup(func() {
+		newLocalExportReader = previousLocalExportReader
+	})
+	newLocalExportReader = func(config.Config) (localExportReader, error) {
+		return stubLocalExportReader{
+			keys: []string{"SNAP1"},
+			payload: []map[string]any{
+				{"id": "SNAP1", "title": "Snapshot Export"},
+			},
+			meta: backend.ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true},
+		}, nil
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"export", "--item-key", "SNAP1", "--format", "csljson"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "using snapshot fallback") {
+		t.Fatalf("expected snapshot warning in stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "\"id\": \"SNAP1\"") {
+		t.Fatalf("expected export output to include item id, got %q", stdout.String())
+	}
+}
+
+func TestRunShowTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	previousNewReader := backendNewReader
+	t.Cleanup(func() {
+		backendNewReader = previousNewReader
+	})
+	backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
+		return stubMetadataReader{
+			item: domain.Item{Key: "SNAP1", ItemType: "journalArticle", Title: "Snapshot Item"},
+			meta: backend.ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true},
+		}, nil
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"show", "SNAP1"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "using snapshot fallback") {
+		t.Fatalf("expected snapshot warning in stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Key: SNAP1") {
+		t.Fatalf("expected show output to include item key, got %q", stdout.String())
+	}
+}
+
+func TestRunStatsTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	previousNewReader := backendNewReader
+	t.Cleanup(func() {
+		backendNewReader = previousNewReader
+	})
+	backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
+		return stubMetadataReader{
+			stats: backend.LibraryStats{LibraryType: "user", LibraryID: "123456", TotalItems: 2},
+			meta:  backend.ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true},
+		}, nil
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"stats"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "using snapshot fallback") {
+		t.Fatalf("expected snapshot warning in stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "items=2") {
+		t.Fatalf("expected stats output to include items count, got %q", stdout.String())
+	}
+}
+
+func TestRunRelateTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	previousNewReader := backendNewReader
+	t.Cleanup(func() {
+		backendNewReader = previousNewReader
+	})
+	backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
+		return stubMetadataReader{
+			relations: []domain.Relation{{Predicate: "dc:relation", Direction: "outgoing", Target: domain.ItemRef{Key: "SNAP2"}}},
+			meta:      backend.ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true},
+		}, nil
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"relate", "SNAP1"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "using snapshot fallback") {
+		t.Fatalf("expected snapshot warning in stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Explicit Relations: 1") {
+		t.Fatalf("expected relate output to include relation count, got %q", stdout.String())
 	}
 }
 

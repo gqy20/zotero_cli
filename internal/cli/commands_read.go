@@ -11,6 +11,17 @@ import (
 	"zotero_cli/internal/zoteroapi"
 )
 
+type localExportReader interface {
+	FindItems(ctx context.Context, opts backend.FindOptions) ([]domain.Item, error)
+	CollectionItemKeys(ctx context.Context, collectionKey string, limit int) ([]string, error)
+	ExportItemsCSLJSON(ctx context.Context, keys []string) ([]map[string]any, error)
+	ConsumeReadMetadata() backend.ReadMetadata
+}
+
+var newLocalExportReader = func(cfg config.Config) (localExportReader, error) {
+	return backend.NewLocalReader(cfg)
+}
+
 func runFind(args []string) int {
 	if isHelpOnly(args) {
 		return printCommandUsage(usageFind)
@@ -55,6 +66,7 @@ func runFind(args []string) int {
 			Meta:    meta,
 		})
 	}
+	warnIfSnapshotRead(consumeReaderReadMetadata(reader))
 
 	if opts.Full || len(opts.IncludeFields) > 0 {
 		for index, item := range items {
@@ -104,6 +116,7 @@ func runStats(args []string) int {
 		appendReadMetadata(meta, reader)
 		return writeJSON(jsonResponse{OK: true, Command: "stats", Data: stats, Meta: meta})
 	}
+	warnIfSnapshotRead(consumeReaderReadMetadata(reader))
 	fmt.Fprintf(stdout, "library=%s:%s\n", stats.LibraryType, stats.LibraryID)
 	fmt.Fprintf(stdout, "items=%d\n", stats.TotalItems)
 	fmt.Fprintf(stdout, "collections=%d\n", stats.TotalCollections)
@@ -165,6 +178,7 @@ func runShow(args []string) int {
 			Meta:    meta,
 		})
 	}
+	warnIfSnapshotRead(consumeReaderReadMetadata(reader))
 
 	fmt.Fprintf(stdout, "Key: %s\n", item.Key)
 	fmt.Fprintf(stdout, "Title: %s\n", item.Title)
@@ -261,6 +275,7 @@ func runRelate(args []string) int {
 		appendReadMetadata(meta, reader)
 		return writeJSON(jsonResponse{OK: true, Command: "relate", Data: relations, Meta: meta})
 	}
+	warnIfSnapshotRead(consumeReaderReadMetadata(reader))
 
 	if len(relations) == 0 {
 		fmt.Fprintf(stdout, "Item: %s\n", key)
@@ -277,11 +292,7 @@ func runRelate(args []string) int {
 }
 
 func appendReadMetadata(meta map[string]any, reader backend.Reader) {
-	reporter, ok := reader.(interface{ ConsumeReadMetadata() backend.ReadMetadata })
-	if !ok {
-		return
-	}
-	appendExplicitReadMetadata(meta, reporter.ConsumeReadMetadata())
+	appendExplicitReadMetadata(meta, consumeReaderReadMetadata(reader))
 }
 
 func appendExplicitReadMetadata(meta map[string]any, readMeta backend.ReadMetadata) {
@@ -291,6 +302,21 @@ func appendExplicitReadMetadata(meta map[string]any, readMeta backend.ReadMetada
 	if readMeta.SQLiteFallback {
 		meta["sqlite_fallback"] = true
 	}
+}
+
+func consumeReaderReadMetadata(reader backend.Reader) backend.ReadMetadata {
+	reporter, ok := reader.(interface{ ConsumeReadMetadata() backend.ReadMetadata })
+	if !ok {
+		return backend.ReadMetadata{}
+	}
+	return reporter.ConsumeReadMetadata()
+}
+
+func warnIfSnapshotRead(readMeta backend.ReadMetadata) {
+	if readMeta.ReadSource != "snapshot" && !readMeta.SQLiteFallback {
+		return
+	}
+	fmt.Fprintln(stderr, "note: using snapshot fallback for local Zotero data")
 }
 
 func relateSummary(ref domain.ItemRef) string {
@@ -394,6 +420,7 @@ func runExport(args []string) int {
 					Meta:    meta,
 				})
 			}
+			warnIfSnapshotRead(readMeta)
 			return writeJSON(result.Data)
 		}
 	}
@@ -455,7 +482,7 @@ func runExport(args []string) int {
 }
 
 func tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, itemKey string, collectionKey string, findOpts zoteroapi.FindOptions) (zoteroapi.ExportResult, backend.ReadMetadata, bool, error) {
-	localReader, err := backend.NewLocalReader(cfg)
+	localReader, err := newLocalExportReader(cfg)
 	if err != nil {
 		if cfg.Mode == "hybrid" {
 			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
