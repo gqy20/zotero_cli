@@ -904,3 +904,76 @@ func TestLocalExtractItemAttachmentTextsIncludesAllPDFAttachments(t *testing.T) 
 		t.Fatalf("ConsumeReadMetadata() = %#v, want primary attachment metadata", meta)
 	}
 }
+
+func TestLocalExtractItemAttachmentTextsPrefersMainPDFOverSupplement(t *testing.T) {
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	suppPath := filepath.Join(storageDir, "ATT456", "supplement.pdf")
+	if err := os.MkdirAll(filepath.Dir(suppPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(suppPath, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mainPath := filepath.Join(storageDir, "ATT123", "paper.pdf")
+	if err := os.MkdirAll(filepath.Dir(mainPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mainPath, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	previous := extractFullTextWithPDFiumFunc
+	t.Cleanup(func() { extractFullTextWithPDFiumFunc = previous })
+	extractFullTextWithPDFiumFunc = func(_ context.Context, _ *LocalReader, attachment domain.Attachment) (fullTextDocument, bool, error) {
+		sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
+		if !ok {
+			return fullTextDocument{}, false, nil
+		}
+		text := "Abstract\nHybrid speciation via inheritance of alternate alleles."
+		if attachment.Key == "ATT456" {
+			text = "Supplementary Information\nAdditional methods and figures."
+		}
+		return fullTextDocument{
+			Text: text,
+			Meta: fullTextCacheMeta{
+				AttachmentKey:   attachment.Key,
+				ResolvedPath:    sourcePath,
+				ContentType:     attachment.ContentType,
+				Extractor:       "pdfium",
+				SourceMtimeUnix: info.ModTime().Unix(),
+				SourceSize:      info.Size(),
+			},
+		}, true, nil
+	}
+
+	reader := &LocalReader{
+		DataDir:          dataDir,
+		StorageDir:       storageDir,
+		FullTextCacheDir: filepath.Join(dataDir, ".zotero_cli", "fulltext"),
+	}
+	item := domain.Item{
+		Key:   "ITEM123",
+		Title: "Hybrid speciation via inheritance of alternate alleles",
+		Attachments: []domain.Attachment{
+			{Key: "ATT456", Title: "Supplementary Information", Filename: "supplement.pdf", ContentType: "application/pdf", ResolvedPath: suppPath, Resolved: true},
+			{Key: "ATT123", Title: "Main Article PDF", Filename: "paper.pdf", ContentType: "application/pdf", ResolvedPath: mainPath, Resolved: true},
+		},
+	}
+
+	result, err := reader.ExtractItemAttachmentTexts(context.Background(), item)
+	if err != nil {
+		t.Fatalf("ExtractItemAttachmentTexts() error = %v", err)
+	}
+	if result.PrimaryAttachmentKey != "ATT123" {
+		t.Fatalf("ExtractItemAttachmentTexts() primary = %q, want ATT123", result.PrimaryAttachmentKey)
+	}
+
+	meta := reader.ConsumeReadMetadata()
+	if meta.FullTextAttachmentKey != "ATT123" {
+		t.Fatalf("ConsumeReadMetadata() = %#v, want ATT123", meta)
+	}
+}
