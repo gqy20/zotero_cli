@@ -88,33 +88,11 @@ func normalizeLocalDate(value string) string {
 }
 
 func stringsJoinFields(value string) string {
-	parts := stringsFields(value)
+	parts := strings.Fields(value)
 	if len(parts) == 0 {
 		return ""
 	}
-	return joinWithSpace(parts)
-}
-
-func stringsFields(value string) []string {
-	return strings.Fields(value)
-}
-
-func joinWithSpace(parts []string) string {
-	if len(parts) == 1 {
-		return parts[0]
-	}
-	result := parts[0]
-	for _, part := range parts[1:] {
-		result += " " + part
-	}
-	return result
-}
-
-func stringsCutPrefix(value string, prefix string) (string, bool) {
-	if len(value) < len(prefix) || value[:len(prefix)] != prefix {
-		return "", false
-	}
-	return value[len(prefix):], true
+	return strings.Join(parts, " ")
 }
 
 func requireDir(path string, label string) error {

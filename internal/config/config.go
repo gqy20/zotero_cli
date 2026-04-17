@@ -108,74 +108,54 @@ func loadEnvConfig() (Config, bool, error) {
 	cfg := Default()
 	found := false
 
-	if value := firstNonEmpty(os.Getenv("ZOT_MODE"), envFile["ZOT_MODE"]); value != "" {
-		cfg.Mode = value
-		found = true
-	}
-	if value := firstNonEmpty(os.Getenv("ZOT_DATA_DIR"), envFile["ZOT_DATA_DIR"]); value != "" {
-		cfg.DataDir = value
-		found = true
-	}
-	if value := firstNonEmpty(os.Getenv("ZOT_LIBRARY_TYPE"), envFile["ZOT_LIBRARY_TYPE"]); value != "" {
-		cfg.LibraryType = value
-		found = true
-	}
-	if value := firstNonEmpty(os.Getenv("ZOT_LIBRARY_ID"), envFile["ZOT_LIBRARY_ID"]); value != "" {
-		cfg.LibraryID = value
-		found = true
-	}
-	if value := firstNonEmpty(os.Getenv("ZOT_API_KEY"), envFile["ZOT_API_KEY"]); value != "" {
-		cfg.APIKey = value
-		found = true
-	}
-	if value := firstNonEmpty(os.Getenv("ZOT_STYLE"), envFile["ZOT_STYLE"]); value != "" {
-		cfg.Style = value
-		found = true
-	}
-	if value := firstNonEmpty(os.Getenv("ZOT_LOCALE"), envFile["ZOT_LOCALE"]); value != "" {
-		cfg.Locale = value
-		found = true
-	}
-	if value := firstNonEmpty(os.Getenv("ZOT_TIMEOUT_SECONDS"), envFile["ZOT_TIMEOUT_SECONDS"]); value != "" {
-		timeout, err := strconv.Atoi(value)
-		if err != nil {
-			return Config{}, false, err
+	type stringField struct{ key string; dst *string }
+	type intField struct{ key string; dst *int }
+	type boolField struct{ key string; dst *bool }
+
+	for _, f := range []stringField{
+		{"ZOT_MODE", &cfg.Mode},
+		{"ZOT_DATA_DIR", &cfg.DataDir},
+		{"ZOT_LIBRARY_TYPE", &cfg.LibraryType},
+		{"ZOT_LIBRARY_ID", &cfg.LibraryID},
+		{"ZOT_API_KEY", &cfg.APIKey},
+		{"ZOT_STYLE", &cfg.Style},
+		{"ZOT_LOCALE", &cfg.Locale},
+	} {
+		if value := firstNonEmpty(os.Getenv(f.key), envFile[f.key]); value != "" {
+			*f.dst = value
+			found = true
 		}
-		cfg.TimeoutSeconds = timeout
-		found = true
 	}
-	if value := firstNonEmpty(os.Getenv("ZOT_RETRY_MAX_ATTEMPTS"), envFile["ZOT_RETRY_MAX_ATTEMPTS"]); value != "" {
-		attempts, err := strconv.Atoi(value)
-		if err != nil {
-			return Config{}, false, err
+
+	for _, f := range []intField{
+		{"ZOT_TIMEOUT_SECONDS", &cfg.TimeoutSeconds},
+		{"ZOT_RETRY_MAX_ATTEMPTS", &cfg.RetryMaxAttempts},
+		{"ZOT_RETRY_BASE_DELAY_MS", &cfg.RetryBaseDelayMilliseconds},
+	} {
+		if value := firstNonEmpty(os.Getenv(f.key), envFile[f.key]); value != "" {
+			n, err := strconv.Atoi(value)
+			if err != nil {
+				return Config{}, false, err
+			}
+			*f.dst = n
+			found = true
 		}
-		cfg.RetryMaxAttempts = attempts
-		found = true
 	}
-	if value := firstNonEmpty(os.Getenv("ZOT_RETRY_BASE_DELAY_MS"), envFile["ZOT_RETRY_BASE_DELAY_MS"]); value != "" {
-		delay, err := strconv.Atoi(value)
-		if err != nil {
-			return Config{}, false, err
+
+	for _, f := range []boolField{
+		{"ZOT_ALLOW_WRITE", &cfg.AllowWrite},
+		{"ZOT_ALLOW_DELETE", &cfg.AllowDelete},
+	} {
+		if value := firstNonEmpty(os.Getenv(f.key), envFile[f.key]); value != "" {
+			b, err := parseBool(value)
+			if err != nil {
+				return Config{}, false, err
+			}
+			*f.dst = b
+			found = true
 		}
-		cfg.RetryBaseDelayMilliseconds = delay
-		found = true
 	}
-	if value := firstNonEmpty(os.Getenv("ZOT_ALLOW_WRITE"), envFile["ZOT_ALLOW_WRITE"]); value != "" {
-		parsed, err := parseBool(value)
-		if err != nil {
-			return Config{}, false, err
-		}
-		cfg.AllowWrite = parsed
-		found = true
-	}
-	if value := firstNonEmpty(os.Getenv("ZOT_ALLOW_DELETE"), envFile["ZOT_ALLOW_DELETE"]); value != "" {
-		parsed, err := parseBool(value)
-		if err != nil {
-			return Config{}, false, err
-		}
-		cfg.AllowDelete = parsed
-		found = true
-	}
+
 	return cfg, found, nil
 }
 

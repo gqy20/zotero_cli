@@ -437,7 +437,7 @@ func (r *LocalReader) resolveAttachmentPath(key string, zoteroPath string, filen
 	if zoteroPath == "" {
 		return "", false
 	}
-	if after, ok := stringsCutPrefix(zoteroPath, "storage:"); ok {
+	if after, ok := strings.CutPrefix(zoteroPath, "storage:"); ok {
 		name := filename
 		if name == "" {
 			name = path.Base(after)
@@ -450,7 +450,7 @@ func (r *LocalReader) resolveAttachmentPath(key string, zoteroPath string, filen
 			return resolved, true
 		}
 	}
-	if after, ok := stringsCutPrefix(zoteroPath, "attachments:"); ok && r.AttachmentBaseDir != "" {
+	if after, ok := strings.CutPrefix(zoteroPath, "attachments:"); ok && r.AttachmentBaseDir != "" {
 		resolved := filepath.Join(r.AttachmentBaseDir, filepath.FromSlash(after))
 		if _, err := os.Stat(resolved); err == nil {
 			return resolved, true

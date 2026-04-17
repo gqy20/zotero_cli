@@ -10,7 +10,14 @@ import (
 	"zotero_cli/internal/zoteroapi"
 )
 
-func parseFindArgs(args []string) (backend.FindOptions, bool, bool, bool, error) {
+type findParsedArgs struct {
+	Opts          backend.FindOptions
+	JSONOutput    bool
+	Snippet       bool
+	QueryProvided bool
+}
+
+func parseFindArgs(args []string) (findParsedArgs, error) {
 	opts := backend.FindOptions{}
 	jsonOutput := false
 	snippet := false
@@ -33,13 +40,13 @@ func parseFindArgs(args []string) (backend.FindOptions, bool, bool, bool, error)
 			opts.Full = true
 		case "--item-type":
 			if i+1 >= len(args) {
-				return backend.FindOptions{}, false, false, false, errors.New("missing value for --item-type")
+				return findParsedArgs{}, fmt.Errorf("missing value for --item-type")
 			}
 			i++
 			opts.ItemType = args[i]
 		case "--tag":
 			if i+1 >= len(args) {
-				return backend.FindOptions{}, false, false, false, errors.New("missing value for --tag")
+				return findParsedArgs{}, fmt.Errorf("missing value for --tag")
 			}
 			i++
 			opts.Tags = append(opts.Tags, args[i])
@@ -47,87 +54,87 @@ func parseFindArgs(args []string) (backend.FindOptions, bool, bool, bool, error)
 			opts.TagAny = true
 		case "--include-fields":
 			if i+1 >= len(args) {
-				return backend.FindOptions{}, false, false, false, errors.New("missing value for --include-fields")
+				return findParsedArgs{}, fmt.Errorf("missing value for --include-fields")
 			}
 			i++
 			fields, err := parseFindIncludeFields(args[i])
 			if err != nil {
-				return backend.FindOptions{}, false, false, false, err
+				return findParsedArgs{}, err
 			}
 			opts.IncludeFields = append(opts.IncludeFields, fields...)
 		case "--date-after":
 			if i+1 >= len(args) {
-				return backend.FindOptions{}, false, false, false, errors.New("missing value for --date-after")
+				return findParsedArgs{}, fmt.Errorf("missing value for --date-after")
 			}
 			i++
 			opts.DateAfter = strings.TrimSpace(args[i])
 		case "--date-before":
 			if i+1 >= len(args) {
-				return backend.FindOptions{}, false, false, false, errors.New("missing value for --date-before")
+				return findParsedArgs{}, fmt.Errorf("missing value for --date-before")
 			}
 			i++
 			opts.DateBefore = strings.TrimSpace(args[i])
 		case "--limit":
 			if i+1 >= len(args) {
-				return backend.FindOptions{}, false, false, false, errors.New("missing value for --limit")
+				return findParsedArgs{}, fmt.Errorf("missing value for --limit")
 			}
 			i++
 			limit, err := strconv.Atoi(args[i])
 			if err != nil || limit <= 0 {
-				return backend.FindOptions{}, false, false, false, errors.New("invalid value for --limit")
+				return findParsedArgs{}, fmt.Errorf("invalid value for --limit")
 			}
 			opts.Limit = limit
 		case "--start":
 			if i+1 >= len(args) {
-				return backend.FindOptions{}, false, false, false, errors.New("missing value for --start")
+				return findParsedArgs{}, fmt.Errorf("missing value for --start")
 			}
 			i++
 			start, err := strconv.Atoi(args[i])
 			if err != nil || start < 0 {
-				return backend.FindOptions{}, false, false, false, errors.New("invalid value for --start")
+				return findParsedArgs{}, fmt.Errorf("invalid value for --start")
 			}
 			opts.Start = start
 		case "--sort":
 			if i+1 >= len(args) {
-				return backend.FindOptions{}, false, false, false, errors.New("missing value for --sort")
+				return findParsedArgs{}, fmt.Errorf("missing value for --sort")
 			}
 			i++
 			opts.Sort = args[i]
 		case "--direction":
 			if i+1 >= len(args) {
-				return backend.FindOptions{}, false, false, false, errors.New("missing value for --direction")
+				return findParsedArgs{}, fmt.Errorf("missing value for --direction")
 			}
 			i++
 			if args[i] != "asc" && args[i] != "desc" {
-				return backend.FindOptions{}, false, false, false, errors.New("invalid value for --direction")
+				return findParsedArgs{}, fmt.Errorf("invalid value for --direction")
 			}
 			opts.Direction = args[i]
 		case "--qmode":
 			if i+1 >= len(args) {
-				return backend.FindOptions{}, false, false, false, errors.New("missing value for --qmode")
+				return findParsedArgs{}, fmt.Errorf("missing value for --qmode")
 			}
 			i++
 			if args[i] != "titleCreatorYear" && args[i] != "everything" {
-				return backend.FindOptions{}, false, false, false, errors.New("invalid value for --qmode")
+				return findParsedArgs{}, fmt.Errorf("invalid value for --qmode")
 			}
 			opts.QMode = args[i]
 		case "--has-pdf":
 			opts.HasPDF = true
 		case "--attachment-name":
 			if i+1 >= len(args) {
-				return backend.FindOptions{}, false, false, false, errors.New("missing value for --attachment-name")
+				return findParsedArgs{}, fmt.Errorf("missing value for --attachment-name")
 			}
 			i++
 			opts.AttachmentName = strings.TrimSpace(args[i])
 		case "--attachment-path":
 			if i+1 >= len(args) {
-				return backend.FindOptions{}, false, false, false, errors.New("missing value for --attachment-path")
+				return findParsedArgs{}, fmt.Errorf("missing value for --attachment-path")
 			}
 			i++
 			opts.AttachmentPath = strings.TrimSpace(args[i])
 		case "--attachment-type":
 			if i+1 >= len(args) {
-				return backend.FindOptions{}, false, false, false, errors.New("missing value for --attachment-type")
+				return findParsedArgs{}, fmt.Errorf("missing value for --attachment-type")
 			}
 			i++
 			opts.AttachmentType = strings.TrimSpace(args[i])
@@ -144,7 +151,7 @@ func parseFindArgs(args []string) (backend.FindOptions, bool, bool, bool, error)
 	}
 
 	opts.Query = strings.TrimSpace(strings.Join(queryParts, " "))
-	return opts, jsonOutput, snippet, queryProvided, nil
+	return findParsedArgs{Opts: opts, JSONOutput: jsonOutput, Snippet: snippet, QueryProvided: queryProvided}, nil
 }
 
 func parseFindIncludeFields(value string) ([]string, error) {
@@ -189,7 +196,15 @@ func parseFindIncludeFields(value string) ([]string, error) {
 	return fields, nil
 }
 
-func parseExportArgs(args []string) (string, string, zoteroapi.FindOptions, string, bool, error) {
+type exportParsedArgs struct {
+	ItemKey       string
+	CollectionKey string
+	FindOpts      zoteroapi.FindOptions
+	Format        string
+	JSONOutput    bool
+}
+
+func parseExportArgs(args []string) (exportParsedArgs, error) {
 	var itemKey string
 	var collectionKey string
 	var format string
@@ -203,30 +218,30 @@ func parseExportArgs(args []string) (string, string, zoteroapi.FindOptions, stri
 			jsonOutput = true
 		case "--item-key":
 			if i+1 >= len(args) {
-				return "", "", zoteroapi.FindOptions{}, "", false, errors.New("missing value for --item-key")
+				return exportParsedArgs{}, fmt.Errorf("missing value for --item-key")
 			}
 			i++
 			itemKey = args[i]
 		case "--collection":
 			if i+1 >= len(args) {
-				return "", "", zoteroapi.FindOptions{}, "", false, errors.New("missing value for --collection")
+				return exportParsedArgs{}, fmt.Errorf("missing value for --collection")
 			}
 			i++
 			collectionKey = args[i]
 		case "--format":
 			if i+1 >= len(args) {
-				return "", "", zoteroapi.FindOptions{}, "", false, errors.New("missing value for --format")
+				return exportParsedArgs{}, fmt.Errorf("missing value for --format")
 			}
 			i++
 			format = args[i]
 		case "--limit":
 			if i+1 >= len(args) {
-				return "", "", zoteroapi.FindOptions{}, "", false, errors.New("missing value for --limit")
+				return exportParsedArgs{}, fmt.Errorf("missing value for --limit")
 			}
 			i++
 			limit, err := strconv.Atoi(args[i])
 			if err != nil || limit <= 0 {
-				return "", "", zoteroapi.FindOptions{}, "", false, errors.New("invalid value for --limit")
+				return exportParsedArgs{}, fmt.Errorf("invalid value for --limit")
 			}
 			findOpts.Limit = limit
 		default:
@@ -245,21 +260,21 @@ func parseExportArgs(args []string) (string, string, zoteroapi.FindOptions, stri
 		sourceCount++
 	}
 	if sourceCount > 1 {
-		return "", "", zoteroapi.FindOptions{}, "", false, errors.New("cannot combine query, --item-key, and --collection")
+		return exportParsedArgs{}, fmt.Errorf("cannot combine query, --item-key, and --collection")
 	}
 
 	if itemKey == "" && collectionKey == "" {
 		findOpts.Query = strings.TrimSpace(strings.Join(queryParts, " "))
 		if findOpts.Query == "" {
-			return "", "", zoteroapi.FindOptions{}, "", false, errors.New("missing query, --item-key, or --collection")
+			return exportParsedArgs{}, fmt.Errorf("missing query, --item-key, or --collection")
 		}
 	}
 
 	if format != "" && format != "bib" && format != "bibtex" && format != "biblatex" && format != "csljson" && format != "ris" {
-		return "", "", zoteroapi.FindOptions{}, "", false, errors.New("unsupported format")
+		return exportParsedArgs{}, fmt.Errorf("unsupported format")
 	}
 
-	return itemKey, collectionKey, findOpts, format, jsonOutput, nil
+	return exportParsedArgs{ItemKey: itemKey, CollectionKey: collectionKey, FindOpts: findOpts, Format: format, JSONOutput: jsonOutput}, nil
 }
 
 func parseCiteArgs(args []string) (string, zoteroapi.CitationOptions, bool, error) {

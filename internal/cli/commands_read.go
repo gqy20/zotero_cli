@@ -31,12 +31,17 @@ func runFind(args []string) int {
 		return 2
 	}
 
-	opts, jsonOutput, snippet, queryProvided, err := parseFindArgs(args)
+	parsed, err := parseFindArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		fmt.Fprintln(stderr, usageFind)
 		return 2
 	}
+	opts := parsed.Opts
+	jsonOutput := parsed.JSONOutput
+	snippet := parsed.Snippet
+	queryProvided := parsed.QueryProvided
+
 	if opts.FullTextAny && !opts.FullText {
 		fmt.Fprintln(stderr, "error: --fulltext-any requires --fulltext")
 		fmt.Fprintln(stderr, usageFind)
@@ -478,12 +483,17 @@ func runExport(args []string) int {
 		return 2
 	}
 
-	itemKey, collectionKey, findOpts, format, jsonOutput, err := parseExportArgs(args)
+	exportParsed, err := parseExportArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		fmt.Fprintln(stderr, usageExport)
 		return 2
 	}
+	itemKey := exportParsed.ItemKey
+	collectionKey := exportParsed.CollectionKey
+	findOpts := exportParsed.FindOpts
+	format := exportParsed.Format
+	jsonOutput := exportParsed.JSONOutput
 
 	cfg, exitCode := loadConfig()
 	if exitCode != 0 {
