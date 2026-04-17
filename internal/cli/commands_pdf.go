@@ -9,29 +9,29 @@ import (
 	"zotero_cli/internal/domain"
 )
 
-func runExtractText(args []string) int {
+func (c *CLI) runExtractText(args []string) int {
 	if isHelpOnly(args) {
-		return printCommandUsage(usageExtractText)
+		return c.printCommandUsage(usageExtractText)
 	}
 
-	itemKey, jsonOutput, ok := parseExtractTextArgs(args)
+	itemKey, jsonOutput, ok := c.parseExtractTextArgs(args)
 	if !ok {
 		return 2
 	}
 
-	cfg, exitCode := loadConfig()
+	cfg, exitCode := c.loadConfig()
 	if exitCode != 0 {
 		return exitCode
 	}
 
-	localReader, err := defaultCLI.newLocalReader(cfg)
+	localReader, err := c.newLocalReader(cfg)
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	item, err := localReader.GetItem(context.Background(), itemKey)
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 	if jsonOutput {
 		var (
@@ -43,21 +43,21 @@ func runExtractText(args []string) int {
 		} else {
 			textReader, ok := localReader.(fullTextReader)
 			if !ok {
-				return printErr(fmt.Errorf("extract-text requires local full-text extraction support"))
+				return c.printErr(fmt.Errorf("extract-text requires local full-text extraction support"))
 			}
 			var text string
 			text, err = textReader.ExtractItemFullText(context.Background(), item)
 			result = backend.ItemFullTextResult{Text: text}
 		}
 		if err != nil {
-			return printErr(err)
+			return c.printErr(err)
 		}
 
-		readMeta := consumeReaderReadMetadata(localReader)
+		readMeta := c.consumeReaderReadMetadata(localReader)
 		meta := map[string]any{
 			"total": len([]rune(result.Text)),
 		}
-		appendExplicitReadMetadata(meta, readMeta)
+		c.appendExplicitReadMetadata(meta, readMeta)
 		attachments := make([]map[string]any, 0, len(result.Attachments))
 		for _, attachment := range result.Attachments {
 			entry := map[string]any{
@@ -92,7 +92,7 @@ func runExtractText(args []string) int {
 		if len(attachments) > 0 {
 			data["attachments"] = attachments
 		}
-		return writeJSON(jsonResponse{
+		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "extract-text",
 			Data:    data,
@@ -102,19 +102,19 @@ func runExtractText(args []string) int {
 
 	textReader, ok := localReader.(fullTextReader)
 	if !ok {
-		return printErr(fmt.Errorf("extract-text requires local full-text extraction support"))
+		return c.printErr(fmt.Errorf("extract-text requires local full-text extraction support"))
 	}
 	text, err := textReader.ExtractItemFullText(context.Background(), item)
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
-	readMeta := consumeReaderReadMetadata(localReader)
-	warnIfSnapshotRead(readMeta)
-	fmt.Fprintln(defaultCLI.stdout, text)
+	readMeta := c.consumeReaderReadMetadata(localReader)
+	c.warnIfSnapshotRead(readMeta)
+	fmt.Fprintln(c.stdout, text)
 	return 0
 }
 
-func parseExtractTextArgs(args []string) (string, bool, bool) {
+func (c *CLI) parseExtractTextArgs(args []string) (string, bool, bool) {
 	itemKey := ""
 	jsonOutput := false
 
@@ -124,7 +124,7 @@ func parseExtractTextArgs(args []string) (string, bool, bool) {
 			jsonOutput = true
 		default:
 			if strings.HasPrefix(arg, "--") || itemKey != "" {
-				fmt.Fprintln(defaultCLI.stderr, usageExtractText)
+				fmt.Fprintln(c.stderr, usageExtractText)
 				return "", false, false
 			}
 			itemKey = arg
@@ -132,7 +132,7 @@ func parseExtractTextArgs(args []string) (string, bool, bool) {
 	}
 
 	if strings.TrimSpace(itemKey) == "" {
-		fmt.Fprintln(defaultCLI.stderr, usageExtractText)
+		fmt.Fprintln(c.stderr, usageExtractText)
 		return "", false, false
 	}
 	return itemKey, jsonOutput, true

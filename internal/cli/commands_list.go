@@ -7,20 +7,20 @@ import (
 	"zotero_cli/internal/zoteroapi"
 )
 
-func runCollections(args []string) int {
+func (c *CLI) runCollections(args []string) int {
 	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageCollections)
 	if !ok {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	collections, err := client.ListCollections(context.Background())
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	if limit > 0 && len(collections) > limit {
@@ -32,7 +32,7 @@ func runCollections(args []string) int {
 			"total":       len(collections),
 			"read_source": "web",
 		}
-		return writeJSON(jsonResponse{
+		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "collections",
 			Data:    collections,
@@ -41,12 +41,12 @@ func runCollections(args []string) int {
 	}
 
 	if len(collections) == 0 {
-		fmt.Fprintln(defaultCLI.stdout, "no collections found")
+		fmt.Fprintln(c.stdout, "no collections found")
 		return 0
 	}
 
 	for _, collection := range collections {
-		fmt.Fprintf(defaultCLI.stdout, "%-10s  %-20s  items=%d  children=%d\n",
+		fmt.Fprintf(c.stdout, "%-10s  %-20s  items=%d  children=%d\n",
 			collection.Key,
 			collection.Name,
 			collection.NumItems,
@@ -56,20 +56,20 @@ func runCollections(args []string) int {
 	return 0
 }
 
-func runNotes(args []string) int {
+func (c *CLI) runNotes(args []string) int {
 	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageNotes)
 	if !ok {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	notes, err := client.ListNotes(context.Background())
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	if limit > 0 && len(notes) > limit {
@@ -81,7 +81,7 @@ func runNotes(args []string) int {
 			"total":       len(notes),
 			"read_source": "web",
 		}
-		return writeJSON(jsonResponse{
+		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "notes",
 			Data:    notes,
@@ -91,30 +91,30 @@ func runNotes(args []string) int {
 
 	visible := filterVisibleNotes(notes)
 	if len(visible) == 0 {
-		fmt.Fprintln(defaultCLI.stdout, "no readable notes found in text mode; use --json to inspect all notes")
+		fmt.Fprintln(c.stdout, "no readable notes found in text mode; use --json to inspect all notes")
 		return 0
 	}
 
 	for _, note := range visible {
-		fmt.Fprintf(defaultCLI.stdout, "%-10s  %s\n", note.Key, notePreview(note.Content))
+		fmt.Fprintf(c.stdout, "%-10s  %s\n", note.Key, notePreview(note.Content))
 	}
 	return 0
 }
 
-func runTags(args []string) int {
+func (c *CLI) runTags(args []string) int {
 	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageTags)
 	if !ok {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	tags, err := client.ListTags(context.Background())
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	if limit > 0 && len(tags) > limit {
@@ -122,7 +122,7 @@ func runTags(args []string) int {
 	}
 
 	if jsonOutput {
-		return writeJSON(jsonResponse{
+		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "tags",
 			Data:    tags,
@@ -134,30 +134,30 @@ func runTags(args []string) int {
 	}
 
 	if len(tags) == 0 {
-		fmt.Fprintln(defaultCLI.stdout, "no tags found")
+		fmt.Fprintln(c.stdout, "no tags found")
 		return 0
 	}
 
 	for _, tag := range tags {
-		fmt.Fprintf(defaultCLI.stdout, "%-20s  items=%d\n", tag.Name, tag.NumItems)
+		fmt.Fprintf(c.stdout, "%-20s  items=%d\n", tag.Name, tag.NumItems)
 	}
 	return 0
 }
 
-func runSearches(args []string) int {
+func (c *CLI) runSearches(args []string) int {
 	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageSearches)
 	if !ok {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	searches, err := client.ListSearches(context.Background())
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	if limit > 0 && len(searches) > limit {
@@ -165,7 +165,7 @@ func runSearches(args []string) int {
 	}
 
 	if jsonOutput {
-		return writeJSON(jsonResponse{
+		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "searches",
 			Data:    searches,
@@ -177,34 +177,34 @@ func runSearches(args []string) int {
 	}
 
 	if len(searches) == 0 {
-		fmt.Fprintln(defaultCLI.stdout, "no saved searches found")
+		fmt.Fprintln(c.stdout, "no saved searches found")
 		return 0
 	}
 
 	for _, search := range searches {
-		fmt.Fprintf(defaultCLI.stdout, "%-10s  %-24s  conditions=%d\n", search.Key, search.Name, search.NumConditions)
+		fmt.Fprintf(c.stdout, "%-10s  %-24s  conditions=%d\n", search.Key, search.Name, search.NumConditions)
 	}
 	return 0
 }
 
-func runDeleted(args []string) int {
+func (c *CLI) runDeleted(args []string) int {
 	jsonOutput, ok := parseJSONOnlyArgs(args, usageDeleted)
 	if !ok {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	deleted, err := client.GetDeleted(context.Background())
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	if jsonOutput {
-		return writeJSON(jsonResponse{
+		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "deleted",
 			Data:    deleted,
@@ -215,22 +215,22 @@ func runDeleted(args []string) int {
 		})
 	}
 
-	fmt.Fprintf(defaultCLI.stdout, "collections=%d\n", len(deleted.Collections))
-	fmt.Fprintf(defaultCLI.stdout, "searches=%d\n", len(deleted.Searches))
-	fmt.Fprintf(defaultCLI.stdout, "items=%d\n", len(deleted.Items))
-	fmt.Fprintf(defaultCLI.stdout, "tags=%d\n", len(deleted.Tags))
+	fmt.Fprintf(c.stdout, "collections=%d\n", len(deleted.Collections))
+	fmt.Fprintf(c.stdout, "searches=%d\n", len(deleted.Searches))
+	fmt.Fprintf(c.stdout, "items=%d\n", len(deleted.Items))
+	fmt.Fprintf(c.stdout, "tags=%d\n", len(deleted.Tags))
 	return 0
 }
 
-func runVersions(args []string) int {
+func (c *CLI) runVersions(args []string) int {
 	objectType, opts, jsonOutput, err := parseVersionsArgs(args)
 	if err != nil {
-		fmt.Fprintln(defaultCLI.stderr, "error:", err)
-		fmt.Fprintln(defaultCLI.stderr, usageVersions)
+		fmt.Fprintln(c.stderr, "error:", err)
+		fmt.Fprintln(c.stderr, usageVersions)
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
@@ -242,7 +242,7 @@ func runVersions(args []string) int {
 		IfModifiedSinceVersion: opts.IfModifiedSinceVersion,
 	})
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	if jsonOutput {
@@ -257,7 +257,7 @@ func runVersions(args []string) int {
 			meta["not_modified"] = true
 		}
 
-		return writeJSON(jsonResponse{
+		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "versions",
 			Data:    result.Versions,
@@ -266,192 +266,192 @@ func runVersions(args []string) int {
 	}
 
 	if result.NotModified {
-		fmt.Fprintf(defaultCLI.stdout, "not modified since version %d\n", opts.IfModifiedSinceVersion)
+		fmt.Fprintf(c.stdout, "not modified since version %d\n", opts.IfModifiedSinceVersion)
 		return 0
 	}
 
 	for key, version := range result.Versions {
-		fmt.Fprintf(defaultCLI.stdout, "%-10s  %d\n", key, version)
+		fmt.Fprintf(c.stdout, "%-10s  %d\n", key, version)
 	}
 	return 0
 }
 
-func runItemTypes(args []string) int {
+func (c *CLI) runItemTypes(args []string) int {
 	jsonOutput, ok := parseJSONOnlyArgs(args, usageItemTypes)
 	if !ok {
 		return 2
 	}
 
-	cfg, client, exitCode := loadClient()
+	cfg, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	values, err := client.ListItemTypes(context.Background(), cfg.Locale)
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
-	return renderLocalizedValues("item-types", values, jsonOutput)
+	return c.renderLocalizedValues("item-types", values, jsonOutput)
 }
 
-func runItemFields(args []string) int {
+func (c *CLI) runItemFields(args []string) int {
 	jsonOutput, ok := parseJSONOnlyArgs(args, usageItemFields)
 	if !ok {
 		return 2
 	}
 
-	cfg, client, exitCode := loadClient()
+	cfg, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	values, err := client.ListItemFields(context.Background(), cfg.Locale)
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
-	return renderLocalizedValues("item-fields", values, jsonOutput)
+	return c.renderLocalizedValues("item-fields", values, jsonOutput)
 }
 
-func runCreatorFields(args []string) int {
+func (c *CLI) runCreatorFields(args []string) int {
 	jsonOutput, ok := parseJSONOnlyArgs(args, usageCreatorFields)
 	if !ok {
 		return 2
 	}
 
-	cfg, client, exitCode := loadClient()
+	cfg, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	values, err := client.ListCreatorFields(context.Background(), cfg.Locale)
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
-	return renderLocalizedValues("creator-fields", values, jsonOutput)
+	return c.renderLocalizedValues("creator-fields", values, jsonOutput)
 }
 
-func runItemTypeFields(args []string) int {
+func (c *CLI) runItemTypeFields(args []string) int {
 	itemType, jsonOutput, ok := parseSingleValueCommand(args, usageItemTypeFields)
 	if !ok {
 		return 2
 	}
 
-	cfg, client, exitCode := loadClient()
+	cfg, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	values, err := client.ListItemTypeFields(context.Background(), itemType, cfg.Locale)
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
-	return renderLocalizedValues("item-type-fields", values, jsonOutput)
+	return c.renderLocalizedValues("item-type-fields", values, jsonOutput)
 }
 
-func runItemTypeCreatorTypes(args []string) int {
+func (c *CLI) runItemTypeCreatorTypes(args []string) int {
 	itemType, jsonOutput, ok := parseSingleValueCommand(args, usageItemTypeCreatorTypes)
 	if !ok {
 		return 2
 	}
 
-	cfg, client, exitCode := loadClient()
+	cfg, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	values, err := client.ListItemTypeCreatorTypes(context.Background(), itemType, cfg.Locale)
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
-	return renderLocalizedValues("item-type-creator-types", values, jsonOutput)
+	return c.renderLocalizedValues("item-type-creator-types", values, jsonOutput)
 }
 
-func runItemTemplate(args []string) int {
+func (c *CLI) runItemTemplate(args []string) int {
 	itemType, jsonOutput, ok := parseSingleValueCommand(args, usageItemTemplate)
 	if !ok {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	template, err := client.GetItemTemplate(context.Background(), itemType)
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	if jsonOutput {
-		return writeJSON(jsonResponse{
+		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "item-template",
 			Data:    template,
 		})
 	}
 
-	return writeJSON(template)
+	return c.writeJSON(template)
 }
 
-func runKeyInfo(args []string) int {
+func (c *CLI) runKeyInfo(args []string) int {
 	key, jsonOutput, ok := parseSingleValueCommand(args, usageKeyInfo)
 	if !ok {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	info, err := client.GetKeyInfo(context.Background(), key)
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	if jsonOutput {
-		return writeJSON(jsonResponse{
+		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "key-info",
 			Data:    info,
 		})
 	}
 
-	fmt.Fprintf(defaultCLI.stdout, "user_id=%d\n", info.UserID)
+	fmt.Fprintf(c.stdout, "user_id=%d\n", info.UserID)
 	if len(info.Access) > 0 {
-		return writeJSON(info.Access)
+		return c.writeJSON(info.Access)
 	}
 	return 0
 }
 
-func runGroups(args []string) int {
+func (c *CLI) runGroups(args []string) int {
 	jsonOutput, ok := parseJSONOnlyArgs(args, usageGroups)
 	if !ok {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	keyInfo, err := client.GetCurrentKeyInfo(context.Background())
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	groups, err := client.ListGroupsForUser(context.Background(), fmt.Sprintf("%d", keyInfo.UserID))
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	if jsonOutput {
-		return writeJSON(jsonResponse{
+		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "groups",
 			Data:    groups,
@@ -462,34 +462,34 @@ func runGroups(args []string) int {
 	}
 
 	if len(groups) == 0 {
-		fmt.Fprintln(defaultCLI.stdout, "no groups found for the current api key")
+		fmt.Fprintln(c.stdout, "no groups found for the current api key")
 		return 0
 	}
 
 	for _, group := range groups {
-		fmt.Fprintf(defaultCLI.stdout, "%-8d  %s\n", group.ID, group.Name)
+		fmt.Fprintf(c.stdout, "%-8d  %s\n", group.ID, group.Name)
 	}
 	return 0
 }
 
-func runTrash(args []string) int {
+func (c *CLI) runTrash(args []string) int {
 	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageTrash)
 	if !ok {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	items, err := client.ListTrashItems(context.Background(), zoteroapi.FindOptions{Limit: limit})
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	if jsonOutput {
-		return writeJSON(jsonResponse{
+		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "trash",
 			Data:    items,
@@ -501,12 +501,12 @@ func runTrash(args []string) int {
 	}
 
 	if len(items) == 0 {
-		fmt.Fprintln(defaultCLI.stdout, "trash is empty")
+		fmt.Fprintln(c.stdout, "trash is empty")
 		return 0
 	}
 
 	for _, item := range items {
-		fmt.Fprintf(defaultCLI.stdout, "%-10s  %-16s  %-6s  %-18s  %s\n",
+		fmt.Fprintf(c.stdout, "%-10s  %-16s  %-6s  %-18s  %s\n",
 			item.Key,
 			item.ItemType,
 			shortDate(item.Date),
@@ -517,24 +517,24 @@ func runTrash(args []string) int {
 	return 0
 }
 
-func runCollectionsTop(args []string) int {
+func (c *CLI) runCollectionsTop(args []string) int {
 	jsonOutput, ok := parseJSONOnlyArgs(args, usageCollectionsTop)
 	if !ok {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	collections, err := client.ListTopCollections(context.Background())
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	if jsonOutput {
-		return writeJSON(jsonResponse{
+		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "collections-top",
 			Data:    collections,
@@ -546,12 +546,12 @@ func runCollectionsTop(args []string) int {
 	}
 
 	if len(collections) == 0 {
-		fmt.Fprintln(defaultCLI.stdout, "no top-level collections found")
+		fmt.Fprintln(c.stdout, "no top-level collections found")
 		return 0
 	}
 
 	for _, collection := range collections {
-		fmt.Fprintf(defaultCLI.stdout, "%-10s  %-20s  items=%d  children=%d\n",
+		fmt.Fprintf(c.stdout, "%-10s  %-20s  items=%d  children=%d\n",
 			collection.Key,
 			collection.Name,
 			collection.NumItems,
@@ -561,24 +561,24 @@ func runCollectionsTop(args []string) int {
 	return 0
 }
 
-func runPublications(args []string) int {
+func (c *CLI) runPublications(args []string) int {
 	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usagePublications)
 	if !ok {
 		return 2
 	}
 
-	_, client, exitCode := loadClient()
+	_, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
 	}
 
 	items, err := client.ListPublicationsItems(context.Background(), zoteroapi.FindOptions{Limit: limit})
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	if jsonOutput {
-		return writeJSON(jsonResponse{
+		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "publications",
 			Data:    items,
@@ -590,12 +590,12 @@ func runPublications(args []string) int {
 	}
 
 	if len(items) == 0 {
-		fmt.Fprintln(defaultCLI.stdout, "no publications found")
+		fmt.Fprintln(c.stdout, "no publications found")
 		return 0
 	}
 
 	for _, item := range items {
-		fmt.Fprintf(defaultCLI.stdout, "%-10s  %-16s  %-6s  %-18s  %s\n",
+		fmt.Fprintf(c.stdout, "%-10s  %-16s  %-6s  %-18s  %s\n",
 			item.Key,
 			item.ItemType,
 			shortDate(item.Date),
@@ -606,9 +606,9 @@ func runPublications(args []string) int {
 	return 0
 }
 
-func renderLocalizedValues(command string, values []zoteroapi.LocalizedValue, jsonOutput bool) int {
+func (c *CLI) renderLocalizedValues(command string, values []zoteroapi.LocalizedValue, jsonOutput bool) int {
 	if jsonOutput {
-		return writeJSON(jsonResponse{
+		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: command,
 			Data:    values,
@@ -619,7 +619,7 @@ func renderLocalizedValues(command string, values []zoteroapi.LocalizedValue, js
 	}
 
 	for _, value := range values {
-		fmt.Fprintf(defaultCLI.stdout, "%-18s  %s\n", value.ID, value.Localized)
+		fmt.Fprintf(c.stdout, "%-18s  %s\n", value.ID, value.Localized)
 	}
 	return 0
 }

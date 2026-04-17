@@ -10,26 +10,26 @@ import (
 	"zotero_cli/internal/domain"
 )
 
-func writeJSON(value any) int {
-	enc := json.NewEncoder(defaultCLI.stdout)
+func (c *CLI) writeJSON(value any) int {
+	enc := json.NewEncoder(c.stdout)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(value); err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 	return 0
 }
 
-func renderFindItemDetailed(item domain.Item, opts backend.FindOptions) {
-	fmt.Fprintf(defaultCLI.stdout, "Key: %s\n", item.Key)
-	fmt.Fprintf(defaultCLI.stdout, "Title: %s\n", item.Title)
-	fmt.Fprintf(defaultCLI.stdout, "Type: %s\n", item.ItemType)
+func (c *CLI) renderFindItemDetailed(item domain.Item, opts backend.FindOptions) {
+	fmt.Fprintf(c.stdout, "Key: %s\n", item.Key)
+	fmt.Fprintf(c.stdout, "Title: %s\n", item.Title)
+	fmt.Fprintf(c.stdout, "Type: %s\n", item.ItemType)
 	printDate := item.Date != "" && !fieldIncluded(opts.IncludeFields, "date")
 	printCreators := len(item.Creators) > 0 && !fieldIncluded(opts.IncludeFields, "creators")
 	if printDate {
-		fmt.Fprintf(defaultCLI.stdout, "Date: %s\n", item.Date)
+		fmt.Fprintf(c.stdout, "Date: %s\n", item.Date)
 	}
 	if printCreators {
-		fmt.Fprintf(defaultCLI.stdout, "Creators: %s\n", joinCreatorNames(item.Creators))
+		fmt.Fprintf(c.stdout, "Creators: %s\n", joinCreatorNames(item.Creators))
 	}
 
 	fields := opts.IncludeFields
@@ -41,75 +41,75 @@ func renderFindItemDetailed(item domain.Item, opts backend.FindOptions) {
 		switch field {
 		case "container":
 			if item.Container != "" {
-				fmt.Fprintf(defaultCLI.stdout, "Container: %s\n", item.Container)
+				fmt.Fprintf(c.stdout, "Container: %s\n", item.Container)
 			}
 		case "version":
 			if item.Version != 0 {
-				fmt.Fprintf(defaultCLI.stdout, "Version: %d\n", item.Version)
+				fmt.Fprintf(c.stdout, "Version: %d\n", item.Version)
 			}
 		case "volume":
 			if item.Volume != "" {
-				fmt.Fprintf(defaultCLI.stdout, "Volume: %s\n", item.Volume)
+				fmt.Fprintf(c.stdout, "Volume: %s\n", item.Volume)
 			}
 		case "issue":
 			if item.Issue != "" {
-				fmt.Fprintf(defaultCLI.stdout, "Issue: %s\n", item.Issue)
+				fmt.Fprintf(c.stdout, "Issue: %s\n", item.Issue)
 			}
 		case "pages":
 			if item.Pages != "" {
-				fmt.Fprintf(defaultCLI.stdout, "Pages: %s\n", item.Pages)
+				fmt.Fprintf(c.stdout, "Pages: %s\n", item.Pages)
 			}
 		case "doi":
 			if item.DOI != "" {
-				fmt.Fprintf(defaultCLI.stdout, "DOI: %s\n", item.DOI)
+				fmt.Fprintf(c.stdout, "DOI: %s\n", item.DOI)
 			}
 		case "url":
 			if item.URL != "" {
-				fmt.Fprintf(defaultCLI.stdout, "URL: %s\n", item.URL)
+				fmt.Fprintf(c.stdout, "URL: %s\n", item.URL)
 			}
 		case "tags":
 			if len(item.Tags) > 0 {
-				fmt.Fprintf(defaultCLI.stdout, "Tags: %s\n", strings.Join(item.Tags, ", "))
+				fmt.Fprintf(c.stdout, "Tags: %s\n", strings.Join(item.Tags, ", "))
 			}
 		case "date":
 			if item.Date != "" {
-				fmt.Fprintf(defaultCLI.stdout, "Date: %s\n", item.Date)
+				fmt.Fprintf(c.stdout, "Date: %s\n", item.Date)
 			}
 		case "creators":
 			if len(item.Creators) > 0 {
-				fmt.Fprintf(defaultCLI.stdout, "Creators: %s\n", joinCreatorNames(item.Creators))
+				fmt.Fprintf(c.stdout, "Creators: %s\n", joinCreatorNames(item.Creators))
 			}
 		case "key":
-			fmt.Fprintf(defaultCLI.stdout, "Key: %s\n", item.Key)
+			fmt.Fprintf(c.stdout, "Key: %s\n", item.Key)
 		case "item_type":
-			fmt.Fprintf(defaultCLI.stdout, "Type: %s\n", item.ItemType)
+			fmt.Fprintf(c.stdout, "Type: %s\n", item.ItemType)
 		case "title":
-			fmt.Fprintf(defaultCLI.stdout, "Title: %s\n", item.Title)
+			fmt.Fprintf(c.stdout, "Title: %s\n", item.Title)
 		case "collections":
 			if len(item.Collections) > 0 {
-				fmt.Fprintf(defaultCLI.stdout, "Collections: %s\n", joinCollectionNames(item.Collections))
+				fmt.Fprintf(c.stdout, "Collections: %s\n", joinCollectionNames(item.Collections))
 			}
 		case "attachments":
 			if len(item.Attachments) > 0 {
-				fmt.Fprintf(defaultCLI.stdout, "Attachments: %d\n", len(item.Attachments))
+				fmt.Fprintf(c.stdout, "Attachments: %d\n", len(item.Attachments))
 				for _, attachment := range item.Attachments {
-					fmt.Fprintf(defaultCLI.stdout, "  - [%s] %s\n", attachmentKind(attachment), attachmentSummary(attachment))
+					fmt.Fprintf(c.stdout, "  - [%s] %s\n", attachmentKind(attachment), attachmentSummary(attachment))
 				}
 			}
 		case "notes":
 			if len(item.Notes) > 0 {
-				fmt.Fprintf(defaultCLI.stdout, "Notes: %d\n", len(item.Notes))
+				fmt.Fprintf(c.stdout, "Notes: %d\n", len(item.Notes))
 				for _, note := range item.Notes {
-					fmt.Fprintf(defaultCLI.stdout, "  - %s\n", noteSummary(note))
+					fmt.Fprintf(c.stdout, "  - %s\n", noteSummary(note))
 				}
 			}
 		case "matched_on":
 			if len(item.MatchedOn) > 0 {
-				fmt.Fprintf(defaultCLI.stdout, "Matched On: %s\n", strings.Join(item.MatchedOn, ", "))
+				fmt.Fprintf(c.stdout, "Matched On: %s\n", strings.Join(item.MatchedOn, ", "))
 			}
 		case "full_text_preview":
 			if item.FullTextPreview != "" {
-				fmt.Fprintf(defaultCLI.stdout, "Full Text Preview: %s\n", item.FullTextPreview)
+				fmt.Fprintf(c.stdout, "Full Text Preview: %s\n", item.FullTextPreview)
 			}
 		}
 	}

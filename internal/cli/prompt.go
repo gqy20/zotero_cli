@@ -10,19 +10,19 @@ import (
 	"zotero_cli/internal/config"
 )
 
-func promptConfigSetup() (config.Config, error) {
-	reader := bufio.NewReader(defaultCLI.stdin)
+func (c *CLI) promptConfigSetup() (config.Config, error) {
+	reader := bufio.NewReader(c.stdin)
 	cfg := config.Default()
 
-	fmt.Fprintln(defaultCLI.stdout, "first-time setup for ~/.zot/.env")
-	fmt.Fprintln(defaultCLI.stdout, "required: library_type, library_id, api_key")
-	fmt.Fprintln(defaultCLI.stdout, "help:")
-	fmt.Fprintln(defaultCLI.stdout, "  API keys: https://www.zotero.org/settings/keys")
-	fmt.Fprintln(defaultCLI.stdout, "  User library ID: check your userID on https://www.zotero.org/settings/keys")
-	fmt.Fprintln(defaultCLI.stdout, "  Group library IDs: https://www.zotero.org/groups")
-	fmt.Fprintln(defaultCLI.stdout, "  Web API basics: https://www.zotero.org/support/dev/web_api/v3/basics")
+	fmt.Fprintln(c.stdout, "first-time setup for ~/.zot/.env")
+	fmt.Fprintln(c.stdout, "required: library_type, library_id, api_key")
+	fmt.Fprintln(c.stdout, "help:")
+	fmt.Fprintln(c.stdout, "  API keys: https://www.zotero.org/settings/keys")
+	fmt.Fprintln(c.stdout, "  User library ID: check your userID on https://www.zotero.org/settings/keys")
+	fmt.Fprintln(c.stdout, "  Group library IDs: https://www.zotero.org/groups")
+	fmt.Fprintln(c.stdout, "  Web API basics: https://www.zotero.org/support/dev/web_api/v3/basics")
 
-	libraryType, err := promptRequired(reader, "Library type (user/group): ", func(value string) error {
+	libraryType, err := c.promptRequired(reader, "Library type (user/group): ", func(value string) error {
 		if value != "user" && value != "group" {
 			return fmt.Errorf("library_type must be user or group")
 		}
@@ -33,7 +33,7 @@ func promptConfigSetup() (config.Config, error) {
 	}
 	cfg.LibraryType = libraryType
 
-	libraryID, err := promptRequired(reader, "Library ID: ", func(value string) error {
+	libraryID, err := c.promptRequired(reader, "Library ID: ", func(value string) error {
 		if strings.TrimSpace(value) == "" {
 			return fmt.Errorf("library_id cannot be empty")
 		}
@@ -44,7 +44,7 @@ func promptConfigSetup() (config.Config, error) {
 	}
 	cfg.LibraryID = libraryID
 
-	apiKey, err := promptRequired(reader, "API key: ", func(value string) error {
+	apiKey, err := c.promptRequired(reader, "API key: ", func(value string) error {
 		if strings.TrimSpace(value) == "" {
 			return fmt.Errorf("api_key cannot be empty")
 		}
@@ -55,7 +55,7 @@ func promptConfigSetup() (config.Config, error) {
 	}
 	cfg.APIKey = apiKey
 
-	style, err := promptWithDefault(reader, fmt.Sprintf("Citation style [%s]: ", cfg.Style))
+	style, err := c.promptWithDefault(reader, fmt.Sprintf("Citation style [%s]: ", cfg.Style))
 	if err != nil {
 		return config.Config{}, err
 	}
@@ -63,7 +63,7 @@ func promptConfigSetup() (config.Config, error) {
 		cfg.Style = style
 	}
 
-	locale, err := promptWithDefault(reader, fmt.Sprintf("Locale [%s]: ", cfg.Locale))
+	locale, err := c.promptWithDefault(reader, fmt.Sprintf("Locale [%s]: ", cfg.Locale))
 	if err != nil {
 		return config.Config{}, err
 	}
@@ -71,13 +71,13 @@ func promptConfigSetup() (config.Config, error) {
 		cfg.Locale = locale
 	}
 
-	allowWrite, err := promptBool(reader, "Allow create/update operations? [Y/n]: ", cfg.AllowWrite)
+	allowWrite, err := c.promptBool(reader, "Allow create/update operations? [Y/n]: ", cfg.AllowWrite)
 	if err != nil {
 		return config.Config{}, err
 	}
 	cfg.AllowWrite = allowWrite
 
-	allowDelete, err := promptBool(reader, "Allow delete operations? [y/N]: ", cfg.AllowDelete)
+	allowDelete, err := c.promptBool(reader, "Allow delete operations? [y/N]: ", cfg.AllowDelete)
 	if err != nil {
 		return config.Config{}, err
 	}
@@ -86,9 +86,9 @@ func promptConfigSetup() (config.Config, error) {
 	return cfg, nil
 }
 
-func promptRequired(reader *bufio.Reader, label string, validate func(string) error) (string, error) {
+func (c *CLI) promptRequired(reader *bufio.Reader, label string, validate func(string) error) (string, error) {
 	for {
-		fmt.Fprint(defaultCLI.stdout, label)
+		fmt.Fprint(c.stdout, label)
 		value, err := readPromptLine(reader)
 		if err != nil {
 			return "", err
@@ -96,7 +96,7 @@ func promptRequired(reader *bufio.Reader, label string, validate func(string) er
 		value = strings.TrimSpace(value)
 		if validate != nil {
 			if err := validate(value); err != nil {
-				fmt.Fprintln(defaultCLI.stderr, "error:", err)
+				fmt.Fprintln(c.stderr, "error:", err)
 				continue
 			}
 		}
@@ -104,8 +104,8 @@ func promptRequired(reader *bufio.Reader, label string, validate func(string) er
 	}
 }
 
-func promptWithDefault(reader *bufio.Reader, label string) (string, error) {
-	fmt.Fprint(defaultCLI.stdout, label)
+func (c *CLI) promptWithDefault(reader *bufio.Reader, label string) (string, error) {
+	fmt.Fprint(c.stdout, label)
 	value, err := readPromptLine(reader)
 	if err != nil {
 		return "", err
@@ -113,9 +113,9 @@ func promptWithDefault(reader *bufio.Reader, label string) (string, error) {
 	return strings.TrimSpace(value), nil
 }
 
-func promptBool(reader *bufio.Reader, label string, defaultValue bool) (bool, error) {
+func (c *CLI) promptBool(reader *bufio.Reader, label string, defaultValue bool) (bool, error) {
 	for {
-		fmt.Fprint(defaultCLI.stdout, label)
+		fmt.Fprint(c.stdout, label)
 		value, err := readPromptLine(reader)
 		if err != nil {
 			return false, err
@@ -126,7 +126,7 @@ func promptBool(reader *bufio.Reader, label string, defaultValue bool) (bool, er
 		}
 		parsed, err := parsePromptBool(value)
 		if err != nil {
-			fmt.Fprintln(defaultCLI.stderr, "error:", err)
+			fmt.Fprintln(c.stderr, "error:", err)
 			continue
 		}
 		return parsed, nil

@@ -43,107 +43,107 @@ func Run(args []string) int {
 	return defaultCLI.Run(args)
 }
 
-func (_ *CLI) Run(args []string) int {
+func (c *CLI) Run(args []string) int {
 	if len(args) == 0 {
-		printUsage()
+		c.printUsage()
 		return 0
 	}
 
 	switch args[0] {
 	case "help", "-h", "--help":
-		printUsage()
+		c.printUsage()
 		return 0
 	case "version":
-		printVersion()
+		c.printVersion()
 		return 0
 	case "config":
-		return runConfig(args[1:])
+		return c.runConfig(args[1:])
 	case "find":
-		return runFind(args[1:])
+		return c.runFind(args[1:])
 	case "show":
-		return runShow(args[1:])
+		return c.runShow(args[1:])
 	case "extract-text":
-		return runExtractText(args[1:])
+		return c.runExtractText(args[1:])
 	case "relate":
-		return runRelate(args[1:])
+		return c.runRelate(args[1:])
 	case "cite":
-		return runCite(args[1:])
+		return c.runCite(args[1:])
 	case "export":
-		return runExport(args[1:])
+		return c.runExport(args[1:])
 	case "collections":
-		return runCollections(args[1:])
+		return c.runCollections(args[1:])
 	case "notes":
-		return runNotes(args[1:])
+		return c.runNotes(args[1:])
 	case "tags":
-		return runTags(args[1:])
+		return c.runTags(args[1:])
 	case "searches":
-		return runSearches(args[1:])
+		return c.runSearches(args[1:])
 	case "deleted":
-		return runDeleted(args[1:])
+		return c.runDeleted(args[1:])
 	case "stats":
-		return runStats(args[1:])
+		return c.runStats(args[1:])
 	case "versions":
-		return runVersions(args[1:])
+		return c.runVersions(args[1:])
 	case "item-types":
-		return runItemTypes(args[1:])
+		return c.runItemTypes(args[1:])
 	case "item-fields":
-		return runItemFields(args[1:])
+		return c.runItemFields(args[1:])
 	case "creator-fields":
-		return runCreatorFields(args[1:])
+		return c.runCreatorFields(args[1:])
 	case "item-type-fields":
-		return runItemTypeFields(args[1:])
+		return c.runItemTypeFields(args[1:])
 	case "item-type-creator-types":
-		return runItemTypeCreatorTypes(args[1:])
+		return c.runItemTypeCreatorTypes(args[1:])
 	case "item-template":
-		return runItemTemplate(args[1:])
+		return c.runItemTemplate(args[1:])
 	case "key-info":
-		return runKeyInfo(args[1:])
+		return c.runKeyInfo(args[1:])
 	case "groups":
-		return runGroups(args[1:])
+		return c.runGroups(args[1:])
 	case "trash":
-		return runTrash(args[1:])
+		return c.runTrash(args[1:])
 	case "collections-top":
-		return runCollectionsTop(args[1:])
+		return c.runCollectionsTop(args[1:])
 	case "publications":
-		return runPublications(args[1:])
+		return c.runPublications(args[1:])
 	case "create-item":
-		return runCreateItem(args[1:])
+		return c.runCreateItem(args[1:])
 	case "update-item":
-		return runUpdateItem(args[1:])
+		return c.runUpdateItem(args[1:])
 	case "delete-item":
-		return runDeleteItem(args[1:])
+		return c.runDeleteItem(args[1:])
 	case "create-items":
-		return runCreateItems(args[1:])
+		return c.runCreateItems(args[1:])
 	case "update-items":
-		return runUpdateItems(args[1:])
+		return c.runUpdateItems(args[1:])
 	case "delete-items":
-		return runDeleteItems(args[1:])
+		return c.runDeleteItems(args[1:])
 	case "add-tag":
-		return runAddTag(args[1:])
+		return c.runAddTag(args[1:])
 	case "remove-tag":
-		return runRemoveTag(args[1:])
+		return c.runRemoveTag(args[1:])
 	case "create-collection":
-		return runCreateCollection(args[1:])
+		return c.runCreateCollection(args[1:])
 	case "update-collection":
-		return runUpdateCollection(args[1:])
+		return c.runUpdateCollection(args[1:])
 	case "delete-collection":
-		return runDeleteCollection(args[1:])
+		return c.runDeleteCollection(args[1:])
 	case "create-search":
-		return runCreateSearch(args[1:])
+		return c.runCreateSearch(args[1:])
 	case "update-search":
-		return runUpdateSearch(args[1:])
+		return c.runUpdateSearch(args[1:])
 	case "delete-search":
-		return runDeleteSearch(args[1:])
+		return c.runDeleteSearch(args[1:])
 	default:
-		fmt.Fprintf(defaultCLI.stderr, "unknown command: %s\n\n", args[0])
-		printUsage()
+		fmt.Fprintf(c.stderr, "unknown command: %s\n\n", args[0])
+		c.printUsage()
 		return 2
 	}
 }
 
-func printUsage() {
+func (c *CLI) printUsage() {
 	exe := filepath.Base(os.Args[0])
-	fmt.Fprintf(defaultCLI.stdout, `%s is a minimal Zotero CLI.
+	fmt.Fprintf(c.stdout, `%s is a minimal Zotero CLI.
 
 Usage:
   %s <command>
@@ -211,14 +211,14 @@ Delete Warnings:
 `, exe, exe)
 }
 
-func printVersion() {
-	fmt.Fprintf(defaultCLI.stdout, "zot %s\n", version)
-	fmt.Fprintf(defaultCLI.stdout, "commit: %s\n", commit)
-	fmt.Fprintf(defaultCLI.stdout, "built: %s\n", buildDate)
+func (c *CLI) printVersion() {
+	fmt.Fprintf(c.stdout, "zot %s\n", version)
+	fmt.Fprintf(c.stdout, "commit: %s\n", commit)
+	fmt.Fprintf(c.stdout, "built: %s\n", buildDate)
 }
 
-func printConfigUsage() {
-	fmt.Fprint(defaultCLI.stdout, `Usage:
+func (c *CLI) printConfigUsage() {
+	fmt.Fprint(c.stdout, `Usage:
   zot config path
   zot config init
   zot config init --example
@@ -227,8 +227,8 @@ func printConfigUsage() {
 `)
 }
 
-func printErr(err error) int {
-	fmt.Fprintln(defaultCLI.stderr, "error:", err)
+func (c *CLI) printErr(err error) int {
+	fmt.Fprintln(c.stderr, "error:", err)
 	return 1
 }
 
@@ -244,7 +244,7 @@ func isHelpOnly(args []string) bool {
 	}
 }
 
-func printCommandUsage(usage string) int {
-	fmt.Fprintln(defaultCLI.stdout, usage)
+func (c *CLI) printCommandUsage(usage string) int {
+	fmt.Fprintln(c.stdout, usage)
 	return 0
 }

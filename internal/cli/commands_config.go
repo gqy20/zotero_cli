@@ -12,9 +12,9 @@ import (
 	"zotero_cli/internal/zoteroapi"
 )
 
-func runConfig(args []string) int {
+func (c *CLI) runConfig(args []string) int {
 	if len(args) == 0 {
-		printConfigUsage()
+		c.printConfigUsage()
 		return 0
 	}
 
@@ -22,39 +22,39 @@ func runConfig(args []string) int {
 	case "path":
 		path, err := config.DefaultPath()
 		if err != nil {
-			return printErr(err)
+			return c.printErr(err)
 		}
-		fmt.Fprintln(defaultCLI.stdout, path)
+		fmt.Fprintln(c.stdout, path)
 		return 0
 	case "show":
 		cfg, path, err := config.Load()
 		if err != nil {
 			if errors.Is(err, config.ErrNotFound) {
-				fmt.Fprintf(defaultCLI.stderr, "config not found; run `zot config init` first\n")
+				fmt.Fprintf(c.stderr, "config not found; run `zot config init` first\n")
 				return 3
 			}
-			return printErr(err)
+			return c.printErr(err)
 		}
 
-		return writeJSON(map[string]any{
+		return c.writeJSON(map[string]any{
 			"path":   path,
 			"config": maskConfig(cfg),
 		})
 	case "validate":
-		return runConfigValidate()
+		return c.runConfigValidate()
 	case "init":
-		return runConfigInit(args[1:])
+		return c.runConfigInit(args[1:])
 	default:
-		fmt.Fprintf(defaultCLI.stderr, "unknown config command: %s\n\n", args[0])
-		printConfigUsage()
+		fmt.Fprintf(c.stderr, "unknown config command: %s\n\n", args[0])
+		c.printConfigUsage()
 		return 2
 	}
 }
 
-func runConfigInit(args []string) int {
+func (c *CLI) runConfigInit(args []string) int {
 	path, err := config.DefaultPath()
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	if len(args) > 0 && args[0] == "--example" {
@@ -62,7 +62,7 @@ func runConfigInit(args []string) int {
 		cfg.LibraryType = "user"
 		cfg.LibraryID = "123456"
 		cfg.APIKey = "replace-me"
-		fmt.Fprint(defaultCLI.stdout, strings.Join([]string{
+		fmt.Fprint(c.stdout, strings.Join([]string{
 			"ZOT_MODE=web",
 			"ZOT_DATA_DIR=",
 			"ZOT_LIBRARY_TYPE=user",
@@ -81,36 +81,36 @@ func runConfigInit(args []string) int {
 	}
 
 	if _, err := os.Stat(path); err == nil {
-		fmt.Fprintf(defaultCLI.stderr, "config already exists at %s\n", path)
-		fmt.Fprintf(defaultCLI.stderr, "edit it manually or remove it before re-running init\n")
+		fmt.Fprintf(c.stderr, "config already exists at %s\n", path)
+		fmt.Fprintf(c.stderr, "edit it manually or remove it before re-running init\n")
 		return 3
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
-	cfg, err := promptConfigSetup()
+	cfg, err := c.promptConfigSetup()
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 	if err := config.Save(cfg); err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
-	fmt.Fprintf(defaultCLI.stdout, "created config at %s\n", path)
-	fmt.Fprintln(defaultCLI.stdout, "you can edit ~/.zot/.env later if you want to change keys or permissions")
+	fmt.Fprintf(c.stdout, "created config at %s\n", path)
+	fmt.Fprintln(c.stdout, "you can edit ~/.zot/.env later if you want to change keys or permissions")
 	return 0
 }
 
-func runConfigValidate() int {
+func (c *CLI) runConfigValidate() int {
 	cfg, path, err := config.Load()
 	if err != nil {
 		if errors.Is(err, config.ErrNotFound) {
-			fmt.Fprintln(defaultCLI.stderr, "config not found.")
-			fmt.Fprintln(defaultCLI.stderr, "required fields: library_type, library_id, api_key")
-			fmt.Fprintln(defaultCLI.stderr, "run `zot config init` to set them up interactively in ~/.zot/.env")
+			fmt.Fprintln(c.stderr, "config not found.")
+			fmt.Fprintln(c.stderr, "required fields: library_type, library_id, api_key")
+			fmt.Fprintln(c.stderr, "run `zot config init` to set them up interactively in ~/.zot/.env")
 			return 3
 		}
-		return printErr(err)
+		return c.printErr(err)
 	}
 
 	baseURL := os.Getenv("ZOT_BASE_URL")
@@ -118,10 +118,10 @@ func runConfigValidate() int {
 
 	result, err := client.ValidateLibraryAccess(context.Background())
 	if err != nil {
-		return printErr(err)
+		return c.printErr(err)
 	}
 
-	return writeJSON(jsonResponse{
+	return c.writeJSON(jsonResponse{
 		OK:      true,
 		Command: "config-validate",
 		Data:    result,
