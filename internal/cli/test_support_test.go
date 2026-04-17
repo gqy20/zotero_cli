@@ -11,21 +11,21 @@ import (
 func captureOutput(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 
-	oldStdout := stdout
-	oldStderr := stderr
-	oldStdin := stdin
+	oldStdout := defaultCLI.stdout
+	oldStderr := defaultCLI.stderr
+	oldStdin := defaultCLI.stdin
 
 	out := &bytes.Buffer{}
 	errOut := &bytes.Buffer{}
 
-	stdout = out
-	stderr = errOut
-	stdin = strings.NewReader("")
+	defaultCLI.stdout = out
+	defaultCLI.stderr = errOut
+	defaultCLI.stdin = strings.NewReader("")
 
 	t.Cleanup(func() {
-		stdout = oldStdout
-		stderr = oldStderr
-		stdin = oldStdin
+		defaultCLI.stdout = oldStdout
+		defaultCLI.stderr = oldStderr
+		defaultCLI.stdin = oldStdin
 	})
 
 	return out, errOut

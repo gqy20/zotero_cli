@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"zotero_cli/internal/backend"
-	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
 )
 
@@ -18,10 +17,6 @@ type localTextReader interface {
 
 type localTextAttachmentReader interface {
 	ExtractItemAttachmentTexts(ctx context.Context, item domain.Item) (backend.ItemFullTextResult, error)
-}
-
-var newLocalTextReader = func(cfg config.Config) (localTextReader, error) {
-	return backend.NewLocalReader(cfg)
 }
 
 func runExtractText(args []string) int {
@@ -39,7 +34,7 @@ func runExtractText(args []string) int {
 		return exitCode
 	}
 
-	localReader, err := newLocalTextReader(cfg)
+	localReader, err := defaultCLI.newLocalTextReader(cfg)
 	if err != nil {
 		return printErr(err)
 	}
@@ -107,7 +102,7 @@ func runExtractText(args []string) int {
 			OK:      true,
 			Command: "extract-text",
 			Data:    data,
-			Meta: meta,
+			Meta:    meta,
 		})
 	}
 
@@ -117,7 +112,7 @@ func runExtractText(args []string) int {
 	}
 	readMeta := localReader.ConsumeReadMetadata()
 	warnIfSnapshotRead(readMeta)
-	fmt.Fprintln(stdout, text)
+	fmt.Fprintln(defaultCLI.stdout, text)
 	return 0
 }
 
@@ -131,7 +126,7 @@ func parseExtractTextArgs(args []string) (string, bool, bool) {
 			jsonOutput = true
 		default:
 			if strings.HasPrefix(arg, "--") || itemKey != "" {
-				fmt.Fprintln(stderr, usageExtractText)
+				fmt.Fprintln(defaultCLI.stderr, usageExtractText)
 				return "", false, false
 			}
 			itemKey = arg
@@ -139,7 +134,7 @@ func parseExtractTextArgs(args []string) (string, bool, bool) {
 	}
 
 	if strings.TrimSpace(itemKey) == "" {
-		fmt.Fprintln(stderr, usageExtractText)
+		fmt.Fprintln(defaultCLI.stderr, usageExtractText)
 		return "", false, false
 	}
 	return itemKey, jsonOutput, true

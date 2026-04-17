@@ -3,21 +3,47 @@ package cli
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+
+	"zotero_cli/internal/backend"
+	"zotero_cli/internal/config"
 )
 
+type CLI struct {
+	stdout               io.Writer
+	stderr               io.Writer
+	stdin                io.Reader
+	backendNewReader     func(config.Config, *http.Client) (backend.Reader, error)
+	newLocalExportReader func(config.Config) (localExportReader, error)
+	newLocalTextReader   func(config.Config) (localTextReader, error)
+}
+
 var (
-	stdout = io.Writer(os.Stdout)
-	stderr = io.Writer(os.Stderr)
-	stdin  = io.Reader(os.Stdin)
+	defaultCLI = New()
 
 	version   = "0.0.3"
 	commit    = "unknown"
 	buildDate = "unknown"
 )
 
+func New() *CLI {
+	return &CLI{
+		stdout:               os.Stdout,
+		stderr:               os.Stderr,
+		stdin:                os.Stdin,
+		backendNewReader:     backend.NewReader,
+		newLocalExportReader: func(cfg config.Config) (localExportReader, error) { return backend.NewLocalReader(cfg) },
+		newLocalTextReader:   func(cfg config.Config) (localTextReader, error) { return backend.NewLocalReader(cfg) },
+	}
+}
+
 func Run(args []string) int {
+	return defaultCLI.Run(args)
+}
+
+func (_ *CLI) Run(args []string) int {
 	if len(args) == 0 {
 		printUsage()
 		return 0
@@ -109,7 +135,7 @@ func Run(args []string) int {
 	case "delete-search":
 		return runDeleteSearch(args[1:])
 	default:
-		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
+		fmt.Fprintf(defaultCLI.stderr, "unknown command: %s\n\n", args[0])
 		printUsage()
 		return 2
 	}
@@ -117,7 +143,7 @@ func Run(args []string) int {
 
 func printUsage() {
 	exe := filepath.Base(os.Args[0])
-	fmt.Fprintf(stdout, `%s is a minimal Zotero CLI.
+	fmt.Fprintf(defaultCLI.stdout, `%s is a minimal Zotero CLI.
 
 Usage:
   %s <command>
@@ -186,13 +212,13 @@ Delete Warnings:
 }
 
 func printVersion() {
-	fmt.Fprintf(stdout, "zot %s\n", version)
-	fmt.Fprintf(stdout, "commit: %s\n", commit)
-	fmt.Fprintf(stdout, "built: %s\n", buildDate)
+	fmt.Fprintf(defaultCLI.stdout, "zot %s\n", version)
+	fmt.Fprintf(defaultCLI.stdout, "commit: %s\n", commit)
+	fmt.Fprintf(defaultCLI.stdout, "built: %s\n", buildDate)
 }
 
 func printConfigUsage() {
-	fmt.Fprint(stdout, `Usage:
+	fmt.Fprint(defaultCLI.stdout, `Usage:
   zot config path
   zot config init
   zot config init --example
@@ -202,7 +228,7 @@ func printConfigUsage() {
 }
 
 func printErr(err error) int {
-	fmt.Fprintln(stderr, "error:", err)
+	fmt.Fprintln(defaultCLI.stderr, "error:", err)
 	return 1
 }
 
@@ -219,6 +245,6 @@ func isHelpOnly(args []string) bool {
 }
 
 func printCommandUsage(usage string) int {
-	fmt.Fprintln(stdout, usage)
+	fmt.Fprintln(defaultCLI.stdout, usage)
 	return 0
 }

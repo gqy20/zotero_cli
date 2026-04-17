@@ -101,75 +101,54 @@ func NewReader(cfg config.Config, httpClient *http.Client) (Reader, error) {
 }
 
 func (r *HybridReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
-	if r.local != nil {
-		items, err := r.local.FindItems(ctx, opts)
-		if err == nil {
-			r.lastReadMetadata = consumeReadMetadata(r.local)
-			return items, nil
-		}
-		if !shouldFallbackToWeb(err) {
-			return nil, err
-		}
-	}
-	items, err := r.web.FindItems(ctx, opts)
-	if err == nil {
-		r.lastReadMetadata = consumeReadMetadata(r.web)
-	}
-	return items, err
+	return readWithFallback(r,
+		func(reader Reader) ([]domain.Item, error) {
+			return reader.FindItems(ctx, opts)
+		},
+	)
 }
 
 func (r *HybridReader) GetItem(ctx context.Context, key string) (domain.Item, error) {
-	if r.local != nil {
-		item, err := r.local.GetItem(ctx, key)
-		if err == nil {
-			r.lastReadMetadata = consumeReadMetadata(r.local)
-			return item, nil
-		}
-		if !shouldFallbackToWeb(err) {
-			return domain.Item{}, err
-		}
-	}
-	item, err := r.web.GetItem(ctx, key)
-	if err == nil {
-		r.lastReadMetadata = consumeReadMetadata(r.web)
-	}
-	return item, err
+	return readWithFallback(r,
+		func(reader Reader) (domain.Item, error) {
+			return reader.GetItem(ctx, key)
+		},
+	)
 }
 
 func (r *HybridReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
-	if r.local != nil {
-		relations, err := r.local.GetRelated(ctx, key)
-		if err == nil {
-			r.lastReadMetadata = consumeReadMetadata(r.local)
-			return relations, nil
-		}
-		if !shouldFallbackToWeb(err) {
-			return nil, err
-		}
-	}
-	relations, err := r.web.GetRelated(ctx, key)
-	if err == nil {
-		r.lastReadMetadata = consumeReadMetadata(r.web)
-	}
-	return relations, err
+	return readWithFallback(r,
+		func(reader Reader) ([]domain.Relation, error) {
+			return reader.GetRelated(ctx, key)
+		},
+	)
 }
 
 func (r *HybridReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
+	return readWithFallback(r,
+		func(reader Reader) (LibraryStats, error) {
+			return reader.GetLibraryStats(ctx)
+		},
+	)
+}
+
+func readWithFallback[T any](r *HybridReader, read func(Reader) (T, error)) (T, error) {
+	var zero T
 	if r.local != nil {
-		stats, err := r.local.GetLibraryStats(ctx)
+		value, err := read(r.local)
 		if err == nil {
 			r.lastReadMetadata = consumeReadMetadata(r.local)
-			return stats, nil
+			return value, nil
 		}
 		if !shouldFallbackToWeb(err) {
-			return LibraryStats{}, err
+			return zero, err
 		}
 	}
-	stats, err := r.web.GetLibraryStats(ctx)
+	value, err := read(r.web)
 	if err == nil {
 		r.lastReadMetadata = consumeReadMetadata(r.web)
 	}
-	return stats, err
+	return value, err
 }
 
 func (r *HybridReader) ConsumeReadMetadata() ReadMetadata {

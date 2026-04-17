@@ -18,23 +18,19 @@ type localExportReader interface {
 	ConsumeReadMetadata() backend.ReadMetadata
 }
 
-var newLocalExportReader = func(cfg config.Config) (localExportReader, error) {
-	return backend.NewLocalReader(cfg)
-}
-
 func runFind(args []string) int {
 	if isHelpOnly(args) {
 		return printCommandUsage(usageFind)
 	}
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, usageFind)
+		fmt.Fprintln(defaultCLI.stderr, usageFind)
 		return 2
 	}
 
 	parsed, err := parseFindArgs(args)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageFind)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageFind)
 		return 2
 	}
 	opts := parsed.Opts
@@ -43,13 +39,13 @@ func runFind(args []string) int {
 	queryProvided := parsed.QueryProvided
 
 	if opts.FullTextAny && !opts.FullText {
-		fmt.Fprintln(stderr, "error: --fulltext-any requires --fulltext")
-		fmt.Fprintln(stderr, usageFind)
+		fmt.Fprintln(defaultCLI.stderr, "error: --fulltext-any requires --fulltext")
+		fmt.Fprintln(defaultCLI.stderr, usageFind)
 		return 2
 	}
 
 	if strings.TrimSpace(opts.Query) == "" && !opts.All && !queryProvided {
-		fmt.Fprintln(stderr, usageFind)
+		fmt.Fprintln(defaultCLI.stderr, usageFind)
 		return 2
 	}
 
@@ -115,14 +111,14 @@ func runFind(args []string) int {
 		for index, item := range items {
 			renderFindItemDetailed(item, renderOpts)
 			if index < len(items)-1 {
-				fmt.Fprintln(stdout)
+				fmt.Fprintln(defaultCLI.stdout)
 			}
 		}
 		return 0
 	}
 
 	for _, item := range items {
-		fmt.Fprintf(stdout, "%-10s  %-16s  %-6s  %-18s  %s\n",
+		fmt.Fprintf(defaultCLI.stdout, "%-10s  %-16s  %-6s  %-18s  %s\n",
 			item.Key,
 			item.ItemType,
 			shortDate(item.Date),
@@ -160,12 +156,12 @@ func runStats(args []string) int {
 		return writeJSON(jsonResponse{OK: true, Command: "stats", Data: stats, Meta: meta})
 	}
 	warnIfSnapshotRead(consumeReaderReadMetadata(reader))
-	fmt.Fprintf(stdout, "library=%s:%s\n", stats.LibraryType, stats.LibraryID)
-	fmt.Fprintf(stdout, "items=%d\n", stats.TotalItems)
-	fmt.Fprintf(stdout, "collections=%d\n", stats.TotalCollections)
-	fmt.Fprintf(stdout, "searches=%d\n", stats.TotalSearches)
+	fmt.Fprintf(defaultCLI.stdout, "library=%s:%s\n", stats.LibraryType, stats.LibraryID)
+	fmt.Fprintf(defaultCLI.stdout, "items=%d\n", stats.TotalItems)
+	fmt.Fprintf(defaultCLI.stdout, "collections=%d\n", stats.TotalCollections)
+	fmt.Fprintf(defaultCLI.stdout, "searches=%d\n", stats.TotalSearches)
 	if stats.LastLibraryVersion > 0 {
-		fmt.Fprintf(stdout, "last_library_version=%d\n", stats.LastLibraryVersion)
+		fmt.Fprintf(defaultCLI.stdout, "last_library_version=%d\n", stats.LastLibraryVersion)
 	}
 	return 0
 }
@@ -175,7 +171,7 @@ func runShow(args []string) int {
 		return printCommandUsage(usageShow)
 	}
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, usageShow)
+		fmt.Fprintln(defaultCLI.stderr, usageShow)
 		return 2
 	}
 
@@ -195,12 +191,12 @@ func runShow(args []string) int {
 			key = arg
 			continue
 		}
-		fmt.Fprintln(stderr, usageShow)
+		fmt.Fprintln(defaultCLI.stderr, usageShow)
 		return 2
 	}
 
 	if strings.TrimSpace(key) == "" {
-		fmt.Fprintln(stderr, usageShow)
+		fmt.Fprintln(defaultCLI.stderr, usageShow)
 		return 2
 	}
 
@@ -242,58 +238,58 @@ func runShow(args []string) int {
 	readMeta := consumeReaderReadMetadata(reader)
 	warnIfSnapshotRead(readMeta)
 
-	fmt.Fprintf(stdout, "Key: %s\n", item.Key)
-	fmt.Fprintf(stdout, "Title: %s\n", item.Title)
-	fmt.Fprintf(stdout, "Type: %s\n", item.ItemType)
+	fmt.Fprintf(defaultCLI.stdout, "Key: %s\n", item.Key)
+	fmt.Fprintf(defaultCLI.stdout, "Title: %s\n", item.Title)
+	fmt.Fprintf(defaultCLI.stdout, "Type: %s\n", item.ItemType)
 	if len(item.Creators) > 0 {
-		fmt.Fprintf(stdout, "Creators: %s\n", joinCreatorNames(item.Creators))
+		fmt.Fprintf(defaultCLI.stdout, "Creators: %s\n", joinCreatorNames(item.Creators))
 	}
 	if item.Date != "" {
-		fmt.Fprintf(stdout, "Date: %s\n", item.Date)
+		fmt.Fprintf(defaultCLI.stdout, "Date: %s\n", item.Date)
 	}
 	if item.Container != "" {
-		fmt.Fprintf(stdout, "Container: %s\n", item.Container)
+		fmt.Fprintf(defaultCLI.stdout, "Container: %s\n", item.Container)
 	}
 	if item.Volume != "" {
-		fmt.Fprintf(stdout, "Volume: %s\n", item.Volume)
+		fmt.Fprintf(defaultCLI.stdout, "Volume: %s\n", item.Volume)
 	}
 	if item.Issue != "" {
-		fmt.Fprintf(stdout, "Issue: %s\n", item.Issue)
+		fmt.Fprintf(defaultCLI.stdout, "Issue: %s\n", item.Issue)
 	}
 	if item.Pages != "" {
-		fmt.Fprintf(stdout, "Pages: %s\n", item.Pages)
+		fmt.Fprintf(defaultCLI.stdout, "Pages: %s\n", item.Pages)
 	}
 	if item.DOI != "" {
-		fmt.Fprintf(stdout, "DOI: %s\n", item.DOI)
+		fmt.Fprintf(defaultCLI.stdout, "DOI: %s\n", item.DOI)
 	}
 	if item.URL != "" {
-		fmt.Fprintf(stdout, "URL: %s\n", item.URL)
+		fmt.Fprintf(defaultCLI.stdout, "URL: %s\n", item.URL)
 	}
 	if len(item.Tags) > 0 {
-		fmt.Fprintf(stdout, "Tags: %s\n", strings.Join(item.Tags, ", "))
+		fmt.Fprintf(defaultCLI.stdout, "Tags: %s\n", strings.Join(item.Tags, ", "))
 	}
 	if len(item.Collections) > 0 {
-		fmt.Fprintf(stdout, "Collections: %s\n", joinCollectionNames(item.Collections))
+		fmt.Fprintf(defaultCLI.stdout, "Collections: %s\n", joinCollectionNames(item.Collections))
 	}
 	if len(item.Attachments) > 0 {
-		fmt.Fprintf(stdout, "Attachments: %d\n", len(item.Attachments))
+		fmt.Fprintf(defaultCLI.stdout, "Attachments: %d\n", len(item.Attachments))
 		for _, attachment := range item.Attachments {
-			fmt.Fprintf(stdout, "  - [%s] %s\n", attachmentKind(attachment), attachmentSummary(attachment))
+			fmt.Fprintf(defaultCLI.stdout, "  - [%s] %s\n", attachmentKind(attachment), attachmentSummary(attachment))
 			if pathLine := attachmentPathLine(attachment); pathLine != "" {
-				fmt.Fprintf(stdout, "    %s\n", pathLine)
+				fmt.Fprintf(defaultCLI.stdout, "    %s\n", pathLine)
 			}
 		}
 	}
 	if len(item.Notes) > 0 {
-		fmt.Fprintf(stdout, "Notes: %d\n", len(item.Notes))
+		fmt.Fprintf(defaultCLI.stdout, "Notes: %d\n", len(item.Notes))
 		for _, note := range item.Notes {
-			fmt.Fprintf(stdout, "  - %s\n", noteSummary(note))
+			fmt.Fprintf(defaultCLI.stdout, "  - %s\n", noteSummary(note))
 		}
 	}
 	if item.FullTextPreview != "" {
-		fmt.Fprintf(stdout, "Full Text Preview: %s\n", item.FullTextPreview)
+		fmt.Fprintf(defaultCLI.stdout, "Full Text Preview: %s\n", item.FullTextPreview)
 		if line := fullTextSourceLine(readMeta); line != "" {
-			fmt.Fprintln(stdout, line)
+			fmt.Fprintln(defaultCLI.stdout, line)
 		}
 	}
 	return 0
@@ -304,7 +300,7 @@ func runRelate(args []string) int {
 		return printCommandUsage(usageRelate)
 	}
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, usageRelate)
+		fmt.Fprintln(defaultCLI.stderr, usageRelate)
 		return 2
 	}
 
@@ -319,12 +315,12 @@ func runRelate(args []string) int {
 			key = arg
 			continue
 		}
-		fmt.Fprintln(stderr, usageRelate)
+		fmt.Fprintln(defaultCLI.stderr, usageRelate)
 		return 2
 	}
 
 	if strings.TrimSpace(key) == "" {
-		fmt.Fprintln(stderr, usageRelate)
+		fmt.Fprintln(defaultCLI.stderr, usageRelate)
 		return 2
 	}
 
@@ -346,15 +342,15 @@ func runRelate(args []string) int {
 	warnIfSnapshotRead(consumeReaderReadMetadata(reader))
 
 	if len(relations) == 0 {
-		fmt.Fprintf(stdout, "Item: %s\n", key)
-		fmt.Fprintln(stdout, "Explicit Relations: 0")
+		fmt.Fprintf(defaultCLI.stdout, "Item: %s\n", key)
+		fmt.Fprintln(defaultCLI.stdout, "Explicit Relations: 0")
 		return 0
 	}
 
-	fmt.Fprintf(stdout, "Item: %s\n", key)
-	fmt.Fprintf(stdout, "Explicit Relations: %d\n", len(relations))
+	fmt.Fprintf(defaultCLI.stdout, "Item: %s\n", key)
+	fmt.Fprintf(defaultCLI.stdout, "Explicit Relations: %d\n", len(relations))
 	for _, relation := range relations {
-		fmt.Fprintf(stdout, "  - [%s][%s] %s\n", relation.Predicate, relation.Direction, relateSummary(relation.Target))
+		fmt.Fprintf(defaultCLI.stdout, "  - [%s][%s] %s\n", relation.Predicate, relation.Direction, relateSummary(relation.Target))
 	}
 	return 0
 }
@@ -396,7 +392,7 @@ func warnIfSnapshotRead(readMeta backend.ReadMetadata) {
 	if readMeta.ReadSource != "snapshot" && !readMeta.SQLiteFallback {
 		return
 	}
-	fmt.Fprintln(stderr, "note: using snapshot fallback for local Zotero data")
+	fmt.Fprintln(defaultCLI.stderr, "note: using snapshot fallback for local Zotero data")
 }
 
 func fullTextSourceLine(readMeta backend.ReadMetadata) string {
@@ -428,14 +424,14 @@ func runCite(args []string) int {
 		return printCommandUsage(usageCite)
 	}
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, usageCite)
+		fmt.Fprintln(defaultCLI.stderr, usageCite)
 		return 2
 	}
 
 	key, opts, jsonOutput, err := parseCiteArgs(args)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageCite)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageCite)
 		return 2
 	}
 
@@ -470,7 +466,7 @@ func runCite(args []string) int {
 		})
 	}
 
-	fmt.Fprintln(stdout, result.Text)
+	fmt.Fprintln(defaultCLI.stdout, result.Text)
 	return 0
 }
 
@@ -479,14 +475,14 @@ func runExport(args []string) int {
 		return printCommandUsage(usageExport)
 	}
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, usageExport)
+		fmt.Fprintln(defaultCLI.stderr, usageExport)
 		return 2
 	}
 
 	exportParsed, err := parseExportArgs(args)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageExport)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageExport)
 		return 2
 	}
 	itemKey := exportParsed.ItemKey
@@ -574,14 +570,14 @@ func runExport(args []string) int {
 	}
 
 	if result.Text != "" {
-		fmt.Fprintln(stdout, result.Text)
+		fmt.Fprintln(defaultCLI.stdout, result.Text)
 		return 0
 	}
 	return writeJSON(result.Data)
 }
 
 func tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, itemKey string, collectionKey string, findOpts zoteroapi.FindOptions) (zoteroapi.ExportResult, backend.ReadMetadata, bool, error) {
-	localReader, err := newLocalExportReader(cfg)
+	localReader, err := defaultCLI.newLocalExportReader(cfg)
 	if err != nil {
 		if cfg.Mode == "hybrid" {
 			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil

@@ -16,12 +16,6 @@ import (
 	"zotero_cli/internal/domain"
 )
 
-var (
-	openSQLiteDBFunc         = openSQLiteDB
-	createSQLiteSnapshotFunc = createSQLiteSnapshot
-	findZoteroPrefsFunc      = findZoteroPrefs
-)
-
 type LocalReader struct {
 	LibraryType       string
 	LibraryID         string
@@ -31,10 +25,13 @@ type LocalReader struct {
 	FullTextCacheDir  string
 	AttachmentBaseDir string
 	lastReadMetadata  ReadMetadata
+	openSQLiteDB      func(string) (*sql.DB, error)
+	createSnapshot    func(string) (string, string, error)
+	findZoteroPrefs   func() ([]string, error)
 }
 
 func NewLocalReader(cfg config.Config) (*LocalReader, error) {
-	prefs, _, err := loadMatchingZoteroPrefs(cfg.DataDir)
+	prefs, _, err := loadMatchingZoteroPrefs(cfg.DataDir, findZoteroPrefs)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +77,9 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 		StorageDir:        storageDir,
 		FullTextCacheDir:  filepath.Join(dataDir, ".zotero_cli", "fulltext"),
 		AttachmentBaseDir: attachmentBaseDir,
+		openSQLiteDB:      openSQLiteDB,
+		createSnapshot:    createSQLiteSnapshot,
+		findZoteroPrefs:   findZoteroPrefs,
 	}, nil
 }
 
@@ -410,7 +410,7 @@ func (r *LocalReader) ConsumeReadMetadata() ReadMetadata {
 }
 
 func (r *LocalReader) openLiveDB() (*sql.DB, func(), error) {
-	db, err := openSQLiteDBFunc(localSQLiteDSN(r.SQLitePath))
+	db, err := r.sqliteOpenFunc()(localSQLiteDSN(r.SQLitePath))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -435,11 +435,11 @@ func (r *LocalReader) openDB() (*sql.DB, func(), error) {
 }
 
 func (r *LocalReader) openSnapshotDB() (*sql.DB, func(), error) {
-	snapshotDir, snapshotPath, err := createSQLiteSnapshotFunc(r.SQLitePath)
+	snapshotDir, snapshotPath, err := r.snapshotFunc()(r.SQLitePath)
 	if err != nil {
 		return nil, nil, err
 	}
-	db, err := openSQLiteDBFunc(localSQLiteDSN(snapshotPath))
+	db, err := r.sqliteOpenFunc()(localSQLiteDSN(snapshotPath))
 	if err != nil {
 		_ = os.RemoveAll(snapshotDir)
 		return nil, nil, err
@@ -447,4 +447,18 @@ func (r *LocalReader) openSnapshotDB() (*sql.DB, func(), error) {
 	return db, func() {
 		_ = os.RemoveAll(snapshotDir)
 	}, nil
+}
+
+func (r *LocalReader) sqliteOpenFunc() func(string) (*sql.DB, error) {
+	if r != nil && r.openSQLiteDB != nil {
+		return r.openSQLiteDB
+	}
+	return openSQLiteDB
+}
+
+func (r *LocalReader) snapshotFunc() func(string) (string, string, error) {
+	if r != nil && r.createSnapshot != nil {
+		return r.createSnapshot
+	}
+	return createSQLiteSnapshot
 }

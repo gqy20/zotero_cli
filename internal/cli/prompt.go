@@ -11,16 +11,16 @@ import (
 )
 
 func promptConfigSetup() (config.Config, error) {
-	reader := bufio.NewReader(stdin)
+	reader := bufio.NewReader(defaultCLI.stdin)
 	cfg := config.Default()
 
-	fmt.Fprintln(stdout, "first-time setup for ~/.zot/.env")
-	fmt.Fprintln(stdout, "required: library_type, library_id, api_key")
-	fmt.Fprintln(stdout, "help:")
-	fmt.Fprintln(stdout, "  API keys: https://www.zotero.org/settings/keys")
-	fmt.Fprintln(stdout, "  User library ID: check your userID on https://www.zotero.org/settings/keys")
-	fmt.Fprintln(stdout, "  Group library IDs: https://www.zotero.org/groups")
-	fmt.Fprintln(stdout, "  Web API basics: https://www.zotero.org/support/dev/web_api/v3/basics")
+	fmt.Fprintln(defaultCLI.stdout, "first-time setup for ~/.zot/.env")
+	fmt.Fprintln(defaultCLI.stdout, "required: library_type, library_id, api_key")
+	fmt.Fprintln(defaultCLI.stdout, "help:")
+	fmt.Fprintln(defaultCLI.stdout, "  API keys: https://www.zotero.org/settings/keys")
+	fmt.Fprintln(defaultCLI.stdout, "  User library ID: check your userID on https://www.zotero.org/settings/keys")
+	fmt.Fprintln(defaultCLI.stdout, "  Group library IDs: https://www.zotero.org/groups")
+	fmt.Fprintln(defaultCLI.stdout, "  Web API basics: https://www.zotero.org/support/dev/web_api/v3/basics")
 
 	libraryType, err := promptRequired(reader, "Library type (user/group): ", func(value string) error {
 		if value != "user" && value != "group" {
@@ -88,7 +88,7 @@ func promptConfigSetup() (config.Config, error) {
 
 func promptRequired(reader *bufio.Reader, label string, validate func(string) error) (string, error) {
 	for {
-		fmt.Fprint(stdout, label)
+		fmt.Fprint(defaultCLI.stdout, label)
 		value, err := readPromptLine(reader)
 		if err != nil {
 			return "", err
@@ -96,7 +96,7 @@ func promptRequired(reader *bufio.Reader, label string, validate func(string) er
 		value = strings.TrimSpace(value)
 		if validate != nil {
 			if err := validate(value); err != nil {
-				fmt.Fprintln(stderr, "error:", err)
+				fmt.Fprintln(defaultCLI.stderr, "error:", err)
 				continue
 			}
 		}
@@ -105,7 +105,7 @@ func promptRequired(reader *bufio.Reader, label string, validate func(string) er
 }
 
 func promptWithDefault(reader *bufio.Reader, label string) (string, error) {
-	fmt.Fprint(stdout, label)
+	fmt.Fprint(defaultCLI.stdout, label)
 	value, err := readPromptLine(reader)
 	if err != nil {
 		return "", err
@@ -115,7 +115,7 @@ func promptWithDefault(reader *bufio.Reader, label string) (string, error) {
 
 func promptBool(reader *bufio.Reader, label string, defaultValue bool) (bool, error) {
 	for {
-		fmt.Fprint(stdout, label)
+		fmt.Fprint(defaultCLI.stdout, label)
 		value, err := readPromptLine(reader)
 		if err != nil {
 			return false, err
@@ -126,7 +126,7 @@ func promptBool(reader *bufio.Reader, label string, defaultValue bool) (bool, er
 		}
 		parsed, err := parsePromptBool(value)
 		if err != nil {
-			fmt.Fprintln(stderr, "error:", err)
+			fmt.Fprintln(defaultCLI.stderr, "error:", err)
 			continue
 		}
 		return parsed, nil

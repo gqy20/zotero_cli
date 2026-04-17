@@ -29,7 +29,7 @@ func runCollections(args []string) int {
 
 	if jsonOutput {
 		meta := map[string]any{
-			"total": len(collections),
+			"total":       len(collections),
 			"read_source": "web",
 		}
 		return writeJSON(jsonResponse{
@@ -41,12 +41,12 @@ func runCollections(args []string) int {
 	}
 
 	if len(collections) == 0 {
-		fmt.Fprintln(stdout, "no collections found")
+		fmt.Fprintln(defaultCLI.stdout, "no collections found")
 		return 0
 	}
 
 	for _, collection := range collections {
-		fmt.Fprintf(stdout, "%-10s  %-20s  items=%d  children=%d\n",
+		fmt.Fprintf(defaultCLI.stdout, "%-10s  %-20s  items=%d  children=%d\n",
 			collection.Key,
 			collection.Name,
 			collection.NumItems,
@@ -78,7 +78,7 @@ func runNotes(args []string) int {
 
 	if jsonOutput {
 		meta := map[string]any{
-			"total": len(notes),
+			"total":       len(notes),
 			"read_source": "web",
 		}
 		return writeJSON(jsonResponse{
@@ -91,12 +91,12 @@ func runNotes(args []string) int {
 
 	visible := filterVisibleNotes(notes)
 	if len(visible) == 0 {
-		fmt.Fprintln(stdout, "no readable notes found in text mode; use --json to inspect all notes")
+		fmt.Fprintln(defaultCLI.stdout, "no readable notes found in text mode; use --json to inspect all notes")
 		return 0
 	}
 
 	for _, note := range visible {
-		fmt.Fprintf(stdout, "%-10s  %s\n", note.Key, notePreview(note.Content))
+		fmt.Fprintf(defaultCLI.stdout, "%-10s  %s\n", note.Key, notePreview(note.Content))
 	}
 	return 0
 }
@@ -134,12 +134,12 @@ func runTags(args []string) int {
 	}
 
 	if len(tags) == 0 {
-		fmt.Fprintln(stdout, "no tags found")
+		fmt.Fprintln(defaultCLI.stdout, "no tags found")
 		return 0
 	}
 
 	for _, tag := range tags {
-		fmt.Fprintf(stdout, "%-20s  items=%d\n", tag.Name, tag.NumItems)
+		fmt.Fprintf(defaultCLI.stdout, "%-20s  items=%d\n", tag.Name, tag.NumItems)
 	}
 	return 0
 }
@@ -177,12 +177,12 @@ func runSearches(args []string) int {
 	}
 
 	if len(searches) == 0 {
-		fmt.Fprintln(stdout, "no saved searches found")
+		fmt.Fprintln(defaultCLI.stdout, "no saved searches found")
 		return 0
 	}
 
 	for _, search := range searches {
-		fmt.Fprintf(stdout, "%-10s  %-24s  conditions=%d\n", search.Key, search.Name, search.NumConditions)
+		fmt.Fprintf(defaultCLI.stdout, "%-10s  %-24s  conditions=%d\n", search.Key, search.Name, search.NumConditions)
 	}
 	return 0
 }
@@ -215,18 +215,18 @@ func runDeleted(args []string) int {
 		})
 	}
 
-	fmt.Fprintf(stdout, "collections=%d\n", len(deleted.Collections))
-	fmt.Fprintf(stdout, "searches=%d\n", len(deleted.Searches))
-	fmt.Fprintf(stdout, "items=%d\n", len(deleted.Items))
-	fmt.Fprintf(stdout, "tags=%d\n", len(deleted.Tags))
+	fmt.Fprintf(defaultCLI.stdout, "collections=%d\n", len(deleted.Collections))
+	fmt.Fprintf(defaultCLI.stdout, "searches=%d\n", len(deleted.Searches))
+	fmt.Fprintf(defaultCLI.stdout, "items=%d\n", len(deleted.Items))
+	fmt.Fprintf(defaultCLI.stdout, "tags=%d\n", len(deleted.Tags))
 	return 0
 }
 
 func runVersions(args []string) int {
 	objectType, opts, jsonOutput, err := parseVersionsArgs(args)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageVersions)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageVersions)
 		return 2
 	}
 
@@ -266,12 +266,12 @@ func runVersions(args []string) int {
 	}
 
 	if result.NotModified {
-		fmt.Fprintf(stdout, "not modified since version %d\n", opts.IfModifiedSinceVersion)
+		fmt.Fprintf(defaultCLI.stdout, "not modified since version %d\n", opts.IfModifiedSinceVersion)
 		return 0
 	}
 
 	for key, version := range result.Versions {
-		fmt.Fprintf(stdout, "%-10s  %d\n", key, version)
+		fmt.Fprintf(defaultCLI.stdout, "%-10s  %d\n", key, version)
 	}
 	return 0
 }
@@ -422,7 +422,7 @@ func runKeyInfo(args []string) int {
 		})
 	}
 
-	fmt.Fprintf(stdout, "user_id=%d\n", info.UserID)
+	fmt.Fprintf(defaultCLI.stdout, "user_id=%d\n", info.UserID)
 	if len(info.Access) > 0 {
 		return writeJSON(info.Access)
 	}
@@ -462,12 +462,12 @@ func runGroups(args []string) int {
 	}
 
 	if len(groups) == 0 {
-		fmt.Fprintln(stdout, "no groups found for the current api key")
+		fmt.Fprintln(defaultCLI.stdout, "no groups found for the current api key")
 		return 0
 	}
 
 	for _, group := range groups {
-		fmt.Fprintf(stdout, "%-8d  %s\n", group.ID, group.Name)
+		fmt.Fprintf(defaultCLI.stdout, "%-8d  %s\n", group.ID, group.Name)
 	}
 	return 0
 }
@@ -501,12 +501,12 @@ func runTrash(args []string) int {
 	}
 
 	if len(items) == 0 {
-		fmt.Fprintln(stdout, "trash is empty")
+		fmt.Fprintln(defaultCLI.stdout, "trash is empty")
 		return 0
 	}
 
 	for _, item := range items {
-		fmt.Fprintf(stdout, "%-10s  %-16s  %-6s  %-18s  %s\n",
+		fmt.Fprintf(defaultCLI.stdout, "%-10s  %-16s  %-6s  %-18s  %s\n",
 			item.Key,
 			item.ItemType,
 			shortDate(item.Date),
@@ -546,12 +546,12 @@ func runCollectionsTop(args []string) int {
 	}
 
 	if len(collections) == 0 {
-		fmt.Fprintln(stdout, "no top-level collections found")
+		fmt.Fprintln(defaultCLI.stdout, "no top-level collections found")
 		return 0
 	}
 
 	for _, collection := range collections {
-		fmt.Fprintf(stdout, "%-10s  %-20s  items=%d  children=%d\n",
+		fmt.Fprintf(defaultCLI.stdout, "%-10s  %-20s  items=%d  children=%d\n",
 			collection.Key,
 			collection.Name,
 			collection.NumItems,
@@ -590,12 +590,12 @@ func runPublications(args []string) int {
 	}
 
 	if len(items) == 0 {
-		fmt.Fprintln(stdout, "no publications found")
+		fmt.Fprintln(defaultCLI.stdout, "no publications found")
 		return 0
 	}
 
 	for _, item := range items {
-		fmt.Fprintf(stdout, "%-10s  %-16s  %-6s  %-18s  %s\n",
+		fmt.Fprintf(defaultCLI.stdout, "%-10s  %-16s  %-6s  %-18s  %s\n",
 			item.Key,
 			item.ItemType,
 			shortDate(item.Date),
@@ -619,7 +619,7 @@ func renderLocalizedValues(command string, values []zoteroapi.LocalizedValue, js
 	}
 
 	for _, value := range values {
-		fmt.Fprintf(stdout, "%-18s  %s\n", value.ID, value.Localized)
+		fmt.Fprintf(defaultCLI.stdout, "%-18s  %s\n", value.ID, value.Localized)
 	}
 	return 0
 }

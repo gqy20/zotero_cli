@@ -24,13 +24,13 @@ func runConfig(args []string) int {
 		if err != nil {
 			return printErr(err)
 		}
-		fmt.Fprintln(stdout, path)
+		fmt.Fprintln(defaultCLI.stdout, path)
 		return 0
 	case "show":
 		cfg, path, err := config.Load()
 		if err != nil {
 			if errors.Is(err, config.ErrNotFound) {
-				fmt.Fprintf(stderr, "config not found; run `zot config init` first\n")
+				fmt.Fprintf(defaultCLI.stderr, "config not found; run `zot config init` first\n")
 				return 3
 			}
 			return printErr(err)
@@ -45,7 +45,7 @@ func runConfig(args []string) int {
 	case "init":
 		return runConfigInit(args[1:])
 	default:
-		fmt.Fprintf(stderr, "unknown config command: %s\n\n", args[0])
+		fmt.Fprintf(defaultCLI.stderr, "unknown config command: %s\n\n", args[0])
 		printConfigUsage()
 		return 2
 	}
@@ -62,7 +62,7 @@ func runConfigInit(args []string) int {
 		cfg.LibraryType = "user"
 		cfg.LibraryID = "123456"
 		cfg.APIKey = "replace-me"
-		fmt.Fprint(stdout, strings.Join([]string{
+		fmt.Fprint(defaultCLI.stdout, strings.Join([]string{
 			"ZOT_MODE=web",
 			"ZOT_DATA_DIR=",
 			"ZOT_LIBRARY_TYPE=user",
@@ -81,8 +81,8 @@ func runConfigInit(args []string) int {
 	}
 
 	if _, err := os.Stat(path); err == nil {
-		fmt.Fprintf(stderr, "config already exists at %s\n", path)
-		fmt.Fprintf(stderr, "edit it manually or remove it before re-running init\n")
+		fmt.Fprintf(defaultCLI.stderr, "config already exists at %s\n", path)
+		fmt.Fprintf(defaultCLI.stderr, "edit it manually or remove it before re-running init\n")
 		return 3
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return printErr(err)
@@ -96,8 +96,8 @@ func runConfigInit(args []string) int {
 		return printErr(err)
 	}
 
-	fmt.Fprintf(stdout, "created config at %s\n", path)
-	fmt.Fprintln(stdout, "you can edit ~/.zot/.env later if you want to change keys or permissions")
+	fmt.Fprintf(defaultCLI.stdout, "created config at %s\n", path)
+	fmt.Fprintln(defaultCLI.stdout, "you can edit ~/.zot/.env later if you want to change keys or permissions")
 	return 0
 }
 
@@ -105,9 +105,9 @@ func runConfigValidate() int {
 	cfg, path, err := config.Load()
 	if err != nil {
 		if errors.Is(err, config.ErrNotFound) {
-			fmt.Fprintln(stderr, "config not found.")
-			fmt.Fprintln(stderr, "required fields: library_type, library_id, api_key")
-			fmt.Fprintln(stderr, "run `zot config init` to set them up interactively in ~/.zot/.env")
+			fmt.Fprintln(defaultCLI.stderr, "config not found.")
+			fmt.Fprintln(defaultCLI.stderr, "required fields: library_type, library_id, api_key")
+			fmt.Fprintln(defaultCLI.stderr, "run `zot config init` to set them up interactively in ~/.zot/.env")
 			return 3
 		}
 		return printErr(err)

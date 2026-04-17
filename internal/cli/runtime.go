@@ -10,15 +10,13 @@ import (
 	"zotero_cli/internal/zoteroapi"
 )
 
-var backendNewReader = backend.NewReader
-
 func loadConfig() (config.Config, int) {
 	cfg, _, err := config.Load()
 	if err != nil {
 		if errors.Is(err, config.ErrNotFound) {
-			fmt.Fprintln(stderr, "config not found.")
-			fmt.Fprintln(stderr, "required fields: library_type, library_id, api_key")
-			fmt.Fprintln(stderr, "run `zot config init` to set them up interactively in ~/.zot/.env")
+			fmt.Fprintln(defaultCLI.stderr, "config not found.")
+			fmt.Fprintln(defaultCLI.stderr, "required fields: library_type, library_id, api_key")
+			fmt.Fprintln(defaultCLI.stderr, "run `zot config init` to set them up interactively in ~/.zot/.env")
 			return config.Config{}, 3
 		}
 		return config.Config{}, printErr(err)
@@ -47,7 +45,7 @@ func loadReader() (config.Config, backend.Reader, int) {
 		return config.Config{}, nil, exitCode
 	}
 
-	reader, err := backendNewReader(cfg, nil)
+	reader, err := defaultCLI.backendNewReader(cfg, nil)
 	if err != nil {
 		return config.Config{}, nil, printErr(err)
 	}
@@ -65,7 +63,7 @@ func ensureWriteAllowed(cfg config.Config) int {
 	if cfg.AllowWrite {
 		return 0
 	}
-	fmt.Fprintln(stderr, "error: writes are disabled in ~/.zot/.env; set ZOT_ALLOW_WRITE=1 to enable create/update operations")
+	fmt.Fprintln(defaultCLI.stderr, "error: writes are disabled in ~/.zot/.env; set ZOT_ALLOW_WRITE=1 to enable create/update operations")
 	return 1
 }
 
@@ -73,7 +71,7 @@ func ensureDeleteAllowed(cfg config.Config) int {
 	if cfg.AllowDelete {
 		return 0
 	}
-	fmt.Fprintln(stderr, "error: delete operations are disabled in ~/.zot/.env; set ZOT_ALLOW_DELETE=1 to enable delete commands")
+	fmt.Fprintln(defaultCLI.stderr, "error: delete operations are disabled in ~/.zot/.env; set ZOT_ALLOW_DELETE=1 to enable delete commands")
 	return 1
 }
 

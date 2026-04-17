@@ -156,23 +156,23 @@ func parseFindArgs(args []string) (findParsedArgs, error) {
 
 func parseFindIncludeFields(value string) ([]string, error) {
 	allowed := map[string]struct{}{
-		"key":         {},
-		"version":     {},
-		"item_type":   {},
-		"title":       {},
-		"date":        {},
-		"creators":    {},
-		"container":   {},
-		"volume":      {},
-		"issue":       {},
-		"pages":       {},
-		"doi":         {},
-		"url":         {},
-		"tags":        {},
-		"collections": {},
-		"attachments": {},
-		"notes":       {},
-		"matched_on":  {},
+		"key":               {},
+		"version":           {},
+		"item_type":         {},
+		"title":             {},
+		"date":              {},
+		"creators":          {},
+		"container":         {},
+		"volume":            {},
+		"issue":             {},
+		"pages":             {},
+		"doi":               {},
+		"url":               {},
+		"tags":              {},
+		"collections":       {},
+		"attachments":       {},
+		"notes":             {},
+		"matched_on":        {},
 		"full_text_preview": {},
 	}
 
@@ -330,7 +330,7 @@ func parseJSONOnlyArgs(args []string, usage string) (bool, bool) {
 			jsonOutput = true
 			continue
 		}
-		fmt.Fprintln(stderr, usage)
+		fmt.Fprintln(defaultCLI.stderr, usage)
 		return false, false
 	}
 	return jsonOutput, true
@@ -346,20 +346,20 @@ func parseJSONAndLimitArgs(args []string, usage string) (bool, int, bool) {
 			jsonOutput = true
 		case "--limit":
 			if i+1 >= len(args) {
-				fmt.Fprintln(stderr, "error: missing value for --limit")
-				fmt.Fprintln(stderr, usage)
+				fmt.Fprintln(defaultCLI.stderr, "error: missing value for --limit")
+				fmt.Fprintln(defaultCLI.stderr, usage)
 				return false, 0, false
 			}
 			n, err := strconv.Atoi(args[i+1])
 			if err != nil || n <= 0 {
-				fmt.Fprintln(stderr, "error: invalid value for --limit")
-				fmt.Fprintln(stderr, usage)
+				fmt.Fprintln(defaultCLI.stderr, "error: invalid value for --limit")
+				fmt.Fprintln(defaultCLI.stderr, usage)
 				return false, 0, false
 			}
 			limit = n
 			i++
 		default:
-			fmt.Fprintln(stderr, usage)
+			fmt.Fprintln(defaultCLI.stderr, usage)
 			return false, 0, false
 		}
 	}
@@ -434,12 +434,12 @@ func parseSingleValueCommand(args []string, usage string) (string, bool, bool) {
 			value = arg
 			continue
 		}
-		fmt.Fprintln(stderr, usage)
+		fmt.Fprintln(defaultCLI.stderr, usage)
 		return "", false, false
 	}
 
 	if strings.TrimSpace(value) == "" {
-		fmt.Fprintln(stderr, usage)
+		fmt.Fprintln(defaultCLI.stderr, usage)
 		return "", false, false
 	}
 

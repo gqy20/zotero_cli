@@ -11,8 +11,8 @@ func runCreateItem(args []string) int {
 	}
 	data, version, jsonOutput, err := parseWriteCreateArgs(args)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageCreateItem)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageCreateItem)
 		return 2
 	}
 
@@ -32,7 +32,7 @@ func runCreateItem(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "create-item", Data: result})
 	}
-	fmt.Fprintf(stdout, "created item %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	fmt.Fprintf(defaultCLI.stdout, "created item %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
 }
 
@@ -42,8 +42,8 @@ func runUpdateItem(args []string) int {
 	}
 	key, data, version, jsonOutput, err := parseWriteUpdateArgs(args, true)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageUpdateItem)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageUpdateItem)
 		return 2
 	}
 
@@ -63,7 +63,7 @@ func runUpdateItem(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "update-item", Data: result})
 	}
-	fmt.Fprintf(stdout, "updated item %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	fmt.Fprintf(defaultCLI.stdout, "updated item %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
 }
 
@@ -73,8 +73,8 @@ func runDeleteItem(args []string) int {
 	}
 	key, version, jsonOutput, err := parseWriteDeleteArgs(args)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageDeleteItem)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageDeleteItem)
 		return 2
 	}
 
@@ -94,7 +94,7 @@ func runDeleteItem(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "delete-item", Data: result})
 	}
-	fmt.Fprintf(stdout, "deleted item %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	fmt.Fprintf(defaultCLI.stdout, "deleted item %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
 }
 
@@ -104,8 +104,8 @@ func runCreateItems(args []string) int {
 	}
 	data, version, jsonOutput, err := parseWriteBatchArgs(args, true)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageCreateItems)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageCreateItems)
 		return 2
 	}
 
@@ -125,7 +125,7 @@ func runCreateItems(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "create-items", Data: result})
 	}
-	fmt.Fprintf(stdout, "created %d items at library version %d\n", len(result.Successful), result.LastModifiedVersion)
+	fmt.Fprintf(defaultCLI.stdout, "created %d items at library version %d\n", len(result.Successful), result.LastModifiedVersion)
 	return 0
 }
 
@@ -135,8 +135,8 @@ func runUpdateItems(args []string) int {
 	}
 	data, version, jsonOutput, err := parseWriteBatchArgs(args, false)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageUpdateItems)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageUpdateItems)
 		return 2
 	}
 
@@ -156,7 +156,7 @@ func runUpdateItems(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "update-items", Data: result})
 	}
-	fmt.Fprintf(stdout, "updated %d items (%d unchanged) at library version %d\n", len(result.Successful), len(result.Unchanged), result.LastModifiedVersion)
+	fmt.Fprintf(defaultCLI.stdout, "updated %d items (%d unchanged) at library version %d\n", len(result.Successful), len(result.Unchanged), result.LastModifiedVersion)
 	return 0
 }
 
@@ -166,8 +166,8 @@ func runDeleteItems(args []string) int {
 	}
 	keys, version, _, jsonOutput, err := parseKeysListArgs(args, false, false)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageDeleteItems)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageDeleteItems)
 		return 2
 	}
 
@@ -187,7 +187,7 @@ func runDeleteItems(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "delete-items", Data: result})
 	}
-	fmt.Fprintf(stdout, "deleted %d items at library version %d\n", len(result.Successful), result.LastModifiedVersion)
+	fmt.Fprintf(defaultCLI.stdout, "deleted %d items at library version %d\n", len(result.Successful), result.LastModifiedVersion)
 	return 0
 }
 
@@ -205,8 +205,8 @@ func runUpdateTags(args []string, usage string, command string, add bool) int {
 	}
 	keys, version, tag, jsonOutput, err := parseKeysListArgs(args, false, true)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usage)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usage)
 		return 2
 	}
 
@@ -245,7 +245,7 @@ func runUpdateTags(args []string, usage string, command string, add bool) int {
 	if !add {
 		action = "removed"
 	}
-	fmt.Fprintf(stdout, "%s tag %q on %d items at library version %d\n", action, tag, len(keys), result.LastModifiedVersion)
+	fmt.Fprintf(defaultCLI.stdout, "%s tag %q on %d items at library version %d\n", action, tag, len(keys), result.LastModifiedVersion)
 	return 0
 }
 
@@ -255,8 +255,8 @@ func runCreateCollection(args []string) int {
 	}
 	data, version, jsonOutput, err := parseWriteCreateArgs(args)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageCreateCollection)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageCreateCollection)
 		return 2
 	}
 
@@ -276,7 +276,7 @@ func runCreateCollection(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "create-collection", Data: result})
 	}
-	fmt.Fprintf(stdout, "created collection %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	fmt.Fprintf(defaultCLI.stdout, "created collection %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
 }
 
@@ -286,8 +286,8 @@ func runUpdateCollection(args []string) int {
 	}
 	key, data, version, jsonOutput, err := parseWriteUpdateArgs(args, false)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageUpdateCollection)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageUpdateCollection)
 		return 2
 	}
 
@@ -307,7 +307,7 @@ func runUpdateCollection(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "update-collection", Data: result})
 	}
-	fmt.Fprintf(stdout, "updated collection %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	fmt.Fprintf(defaultCLI.stdout, "updated collection %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
 }
 
@@ -317,8 +317,8 @@ func runDeleteCollection(args []string) int {
 	}
 	key, version, jsonOutput, err := parseWriteDeleteArgs(args)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageDeleteCollection)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageDeleteCollection)
 		return 2
 	}
 
@@ -338,7 +338,7 @@ func runDeleteCollection(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "delete-collection", Data: result})
 	}
-	fmt.Fprintf(stdout, "deleted collection %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	fmt.Fprintf(defaultCLI.stdout, "deleted collection %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
 }
 
@@ -348,8 +348,8 @@ func runCreateSearch(args []string) int {
 	}
 	data, version, jsonOutput, err := parseWriteCreateArgs(args)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageCreateSearch)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageCreateSearch)
 		return 2
 	}
 
@@ -369,7 +369,7 @@ func runCreateSearch(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "create-search", Data: result})
 	}
-	fmt.Fprintf(stdout, "created search %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	fmt.Fprintf(defaultCLI.stdout, "created search %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
 }
 
@@ -379,8 +379,8 @@ func runUpdateSearch(args []string) int {
 	}
 	key, data, version, jsonOutput, err := parseWriteUpdateArgs(args, false)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageUpdateSearch)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageUpdateSearch)
 		return 2
 	}
 
@@ -400,7 +400,7 @@ func runUpdateSearch(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "update-search", Data: result})
 	}
-	fmt.Fprintf(stdout, "updated search %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	fmt.Fprintf(defaultCLI.stdout, "updated search %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
 }
 
@@ -410,8 +410,8 @@ func runDeleteSearch(args []string) int {
 	}
 	key, version, jsonOutput, err := parseWriteDeleteArgs(args)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		fmt.Fprintln(stderr, usageDeleteSearch)
+		fmt.Fprintln(defaultCLI.stderr, "error:", err)
+		fmt.Fprintln(defaultCLI.stderr, usageDeleteSearch)
 		return 2
 	}
 
@@ -431,6 +431,6 @@ func runDeleteSearch(args []string) int {
 	if jsonOutput {
 		return writeJSON(jsonResponse{OK: true, Command: "delete-search", Data: result})
 	}
-	fmt.Fprintf(stdout, "deleted search %s at library version %d\n", result.Key, result.LastModifiedVersion)
+	fmt.Fprintf(defaultCLI.stdout, "deleted search %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
 }

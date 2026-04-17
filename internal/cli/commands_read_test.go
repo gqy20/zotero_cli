@@ -265,11 +265,11 @@ func TestRunFindJSONReportsSnapshotReadSource(t *testing.T) {
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
 
-	previousNewReader := backendNewReader
+	previousNewReader := defaultCLI.backendNewReader
 	t.Cleanup(func() {
-		backendNewReader = previousNewReader
+		defaultCLI.backendNewReader = previousNewReader
 	})
-	backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
+	defaultCLI.backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
 		return stubMetadataReader{
 			items: []domain.Item{{Key: "SNAP1", ItemType: "journalArticle", Title: "Snapshot Item"}},
 			meta:  backend.ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true},
@@ -300,11 +300,11 @@ func TestRunFindTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
 
-	previousNewReader := backendNewReader
+	previousNewReader := defaultCLI.backendNewReader
 	t.Cleanup(func() {
-		backendNewReader = previousNewReader
+		defaultCLI.backendNewReader = previousNewReader
 	})
-	backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
+	defaultCLI.backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
 		return stubMetadataReader{
 			items: []domain.Item{{Key: "SNAP1", ItemType: "journalArticle", Title: "Snapshot Item"}},
 			meta:  backend.ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true},
@@ -2208,11 +2208,11 @@ func TestRunExportCSLJSONTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
 	writeTestConfig(t, configRoot)
 	t.Setenv("ZOT_MODE", "local")
 
-	previousLocalExportReader := newLocalExportReader
+	previousLocalExportReader := defaultCLI.newLocalExportReader
 	t.Cleanup(func() {
-		newLocalExportReader = previousLocalExportReader
+		defaultCLI.newLocalExportReader = previousLocalExportReader
 	})
-	newLocalExportReader = func(config.Config) (localExportReader, error) {
+	defaultCLI.newLocalExportReader = func(config.Config) (localExportReader, error) {
 		return stubLocalExportReader{
 			keys: []string{"SNAP1"},
 			payload: []map[string]any{
@@ -2241,11 +2241,11 @@ func TestRunExtractTextLocalJSON(t *testing.T) {
 	writeTestConfig(t, configRoot)
 	t.Setenv("ZOT_MODE", "local")
 
-	previousLocalTextReader := newLocalTextReader
+	previousLocalTextReader := defaultCLI.newLocalTextReader
 	t.Cleanup(func() {
-		newLocalTextReader = previousLocalTextReader
+		defaultCLI.newLocalTextReader = previousLocalTextReader
 	})
-	newLocalTextReader = func(config.Config) (localTextReader, error) {
+	defaultCLI.newLocalTextReader = func(config.Config) (localTextReader, error) {
 		return stubLocalTextReader{
 			item: domain.Item{
 				Key: "ITEM123",
@@ -2315,11 +2315,11 @@ func TestRunShowTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
 
-	previousNewReader := backendNewReader
+	previousNewReader := defaultCLI.backendNewReader
 	t.Cleanup(func() {
-		backendNewReader = previousNewReader
+		defaultCLI.backendNewReader = previousNewReader
 	})
-	backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
+	defaultCLI.backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
 		return stubMetadataReader{
 			item: domain.Item{Key: "SNAP1", ItemType: "journalArticle", Title: "Snapshot Item"},
 			meta: backend.ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true},
@@ -2344,11 +2344,11 @@ func TestRunStatsTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
 
-	previousNewReader := backendNewReader
+	previousNewReader := defaultCLI.backendNewReader
 	t.Cleanup(func() {
-		backendNewReader = previousNewReader
+		defaultCLI.backendNewReader = previousNewReader
 	})
-	backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
+	defaultCLI.backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
 		return stubMetadataReader{
 			stats: backend.LibraryStats{LibraryType: "user", LibraryID: "123456", TotalItems: 2},
 			meta:  backend.ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true},
@@ -2373,11 +2373,11 @@ func TestRunRelateTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
 
-	previousNewReader := backendNewReader
+	previousNewReader := defaultCLI.backendNewReader
 	t.Cleanup(func() {
-		backendNewReader = previousNewReader
+		defaultCLI.backendNewReader = previousNewReader
 	})
-	backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
+	defaultCLI.backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
 		return stubMetadataReader{
 			relations: []domain.Relation{{Predicate: "dc:relation", Direction: "outgoing", Target: domain.ItemRef{Key: "SNAP2"}}},
 			meta:      backend.ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true},

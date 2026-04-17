@@ -14,8 +14,11 @@ type zoteroPrefs struct {
 	BaseAttachmentPath string
 }
 
-func loadMatchingZoteroPrefs(dataDir string) (zoteroPrefs, string, error) {
-	paths, err := findZoteroPrefsFunc()
+func loadMatchingZoteroPrefs(dataDir string, findPrefs func() ([]string, error)) (zoteroPrefs, string, error) {
+	if findPrefs == nil {
+		findPrefs = findZoteroPrefs
+	}
+	paths, err := findPrefs()
 	if err != nil {
 		return zoteroPrefs{}, "", err
 	}

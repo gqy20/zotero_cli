@@ -649,25 +649,22 @@ func TestWithReadableDBFallsBackToSnapshotWhenQueryHitsBusy(t *testing.T) {
 	}
 	defer snapshotDB.Close()
 
-	previousOpen := openSQLiteDBFunc
-	previousSnapshot := createSQLiteSnapshotFunc
-	t.Cleanup(func() {
-		openSQLiteDBFunc = previousOpen
-		createSQLiteSnapshotFunc = previousSnapshot
-	})
-
-	openSQLiteDBFunc = func(dsn string) (*sql.DB, error) {
+	openDB := func(dsn string) (*sql.DB, error) {
 		if strings.Contains(dsn, "snapshot.sqlite") {
 			return snapshotDB, nil
 		}
 		return liveDB, nil
 	}
-	createSQLiteSnapshotFunc = func(string) (string, string, error) {
+	createSnapshot := func(string) (string, string, error) {
 		snapshotDir := t.TempDir()
 		return snapshotDir, filepath.Join(snapshotDir, "snapshot.sqlite"), nil
 	}
 
-	reader := &LocalReader{SQLitePath: filepath.Join(t.TempDir(), "zotero.sqlite")}
+	reader := &LocalReader{
+		SQLitePath:     filepath.Join(t.TempDir(), "zotero.sqlite"),
+		openSQLiteDB:   openDB,
+		createSnapshot: createSnapshot,
+	}
 	attempts := 0
 	err = reader.withReadableDB(context.Background(), func(db *sql.DB) error {
 		attempts++
