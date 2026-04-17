@@ -59,6 +59,12 @@ type stubLocalPDFReader struct {
 	meta   backend.ReadMetadata
 }
 
+type stubLocalTextReader struct {
+	item domain.Item
+	text string
+	meta backend.ReadMetadata
+}
+
 func (r stubLocalExportReader) FindItems(context.Context, backend.FindOptions) ([]domain.Item, error) {
 	items := make([]domain.Item, 0, len(r.keys))
 	for _, key := range r.keys {
@@ -88,6 +94,18 @@ func (r stubLocalPDFReader) ExtractAttachmentImages(context.Context, domain.Atta
 }
 
 func (r stubLocalPDFReader) ConsumeReadMetadata() backend.ReadMetadata {
+	return r.meta
+}
+
+func (r stubLocalTextReader) GetItem(context.Context, string) (domain.Item, error) {
+	return r.item, nil
+}
+
+func (r stubLocalTextReader) ExtractItemFullText(context.Context, domain.Item) (string, error) {
+	return r.text, nil
+}
+
+func (r stubLocalTextReader) ConsumeReadMetadata() backend.ReadMetadata {
 	return r.meta
 }
 
@@ -2288,6 +2306,52 @@ func TestRunExtractImagesLocalJSON(t *testing.T) {
 	imageData := images[0].(map[string]any)
 	if imageData["attachment_key"] != "ATT123" || imageData["format"] != "png" {
 		t.Fatalf("unexpected image payload: %#v", imageData)
+	}
+}
+
+func TestRunExtractTextLocalJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	previousLocalTextReader := newLocalTextReader
+	t.Cleanup(func() {
+		newLocalTextReader = previousLocalTextReader
+	})
+	newLocalTextReader = func(config.Config) (localTextReader, error) {
+		return stubLocalTextReader{
+			item: domain.Item{
+				Key: "ITEM123",
+				Attachments: []domain.Attachment{
+					{Key: "ATT123", Title: "Paper PDF", ContentType: "application/pdf", ResolvedPath: "D:/paper.pdf", Resolved: true},
+				},
+			},
+			text: "full extracted text",
+			meta: backend.ReadMetadata{ReadSource: "live", FullTextSource: "pdfium", FullTextAttachmentKey: "ATT123"},
+		}, nil
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"extract-text", "ITEM123", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	if got["command"] != "extract-text" {
+		t.Fatalf("unexpected command: %#v", got["command"])
+	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["full_text_source"] != "pdfium" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
+	data, ok := got["data"].(map[string]any)
+	if !ok || data["text"] != "full extracted text" {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
 	}
 }
 

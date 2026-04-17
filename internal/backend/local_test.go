@@ -772,6 +772,67 @@ func TestLocalExtractAttachmentImagesWithPDFCPU(t *testing.T) {
 	}
 }
 
+func TestLocalExtractItemFullTextUsesPDFAttachment(t *testing.T) {
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resolvedPath := filepath.Join(storageDir, "ATT123", "paper.pdf")
+	if err := os.MkdirAll(filepath.Dir(resolvedPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(resolvedPath, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	previous := extractFullTextWithPDFiumFunc
+	t.Cleanup(func() { extractFullTextWithPDFiumFunc = previous })
+	extractFullTextWithPDFiumFunc = func(_ context.Context, _ *LocalReader, attachment domain.Attachment) (fullTextDocument, bool, error) {
+		sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
+		if !ok {
+			return fullTextDocument{}, false, nil
+		}
+		return fullTextDocument{
+			Text: "full extracted text",
+			Meta: fullTextCacheMeta{
+				AttachmentKey:   attachment.Key,
+				ResolvedPath:    sourcePath,
+				ContentType:     attachment.ContentType,
+				Extractor:       "pdfium",
+				SourceMtimeUnix: info.ModTime().Unix(),
+				SourceSize:      info.Size(),
+			},
+		}, true, nil
+	}
+
+	reader := &LocalReader{
+		DataDir:          dataDir,
+		StorageDir:       storageDir,
+		FullTextCacheDir: filepath.Join(dataDir, ".zotero_cli", "fulltext"),
+	}
+	item := domain.Item{
+		Key: "ITEM123",
+		Attachments: []domain.Attachment{
+			{Key: "ATT999", ContentType: "text/plain", ResolvedPath: filepath.Join(storageDir, "ATT999", "note.txt"), Resolved: true},
+			{Key: "ATT123", Title: "Paper PDF", ContentType: "application/pdf", ResolvedPath: resolvedPath, Resolved: true},
+		},
+	}
+
+	text, err := reader.ExtractItemFullText(context.Background(), item)
+	if err != nil {
+		t.Fatalf("ExtractItemFullText() error = %v", err)
+	}
+	if text != "full extracted text" {
+		t.Fatalf("ExtractItemFullText() = %q, want full extracted text", text)
+	}
+
+	meta := reader.ConsumeReadMetadata()
+	if meta.FullTextSource != "pdfium" || meta.FullTextAttachmentKey != "ATT123" {
+		t.Fatalf("ConsumeReadMetadata() = %#v, want pdfium attachment metadata", meta)
+	}
+}
+
 func writeTestPNG(path string, width int, height int) error {
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	for y := 0; y < height; y++ {
