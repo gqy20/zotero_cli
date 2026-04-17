@@ -6,30 +6,35 @@
 
 ## [Unreleased]
 
+### 说明
+- 当前尚未开始新的未发布变更。
+
+## [0.0.3] - 2026-04-17
+
 ### 新增
-- 使用 `CHANGELOG.md` 驱动 GitHub Release 发布说明。
+- 新增 `extract-text` 命令，可在 `local` / `hybrid` 模式下提取本地 PDF 正文。
+- `extract-text --json` 现在会返回主附件文本、所有 PDF 附件文本、缓存命中状态和全文来源元信息。
+- `show` 的本地输出现在会加载并展示 Zotero Reader 的 PDF 注释与高亮数据。
+- 本地 `find` 现在支持附件感知过滤，包括 `--has-pdf`、`--attachment-type`、附件路径/名称相关匹配，以及更明确的 `matched_on` 信号。
+- 本地全文检索进一步扩展，支持 snippet 预览、附件感知片段、实验性 FTS 索引查询和更丰富的全文元信息。
+- 新增 PDF 处理研究文档，记录全文提取与渲染路线的实现背景。
 
-### 0.0.3 方向
-- 聚焦“语义一致性”和“脚本可诊断性”，继续减少 `web` / `local` / `hybrid` 之间的行为漂移。
-
-### 0.0.3 开发顺序
-1. 收敛 `find` 共享语义
-   - 统一日期过滤、标签过滤和默认可见条目策略。
-   - 把 backend 无关的判定尽量收敛到共享实现，减少重复逻辑。
-2. 稳定 fallback 能力信号
-   - 继续去除依赖错误文案的 fallback 判断。
-   - 把“可回退”和“不可回退”的判断固定到明确的 backend 能力或错误类型上。
-3. 补强写命令可诊断性
-   - 进一步细化写命令参数和输入数据错误。
-   - 让脚本和 agent 更容易区分“参数错”“前置条件不满足”“文件不可读”“数据无效”等失败原因。
-
-### 0.0.3 验收重点
-- `find` 在 `web` / `local` / `hybrid` 下对同一组过滤条件尽量给出一致结果。
-- `hybrid` fallback 判断不再依赖脆弱的错误字符串匹配。
-- 常见写命令失败场景能给出稳定、可测试、便于自动化处理的错误信号。
+### 变更
+- `hybrid` 模式下的本地读 fallback 与 `read_source` 元数据进一步稳定化，本地缺失、暂时不可用和能力边界现在会给出更一致的信号。
+- `find` 的共享语义进一步收敛，统一了查询参数规范化、标签去重归一化、日期过滤和默认可见条目策略。
+- `hybrid` 模式的 fallback 现在不仅看错误类型，还会看 Web 是否真的能够承接该请求，避免 local-only 查询被误退回到 Web。
+- `relate` 在 `hybrid` 下不再误回退到 `web`，本地关系读取失败时会保留真实本地错误。
+- `export --format csljson` 在 `local` / `hybrid` 下优先使用本地导出；`hybrid` 只会在可预期的本地缺失或暂时不可用场景下回退到 Web。
+- PDF 全文提取优先级调整为更偏向主 PDF；正文归一化、去重、补空格和多附件返回行为也进一步改进。
+- CLI 内部结构完成一轮较大整理，包括命令方法化、依赖注入收敛、局部工具函数清理，以及移除旧的兼容入口。
+- 命令帮助、字段选择、错误输出和 agent 友好型元信息继续增强，便于脚本和自动化工具消费。
+- CLI help 现在补充了 modes 和 environment 说明，GitHub release 工作流的展示也做了整理。
 
 ### 文档
-- 新增 `docs/roadmap-0.0.3.md`，记录 `0.0.3` 的推荐开发顺序和阶段目标。
+- `README.md` 现在明确记录了 `find`、`relate`、`extract-text` 和 `csljson export` 在 `web` / `local` / `hybrid` 下的能力边界与回退规则。
+- `docs/AI_AGENT.md` 更新了 agent 调用建议，补充了 local-only 能力与 `hybrid` 回退约束。
+- 新增 `docs/roadmap-0.0.3.md`，记录语义一致性与 fallback 稳定性的推荐推进顺序。
+- 使用 `CHANGELOG.md` 驱动 GitHub Release 发布说明。
 
 ## [0.0.2] - 2026-04-01
 
