@@ -275,6 +275,16 @@ func (c *CLI) runShow(args []string) int {
 			fmt.Fprintf(c.stdout, "  - %s\n", noteSummary(note))
 		}
 	}
+	if len(item.Annotations) > 0 {
+		fmt.Fprintf(c.stdout, "Annotations: %d\n", len(item.Annotations))
+		for _, a := range item.Annotations {
+			fmt.Fprintf(c.stdout, "  - [%s] color=%s page=%s: %s", a.Type, a.Color, a.PageLabel, a.Text)
+			if a.Comment != "" {
+				fmt.Fprintf(c.stdout, " | %s", a.Comment)
+			}
+			fmt.Fprintln(c.stdout)
+		}
+	}
 	if item.FullTextPreview != "" {
 		fmt.Fprintf(c.stdout, "Full Text Preview: %s\n", item.FullTextPreview)
 		if line := fullTextSourceLine(readMeta); line != "" {

@@ -21,6 +21,7 @@ type Item struct {
 	Collections     []Collection `json:"collections,omitempty"`
 	Attachments     []Attachment `json:"attachments,omitempty"`
 	Notes           []Note       `json:"notes,omitempty"`
+	Annotations     []Annotation `json:"annotations,omitempty"`
 }
 
 type Creator struct {
@@ -48,6 +49,20 @@ type Attachment struct {
 type Note struct {
 	Key     string `json:"key"`
 	Preview string `json:"preview,omitempty"`
+}
+
+// Annotation represents a Zotero reader highlight or note on a PDF attachment.
+type Annotation struct {
+	Key        string `json:"key"`
+	Type       string  `json:"type"`                 // "highlight" | "note" | "image" | "ink"
+	Text       string  `json:"text,omitempty"`        // highlighted text (original passage)
+	Comment    string  `json:"comment,omitempty"`     // user-written note
+	Color      string  `json:"color,omitempty"`       // "#ffd400"
+	PageLabel  string  `json:"page_label,omitempty"`  // "2"
+	PageIndex  int     `json:"page_index,omitempty"`   // parsed from position JSON
+	Position   string  `json:"position,omitempty"`    // raw position JSON
+	SortIndex  string  `json:"sort_index,omitempty"`
+	IsExternal bool    `json:"is_external"`
 }
 
 type ItemRef struct {

@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -431,6 +432,113 @@ func (r *LocalReader) loadNotes(ctx context.Context, db *sql.DB, itemID int64) (
 		notes = append(notes, note)
 	}
 	return notes, rows.Err()
+}
+
+// loadAnnotations loads Zotero reader annotations (highlights/notes/ink) for a given parent item ID.
+// parentItemID is typically the itemID of a PDF attachment.
+func (r *LocalReader) loadAnnotations(ctx context.Context, db *sql.DB, parentItemID int64) ([]domain.Annotation, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+			i.key,
+			ia.type,
+			COALESCE(ia.authorName, ''),
+			COALESCE(ia.text, ''),
+			COALESCE(ia.comment, ''),
+			COALESCE(ia.color, ''),
+			COALESCE(ia.pageLabel, ''),
+			COALESCE(ia.position, ''),
+			COALESCE(ia.sortIndex, ''),
+			ia.isExternal
+		FROM itemAnnotations ia
+		JOIN items i ON i.itemID = ia.itemID
+		WHERE ia.parentItemID = ?
+		ORDER BY ia.sortIndex
+	`, parentItemID)
+	if err != nil {
+			return nil, err
+	}
+	defer rows.Close()
+
+	annotations := []domain.Annotation{}
+	for rows.Next() {
+		var a domain.Annotation
+		var atype int
+		var isExternal int
+		var authorName string
+
+		if err := rows.Scan(
+			&a.Key,
+			&atype,
+			&authorName,
+			&a.Text,
+			&a.Comment,
+			&a.Color,
+			&a.PageLabel,
+			&a.Position,
+			&a.SortIndex,
+			&isExternal,
+		); err != nil {
+					return nil, err
+		}
+
+		a.Type = annotationTypeString(atype)
+		a.IsExternal = isExternal != 0
+		a.PageIndex = extractAnnotationPageIndex(a.Position)
+
+		annotations = append(annotations, a)
+	}
+	return annotations, rows.Err()
+}
+
+// loadChildAttachmentIDs returns the itemIDs of all attachment children of the given parent item.
+func (r *LocalReader) loadChildAttachmentIDs(ctx context.Context, db *sql.DB, parentItemID int64) ([]int64, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT ia.itemID
+		FROM itemAttachments ia
+		WHERE ia.parentItemID = ?
+	`, parentItemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func annotationTypeString(t int) string {
+	switch t {
+	case 0:
+		return "highlight"
+	case 1:
+		return "note"
+	case 2:
+		return "image"
+	case 3:
+		return "ink"
+	default:
+		return fmt.Sprintf("unknown(%d)", t)
+	}
+}
+
+func extractAnnotationPageIndex(positionJSON string) int {
+	if positionJSON == "" {
+		return -1
+	}
+	var pos struct {
+		PageIndex int `json:"pageIndex"`
+	}
+	if err := json.Unmarshal([]byte(positionJSON), &pos); err == nil {
+		return pos.PageIndex
+	}
+	return -1
 }
 
 func (r *LocalReader) resolveAttachmentPath(key string, zoteroPath string, filename string) (string, bool) {
