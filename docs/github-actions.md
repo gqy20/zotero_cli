@@ -28,6 +28,27 @@ Workflow: `.github/workflows/release.yml`
 - Injects version, commit, and build date into the binary at build time
 - Generates a `checksums.txt` file for all release artifacts
 - Publishes a GitHub Release and uploads packaged binaries automatically
+- If `HOMEBREW_TAP_TOKEN` is configured, updates `gqy20/homebrew-tap` automatically
+
+## Homebrew tap automation
+
+The release workflow can update the external tap repository after a tagged release is published.
+
+Required secret in this repository:
+
+- `HOMEBREW_TAP_TOKEN`
+  - Recommended: a fine-grained personal access token
+  - Repository access: `gqy20/homebrew-tap`
+  - Repository permissions: `Contents: Read and write`
+
+Behavior:
+
+- Downloads the release artifacts produced in the same workflow run
+- Computes the macOS and Linux archive SHA256 values
+- Rewrites `Formula/zotcli.rb` in `gqy20/homebrew-tap`
+- Commits and pushes the tap update to `main`
+
+If `HOMEBREW_TAP_TOKEN` is not configured, the release workflow still publishes the GitHub Release and simply skips the tap update job.
 
 ## Suggested release flow
 

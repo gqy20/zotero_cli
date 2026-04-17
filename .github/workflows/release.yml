@@ -197,3 +197,117 @@ jobs:
           body_path: release-notes.md
           files: dist/*
           make_latest: true
+
+  update-homebrew-tap:
+    name: Update Homebrew Tap
+    runs-on: ubuntu-latest
+    needs:
+      - verify
+      - build
+      - publish
+    if: startsWith(github.ref, 'refs/tags/') && secrets.HOMEBREW_TAP_TOKEN != ''
+    env:
+      TAP_REPO: gqy20/homebrew-tap
+      TAP_FORMULA_PATH: Formula/zotcli.rb
+      VERSION: ${{ env.RELEASE_VERSION }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Capture Homebrew artifact checksums
+        id: checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          linux_amd64="dist/zot_${VERSION}_linux_amd64.tar.gz"
+          linux_arm64="dist/zot_${VERSION}_linux_arm64.tar.gz"
+          darwin_amd64="dist/zot_${VERSION}_darwin_amd64.tar.gz"
+          darwin_arm64="dist/zot_${VERSION}_darwin_arm64.tar.gz"
+
+          echo "linux_amd64_sha=$(sha256sum "${linux_amd64}" | awk '{print $1}')" >> "${GITHUB_OUTPUT}"
+          echo "linux_arm64_sha=$(sha256sum "${linux_arm64}" | awk '{print $1}')" >> "${GITHUB_OUTPUT}"
+          echo "darwin_amd64_sha=$(sha256sum "${darwin_amd64}" | awk '{print $1}')" >> "${GITHUB_OUTPUT}"
+          echo "darwin_arm64_sha=$(sha256sum "${darwin_arm64}" | awk '{print $1}')" >> "${GITHUB_OUTPUT}"
+
+      - name: Check out Homebrew tap
+        shell: bash
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" tap-repo
+
+      - name: Update formula
+        shell: bash
+        working-directory: tap-repo
+        env:
+          LINUX_AMD64_SHA: ${{ steps.checksums.outputs.linux_amd64_sha }}
+          LINUX_ARM64_SHA: ${{ steps.checksums.outputs.linux_arm64_sha }}
+          DARWIN_AMD64_SHA: ${{ steps.checksums.outputs.darwin_amd64_sha }}
+          DARWIN_ARM64_SHA: ${{ steps.checksums.outputs.darwin_arm64_sha }}
+        run: |
+          set -euo pipefail
+
+          cat > "${TAP_FORMULA_PATH}" <<EOF
+          class Zotcli < Formula
+            desc "Zotero CLI for terminal, scripts, and AI agents"
+            homepage "https://github.com/${REPO}"
+            license "MIT"
+            version "${VERSION}"
+
+            on_macos do
+              on_intel do
+                url "https://github.com/${REPO}/releases/download/${VERSION}/zot_${VERSION}_darwin_amd64.tar.gz"
+                sha256 "${DARWIN_AMD64_SHA}"
+              end
+              on_arm do
+                url "https://github.com/${REPO}/releases/download/${VERSION}/zot_${VERSION}_darwin_arm64.tar.gz"
+                sha256 "${DARWIN_ARM64_SHA}"
+              end
+            end
+
+            on_linux do
+              on_intel do
+                url "https://github.com/${REPO}/releases/download/${VERSION}/zot_${VERSION}_linux_amd64.tar.gz"
+                sha256 "${LINUX_AMD64_SHA}"
+              end
+              on_arm do
+                url "https://github.com/${REPO}/releases/download/${VERSION}/zot_${VERSION}_linux_arm64.tar.gz"
+                sha256 "${LINUX_ARM64_SHA}"
+              end
+            end
+
+            def install
+              bin.install "zot"
+            end
+
+            test do
+              assert_match "zot", shell_output("#{bin}/zot --help")
+            end
+          end
+          EOF
+
+      - name: Commit and push tap update
+        shell: bash
+        working-directory: tap-repo
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "${TAP_FORMULA_PATH}"
+
+          if git diff --cached --quiet; then
+            echo "No Homebrew formula changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Update zotcli formula to ${VERSION}"
+          git push origin HEAD:main
