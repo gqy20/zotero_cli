@@ -20,8 +20,6 @@ type CLI struct {
 }
 
 var (
-	defaultCLI = New()
-
 	version   = "0.0.3"
 	commit    = "unknown"
 	buildDate = "unknown"
@@ -37,10 +35,6 @@ func New() *CLI {
 			return backend.NewLocalReader(cfg)
 		},
 	}
-}
-
-func Run(args []string) int {
-	return defaultCLI.Run(args)
 }
 
 func (c *CLI) Run(args []string) int {

@@ -323,20 +323,20 @@ func parseCiteArgs(args []string) (string, zoteroapi.CitationOptions, bool, erro
 	return key, opts, jsonOutput, nil
 }
 
-func parseJSONOnlyArgs(args []string, usage string) (bool, bool) {
+func (c *CLI) parseJSONOnlyArgs(args []string, usage string) (bool, bool) {
 	jsonOutput := false
 	for _, arg := range args {
 		if arg == "--json" {
 			jsonOutput = true
 			continue
 		}
-		fmt.Fprintln(defaultCLI.stderr, usage)
+		fmt.Fprintln(c.stderr, usage)
 		return false, false
 	}
 	return jsonOutput, true
 }
 
-func parseJSONAndLimitArgs(args []string, usage string) (bool, int, bool) {
+func (c *CLI) parseJSONAndLimitArgs(args []string, usage string) (bool, int, bool) {
 	jsonOutput := false
 	limit := 0
 
@@ -346,20 +346,20 @@ func parseJSONAndLimitArgs(args []string, usage string) (bool, int, bool) {
 			jsonOutput = true
 		case "--limit":
 			if i+1 >= len(args) {
-				fmt.Fprintln(defaultCLI.stderr, "error: missing value for --limit")
-				fmt.Fprintln(defaultCLI.stderr, usage)
+				fmt.Fprintln(c.stderr, "error: missing value for --limit")
+				fmt.Fprintln(c.stderr, usage)
 				return false, 0, false
 			}
 			n, err := strconv.Atoi(args[i+1])
 			if err != nil || n <= 0 {
-				fmt.Fprintln(defaultCLI.stderr, "error: invalid value for --limit")
-				fmt.Fprintln(defaultCLI.stderr, usage)
+				fmt.Fprintln(c.stderr, "error: invalid value for --limit")
+				fmt.Fprintln(c.stderr, usage)
 				return false, 0, false
 			}
 			limit = n
 			i++
 		default:
-			fmt.Fprintln(defaultCLI.stderr, usage)
+			fmt.Fprintln(c.stderr, usage)
 			return false, 0, false
 		}
 	}
@@ -421,7 +421,7 @@ func parseVersionsArgs(args []string) (string, versionsArgs, bool, error) {
 	return objectType, opts, jsonOutput, nil
 }
 
-func parseSingleValueCommand(args []string, usage string) (string, bool, bool) {
+func (c *CLI) parseSingleValueCommand(args []string, usage string) (string, bool, bool) {
 	jsonOutput := false
 	value := ""
 
@@ -434,12 +434,12 @@ func parseSingleValueCommand(args []string, usage string) (string, bool, bool) {
 			value = arg
 			continue
 		}
-		fmt.Fprintln(defaultCLI.stderr, usage)
+		fmt.Fprintln(c.stderr, usage)
 		return "", false, false
 	}
 
 	if strings.TrimSpace(value) == "" {
-		fmt.Fprintln(defaultCLI.stderr, usage)
+		fmt.Fprintln(c.stderr, usage)
 		return "", false, false
 	}
 

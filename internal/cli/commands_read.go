@@ -124,7 +124,7 @@ func (c *CLI) runStats(args []string) int {
 	if isHelpOnly(args) {
 		return c.printCommandUsage(usageStats)
 	}
-	jsonOutput, ok := parseJSONOnlyArgs(args, usageStats)
+	jsonOutput, ok := c.parseJSONOnlyArgs(args, usageStats)
 	if !ok {
 		return 2
 	}

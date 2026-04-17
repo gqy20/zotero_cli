@@ -8,24 +8,30 @@ import (
 	"testing"
 )
 
+var testCLI = New()
+
+func Run(args []string) int {
+	return testCLI.Run(args)
+}
+
 func captureOutput(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 
-	oldStdout := defaultCLI.stdout
-	oldStderr := defaultCLI.stderr
-	oldStdin := defaultCLI.stdin
+	oldStdout := testCLI.stdout
+	oldStderr := testCLI.stderr
+	oldStdin := testCLI.stdin
 
 	out := &bytes.Buffer{}
 	errOut := &bytes.Buffer{}
 
-	defaultCLI.stdout = out
-	defaultCLI.stderr = errOut
-	defaultCLI.stdin = strings.NewReader("")
+	testCLI.stdout = out
+	testCLI.stderr = errOut
+	testCLI.stdin = strings.NewReader("")
 
 	t.Cleanup(func() {
-		defaultCLI.stdout = oldStdout
-		defaultCLI.stderr = oldStderr
-		defaultCLI.stdin = oldStdin
+		testCLI.stdout = oldStdout
+		testCLI.stderr = oldStderr
+		testCLI.stdin = oldStdin
 	})
 
 	return out, errOut

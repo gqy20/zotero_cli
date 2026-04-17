@@ -8,7 +8,7 @@ import (
 )
 
 func (c *CLI) runCollections(args []string) int {
-	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageCollections)
+	jsonOutput, limit, ok := c.parseJSONAndLimitArgs(args, usageCollections)
 	if !ok {
 		return 2
 	}
@@ -57,7 +57,7 @@ func (c *CLI) runCollections(args []string) int {
 }
 
 func (c *CLI) runNotes(args []string) int {
-	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageNotes)
+	jsonOutput, limit, ok := c.parseJSONAndLimitArgs(args, usageNotes)
 	if !ok {
 		return 2
 	}
@@ -102,7 +102,7 @@ func (c *CLI) runNotes(args []string) int {
 }
 
 func (c *CLI) runTags(args []string) int {
-	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageTags)
+	jsonOutput, limit, ok := c.parseJSONAndLimitArgs(args, usageTags)
 	if !ok {
 		return 2
 	}
@@ -145,7 +145,7 @@ func (c *CLI) runTags(args []string) int {
 }
 
 func (c *CLI) runSearches(args []string) int {
-	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageSearches)
+	jsonOutput, limit, ok := c.parseJSONAndLimitArgs(args, usageSearches)
 	if !ok {
 		return 2
 	}
@@ -188,7 +188,7 @@ func (c *CLI) runSearches(args []string) int {
 }
 
 func (c *CLI) runDeleted(args []string) int {
-	jsonOutput, ok := parseJSONOnlyArgs(args, usageDeleted)
+	jsonOutput, ok := c.parseJSONOnlyArgs(args, usageDeleted)
 	if !ok {
 		return 2
 	}
@@ -277,7 +277,7 @@ func (c *CLI) runVersions(args []string) int {
 }
 
 func (c *CLI) runItemTypes(args []string) int {
-	jsonOutput, ok := parseJSONOnlyArgs(args, usageItemTypes)
+	jsonOutput, ok := c.parseJSONOnlyArgs(args, usageItemTypes)
 	if !ok {
 		return 2
 	}
@@ -296,7 +296,7 @@ func (c *CLI) runItemTypes(args []string) int {
 }
 
 func (c *CLI) runItemFields(args []string) int {
-	jsonOutput, ok := parseJSONOnlyArgs(args, usageItemFields)
+	jsonOutput, ok := c.parseJSONOnlyArgs(args, usageItemFields)
 	if !ok {
 		return 2
 	}
@@ -315,7 +315,7 @@ func (c *CLI) runItemFields(args []string) int {
 }
 
 func (c *CLI) runCreatorFields(args []string) int {
-	jsonOutput, ok := parseJSONOnlyArgs(args, usageCreatorFields)
+	jsonOutput, ok := c.parseJSONOnlyArgs(args, usageCreatorFields)
 	if !ok {
 		return 2
 	}
@@ -334,7 +334,7 @@ func (c *CLI) runCreatorFields(args []string) int {
 }
 
 func (c *CLI) runItemTypeFields(args []string) int {
-	itemType, jsonOutput, ok := parseSingleValueCommand(args, usageItemTypeFields)
+	itemType, jsonOutput, ok := c.parseSingleValueCommand(args, usageItemTypeFields)
 	if !ok {
 		return 2
 	}
@@ -353,7 +353,7 @@ func (c *CLI) runItemTypeFields(args []string) int {
 }
 
 func (c *CLI) runItemTypeCreatorTypes(args []string) int {
-	itemType, jsonOutput, ok := parseSingleValueCommand(args, usageItemTypeCreatorTypes)
+	itemType, jsonOutput, ok := c.parseSingleValueCommand(args, usageItemTypeCreatorTypes)
 	if !ok {
 		return 2
 	}
@@ -372,7 +372,7 @@ func (c *CLI) runItemTypeCreatorTypes(args []string) int {
 }
 
 func (c *CLI) runItemTemplate(args []string) int {
-	itemType, jsonOutput, ok := parseSingleValueCommand(args, usageItemTemplate)
+	itemType, jsonOutput, ok := c.parseSingleValueCommand(args, usageItemTemplate)
 	if !ok {
 		return 2
 	}
@@ -399,7 +399,7 @@ func (c *CLI) runItemTemplate(args []string) int {
 }
 
 func (c *CLI) runKeyInfo(args []string) int {
-	key, jsonOutput, ok := parseSingleValueCommand(args, usageKeyInfo)
+	key, jsonOutput, ok := c.parseSingleValueCommand(args, usageKeyInfo)
 	if !ok {
 		return 2
 	}
@@ -430,7 +430,7 @@ func (c *CLI) runKeyInfo(args []string) int {
 }
 
 func (c *CLI) runGroups(args []string) int {
-	jsonOutput, ok := parseJSONOnlyArgs(args, usageGroups)
+	jsonOutput, ok := c.parseJSONOnlyArgs(args, usageGroups)
 	if !ok {
 		return 2
 	}
@@ -473,7 +473,7 @@ func (c *CLI) runGroups(args []string) int {
 }
 
 func (c *CLI) runTrash(args []string) int {
-	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usageTrash)
+	jsonOutput, limit, ok := c.parseJSONAndLimitArgs(args, usageTrash)
 	if !ok {
 		return 2
 	}
@@ -518,7 +518,7 @@ func (c *CLI) runTrash(args []string) int {
 }
 
 func (c *CLI) runCollectionsTop(args []string) int {
-	jsonOutput, ok := parseJSONOnlyArgs(args, usageCollectionsTop)
+	jsonOutput, ok := c.parseJSONOnlyArgs(args, usageCollectionsTop)
 	if !ok {
 		return 2
 	}
@@ -562,7 +562,7 @@ func (c *CLI) runCollectionsTop(args []string) int {
 }
 
 func (c *CLI) runPublications(args []string) int {
-	jsonOutput, limit, ok := parseJSONAndLimitArgs(args, usagePublications)
+	jsonOutput, limit, ok := c.parseJSONAndLimitArgs(args, usagePublications)
 	if !ok {
 		return 2
 	}

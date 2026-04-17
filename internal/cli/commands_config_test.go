@@ -13,10 +13,10 @@ func TestRunConfigInitCreatesFileWhenOnlyEnvConfigExists(t *testing.T) {
 	setTestConfigDir(t, configRoot)
 
 	stdout, stderr := captureOutput(t)
-	oldStdin := defaultCLI.stdin
-	defaultCLI.stdin = strings.NewReader("user\n123456\nsecret\n\n\ny\nn\n")
+	oldStdin := testCLI.stdin
+	testCLI.stdin = strings.NewReader("user\n123456\nsecret\n\n\ny\nn\n")
 	t.Cleanup(func() {
-		defaultCLI.stdin = oldStdin
+		testCLI.stdin = oldStdin
 	})
 	exitCode := Run([]string{"config", "init"})
 	if exitCode != 0 {
