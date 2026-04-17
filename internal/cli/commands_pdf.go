@@ -9,16 +9,6 @@ import (
 	"zotero_cli/internal/domain"
 )
 
-type localTextReader interface {
-	GetItem(ctx context.Context, key string) (domain.Item, error)
-	ExtractItemFullText(ctx context.Context, item domain.Item) (string, error)
-	ConsumeReadMetadata() backend.ReadMetadata
-}
-
-type localTextAttachmentReader interface {
-	ExtractItemAttachmentTexts(ctx context.Context, item domain.Item) (backend.ItemFullTextResult, error)
-}
-
 func runExtractText(args []string) int {
 	if isHelpOnly(args) {
 		return printCommandUsage(usageExtractText)
@@ -34,7 +24,7 @@ func runExtractText(args []string) int {
 		return exitCode
 	}
 
-	localReader, err := defaultCLI.newLocalTextReader(cfg)
+	localReader, err := defaultCLI.newLocalReader(cfg)
 	if err != nil {
 		return printErr(err)
 	}
@@ -48,18 +38,22 @@ func runExtractText(args []string) int {
 			result backend.ItemFullTextResult
 			err    error
 		)
-		if attachmentReader, ok := localReader.(localTextAttachmentReader); ok {
+		if attachmentReader, ok := localReader.(attachmentTextReader); ok {
 			result, err = attachmentReader.ExtractItemAttachmentTexts(context.Background(), item)
 		} else {
+			textReader, ok := localReader.(fullTextReader)
+			if !ok {
+				return printErr(fmt.Errorf("extract-text requires local full-text extraction support"))
+			}
 			var text string
-			text, err = localReader.ExtractItemFullText(context.Background(), item)
+			text, err = textReader.ExtractItemFullText(context.Background(), item)
 			result = backend.ItemFullTextResult{Text: text}
 		}
 		if err != nil {
 			return printErr(err)
 		}
 
-		readMeta := localReader.ConsumeReadMetadata()
+		readMeta := consumeReaderReadMetadata(localReader)
 		meta := map[string]any{
 			"total": len([]rune(result.Text)),
 		}
@@ -106,11 +100,15 @@ func runExtractText(args []string) int {
 		})
 	}
 
-	text, err := localReader.ExtractItemFullText(context.Background(), item)
+	textReader, ok := localReader.(fullTextReader)
+	if !ok {
+		return printErr(fmt.Errorf("extract-text requires local full-text extraction support"))
+	}
+	text, err := textReader.ExtractItemFullText(context.Background(), item)
 	if err != nil {
 		return printErr(err)
 	}
-	readMeta := localReader.ConsumeReadMetadata()
+	readMeta := consumeReaderReadMetadata(localReader)
 	warnIfSnapshotRead(readMeta)
 	fmt.Fprintln(defaultCLI.stdout, text)
 	return 0

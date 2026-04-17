@@ -12,12 +12,11 @@ import (
 )
 
 type CLI struct {
-	stdout               io.Writer
-	stderr               io.Writer
-	stdin                io.Reader
-	backendNewReader     func(config.Config, *http.Client) (backend.Reader, error)
-	newLocalExportReader func(config.Config) (localExportReader, error)
-	newLocalTextReader   func(config.Config) (localTextReader, error)
+	stdout           io.Writer
+	stderr           io.Writer
+	stdin            io.Reader
+	backendNewReader func(config.Config, *http.Client) (backend.Reader, error)
+	newLocalReader   func(config.Config) (backend.Reader, error)
 }
 
 var (
@@ -30,12 +29,13 @@ var (
 
 func New() *CLI {
 	return &CLI{
-		stdout:               os.Stdout,
-		stderr:               os.Stderr,
-		stdin:                os.Stdin,
-		backendNewReader:     backend.NewReader,
-		newLocalExportReader: func(cfg config.Config) (localExportReader, error) { return backend.NewLocalReader(cfg) },
-		newLocalTextReader:   func(cfg config.Config) (localTextReader, error) { return backend.NewLocalReader(cfg) },
+		stdout:           os.Stdout,
+		stderr:           os.Stderr,
+		stdin:            os.Stdin,
+		backendNewReader: backend.NewReader,
+		newLocalReader: func(cfg config.Config) (backend.Reader, error) {
+			return backend.NewLocalReader(cfg)
+		},
 	}
 }
 

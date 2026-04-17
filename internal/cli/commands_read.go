@@ -11,13 +11,6 @@ import (
 	"zotero_cli/internal/zoteroapi"
 )
 
-type localExportReader interface {
-	FindItems(ctx context.Context, opts backend.FindOptions) ([]domain.Item, error)
-	CollectionItemKeys(ctx context.Context, collectionKey string, limit int) ([]string, error)
-	ExportItemsCSLJSON(ctx context.Context, keys []string) ([]map[string]any, error)
-	ConsumeReadMetadata() backend.ReadMetadata
-}
-
 func runFind(args []string) int {
 	if isHelpOnly(args) {
 		return printCommandUsage(usageFind)
@@ -68,9 +61,7 @@ func runFind(args []string) int {
 	items = filterDefaultFindItems(items, opts)
 
 	if snippet {
-		snippeter, ok := reader.(interface {
-			FullTextSnippet(context.Context, domain.Item, string) (string, error)
-		})
+		snippeter, ok := reader.(snippetReader)
 		if !ok {
 			return printErr(fmt.Errorf("find --snippet requires local or hybrid mode with local data"))
 		}
@@ -210,9 +201,7 @@ func runShow(args []string) int {
 		return printErr(err)
 	}
 	if snippet {
-		previewer, ok := reader.(interface {
-			FullTextPreview(context.Context, domain.Item) (string, error)
-		})
+		previewer, ok := reader.(previewReader)
 		if !ok {
 			return printErr(fmt.Errorf("show --snippet requires local or hybrid mode with local data"))
 		}
@@ -577,7 +566,7 @@ func runExport(args []string) int {
 }
 
 func tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, itemKey string, collectionKey string, findOpts zoteroapi.FindOptions) (zoteroapi.ExportResult, backend.ReadMetadata, bool, error) {
-	localReader, err := defaultCLI.newLocalExportReader(cfg)
+	localReader, err := defaultCLI.newLocalReader(cfg)
 	if err != nil {
 		if cfg.Mode == "hybrid" {
 			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
@@ -589,7 +578,14 @@ func tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, itemKey strin
 	if itemKey != "" {
 		keys = append(keys, itemKey)
 	} else if collectionKey != "" {
-		keys, err = localReader.CollectionItemKeys(ctx, collectionKey, findOpts.Limit)
+		collectionReader, ok := localReader.(collectionItemKeyReader)
+		if !ok {
+			if cfg.Mode == "hybrid" {
+				return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
+			}
+			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, true, fmt.Errorf("local export requires collection access support")
+		}
+		keys, err = collectionReader.CollectionItemKeys(ctx, collectionKey, findOpts.Limit)
 		if err != nil {
 			if cfg.Mode == "hybrid" {
 				return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
@@ -616,7 +612,14 @@ func tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, itemKey strin
 		}
 	}
 
-	payload, err := localReader.ExportItemsCSLJSON(ctx, keys)
+	exporter, ok := localReader.(cslJSONExporter)
+	if !ok {
+		if cfg.Mode == "hybrid" {
+			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
+		}
+		return zoteroapi.ExportResult{}, backend.ReadMetadata{}, true, fmt.Errorf("local export requires CSL JSON export support")
+	}
+	payload, err := exporter.ExportItemsCSLJSON(ctx, keys)
 	if err != nil {
 		if cfg.Mode == "hybrid" {
 			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
@@ -626,5 +629,5 @@ func tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, itemKey strin
 	return zoteroapi.ExportResult{
 		Format: "csljson",
 		Data:   payload,
-	}, localReader.ConsumeReadMetadata(), true, nil
+	}, consumeReaderReadMetadata(localReader), true, nil
 }

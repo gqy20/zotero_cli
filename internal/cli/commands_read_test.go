@@ -68,6 +68,18 @@ func (r stubLocalExportReader) FindItems(context.Context, backend.FindOptions) (
 	return items, nil
 }
 
+func (r stubLocalExportReader) GetItem(context.Context, string) (domain.Item, error) {
+	return domain.Item{}, nil
+}
+
+func (r stubLocalExportReader) GetRelated(context.Context, string) ([]domain.Relation, error) {
+	return nil, nil
+}
+
+func (r stubLocalExportReader) GetLibraryStats(context.Context) (backend.LibraryStats, error) {
+	return backend.LibraryStats{}, nil
+}
+
 func (r stubLocalExportReader) CollectionItemKeys(context.Context, string, int) ([]string, error) {
 	return append([]string(nil), r.keys...), nil
 }
@@ -82,6 +94,18 @@ func (r stubLocalExportReader) ConsumeReadMetadata() backend.ReadMetadata {
 
 func (r stubLocalTextReader) GetItem(context.Context, string) (domain.Item, error) {
 	return r.item, nil
+}
+
+func (r stubLocalTextReader) FindItems(context.Context, backend.FindOptions) ([]domain.Item, error) {
+	return nil, nil
+}
+
+func (r stubLocalTextReader) GetRelated(context.Context, string) ([]domain.Relation, error) {
+	return nil, nil
+}
+
+func (r stubLocalTextReader) GetLibraryStats(context.Context) (backend.LibraryStats, error) {
+	return backend.LibraryStats{}, nil
 }
 
 func (r stubLocalTextReader) ExtractItemFullText(context.Context, domain.Item) (string, error) {
@@ -2208,11 +2232,11 @@ func TestRunExportCSLJSONTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
 	writeTestConfig(t, configRoot)
 	t.Setenv("ZOT_MODE", "local")
 
-	previousLocalExportReader := defaultCLI.newLocalExportReader
+	previousLocalReader := defaultCLI.newLocalReader
 	t.Cleanup(func() {
-		defaultCLI.newLocalExportReader = previousLocalExportReader
+		defaultCLI.newLocalReader = previousLocalReader
 	})
-	defaultCLI.newLocalExportReader = func(config.Config) (localExportReader, error) {
+	defaultCLI.newLocalReader = func(config.Config) (backend.Reader, error) {
 		return stubLocalExportReader{
 			keys: []string{"SNAP1"},
 			payload: []map[string]any{
@@ -2241,11 +2265,11 @@ func TestRunExtractTextLocalJSON(t *testing.T) {
 	writeTestConfig(t, configRoot)
 	t.Setenv("ZOT_MODE", "local")
 
-	previousLocalTextReader := defaultCLI.newLocalTextReader
+	previousLocalReader := defaultCLI.newLocalReader
 	t.Cleanup(func() {
-		defaultCLI.newLocalTextReader = previousLocalTextReader
+		defaultCLI.newLocalReader = previousLocalReader
 	})
-	defaultCLI.newLocalTextReader = func(config.Config) (localTextReader, error) {
+	defaultCLI.newLocalReader = func(config.Config) (backend.Reader, error) {
 		return stubLocalTextReader{
 			item: domain.Item{
 				Key: "ITEM123",
