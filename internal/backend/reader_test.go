@@ -215,6 +215,58 @@ func TestHybridReaderGetItemFallsBackToWeb(t *testing.T) {
 	}
 }
 
+func TestHybridReaderGetRelatedDoesNotFallbackOnLocalItemNotFound(t *testing.T) {
+	reader := &HybridReader{
+		local: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
+			getItem:   func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, newItemNotFoundError("item", "ITEM1")
+			},
+			getLibraryStats: func(context.Context) (LibraryStats, error) { return LibraryStats{}, errors.New("unexpected") },
+		},
+		web: stubReader{
+			findItems:  func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
+			getItem:    func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated: func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("web should not be used") },
+			getLibraryStats: func(context.Context) (LibraryStats, error) {
+				return LibraryStats{}, errors.New("unexpected")
+			},
+		},
+	}
+
+	_, err := reader.GetRelated(context.Background(), "ITEM1")
+	if err == nil || err.Error() != "item not found: ITEM1" {
+		t.Fatalf("GetRelated() error = %v, want local item-not-found error", err)
+	}
+}
+
+func TestHybridReaderGetRelatedDoesNotFallbackWhenLocalIsTemporarilyUnavailable(t *testing.T) {
+	reader := &HybridReader{
+		local: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
+			getItem:   func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, newLocalTemporarilyUnavailableError(errors.New("SQLITE_BUSY"))
+			},
+			getLibraryStats: func(context.Context) (LibraryStats, error) { return LibraryStats{}, errors.New("unexpected") },
+		},
+		web: stubReader{
+			findItems:  func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
+			getItem:    func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated: func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("web should not be used") },
+			getLibraryStats: func(context.Context) (LibraryStats, error) {
+				return LibraryStats{}, errors.New("unexpected")
+			},
+		},
+	}
+
+	_, err := reader.GetRelated(context.Background(), "ITEM1")
+	if err == nil || err.Error() != "local Zotero database is temporarily unavailable: SQLITE_BUSY" {
+		t.Fatalf("GetRelated() error = %v, want local temporary-unavailable error", err)
+	}
+}
+
 func TestHybridReaderFindItemsDoesNotHideUnexpectedLocalError(t *testing.T) {
 	reader := &HybridReader{
 		local: stubReader{
@@ -244,6 +296,32 @@ func TestHybridReaderFindItemsDoesNotHideUnexpectedLocalError(t *testing.T) {
 	_, err := reader.FindItems(context.Background(), FindOptions{Query: "test"})
 	if err == nil || err.Error() != "sqlite corrupted" {
 		t.Fatalf("FindItems() error = %v, want local error", err)
+	}
+}
+
+func TestHybridReaderFindItemsDoesNotFallbackWhenRequestNeedsLocalOnlyCapability(t *testing.T) {
+	reader := &HybridReader{
+		local: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return nil, newLocalTemporarilyUnavailableError(errors.New("SQLITE_BUSY"))
+			},
+			getItem:         func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated:      func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("unexpected") },
+			getLibraryStats: func(context.Context) (LibraryStats, error) { return LibraryStats{}, errors.New("unexpected") },
+		},
+		web: stubReader{
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) {
+				return []domain.Item{{Key: "WEB1"}}, nil
+			},
+			getItem:         func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated:      func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("unexpected") },
+			getLibraryStats: func(context.Context) (LibraryStats, error) { return LibraryStats{}, errors.New("unexpected") },
+		},
+	}
+
+	_, err := reader.FindItems(context.Background(), FindOptions{Query: "test", FullText: true})
+	if err == nil || err.Error() != "local Zotero database is temporarily unavailable: SQLITE_BUSY" {
+		t.Fatalf("FindItems() error = %v, want local temporary-unavailable error", err)
 	}
 }
 

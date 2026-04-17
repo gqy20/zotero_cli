@@ -1,37 +1,15 @@
 # zot
 
-当前版本：`0.0.2`
+一个面向终端、脚本和 AI agent 的 Zotero CLI 工具。
 
-一个面向终端、脚本和 AI agent 的 Zotero CLI。
-
-`zot` 现在已经覆盖了较完整的 Zotero Web API 读能力，提供了受权限开关保护的常见写操作，并支持真实 Zotero 本地库上的 `local` / `hybrid` 读路径。它适合这些场景：
+`zot` 覆盖了完整的 Zotero Web API 读写能力，支持从本地 SQLite 数据库直接读取（含全文检索、PDF 文本提取、高亮/注释提取），并提供 `hybrid` 模式实现本地优先 + 云端回退。它适合这些场景：
 
 - 在终端里快速检索、查看和导出 Zotero 条目
-- 在本地库里离线查看条目、附件、笔记和显式关系
+- 离线浏览本地库：条目、附件、笔记、关系、**PDF 高亮与批注**
+- 提取 PDF 全文或附件文本，供 AI agent / LLM 消费
 - 给脚本或 agent 提供稳定的 `--json` 输出
-- 批量给条目打标签、更新、删除
-- 做基础的库统计、版本同步和配置校验
-
-## 0.0.2 重点
-
-`0.0.2` 关注的是“把读路径和命令行诊断做得更稳定、更适合脚本和 agent 使用”，这一版重点补强了：
-
-- `hybrid` 模式下更稳定的远程 fallback 行为
-- 更明确的写命令参数错误信息
-- `config validate --json` 的诊断元信息
-- 只读 list 命令更准确的权限语义
-- 空结果时更一致的文本提示
-
-## 0.0.1 范围
-
-`0.0.1` 关注的是“准确读取 Zotero 信息并稳定暴露给人和自动化系统”，当前已实现：
-
-- `web`、`local`、`hybrid` 三种读模式
-- `find` / `show` / `relate` 的稳定 JSON 输出
-- 本地 `show` 的 collections、attachments、notes、路径解析
-- 本地 `find` 的 metadata 查询、tag/date 过滤、排序和分页
-- 基于本地 SQLite `itemRelations` 的显式关系读取
-- 受权限开关保护的常见写操作
+- 批量打标签、更新、删除条目
+- 做库统计、版本同步和配置校验
 
 ## 快速开始
 
@@ -43,49 +21,58 @@ cd zotero_cli
 go build -o zot.exe .\cmd\zot
 ```
 
-### 初始化配置
+> 需要 Go 1.26+。项目使用 `modernc.org/sqlite`（纯 Go 实现）和 `go-pdfium`（WASM PDF 引擎），无需 CGO，跨平台编译。
 
-推荐直接运行交互式初始化：
+### 初始化配置
 
 ```powershell
 .\zot.exe config init
 ```
 
-它会引导你填写并写入 `~/.zot/.env`：
+交互式引导填写并写入 `~/.zot/.env`：
 
-- `library_type`
-- `library_id`
-- `api_key`
-- `style`
-- `locale`
-- 是否允许写操作
-- 是否允许删除操作
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `ZOT_MODE` | 运行模式：`web` / `local` / `hybrid` | — |
+| `ZOT_DATA_DIR` | Zotero 数据目录路径（local/hybrid 必填） | — |
+| `ZOT_LIBRARY_TYPE` | 库类型：`user` 或 `group` | — |
+| `ZOT_LIBRARY_ID` | 库 ID（数字） | — |
+| `ZOT_API_KEY` | Zotero Web API 密钥（web/hybrid 必填） | — |
+| `ZOT_STYLE` | 引文格式（APA、Chicago 等） | `apa` |
+| `ZOT_LOCALE` | 输出语言区域 | `en-US` |
+| `ZOT_TIMEOUT_SECONDS` | API 超时秒数 | `20` |
+| `ZOT_RETRY_MAX_ATTEMPTS` | 最大重试次数 | `3` |
+| `ZOT_RETRY_BASE_DELAY_MS` | 重试基础延迟 (ms) | `250` |
+| `ZOT_ALLOW_WRITE` | 是否允许写操作 | `1` |
+| `ZOT_ALLOW_DELETE` | 是否允许删除操作 | `0` |
 
-初始化过程中会打印这些 Zotero 页面，方便直接打开：
+初始化过程中会打印以下页面链接：
 
-- API keys: `https://www.zotero.org/settings/keys`
-- Group IDs: `https://www.zotero.org/groups`
-- Web API basics: `https://www.zotero.org/support/dev/web_api/v3/basics`
+- API keys: https://www.zotero.org/settings/keys
+- Group IDs: https://www.zotero.org/groups
+- Web API basics: https://www.zotero.org/support/dev/web_api/v3/basics
 
-也可以手工写 `~/.zot/.env`。
+#### 三种运行模式
 
-Web 模式：
+**Web 模式** — 纯云端 API：
 
 ```env
 ZOT_MODE=web
 ZOT_LIBRARY_TYPE=user
 ZOT_LIBRARY_ID=123456
 ZOT_API_KEY=replace-me
-ZOT_STYLE=apa
-ZOT_LOCALE=en-US
-ZOT_TIMEOUT_SECONDS=20
-ZOT_RETRY_MAX_ATTEMPTS=3
-ZOT_RETRY_BASE_DELAY_MS=250
-ZOT_ALLOW_WRITE=1
-ZOT_ALLOW_DELETE=0
 ```
 
-Hybrid 模式：
+**Local 模式** — 纯本地 SQLite，离线可用：
+
+```env
+ZOT_MODE=local
+ZOT_DATA_DIR=D:\zotero\zotero_file
+ZOT_LIBRARY_TYPE=user
+ZOT_LIBRARY_ID=123456
+```
+
+**Hybrid 模式**（推荐）— 本地优先，但只会在 **Web 确实能够承接该请求** 时回退 Web API：
 
 ```env
 ZOT_MODE=hybrid
@@ -95,212 +82,409 @@ ZOT_LIBRARY_ID=123456
 ZOT_API_KEY=replace-me
 ```
 
-Local 模式：
+#### Hybrid 回退规则
 
-```env
-ZOT_MODE=local
-ZOT_DATA_DIR=D:\zotero\zotero_file
-ZOT_LIBRARY_TYPE=user
-ZOT_LIBRARY_ID=123456
-```
+- `find` 在 `--qmode`、`--include-trashed` 这类 Web 能力上，会在 `hybrid` 下自动回退到 Web。
+- `find` 在 `--fulltext`、`--snippet`、附件过滤这类 local-only 能力上，`hybrid` 不会伪装成 Web 查询；如果本地临时不可用，会直接保留本地错误。
+- `relate` 依赖本地 SQLite `itemRelations`，`hybrid` 不会回退到 `web` 模式制造误导性结果。
+- `export --format csljson` 在 `hybrid` 下会优先尝试本地导出；只有遇到可预期的本地缺失/暂时不可用场景时才回退到 Web。
 
-默认安全策略：
+#### 安全策略
 
-- `ZOT_ALLOW_WRITE=1`
-- `ZOT_ALLOW_DELETE=0`
-
-也就是说，创建和更新默认允许，删除默认禁止。
+- 创建 / 更新默认允许 (`ZOT_ALLOW_WRITE=1`)
+- 删除默认禁止 (`ZOT_ALLOW_DELETE=0`)
+- 写操作使用版本号乐观锁 (`--if-unmodified-since-version`)
 
 ### 验证配置
 
 ```powershell
-.\zot.exe config show
-.\zot.exe config validate
+.\zot.exe config show      # 显示当前配置
+.\zot.exe config validate  # 校验配置有效性
+.\zot.exe version          # 显示版本信息
 ```
 
-## 常用命令
+---
 
-### 检索
+## 命令参考
+
+### 检索 (`find`)
 
 ```powershell
+# 基本检索
 .\zot.exe find "hybrid speciation"
-.\zot.exe find --all --json
-.\zot.exe find "" --json
-.\zot.exe find "hybrid speciation" --date-after 2020
-.\zot.exe find "hybrid speciation" --date-after 2020-01 --date-before 2024-12-31
-.\zot.exe find "hybrid speciation" --tag "物种形成" --tag "经典案例"
-.\zot.exe find "hybrid speciation" --tag "物种形成" --tag "经典案例" --tag-any
-.\zot.exe find "hybrid speciation" --json
-.\zot.exe find "hybrid speciation" --include-fields url,doi,version
-.\zot.exe find "hybrid speciation" --full
+.\zot.exe find ""                          # 列出所有条目
+.\zot.exe find "hybrid speciation" --all   # 不限制数量
+
+# 过滤选项
+.\zot.exe find "genome" --item-type journalArticle
+.\zot.exe find "genome" --tag "物种形成" --tag "经典案例"
+.\zot.exe find "genome" --tag "物种形成" --tag-any    # 任一标签匹配
+.\zot.exe find "genome" --date-after 2020
+.\zot.exe find "genome" --date-after 2020-01 --date-before 2024-12-31
+.\zot.exe find "genome" --has-pdf                      # 仅返回有 PDF 附件的条目
+.\zot.exe find "genome" --attachment-type pdf           # 按附件类型过滤
+
+# 全文检索（local/hybrid 模式）
+.\zot.exe find "speciation" --fulltext                  # Zotero 内置全文索引
+.\zot.exe find "speciation" --fulltext --fulltext-any   # 任一词匹配
+
+# 全文片段（需要本地全文可读）
+.\zot.exe find "speciation" --fulltext --snippet
+
+# 实验性全文索引（需设置 ZOT_EXPERIMENTAL_FTS=1）
+.\zot.exe find "CRISPR" --full                          # 使用本地构建的 PDF 全文索引
+
+# 输出控制
+.\zot.exe find "genome" --json                          # JSON 格式
+.\zot.exe find "genome" --include-fields url,doi,version
+.\zot.exe find "genome" --start 0 --limit 20            # 分页
+.\zot.exe find "genome" --sort date-desc                # 排序
 ```
 
-`find` 当前支持：
+**支持的选项一览**：
 
-- `--all`
-- 显式空查询 `find ""`
-- `--item-type`
-- 重复 `--tag`
-- `--tag-any`
-- `--date-after`
-- `--date-before`
-- `--qmode`
-- `--include-trashed`
-- `--include-fields`
-- `--full`
-- `--json`
+| 选项 | 说明 | 模式限制 |
+|------|------|----------|
+| `--all` | 不限制返回数量 | 全部 |
+| `--item-type` | 按文献类型过滤 | 全部 |
+| `--tag` / `--tag-any` | 标签过滤（AND / OR） | web / local / hybrid |
+| `--date-after` / `--date-before` | 日期范围 | web / local / hybrid |
+| `--has-pdf` / `--attachment-type` | 附件过滤 | local / hybrid |
+| `--qmode` | 查询模式（titleCreatorYear / everything） | web only |
+| `--include-trashed` | 包含回收站 | web only |
+| `--include-fields` | 指定包含字段 | 全部 |
+| `--fulltext` | Zotero 全文索引搜索 | local / hybrid |
+| `--fulltext-any` | 全文任一词匹配 | local / hybrid |
+| `--snippet` | 返回全文匹配片段 | local / hybrid |
+| `--full` | 完整字段 + 附件详情 | 全部 |
+| `--sort` | 排序方式 | local / hybrid |
+| `--start` / `--limit` | 分页 | 全部 |
+| `--json` | JSON 输出 | 全部 |
 
-模式说明：
+**`find` 的模式边界**：
 
-- `web`：完整支持 Web API 查询语义
-- `local`：支持 metadata 查询、`--item-type`、`--tag`、`--tag-any`、日期过滤、排序、分页
-- `hybrid`：优先走 local；本地不支持的个别场景才回退 Web
+- `web`：支持标准 Web API 查询语义，包括 `--qmode`、`--include-trashed`
+- `local`：支持 metadata 检索、标签/日期过滤、附件过滤、全文检索、snippet，但不支持 `--qmode`、`--include-trashed`
+- `hybrid`：优先本地；仅在 `web` 能正确承接请求时才回退。也就是说：
+  - `find --qmode ...`、`find --include-trashed` 可回退到 Web
+  - `find --fulltext`、`find --snippet`、附件过滤不可回退到 Web
 
-### 查看与导出
+### 查看条目 (`show`)
 
 ```powershell
-.\zot.exe show SA6DHVIM
-.\zot.exe show SA6DHVIM --json
-.\zot.exe relate SA6DHVIM
-.\zot.exe relate SA6DHVIM --json
-.\zot.exe cite SA6DHVIM
-.\zot.exe cite SA6DHVIM --format bib
-.\zot.exe export --item-key SA6DHVIM --format bibtex
-.\zot.exe export "hybrid speciation" --format ris
+.\zot.exe show ITEM1234                    # 文本格式
+.\zot.exe show ITEM1234 --json             # JSON 格式
+```
+
+文本输出展示：
+
+```
+Key: ITEM1234
+Title: Annotated Paper
+Type: journalArticle
+Creators: Jane Doe
+Tags: genomics
+Collections: Research
+Attachments: 1
+  - [pdf] ATTACHPDF (ATTACHPDF)
+    path: D:\zotero\storage\ATTACHPDF\paper.pdf
+Notes: 1
+  - NOTE1234: A regular note
+Annotations: 4
+  - [note] color=#ffd400 page=2: Key finding about genome assembly | This is important for the discussion section
+  - [note] color=#ff6666 page=3: Another highlighted passage | Need to verify this claim
+  - [highlight] color=#5c9eff page=5: A pure highlight text
+  - [ink] color=#000000 page=1:  | A hand-drawn sketch note
+```
+
+JSON 输出包含完整字段：`creators`、`tags`、`collections`、`attachments`（含 resolved path）、`notes`、**`annotations`**（含高亮文本、批注、颜色、页码、位置 JSON）。
+
+### 关系查询 (`relate`)
+
+```powershell
+.\zot.exe relate ITEM1234              # 文本格式
+.\zot.exe relate ITEM1234 --json       # JSON 格式
+```
+
+读取 Zotero `itemRelations` 表中的显式关系（如 "related to"、"containing"），返回谓词、方向（outgoing/incoming）、目标条目简要信息。
+
+> 仅 **local** 和 **hybrid** 模式支持；`web` 模式暂未实现。  
+> 在 `hybrid` 下如果本地关系读取失败，不会伪装回退成 `web relate`。
+
+### 引文生成 (`cite`)
+
+```powershell
+.\zot.exe cite ITEM1234                        # APA 格式（默认）
+.\zot.exe cite ITEM1234 --format chicago       # 指定引文格式
+.\zot.exe cite ITEM1234 --format bib           # BibTeX
+```
+
+### 导出 (`export`)
+
+```powershell
+# 按关键词导出
+.\zot.exe export "hybrid speciation" --format bibtex
+
+# 按 item key 导出
+.\zot.exe export --item-key SA6DHVIM --format ris
+
+# 按收藏夹导出
 .\zot.exe export --collection COLL1234 --format csljson --json
 ```
 
-`export` 当前支持：
+**支持格式**：`bib`、`bibtex`、`biblatex`、`csljson`、`ris`
 
-- 按 query 导出
-- 按单个 `--item-key` 导出
-- 按 `--collection` 导出
-- `bib`
-- `bibtex`
-- `biblatex`
-- `csljson`
-- `ris`
+**导出模式说明**：
 
-`show` 当前支持：
+- `bib` / `bibtex` / `biblatex` / `ris` 走 Web API。
+- `csljson` 在 `local` / `hybrid` 下优先使用本地导出。
+- `hybrid` 下的 `csljson` 只会在可预期的本地缺失或暂时不可用场景下回退到 Web；不会吞掉异常的本地错误。
 
-- Web / local / hybrid 统一条目详情接口
-- 文本模式显示 creators、tags、collections、attachments、notes
-- 本地模式显示附件 `zotero_path`、`resolved_path`、`resolved`
-- 对重复附件名显示附件 key，便于精确定位
+### PDF 文本提取 (`extract-text`)
 
-`relate` 当前支持：
-
-- 本地 SQLite `itemRelations` 显式关系读取
-- 当前会返回 `predicate`、`direction`、目标条目简要信息
-- `hybrid` 下优先使用本地关系
-- `web` 模式暂不支持
-
-### 列表和元数据
+> 仅 **local** 和 **hybrid** 模式支持。使用 go-pdfium WASM 引擎提取 PDF 正文。  
+> `hybrid` 下该命令仍依赖本地数据，不会回退到 Web。
 
 ```powershell
-.\zot.exe collections --json
-.\zot.exe collections-top --json
-.\zot.exe notes --json
-.\zot.exe tags --json
-.\zot.exe searches --json
-.\zot.exe trash --json
-.\zot.exe publications --json
-.\zot.exe deleted --json
-.\zot.exe stats --json
-.\zot.exe versions items --since 0 --json
-.\zot.exe item-types --json
-.\zot.exe item-fields --json
-.\zot.exe creator-fields --json
-.\zot.exe item-template journalArticle --json
-.\zot.exe key-info YOUR_API_KEY --json
-.\zot.exe groups --json
+# 提取主附件全文（文本输出）
+.\zot.exe extract-text ITEM1234
+
+# 提取所有 PDF 附件的文本（JSON 输出，含缓存命中状态）
+.\zot.exe extract-text ITEM1234 --json
 ```
 
-### 写操作
+JSON 输出示例：
+
+```json
+{
+  "ok": true,
+  "command": "extract-text",
+  "data": {
+    "item_key": "ITEM1234",
+    "primary_attachment_key": "ATTACHPDF",
+    "text": "...完整正文...",
+    "attachments": [
+      {
+        "attachment_key": "ATTACHPDF",
+        "title": "paper.pdf",
+        "filename": "paper.pdf",
+        "resolved_path": "D:\\zotero\\storage\\ATTACHPDF\\paper.pdf",
+        "text": "...该附件的提取文本...",
+        "total": 12345,
+        "full_text_source": "pdfium",
+        "full_text_cache_hit": false
+      }
+    ]
+  },
+  "meta": { "total": 12345 }
+}
+```
+
+### 高亮与注释提取
+
+在 `show` 命令中自动加载并展示 Zotero Reader 的 PDF 注解数据（local/hybrid 模式）。支持四种注解类型：
+
+| 类型 | 说明 |
+|------|------|
+| `highlight` | 高亮标注（含原始文本） |
+| `note` | 批注笔记（含高亮文本 + 用户评论） |
+| `image` | 图片标注 |
+| `ink` | 手绘/墨迹 |
+
+每条注解包含：key、type、text（高亮原文）、comment（用户批注）、color（十六进制颜色）、page_label、page_index（从 position JSON 解析）、position（原始坐标 JSON）、is_external。
+
+---
+
+## 列表命令
 
 ```powershell
+.\zot.exe collections          # 所有收藏夹
+.\zot.exe collections-top      # 仅顶层收藏夹
+.\zot.exe notes                # 所有子笔记
+.\zot.exe tags                 # 所有标签
+.\zot.exe searches             # 已保存的搜索
+.\zot.exe trash                # 回收站中的条目
+.\zot.exe publications         # My Publications
+.\zot.exe deleted              # 已删除对象 key（自某版本以来）
+.\zot.exe stats                # 库统计（总条目/收藏夹/搜索数）
+.\zot.exe versions items --since 0   # 版本变更列表
+```
+
+以上均支持 `--json` 输出。
+
+## 元数据命令
+
+```powershell
+.\zot.exe item-types                       # 可用文献类型列表
+.\zot.exe item-fields                      # 可用字段列表
+.\zot.exe creator-fields                   # 可用作者字段列表
+.\zot.exe item-type-fields journalArticle   # 某类型的有效字段
+.\zot.exe item-type-creator-types book     # 某类型的有效作者角色
+.\zot.exe item-template journalArticle     # 新建条目的模板
+.\zot.exe key-info YOUR_API_KEY            # API key 权限信息
+.\zot.exe groups                           # 可访问的群组库
+```
+
+## 写操作
+
+写操作受权限开关保护。默认策略：**允许创建/更新，禁止删除**。
+
+### 条目 CRUD
+
+```powershell
+# 创建单个条目
 .\zot.exe create-item --from-file item.json --if-unmodified-since-version 41
-.\zot.exe update-item ABCD2345 --from-file patch.json --if-unmodified-since-version 42
+
+# 批量创建
 .\zot.exe create-items --from-file items.json --if-unmodified-since-version 41 --json
+
+# 更新
+.\zot.exe update-item ABCD2345 --from-file patch.json --if-unmodified-since-version 42
 .\zot.exe update-items --from-file patches.json --json
+
+# 删除（需 ZOT_ALLOW_DELETE=1）
+.\zot.exe delete-item ABCD2345 --if-unmodified-since-version 43
+.\zot.exe delete-items --items KEY1,KEY2 --if-unmodified-since-version 43
+```
+
+### 标签操作
+
+```powershell
 .\zot.exe add-tag --items KEY1,KEY2 --tag "to-read"
 .\zot.exe remove-tag --items KEY1,KEY2 --tag "obsolete"
 ```
 
-删除命令默认被权限开关拦住；只有在 `ZOT_ALLOW_DELETE=1` 时才允许执行：
+### 收藏夹与搜索
 
 ```powershell
-.\zot.exe delete-item ABCD2345 --if-unmodified-since-version 43
-.\zot.exe delete-items --items KEY1,KEY2 --if-unmodified-since-version 43
+.\zot.exe create-collection --name "New Collection" --parent COLL_PARENT
+.\zot.exe update-collection COLL1234 --name "Renamed"
 .\zot.exe delete-collection COLL1234 --if-unmodified-since-version 10
+
+.\zot.exe create-search --from-file search.json
+.\zot.exe update-search SRCH1234 --from-file search.json
 .\zot.exe delete-search SRCH1234 --if-unmodified-since-version 10
 ```
 
+---
+
+## 架构概览
+
+```
+zot (CLI)
+├── cmd/zot/main.go          # 入口
+├── internal/
+│   ├── cli/                 # 命令解析与执行
+│   │   ├── cli.go           # 命令注册与路由
+│   │   ├── commands_read.go # find, show, relate, cite, extract-text
+│   │   ├── commands_write.go# create/update/delete, tag ops
+│   │   ├── commands_list.go # collections, notes, tags, stats...
+│   │   ├── commands_config.go# config init/show/validate
+│   │   └── commands_pdf.go  # PDF 文本提取
+│   ├── backend/             # 数据访问层
+│   │   ├── reader.go        # Reader 接口定义
+│   │   ├── local.go         # LocalReader (SQLite)
+│   │   ├── local_find.go    # 本地查询构建
+│   │   ├── local_loaders.go # 数据加载器 (creators, tags, attachments, notes, annotations...)
+│   │   ├── web.go           # WebReader (Zotero Web API)
+│   │   ├── hybrid.go        # HybridReader (本地优先 + 回退)
+│   │   └── pdfium.go        # PDF 文本提取引擎 (go-pdfium WASM)
+│   ├── domain/types.go      # 领域模型 (Item, Annotation, Attachment, Note...)
+│   ├── config/              # 配置加载与环境变量
+│   └── zoteroapi/           # Zotero Web API 客户端
+└── docs/                    # 设计文档
+```
+
+### 三层后端架构
+
+| 层 | 模式 | 数据源 | 特性 |
+|----|------|--------|------|
+| **WebReader** | `web` | Zotero Cloud API | 完整 API 能力，需网络 |
+| **LocalReader** | `local` | 本地 SQLite | 离线、快速、全文检索、PDF 提取、注解读取 |
+| **HybridReader** | `hybrid` | Local → Web fallback | 兼顾速度与完整性 |
+
+**LocalReader** 的核心能力：
+- 从 `zotero.sqlite` 直接读取元数据、创建者、标签、收藏夹、附件、笔记
+- 通过 `itemAnnotations` 表读取 PDF 高亮/批注/手绘（经附件子项链路）
+- 通过 `itemRelations` 表读取显式条目关系
+- PDF 全文提取（go-pdfium WASM 引擎，带缓存）
+- Zotero 内置全文索引搜索 (`--fulltext`)
+- 自动快照回退机制（当数据库被 Zotero 锁定时）
+
+### 领域模型
+
+```go
+Item {
+    Key, Version, ItemType, Title, Date,
+    Volume, Issue, Pages, DOI, URL, Container,
+    Creators [], Tags [], Collections [],
+    Attachments []{Key, Title, Filename, ContentType,
+                    LinkMode, ZoteroPath, ResolvedPath, Resolved},
+    Notes []{Key, Preview},
+    Annotations []{Key, Type, Text, Comment, Color,
+                    PageLabel, PageIndex, Position, SortIndex, IsExternal},
+    SearchScore, MatchedOn, FullTextPreview, SnippetAttachmentKey
+}
+```
+
+---
+
 ## AI / Agent 使用建议
 
-- 默认优先加 `--json`
-- 当需要精确文献关系时，优先用 `relate --json`
-- 当需要 DOI、URL、版本号时，优先用 `find --json`，必要时加 `--include-fields` 或 `--full`
-- 批量导出收藏夹优先用 `export --collection`
-- 在首次执行前先跑 `config validate`
-- 删除前先确认：
-  - library
-  - object key
-  - version precondition
-  - 用户是否明确授权
+`zot` 天然适合作为 AI agent 的 Zotero 操作接口：
 
-更完整的 agent 说明见：
+- **默认加 `--json`** — 结构化输出便于解析
+- **检索文献**：`find "query" --json --full` 获取完整元数据
+- **获取全文**：`extract-text ITEM_KEY --json` 提取 PDF 正文供 LLM 阅读
+- **获取高亮批注**：`show ITEM_KEY --json` 的 `annotations` 字段包含用户的阅读标记
+- **查关系**：`relate KEY --json` 发现文献间的显式关联
+- **批量导出**：`export --collection COLL --format csljson --json`
+- **安全前提**：执行前先跑 `config validate`；删除前确认 version precondition
 
-- [AI Agent Guide](/d:/C/Documents/Program/Go/zotero_cli/docs/AI_AGENT.md)
-- 仓库内 skill: [.codex/skills/zotero-cli/SKILL.md](/d:/C/Documents/Program/Go/zotero_cli/.codex/skills/zotero-cli/SKILL.md)
+更详细的 agent 集成指南：
+
+- [AI Agent Guide](docs/AI_AGENT.md)
+- [.codex/skills/zotero-cli/SKILL.md](.codex/skills/zotero-cli/SKILL.md)
+
+---
 
 ## 开发
 
 ```powershell
-go test ./...
+# 测试
+go test ./...                         # 全量测试
+go test ./internal/cli/ -run TestLoad  # 运行特定测试
+go test ./internal/cli/ -v -run TestShowLocal.*Annotation  # verbose 运行注解相关测试
+
+# 构建
 go build -o zot.exe .\cmd\zot
 .\zot.exe version
 ```
 
+### 项目依赖
+
+| 依赖 | 用途 |
+|------|------|
+| `modernc.org/sqlite` | 纯 Go SQLite 驱动（无需 CGO） |
+| `klippa-app/go-pdfium` | PDF 文本提取（WASM 引擎，跨平台） |
+
+### 关键设计决策
+
+- **纯 Go 工具链**：无 CGO 依赖，交叉编译友好
+- **SQLite 快照回退**：当 Zotero 持有数据库锁时，自动复制快照读取
+- **TDD 开发流程**：核心功能均有对应测试覆盖
+- **权限门控**：写/删除操作通过环境变量开关控制，防止误操作
+
+---
+
 ## 文档
 
-- [AI Agent Guide](/d:/C/Documents/Program/Go/zotero_cli/docs/AI_AGENT.md)
-- [Repo Skill](/d:/C/Documents/Program/Go/zotero_cli/.codex/skills/zotero-cli/SKILL.md)
-- [MVP 设计文档](/d:/C/Documents/Program/Go/zotero_cli/docs/MVP.md)
-- [Rate Limit Optimization Notes](/d:/C/Documents/Program/Go/zotero_cli/docs/rate-limit-optimization.md)
-## 0.0.2 Stability Pass Update
-
-Recent `0.0.2` stability work focuses on making mode behavior and CLI failures
-more predictable rather than adding a large new command surface.
-
-Completed in this pass:
-
-- `hybrid` read flows now normalize remote fallback through the Web API client
-- write commands now return clearer argument-validation errors before usage text
-- current mode boundaries are documented explicitly for `web`, `local`, and `hybrid`
-
-Current mode summary:
-
-- backend-aware commands: `find`, `show`, `relate`
-- Web API commands: `cite`, `export`, list/meta commands, and all write commands
-- `local` mode rejects Web API-only commands with an explicit mode-boundary error
-- `hybrid` mode can still use remote API paths when local support is unavailable
-
-For the detailed design notes, see:
-
-- [0.0.2 Stability Pass](/D:/C/Documents/Program/Go/zotero_cli/docs/stability-pass-0.0.2.md)
-- [Local Backend Design](/D:/C/Documents/Program/Go/zotero_cli/docs/local-backend-design.md)
-
-## Read Source Metadata
-
-Read commands now expose a `meta.read_source` field in JSON output when applicable.
-
-- `live`: direct read from the local Zotero SQLite database
-- `snapshot`: temporary snapshot fallback because the local database was busy or locked
-- `web`: data came from the Zotero Web API
-
-For local text-mode commands, when snapshot fallback is used, `zot` prints a short note on stderr:
-
-```text
-note: using snapshot fallback for local Zotero data
-```
+| 文档 | 说明 |
+|------|------|
+| [AI Agent Guide](docs/AI_AGENT.md) | AI agent 集成详细指南 |
+| [MVP 设计文档](docs/MVP.md) | 最小可行产品设计 |
+| [Local 后端设计](docs/local-backend-design.md) | SQLite 读取层架构 |
+| [PDF 处理研究](docs/pdf-processing-research.md) | PDF 文本提取技术选型 |
+| [Rate Limit 优化](docs/rate-limit-optimization.md) | API 限流处理策略 |
+| [Roadmap 0.0.3](docs/roadmap-0.0.3.md) | 版本路线图 |
+| [Stability Pass](docs/stability-pass-0.0.2.md) | 稳定性改进记录 |

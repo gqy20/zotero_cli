@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
@@ -72,6 +73,15 @@ type HybridReader struct {
 	lastReadMetadata ReadMetadata
 }
 
+type readOperation string
+
+const (
+	readOperationFind            readOperation = "find"
+	readOperationGetItem         readOperation = "get_item"
+	readOperationGetRelated      readOperation = "get_related"
+	readOperationGetLibraryStats readOperation = "get_library_stats"
+)
+
 func NewReader(cfg config.Config, httpClient *http.Client) (Reader, error) {
 	mode := cfg.Mode
 	if mode == "" {
@@ -101,7 +111,11 @@ func NewReader(cfg config.Config, httpClient *http.Client) (Reader, error) {
 }
 
 func (r *HybridReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
-	return readWithFallback(r,
+	opts = NormalizeFindOptions(opts)
+	return readWithFallbackUsingPolicy(r,
+		func(err error) bool {
+			return shouldFallbackFindToWeb(opts, err)
+		},
 		func(reader Reader) ([]domain.Item, error) {
 			return reader.FindItems(ctx, opts)
 		},
@@ -109,7 +123,10 @@ func (r *HybridReader) FindItems(ctx context.Context, opts FindOptions) ([]domai
 }
 
 func (r *HybridReader) GetItem(ctx context.Context, key string) (domain.Item, error) {
-	return readWithFallback(r,
+	return readWithFallbackUsingPolicy(r,
+		func(err error) bool {
+			return shouldFallbackToWeb(readOperationGetItem, err)
+		},
 		func(reader Reader) (domain.Item, error) {
 			return reader.GetItem(ctx, key)
 		},
@@ -117,7 +134,10 @@ func (r *HybridReader) GetItem(ctx context.Context, key string) (domain.Item, er
 }
 
 func (r *HybridReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
-	return readWithFallback(r,
+	return readWithFallbackUsingPolicy(r,
+		func(err error) bool {
+			return shouldFallbackToWeb(readOperationGetRelated, err)
+		},
 		func(reader Reader) ([]domain.Relation, error) {
 			return reader.GetRelated(ctx, key)
 		},
@@ -125,14 +145,17 @@ func (r *HybridReader) GetRelated(ctx context.Context, key string) ([]domain.Rel
 }
 
 func (r *HybridReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
-	return readWithFallback(r,
+	return readWithFallbackUsingPolicy(r,
+		func(err error) bool {
+			return shouldFallbackToWeb(readOperationGetLibraryStats, err)
+		},
 		func(reader Reader) (LibraryStats, error) {
 			return reader.GetLibraryStats(ctx)
 		},
 	)
 }
 
-func readWithFallback[T any](r *HybridReader, read func(Reader) (T, error)) (T, error) {
+func readWithFallbackUsingPolicy[T any](r *HybridReader, shouldFallback func(error) bool, read func(Reader) (T, error)) (T, error) {
 	var zero T
 	if r.local != nil {
 		value, err := read(r.local)
@@ -140,7 +163,7 @@ func readWithFallback[T any](r *HybridReader, read func(Reader) (T, error)) (T, 
 			r.lastReadMetadata = consumeReadMetadata(r.local)
 			return value, nil
 		}
-		if !shouldFallbackToWeb(err) {
+		if !shouldFallback(err) {
 			return zero, err
 		}
 	}
@@ -187,14 +210,52 @@ func mergeReadMetadata(base ReadMetadata, extra ReadMetadata) ReadMetadata {
 	return base
 }
 
-func shouldFallbackToWeb(err error) bool {
+func shouldFallbackToWeb(op readOperation, err error) bool {
 	if err == nil {
 		return false
 	}
-	return errors.Is(err, ErrItemNotFound) || errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
+	switch op {
+	case readOperationFind:
+		return false
+	case readOperationGetItem:
+		return errors.Is(err, ErrItemNotFound) || errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
+	case readOperationGetLibraryStats:
+		return errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
+	case readOperationGetRelated:
+		return false
+	default:
+		return false
+	}
+}
+
+func shouldFallbackFindToWeb(opts FindOptions, err error) bool {
+	if !SupportsWebFind(opts) {
+		return false
+	}
+	if errors.Is(err, ErrUnsupportedFeature) {
+		featureErr, ok := err.(*unsupportedFeatureError)
+		if !ok {
+			return true
+		}
+		return supportsWebFindFallback(featureErr.Feature)
+	}
+	if errors.Is(err, ErrLocalTemporarilyUnavailable) {
+		return true
+	}
+	return false
+}
+
+func supportsWebFindFallback(feature string) bool {
+	switch strings.TrimSpace(feature) {
+	case "find --include-trashed", "find --qmode":
+		return true
+	default:
+		return false
+	}
 }
 
 func toAPIFindOptions(opts FindOptions) zoteroapi.FindOptions {
+	opts = NormalizeFindOptions(opts)
 	return zoteroapi.FindOptions{
 		Query:          opts.Query,
 		All:            opts.All,

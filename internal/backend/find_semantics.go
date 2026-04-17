@@ -5,8 +5,32 @@ import (
 	"time"
 )
 
+func NormalizeFindOptions(opts FindOptions) FindOptions {
+	opts.Query = strings.TrimSpace(opts.Query)
+	opts.ItemType = strings.TrimSpace(opts.ItemType)
+	opts.Sort = strings.TrimSpace(opts.Sort)
+	opts.Direction = strings.TrimSpace(opts.Direction)
+	opts.QMode = strings.TrimSpace(opts.QMode)
+	opts.DateAfter = strings.TrimSpace(opts.DateAfter)
+	opts.DateBefore = strings.TrimSpace(opts.DateBefore)
+	opts.AttachmentName = strings.TrimSpace(opts.AttachmentName)
+	opts.AttachmentPath = strings.TrimSpace(opts.AttachmentPath)
+	opts.AttachmentType = strings.TrimSpace(opts.AttachmentType)
+	opts.Tags = normalizeFindTags(opts.Tags)
+	opts.Tag = ""
+	if len(opts.Tags) == 1 {
+		opts.Tag = opts.Tags[0]
+	}
+	return opts
+}
+
+func SupportsWebFind(opts FindOptions) bool {
+	opts = NormalizeFindOptions(opts)
+	return !requiresLocalFindSupport(opts)
+}
+
 func ShouldIncludeFindItem(itemType string, itemTags []string, itemDate string, requestedType string, requiredTags []string, anyMode bool, after string, before string) bool {
-	if requestedType == "" && (itemType == "attachment" || itemType == "note" || itemType == "annotation") {
+	if requestedType == "" && !isDefaultFindVisibleItemType(itemType) {
 		return false
 	}
 	if !matchesTags(itemTags, requiredTags, anyMode) {
@@ -16,6 +40,43 @@ func ShouldIncludeFindItem(itemType string, itemTags []string, itemDate string, 
 		return false
 	}
 	return true
+}
+
+func isDefaultFindVisibleItemType(itemType string) bool {
+	switch strings.TrimSpace(itemType) {
+	case "attachment", "note", "annotation":
+		return false
+	default:
+		return true
+	}
+}
+
+func requiresLocalFindSupport(opts FindOptions) bool {
+	return opts.FullText || hasAttachmentFindFilters(opts)
+}
+
+func hasAttachmentFindFilters(opts FindOptions) bool {
+	return opts.HasPDF ||
+		strings.TrimSpace(opts.AttachmentName) != "" ||
+		strings.TrimSpace(opts.AttachmentPath) != "" ||
+		strings.TrimSpace(opts.AttachmentType) != ""
+}
+
+func normalizeFindTags(tags []string) []string {
+	out := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		normalized := strings.TrimSpace(strings.ToLower(tag))
+		if normalized == "" {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	return out
 }
 
 func MatchesDateRange(itemDate string, after string, before string) bool {

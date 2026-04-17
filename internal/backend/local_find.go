@@ -199,7 +199,7 @@ func localFullTextMatchClause(tokens []string, any bool) string {
 }
 
 func localTagFilterClause(opts FindOptions) string {
-	tags := normalizedTags(opts.Tags)
+	tags := normalizeFindTags(opts.Tags)
 	if len(tags) == 0 {
 		return ""
 	}
@@ -230,20 +230,7 @@ func localTagFilterClause(opts FindOptions) string {
 }
 
 func normalizedTags(tags []string) []string {
-	out := make([]string, 0, len(tags))
-	seen := make(map[string]struct{}, len(tags))
-	for _, tag := range tags {
-		normalized := strings.TrimSpace(strings.ToLower(tag))
-		if normalized == "" {
-			continue
-		}
-		if _, ok := seen[normalized]; ok {
-			continue
-		}
-		seen[normalized] = struct{}{}
-		out = append(out, normalized)
-	}
-	return out
+	return normalizeFindTags(tags)
 }
 
 func placeholders(n int) string {

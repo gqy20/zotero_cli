@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -27,6 +28,7 @@ func (c *CLI) runFind(args []string) int {
 		return 2
 	}
 	opts := parsed.Opts
+	opts = backend.NormalizeFindOptions(opts)
 	jsonOutput := parsed.JSONOutput
 	snippet := parsed.Snippet
 	queryProvided := parsed.QueryProvided
@@ -597,7 +599,7 @@ func (c *CLI) tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, item
 		}
 		keys, err = collectionReader.CollectionItemKeys(ctx, collectionKey, findOpts.Limit)
 		if err != nil {
-			if cfg.Mode == "hybrid" {
+			if cfg.Mode == "hybrid" && shouldFallbackLocalCSLJSONExport(err) {
 				return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
 			}
 			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, true, err
@@ -608,7 +610,7 @@ func (c *CLI) tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, item
 			Limit: findOpts.Limit,
 		})
 		if err != nil {
-			if cfg.Mode == "hybrid" {
+			if cfg.Mode == "hybrid" && shouldFallbackLocalCSLJSONExport(err) {
 				return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
 			}
 			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, true, err
@@ -631,7 +633,7 @@ func (c *CLI) tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, item
 	}
 	payload, err := exporter.ExportItemsCSLJSON(ctx, keys)
 	if err != nil {
-		if cfg.Mode == "hybrid" {
+		if cfg.Mode == "hybrid" && shouldFallbackLocalCSLJSONExport(err) {
 			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
 		}
 		return zoteroapi.ExportResult{}, backend.ReadMetadata{}, true, err
@@ -640,4 +642,10 @@ func (c *CLI) tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, item
 		Format: "csljson",
 		Data:   payload,
 	}, c.consumeReaderReadMetadata(localReader), true, nil
+}
+
+func shouldFallbackLocalCSLJSONExport(err error) bool {
+	return errors.Is(err, backend.ErrItemNotFound) ||
+		errors.Is(err, backend.ErrUnsupportedFeature) ||
+		errors.Is(err, backend.ErrLocalTemporarilyUnavailable)
 }

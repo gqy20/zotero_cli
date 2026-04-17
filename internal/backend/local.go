@@ -84,6 +84,7 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 }
 
 func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
+	opts = NormalizeFindOptions(opts)
 	if opts.IncludeTrashed {
 		return nil, newUnsupportedFeatureErrorWithHint("local", "find --include-trashed", "set ZOT_MODE=web or ZOT_MODE=hybrid to use this feature")
 	}

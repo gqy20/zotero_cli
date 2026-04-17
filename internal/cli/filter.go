@@ -9,6 +9,7 @@ import (
 )
 
 func filterDefaultFindItems(items []domain.Item, opts backend.FindOptions) []domain.Item {
+	opts = backend.NormalizeFindOptions(opts)
 	filtered := make([]domain.Item, 0, len(items))
 	for _, item := range items {
 		if !backend.ShouldIncludeFindItem(item.ItemType, item.Tags, item.Date, opts.ItemType, opts.Tags, opts.TagAny, opts.DateAfter, opts.DateBefore) {
@@ -41,9 +42,16 @@ func shortCreatorsAPI(creators []zoteroapi.Creator) string {
 }
 
 func filterDefaultFindItemsAPI(items []zoteroapi.Item, opts zoteroapi.FindOptions) []zoteroapi.Item {
+	normalized := backend.NormalizeFindOptions(backend.FindOptions{
+		ItemType:   opts.ItemType,
+		Tags:       opts.Tags,
+		TagAny:     opts.TagAny,
+		DateAfter:  opts.DateAfter,
+		DateBefore: opts.DateBefore,
+	})
 	filtered := make([]zoteroapi.Item, 0, len(items))
 	for _, item := range items {
-		if !backend.ShouldIncludeFindItem(item.ItemType, item.Tags, item.Date, opts.ItemType, opts.Tags, opts.TagAny, opts.DateAfter, opts.DateBefore) {
+		if !backend.ShouldIncludeFindItem(item.ItemType, item.Tags, item.Date, normalized.ItemType, normalized.Tags, normalized.TagAny, normalized.DateAfter, normalized.DateBefore) {
 			continue
 		}
 		filtered = append(filtered, item)

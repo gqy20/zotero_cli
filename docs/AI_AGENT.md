@@ -92,15 +92,24 @@ go run .\cmd\zot config validate
 说明：
 
 - `local`：只读本地 SQLite 和 `storage/`
-- `hybrid`：优先本地，部分不支持场景回退 Web
+- `hybrid`：优先本地，但只在 Web 确实能承接请求时回退
 - 本地 `find` 不支持 `--qmode` 和 `--include-trashed`
+- `hybrid` 下 `find --qmode` / `find --include-trashed` 可以回退 Web
+- `hybrid` 下 `find --fulltext` / `find --snippet` / 附件过滤不会回退 Web
 - `relate` 当前依赖本地 SQLite 的 `itemRelations`
+- `relate` 和 `extract-text` 在 `hybrid` 下仍然是本地能力，不要假设有远程兜底
 
 ### 5. 批量导出收藏夹
 
 ```powershell
 .\zot.exe export --collection COLL1234 --format csljson --json
 ```
+
+补充：
+
+- `csljson` 在 `local` / `hybrid` 下优先走本地导出
+- `hybrid` 下只有可预期的本地缺失/暂时不可用错误才回退 Web
+- 如果本地导出报的是异常错误，应保留错误，不要自动假设 Web 结果等价
 
 ## 安全规则
 
@@ -177,6 +186,8 @@ go run .\cmd\zot config validate
   - 说明库版本已变化，刷新后重试
 - `429`
   - CLI 已有基础重试，但高频脚本仍应降速
+- local temporary unavailable
+  - 对 `find --fulltext`、`find --snippet`、`relate`、`extract-text` 这类本地能力，优先保留本地错误，不要强行改走 Web
 - 配置缺失
   - 运行 `zot config init`
 

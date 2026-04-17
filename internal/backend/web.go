@@ -2,7 +2,6 @@ package backend
 
 import (
 	"context"
-	"strings"
 
 	"zotero_cli/internal/domain"
 	"zotero_cli/internal/zoteroapi"
@@ -18,6 +17,7 @@ func NewWebReader(client *zoteroapi.Client) *WebReader {
 }
 
 func (r *WebReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
+	opts = NormalizeFindOptions(opts)
 	if opts.FullText {
 		return nil, newUnsupportedFeatureErrorWithHint("web", "find --fulltext", "set ZOT_MODE=local or ZOT_MODE=hybrid to use local full-text attachment search")
 	}
@@ -65,14 +65,6 @@ func (r *WebReader) ConsumeReadMetadata() ReadMetadata {
 	meta := r.lastReadMetadata
 	r.lastReadMetadata = ReadMetadata{}
 	return meta
-}
-
-func hasAttachmentFindFilters(opts FindOptions) bool {
-	return opts.FullText ||
-		opts.HasPDF ||
-		strings.TrimSpace(opts.AttachmentName) != "" ||
-		strings.TrimSpace(opts.AttachmentPath) != "" ||
-		strings.TrimSpace(opts.AttachmentType) != ""
 }
 
 func mapItems(items []zoteroapi.Item) []domain.Item {

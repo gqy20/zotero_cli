@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"os/exec"
@@ -51,6 +52,9 @@ type stubLocalExportReader struct {
 	keys    []string
 	payload []map[string]any
 	meta    backend.ReadMetadata
+	findErr error
+	keysErr error
+	exportErr error
 }
 
 type stubLocalTextReader struct {
@@ -61,6 +65,9 @@ type stubLocalTextReader struct {
 }
 
 func (r stubLocalExportReader) FindItems(context.Context, backend.FindOptions) ([]domain.Item, error) {
+	if r.findErr != nil {
+		return nil, r.findErr
+	}
 	items := make([]domain.Item, 0, len(r.keys))
 	for _, key := range r.keys {
 		items = append(items, domain.Item{Key: key})
@@ -81,10 +88,16 @@ func (r stubLocalExportReader) GetLibraryStats(context.Context) (backend.Library
 }
 
 func (r stubLocalExportReader) CollectionItemKeys(context.Context, string, int) ([]string, error) {
+	if r.keysErr != nil {
+		return nil, r.keysErr
+	}
 	return append([]string(nil), r.keys...), nil
 }
 
 func (r stubLocalExportReader) ExportItemsCSLJSON(context.Context, []string) ([]map[string]any, error) {
+	if r.exportErr != nil {
+		return nil, r.exportErr
+	}
 	return append([]map[string]any(nil), r.payload...), nil
 }
 
@@ -2189,6 +2202,70 @@ func TestRunExportCSLJSONHybridPrefersLocalByItemKey(t *testing.T) {
 	item := payload[0].(map[string]any)
 	if item["id"] != "ITEM1234" {
 		t.Fatalf("unexpected hybrid csljson payload: %#v", item)
+	}
+}
+
+func TestRunExportCSLJSONHybridFallsBackWhenLocalExportIsTemporarilyUnavailable(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "hybrid")
+
+	previousLocalReader := testCLI.newLocalReader
+	t.Cleanup(func() {
+		testCLI.newLocalReader = previousLocalReader
+	})
+	testCLI.newLocalReader = func(config.Config) (backend.Reader, error) {
+		return stubLocalExportReader{
+			exportErr: backend.ErrLocalTemporarilyUnavailable,
+		}, nil
+	}
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"export", "--item-key", "X42A7DEE", "--format", "csljson", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["read_source"] != "web" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
+}
+
+func TestRunExportCSLJSONHybridPreservesUnexpectedLocalExportError(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "hybrid")
+
+	previousLocalReader := testCLI.newLocalReader
+	t.Cleanup(func() {
+		testCLI.newLocalReader = previousLocalReader
+	})
+	testCLI.newLocalReader = func(config.Config) (backend.Reader, error) {
+		return stubLocalExportReader{
+			exportErr: errors.New("local csljson cache corrupted"),
+		}, nil
+	}
+
+	t.Setenv("ZOT_BASE_URL", "http://127.0.0.1:1")
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"export", "--item-key", "ITEM1234", "--format", "csljson", "--json"})
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "local csljson cache corrupted") {
+		t.Fatalf("expected unexpected local export error, got %q", stderr.String())
 	}
 }
 
