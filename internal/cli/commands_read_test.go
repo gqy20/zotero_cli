@@ -54,9 +54,10 @@ type stubLocalExportReader struct {
 }
 
 type stubLocalTextReader struct {
-	item domain.Item
-	text string
-	meta backend.ReadMetadata
+	item        domain.Item
+	text        string
+	attachments []backend.AttachmentFullText
+	meta        backend.ReadMetadata
 }
 
 func (r stubLocalExportReader) FindItems(context.Context, backend.FindOptions) ([]domain.Item, error) {
@@ -85,6 +86,14 @@ func (r stubLocalTextReader) GetItem(context.Context, string) (domain.Item, erro
 
 func (r stubLocalTextReader) ExtractItemFullText(context.Context, domain.Item) (string, error) {
 	return r.text, nil
+}
+
+func (r stubLocalTextReader) ExtractItemAttachmentTexts(context.Context, domain.Item) (backend.ItemFullTextResult, error) {
+	return backend.ItemFullTextResult{
+		Text:                 r.text,
+		PrimaryAttachmentKey: r.meta.FullTextAttachmentKey,
+		Attachments:          append([]backend.AttachmentFullText(nil), r.attachments...),
+	}, nil
 }
 
 func (r stubLocalTextReader) ConsumeReadMetadata() backend.ReadMetadata {
@@ -2242,9 +2251,23 @@ func TestRunExtractTextLocalJSON(t *testing.T) {
 				Key: "ITEM123",
 				Attachments: []domain.Attachment{
 					{Key: "ATT123", Title: "Paper PDF", ContentType: "application/pdf", ResolvedPath: "D:/paper.pdf", Resolved: true},
+					{Key: "ATT456", Title: "Supplementary PDF", ContentType: "application/pdf", ResolvedPath: "D:/supplement.pdf", Resolved: true},
 				},
 			},
 			text: "full extracted text",
+			attachments: []backend.AttachmentFullText{
+				{
+					Attachment: domain.Attachment{Key: "ATT123", Title: "Paper PDF", ContentType: "application/pdf", ResolvedPath: "D:/paper.pdf", Resolved: true},
+					Text:       "full extracted text",
+					Source:     "pdfium",
+				},
+				{
+					Attachment: domain.Attachment{Key: "ATT456", Title: "Supplementary PDF", ContentType: "application/pdf", ResolvedPath: "D:/supplement.pdf", Resolved: true},
+					Text:       "supplement extracted text",
+					Source:     "zotero_ft_cache",
+					CacheHit:   true,
+				},
+			},
 			meta: backend.ReadMetadata{ReadSource: "live", FullTextSource: "pdfium", FullTextAttachmentKey: "ATT123"},
 		}, nil
 	}
@@ -2269,6 +2292,21 @@ func TestRunExtractTextLocalJSON(t *testing.T) {
 	data, ok := got["data"].(map[string]any)
 	if !ok || data["text"] != "full extracted text" {
 		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	if data["primary_attachment_key"] != "ATT123" {
+		t.Fatalf("unexpected primary_attachment_key: %#v", data["primary_attachment_key"])
+	}
+	attachments, ok := data["attachments"].([]any)
+	if !ok || len(attachments) != 2 {
+		t.Fatalf("unexpected attachments payload: %#v", data["attachments"])
+	}
+	first, ok := attachments[0].(map[string]any)
+	if !ok || first["attachment_key"] != "ATT123" || first["text"] != "full extracted text" {
+		t.Fatalf("unexpected first attachment payload: %#v", attachments[0])
+	}
+	second, ok := attachments[1].(map[string]any)
+	if !ok || second["attachment_key"] != "ATT456" || second["text"] != "supplement extracted text" || second["full_text_cache_hit"] != true {
+		t.Fatalf("unexpected second attachment payload: %#v", attachments[1])
 	}
 }
 

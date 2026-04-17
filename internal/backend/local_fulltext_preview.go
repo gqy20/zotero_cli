@@ -58,6 +58,7 @@ var fullTextPhraseFixes = map[string]string{
 	"timeof hybrid":          "time of hybrid",
 	"thatthe":                "that the",
 	"thatthusmay":            "that thus may",
+	"thatthus may":           "that thus may",
 	"thathybridization":      "that hybridization",
 	"thathomoploid":          "that homoploid",
 	"willcontribute":         "will contribute",
@@ -434,6 +435,8 @@ func postprocessFullTextText(value string) string {
 	for old, newValue := range fullTextPhraseFixes {
 		value = strings.ReplaceAll(value, old, newValue)
 	}
+	value = strings.ReplaceAll(value, "thatthusmay", "that thus may")
+	value = strings.ReplaceAll(value, "thatthus may", "that thus may")
 	return value
 }
 

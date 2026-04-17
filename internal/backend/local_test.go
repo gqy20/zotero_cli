@@ -827,3 +827,80 @@ func TestLocalExtractItemFullTextUsesPDFAttachment(t *testing.T) {
 		t.Fatalf("ConsumeReadMetadata() = %#v, want pdfium attachment metadata", meta)
 	}
 }
+
+func TestLocalExtractItemAttachmentTextsIncludesAllPDFAttachments(t *testing.T) {
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mainPath := filepath.Join(storageDir, "ATT123", "paper.pdf")
+	if err := os.MkdirAll(filepath.Dir(mainPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mainPath, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	suppPath := filepath.Join(storageDir, "ATT456", "supplement.pdf")
+	if err := os.MkdirAll(filepath.Dir(suppPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(suppPath, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	previous := extractFullTextWithPDFiumFunc
+	t.Cleanup(func() { extractFullTextWithPDFiumFunc = previous })
+	extractFullTextWithPDFiumFunc = func(_ context.Context, _ *LocalReader, attachment domain.Attachment) (fullTextDocument, bool, error) {
+		sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
+		if !ok {
+			return fullTextDocument{}, false, nil
+		}
+		return fullTextDocument{
+			Text: attachment.Key + " text",
+			Meta: fullTextCacheMeta{
+				AttachmentKey:   attachment.Key,
+				ResolvedPath:    sourcePath,
+				ContentType:     attachment.ContentType,
+				Extractor:       "pdfium",
+				SourceMtimeUnix: info.ModTime().Unix(),
+				SourceSize:      info.Size(),
+			},
+		}, true, nil
+	}
+
+	reader := &LocalReader{
+		DataDir:          dataDir,
+		StorageDir:       storageDir,
+		FullTextCacheDir: filepath.Join(dataDir, ".zotero_cli", "fulltext"),
+	}
+	item := domain.Item{
+		Key: "ITEM123",
+		Attachments: []domain.Attachment{
+			{Key: "ATT123", Title: "Paper PDF", ContentType: "application/pdf", ResolvedPath: mainPath, Resolved: true},
+			{Key: "ATT456", Title: "Supplementary PDF", ContentType: "application/pdf", ResolvedPath: suppPath, Resolved: true},
+		},
+	}
+
+	result, err := reader.ExtractItemAttachmentTexts(context.Background(), item)
+	if err != nil {
+		t.Fatalf("ExtractItemAttachmentTexts() error = %v", err)
+	}
+	if result.Text != "ATT123 text" || result.PrimaryAttachmentKey != "ATT123" {
+		t.Fatalf("ExtractItemAttachmentTexts() primary = %#v", result)
+	}
+	if len(result.Attachments) != 2 {
+		t.Fatalf("ExtractItemAttachmentTexts() attachments = %#v, want 2 entries", result.Attachments)
+	}
+	if result.Attachments[0].Attachment.Key != "ATT123" || result.Attachments[0].Text != "ATT123 text" {
+		t.Fatalf("unexpected first attachment result: %#v", result.Attachments[0])
+	}
+	if result.Attachments[1].Attachment.Key != "ATT456" || result.Attachments[1].Text != "ATT456 text" {
+		t.Fatalf("unexpected second attachment result: %#v", result.Attachments[1])
+	}
+
+	meta := reader.ConsumeReadMetadata()
+	if meta.FullTextSource != "pdfium" || meta.FullTextAttachmentKey != "ATT123" {
+		t.Fatalf("ConsumeReadMetadata() = %#v, want primary attachment metadata", meta)
+	}
+}
