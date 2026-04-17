@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
@@ -297,6 +299,15 @@ func TestLocalFullTextPreviewFallsBackToPDFiumAndCachesResult(t *testing.T) {
 	}
 	if cacheMeta.Extractor != "pdfium" {
 		t.Fatalf("meta.Extractor = %q, want pdfium", cacheMeta.Extractor)
+	}
+}
+
+func TestNormalizeFullTextTextCleansWhitespaceAndHyphenation(t *testing.T) {
+	input := "  This\t is   a   test.\r\n\r\ninforma-\n  tion retrieval \n\n\nNext\tparagraph.  "
+	got := normalizeFullTextText(input)
+	want := "This is a test.\n\ninformation retrieval\n\nNext paragraph."
+	if got != want {
+		t.Fatalf("normalizeFullTextText() = %q, want %q", got, want)
 	}
 }
 
@@ -729,7 +740,7 @@ func TestLocalExtractAttachmentImagesWithPDFCPU(t *testing.T) {
 	}
 
 	imagePath := filepath.Join(attachmentDir, "figure.png")
-	if err := writeTestPNG(imagePath, 24, 18); err != nil {
+	if err := writeTestPNG(imagePath, 120, 80); err != nil {
 		t.Fatalf("writeTestPNG(): %v", err)
 	}
 
@@ -833,7 +844,99 @@ func TestLocalExtractItemFullTextUsesPDFAttachment(t *testing.T) {
 	}
 }
 
+func TestPrepareExtractedImageFiltersSmallImages(t *testing.T) {
+	outputDir := filepath.Join(t.TempDir(), "out")
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	content, err := encodeTestPNG(24, 18)
+	if err != nil {
+		t.Fatalf("encodeTestPNG(): %v", err)
+	}
+
+	_, kept, err := prepareExtractedImage(outputDir, "paper", "ATT123", model.Image{
+		Reader:   bytes.NewReader(content),
+		Name:     "Logo1",
+		FileType: "png",
+		PageNr:   1,
+		ObjNr:    3,
+	}, make(map[string]struct{}))
+	if err != nil {
+		t.Fatalf("prepareExtractedImage() error = %v", err)
+	}
+	if kept {
+		t.Fatal("prepareExtractedImage() kept small image, want filtered")
+	}
+	entries, err := os.ReadDir(outputDir)
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("outputDir has %d entries, want 0", len(entries))
+	}
+}
+
+func TestPrepareExtractedImageDeduplicatesByContent(t *testing.T) {
+	outputDir := filepath.Join(t.TempDir(), "out")
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	content, err := encodeTestPNG(120, 80)
+	if err != nil {
+		t.Fatalf("encodeTestPNG(): %v", err)
+	}
+	seen := make(map[string]struct{})
+
+	first, kept, err := prepareExtractedImage(outputDir, "paper", "ATT123", model.Image{
+		Reader:   bytes.NewReader(content),
+		Name:     "Image1",
+		FileType: "png",
+		PageNr:   1,
+		ObjNr:    3,
+	}, seen)
+	if err != nil {
+		t.Fatalf("prepareExtractedImage() first error = %v", err)
+	}
+	if !kept {
+		t.Fatal("prepareExtractedImage() filtered first image, want kept")
+	}
+
+	_, kept, err = prepareExtractedImage(outputDir, "paper", "ATT123", model.Image{
+		Reader:   bytes.NewReader(content),
+		Name:     "Image2",
+		FileType: "png",
+		PageNr:   2,
+		ObjNr:    4,
+	}, seen)
+	if err != nil {
+		t.Fatalf("prepareExtractedImage() second error = %v", err)
+	}
+	if kept {
+		t.Fatal("prepareExtractedImage() kept duplicate image, want deduplicated")
+	}
+	if _, err := os.Stat(first.Path); err != nil {
+		t.Fatalf("first extracted file missing: %v", err)
+	}
+	entries, err := os.ReadDir(outputDir)
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("outputDir has %d entries, want 1", len(entries))
+	}
+}
+
 func writeTestPNG(path string, width int, height int) error {
+	content, err := encodeTestPNG(width, height)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, content, 0o600)
+}
+
+func encodeTestPNG(width int, height int) ([]byte, error) {
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
@@ -841,11 +944,9 @@ func writeTestPNG(path string, width int, height int) error {
 		}
 	}
 
-	f, err := os.Create(path)
-	if err != nil {
-		return err
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return nil, err
 	}
-	defer f.Close()
-
-	return png.Encode(f, img)
+	return buf.Bytes(), nil
 }

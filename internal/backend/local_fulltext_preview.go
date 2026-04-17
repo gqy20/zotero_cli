@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -13,6 +14,8 @@ import (
 )
 
 const fullTextPreviewLimit = 280
+
+var hyphenatedLineBreakPattern = regexp.MustCompile(`([\p{L}\p{N}])-\s*\n\s*([\p{L}\p{N}])`)
 
 func (r *LocalReader) FullTextPreview(ctx context.Context, item domain.Item) (string, error) {
 	doc, ok, err := r.loadFullTextDocument(ctx, item, "")
@@ -204,11 +207,40 @@ func normalizeFullTextText(value string) string {
 		"\u00ad", "",
 		"\u00a0", " ",
 		"\u202f", " ",
+		"\t", " ",
 		"\r\n", "\n",
 		"\r", "\n",
 	)
 	cleaned := replacer.Replace(value)
-	return strings.TrimSpace(cleaned)
+	cleaned = normalizeHyphenatedLineBreaks(cleaned)
+
+	lines := strings.Split(cleaned, "\n")
+	normalizedLines := make([]string, 0, len(lines))
+	blankPending := false
+	for _, line := range lines {
+		line = strings.Join(strings.Fields(line), " ")
+		if line == "" {
+			if len(normalizedLines) > 0 && !blankPending {
+				normalizedLines = append(normalizedLines, "")
+				blankPending = true
+			}
+			continue
+		}
+		normalizedLines = append(normalizedLines, line)
+		blankPending = false
+	}
+
+	return strings.TrimSpace(strings.Join(normalizedLines, "\n"))
+}
+
+func normalizeHyphenatedLineBreaks(value string) string {
+	for {
+		normalized := hyphenatedLineBreakPattern.ReplaceAllString(value, "$1$2")
+		if normalized == value {
+			return normalized
+		}
+		value = normalized
+	}
 }
 
 func normalizeFullTextPreview(value string) string {

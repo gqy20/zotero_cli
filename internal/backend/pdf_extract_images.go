@@ -3,6 +3,8 @@ package backend
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -19,6 +21,11 @@ import (
 	_ "golang.org/x/image/webp"
 
 	"zotero_cli/internal/domain"
+)
+
+const (
+	minExtractedImageSide = 64
+	minExtractedImageArea = 4096
 )
 
 type ExtractedImage struct {
@@ -63,6 +70,7 @@ func (r *LocalReader) ExtractAttachmentImages(ctx context.Context, attachment do
 
 	fileBase := sanitizeImageBaseName(firstNonEmptyString(attachment.Filename, filepath.Base(sourcePath), attachment.Key))
 	results := make([]ExtractedImage, 0)
+	seenHashes := make(map[string]struct{})
 	for _, pageImages := range rawImages {
 		objNrs := make([]int, 0, len(pageImages))
 		for objNr := range pageImages {
@@ -77,18 +85,20 @@ func (r *LocalReader) ExtractAttachmentImages(ctx context.Context, attachment do
 			}
 
 			img := pageImages[objNr]
-			result, err := writeExtractedImage(outputDir, fileBase, attachment.Key, img)
+			result, kept, err := prepareExtractedImage(outputDir, fileBase, attachment.Key, img, seenHashes)
 			if err != nil {
 				return nil, err
 			}
-			results = append(results, result)
+			if kept {
+				results = append(results, result)
+			}
 		}
 	}
 
 	return results, nil
 }
 
-func writeExtractedImage(outputDir string, fileBase string, attachmentKey string, img model.Image) (ExtractedImage, error) {
+func prepareExtractedImage(outputDir string, fileBase string, attachmentKey string, img model.Image, seenHashes map[string]struct{}) (ExtractedImage, bool, error) {
 	format := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(img.FileType), "."))
 	if format == "" {
 		format = "bin"
@@ -103,22 +113,8 @@ func writeExtractedImage(outputDir string, fileBase string, attachmentKey string
 
 	content, err := io.ReadAll(img)
 	if err != nil {
-		return ExtractedImage{}, err
+		return ExtractedImage{}, false, err
 	}
-
-	outFile, err := os.Create(outPath)
-	if err != nil {
-		return ExtractedImage{}, err
-	}
-	written, copyErr := outFile.Write(content)
-	closeErr := outFile.Close()
-	if copyErr != nil {
-		return ExtractedImage{}, copyErr
-	}
-	if closeErr != nil {
-		return ExtractedImage{}, closeErr
-	}
-
 	width := img.Width
 	height := img.Height
 	if (width <= 0 || height <= 0) && len(content) > 0 {
@@ -128,6 +124,29 @@ func writeExtractedImage(outputDir string, fileBase string, attachmentKey string
 			height = cfg.Height
 		}
 	}
+	if shouldFilterExtractedImage(width, height) {
+		return ExtractedImage{}, false, nil
+	}
+
+	contentHash := extractedImageContentHash(content)
+	if _, exists := seenHashes[contentHash]; exists {
+		return ExtractedImage{}, false, nil
+	}
+
+	outFile, err := os.Create(outPath)
+	if err != nil {
+		return ExtractedImage{}, false, err
+	}
+	written, copyErr := outFile.Write(content)
+	closeErr := outFile.Close()
+	if copyErr != nil {
+		return ExtractedImage{}, false, copyErr
+	}
+	if closeErr != nil {
+		return ExtractedImage{}, false, closeErr
+	}
+
+	seenHashes[contentHash] = struct{}{}
 
 	return ExtractedImage{
 		AttachmentKey: attachmentKey,
@@ -138,7 +157,22 @@ func writeExtractedImage(outputDir string, fileBase string, attachmentKey string
 		Height:        height,
 		Bytes:         int64(written),
 		Path:          outPath,
-	}, nil
+	}, true, nil
+}
+
+func shouldFilterExtractedImage(width int, height int) bool {
+	if width <= 0 || height <= 0 {
+		return false
+	}
+	if width < minExtractedImageSide || height < minExtractedImageSide {
+		return true
+	}
+	return width*height < minExtractedImageArea
+}
+
+func extractedImageContentHash(content []byte) string {
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:])
 }
 
 func sanitizeImageBaseName(value string) string {
