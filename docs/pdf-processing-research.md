@@ -850,7 +850,7 @@ func ExtractText(pdfPath string) (*ExtractedText, error) {
 |------|--------|----------|
 | 添加 go mod 依赖（含 wazero 传递） | low | 5 min |
 | 实现 pool/instance 生命周期管理 | medium | 20-30 min |
-| 实现单页/全文文本提取 | medium | 30 min |
+| 实现单页/文本提取 | medium | 30 min |
 | 实现结构化提取（位置/字体） | medium | 20-30 min |
 | 元数据解析 | low | 10 min |
 | 文本清洗（去除多余空白） | low | 15 min |

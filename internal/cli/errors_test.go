@@ -76,7 +76,6 @@ func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 		{name: "config validate", args: []string{"config", "validate"}},
 		{name: "show", args: []string{"show", "X42A7DEE"}},
 		{name: "extract-text", args: []string{"extract-text", "X42A7DEE"}},
-		{name: "extract-images", args: []string{"extract-images", "X42A7DEE"}},
 		{name: "relate", args: []string{"relate", "X42A7DEE"}},
 		{name: "cite", args: []string{"cite", "X42A7DEE"}},
 		{name: "export query", args: []string{"export", "attention"}},

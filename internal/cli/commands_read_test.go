@@ -53,12 +53,6 @@ type stubLocalExportReader struct {
 	meta    backend.ReadMetadata
 }
 
-type stubLocalPDFReader struct {
-	item   domain.Item
-	images []backend.ExtractedImage
-	meta   backend.ReadMetadata
-}
-
 type stubLocalTextReader struct {
 	item domain.Item
 	text string
@@ -82,18 +76,6 @@ func (r stubLocalExportReader) ExportItemsCSLJSON(context.Context, []string) ([]
 }
 
 func (r stubLocalExportReader) ConsumeReadMetadata() backend.ReadMetadata {
-	return r.meta
-}
-
-func (r stubLocalPDFReader) GetItem(context.Context, string) (domain.Item, error) {
-	return r.item, nil
-}
-
-func (r stubLocalPDFReader) ExtractAttachmentImages(context.Context, domain.Attachment, string) ([]backend.ExtractedImage, error) {
-	return append([]backend.ExtractedImage(nil), r.images...), nil
-}
-
-func (r stubLocalPDFReader) ConsumeReadMetadata() backend.ReadMetadata {
 	return r.meta
 }
 
@@ -2241,71 +2223,6 @@ func TestRunExportCSLJSONTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "\"id\": \"SNAP1\"") {
 		t.Fatalf("expected export output to include item id, got %q", stdout.String())
-	}
-}
-
-func TestRunExtractImagesLocalJSON(t *testing.T) {
-	configRoot := t.TempDir()
-	setTestConfigDir(t, configRoot)
-	writeTestConfig(t, configRoot)
-	t.Setenv("ZOT_MODE", "local")
-
-	previousLocalPDFReader := newLocalPDFReader
-	t.Cleanup(func() {
-		newLocalPDFReader = previousLocalPDFReader
-	})
-	newLocalPDFReader = func(config.Config) (localPDFReader, error) {
-		return stubLocalPDFReader{
-			item: domain.Item{
-				Key: "ITEM123",
-				Attachments: []domain.Attachment{
-					{Key: "ATT123", Title: "Paper PDF", ContentType: "application/pdf", ResolvedPath: "D:/paper.pdf", Resolved: true},
-				},
-			},
-			images: []backend.ExtractedImage{
-				{
-					AttachmentKey: "ATT123",
-					Page:          1,
-					ObjectID:      "Image1",
-					Format:        "png",
-					Width:         120,
-					Height:        80,
-					Bytes:         2048,
-					Path:          filepath.Join(t.TempDir(), "paper_page_1_Image1.png"),
-				},
-			},
-			meta: backend.ReadMetadata{ReadSource: "live"},
-		}, nil
-	}
-
-	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"extract-images", "ITEM123", "--json"})
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
-	}
-
-	var got map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
-		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
-	}
-	if got["command"] != "extract-images" {
-		t.Fatalf("unexpected command: %#v", got["command"])
-	}
-	meta, ok := got["meta"].(map[string]any)
-	if !ok || meta["read_source"] != "live" {
-		t.Fatalf("unexpected meta payload: %#v", got["meta"])
-	}
-	data, ok := got["data"].(map[string]any)
-	if !ok {
-		t.Fatalf("unexpected data payload: %#v", got["data"])
-	}
-	images, ok := data["images"].([]any)
-	if !ok || len(images) != 1 {
-		t.Fatalf("unexpected images payload: %#v", data["images"])
-	}
-	imageData := images[0].(map[string]any)
-	if imageData["attachment_key"] != "ATT123" || imageData["format"] != "png" {
-		t.Fatalf("unexpected image payload: %#v", imageData)
 	}
 }
 

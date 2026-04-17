@@ -38,8 +38,6 @@ func Run(args []string) int {
 		return runShow(args[1:])
 	case "extract-text":
 		return runExtractText(args[1:])
-	case "extract-images":
-		return runExtractImages(args[1:])
 	case "relate":
 		return runRelate(args[1:])
 	case "cite":
@@ -129,11 +127,10 @@ Commands:
   config path    Print config path
   config init    Interactively create ~/.zot/.env
   config show    Show active config with masked secrets
-  config validate  Validate library_id and api_key against Zotero
+	config validate  Validate library_id and api_key against Zotero
 	find           Search items in the configured Zotero library
 	show           Show item details
-  extract-text   Extract full text from local PDF attachments
-  extract-images Extract images from local PDF attachments
+  extract-text   Extract text from local PDF attachments
 	relate         Show explicit item relations
 	cite           Generate a citation or bibliography entry
   export         Export bibliography entries
