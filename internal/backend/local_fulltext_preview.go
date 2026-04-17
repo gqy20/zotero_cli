@@ -134,7 +134,13 @@ func (r *LocalReader) buildFullTextDocument(item domain.Item, attachment domain.
 			},
 		}, true, nil
 	}
-	doc, ok, err := r.extractFullTextWithPyMuPDF(context.Background(), attachment)
+	doc, ok, err := extractFullTextWithPDFiumFunc(context.Background(), r, attachment)
+	if err != nil {
+		return fullTextDocument{}, false, err
+	}
+	if !ok {
+		doc, ok, err = r.extractFullTextWithPyMuPDF(context.Background(), attachment)
+	}
 	if err != nil {
 		return fullTextDocument{}, false, err
 	}

@@ -221,7 +221,7 @@ func TestLocalFullTextPreviewCachesZoteroFTCacheContent(t *testing.T) {
 	}
 }
 
-func TestLocalFullTextPreviewFallsBackToPyMuPDFAndCachesResult(t *testing.T) {
+func TestLocalFullTextPreviewFallsBackToPDFiumAndCachesResult(t *testing.T) {
 	dataDir := t.TempDir()
 	storageDir := filepath.Join(dataDir, "storage")
 	if err := os.MkdirAll(storageDir, 0o755); err != nil {
@@ -235,15 +235,26 @@ func TestLocalFullTextPreviewFallsBackToPyMuPDFAndCachesResult(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	previous := findPythonCommandFunc
-	t.Cleanup(func() { findPythonCommandFunc = previous })
-	findPythonCommandFunc = func() (string, bool) {
-		return filepath.Join(dataDir, "fake-python.cmd"), true
-	}
-	script := "@echo off\r\n"
-	script += "echo {\"text\":\"pymupdf extracted text\",\"pages\":1,\"chars\":22}\r\n"
-	if err := os.WriteFile(filepath.Join(dataDir, "fake-python.cmd"), []byte(script), 0o700); err != nil {
-		t.Fatal(err)
+	previous := extractFullTextWithPDFiumFunc
+	t.Cleanup(func() { extractFullTextWithPDFiumFunc = previous })
+	extractFullTextWithPDFiumFunc = func(_ context.Context, _ *LocalReader, attachment domain.Attachment) (fullTextDocument, bool, error) {
+		sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
+		if !ok {
+			return fullTextDocument{}, false, nil
+		}
+		return fullTextDocument{
+			Text: "pdfium extracted text",
+			Meta: fullTextCacheMeta{
+				AttachmentKey:   attachment.Key,
+				ResolvedPath:    sourcePath,
+				ContentType:     attachment.ContentType,
+				Extractor:       "pdfium",
+				SourceMtimeUnix: info.ModTime().Unix(),
+				SourceSize:      info.Size(),
+				Pages:           1,
+				Chars:           len([]rune("pdfium extracted text")),
+			},
+		}, true, nil
 	}
 
 	reader := &LocalReader{
@@ -262,12 +273,12 @@ func TestLocalFullTextPreviewFallsBackToPyMuPDFAndCachesResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FullTextPreview() error = %v", err)
 	}
-	if preview != "pymupdf extracted text" {
-		t.Fatalf("FullTextPreview() = %q, want pymupdf extracted text", preview)
+	if preview != "pdfium extracted text" {
+		t.Fatalf("FullTextPreview() = %q, want pdfium extracted text", preview)
 	}
 	readMeta := reader.ConsumeReadMetadata()
-	if readMeta.FullTextSource != "pymupdf" || readMeta.FullTextAttachmentKey != "ATT123" || readMeta.FullTextCacheHit {
-		t.Fatalf("ConsumeReadMetadata() = %#v, want pymupdf metadata", readMeta)
+	if readMeta.FullTextSource != "pdfium" || readMeta.FullTextAttachmentKey != "ATT123" || readMeta.FullTextCacheHit {
+		t.Fatalf("ConsumeReadMetadata() = %#v, want pdfium metadata", readMeta)
 	}
 
 	metaPath := filepath.Join(reader.FullTextCacheDir, "cache", "ATT123", "meta.json")
@@ -279,8 +290,8 @@ func TestLocalFullTextPreviewFallsBackToPyMuPDFAndCachesResult(t *testing.T) {
 	if err := json.Unmarshal(metaData, &cacheMeta); err != nil {
 		t.Fatalf("unmarshal meta: %v", err)
 	}
-	if cacheMeta.Extractor != "pymupdf" {
-		t.Fatalf("meta.Extractor = %q, want pymupdf", cacheMeta.Extractor)
+	if cacheMeta.Extractor != "pdfium" {
+		t.Fatalf("meta.Extractor = %q, want pdfium", cacheMeta.Extractor)
 	}
 }
 
