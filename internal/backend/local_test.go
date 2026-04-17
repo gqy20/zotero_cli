@@ -304,6 +304,53 @@ func TestNormalizeFullTextTextCleansWhitespaceAndHyphenation(t *testing.T) {
 	}
 }
 
+func TestNormalizeFullTextTextRemovesHeadersAndMergesWrappedLines(t *testing.T) {
+	input := strings.Join([]string{
+		"Molecular Ecology. 2024;00:e17412. | 1 of 9 https://doi.org/10.1111/mec.17412",
+		"wileyonlinelibrary.com/journal/mec",
+		"1 | INTRODUCTION",
+		"Speciation is often defined as a process in which one species splits",
+		"into two. However, new species can also form as a result of hy",
+		"bridization between different species.",
+		"",
+		"\f2 of 9 | LONG and RIESEBERG",
+		"Downloaded from https://onlinelibrary.wiley.com/doi/10.1111/mec.17412",
+		"See the Terms and Conditions on Wiley Online Library for rules of use;",
+		"Abstract",
+		"Homoploid hybrid speciation is challenging to document because hybridization can",
+		"lead to outcomes other than speciation.",
+	}, "\n")
+
+	got := normalizeFullTextText(input)
+	want := strings.Join([]string{
+		"1 | INTRODUCTION",
+		"Speciation is often defined as a process in which one species splits into two. However, new species can also form as a result of hybridization between different species.",
+		"",
+		"Abstract",
+		"Homoploid hybrid speciation is challenging to document because hybridization can lead to outcomes other than speciation.",
+	}, "\n")
+	if got != want {
+		t.Fatalf("normalizeFullTextText() = %q, want %q", got, want)
+	}
+}
+
+func TestNormalizeFullTextTextRepairsCommonJoinedWords(t *testing.T) {
+	input := strings.Join([]string{
+		"Also,these outcomes are not mutually exclusive.",
+		"Some authors used Wanget al. (2021), while others cited Sunet al. (2020).",
+		"The estab lishment of reproductive isola tion may drive evolu tion.",
+		"Next, whole-genome sequencing dataand standard analyses were used.",
+		"The criteria maybe too strict, but the straight forward pipeline can didate genes in in dels data.",
+		"Signals may remain if homop loid lineages have paren tal barriers thatthusmay persist.",
+	}, "\n")
+
+	got := normalizeFullTextText(input)
+	want := "Also, these outcomes are not mutually exclusive. Some authors used Wang et al. (2021), while others cited Sun et al. (2020). The establishment of reproductive isolation may drive evolution. Next, whole-genome sequencing data and standard analyses were used. The criteria may be too strict, but the straightforward pipeline candidate genes in indels data. Signals may remain if homoploid lineages have parental barriers that thus may persist."
+	if got != want {
+		t.Fatalf("normalizeFullTextText() = %q, want %q", got, want)
+	}
+}
+
 func TestBuildFullTextSnippetCentersMatch(t *testing.T) {
 	text := "Preface words. Mixed survey full text preview from zotero cache. Core section discusses speciation genome patterns in plants and gene flow. Ending notes."
 	got := buildFullTextSnippet(text, "speciation genome")
