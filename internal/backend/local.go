@@ -293,22 +293,22 @@ func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, err
 		loadedItem.Attachments = attachments
 		loadedItem.Notes = notes
 
-			var allAnnotations []domain.Annotation
-			childAttIDs, cerr := r.loadChildAttachmentIDs(ctx, db, itemID)
-			if cerr != nil {
-				return cerr
+		var allAnnotations []domain.Annotation
+		childAttIDs, cerr := r.loadChildAttachmentIDs(ctx, db, itemID)
+		if cerr != nil {
+			return cerr
+		}
+		for _, attID := range childAttIDs {
+			annos, aerr := r.loadAnnotations(ctx, db, attID)
+			if aerr != nil {
+				return aerr
 			}
-			for _, attID := range childAttIDs {
-				annos, aerr := r.loadAnnotations(ctx, db, attID)
-				if aerr != nil {
-					return aerr
-				}
-				allAnnotations = append(allAnnotations, annos...)
-			}
+			allAnnotations = append(allAnnotations, annos...)
+		}
 
-			loadedItem.Annotations = allAnnotations
-			item = loadedItem
-			return nil
+		loadedItem.Annotations = allAnnotations
+		item = loadedItem
+		return nil
 	})
 	if err != nil {
 		return domain.Item{}, err

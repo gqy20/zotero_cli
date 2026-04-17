@@ -49,11 +49,11 @@ func (r stubMetadataReader) ConsumeReadMetadata() backend.ReadMetadata {
 }
 
 type stubLocalExportReader struct {
-	keys    []string
-	payload []map[string]any
-	meta    backend.ReadMetadata
-	findErr error
-	keysErr error
+	keys      []string
+	payload   []map[string]any
+	meta      backend.ReadMetadata
+	findErr   error
+	keysErr   error
 	exportErr error
 }
 

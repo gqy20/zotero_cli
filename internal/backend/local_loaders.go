@@ -455,7 +455,7 @@ func (r *LocalReader) loadAnnotations(ctx context.Context, db *sql.DB, parentIte
 		ORDER BY ia.sortIndex
 	`, parentItemID)
 	if err != nil {
-			return nil, err
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -478,7 +478,7 @@ func (r *LocalReader) loadAnnotations(ctx context.Context, db *sql.DB, parentIte
 			&a.SortIndex,
 			&isExternal,
 		); err != nil {
-					return nil, err
+			return nil, err
 		}
 
 		a.Type = annotationTypeString(atype)

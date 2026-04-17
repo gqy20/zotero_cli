@@ -226,9 +226,11 @@ func TestHybridReaderGetRelatedDoesNotFallbackOnLocalItemNotFound(t *testing.T) 
 			getLibraryStats: func(context.Context) (LibraryStats, error) { return LibraryStats{}, errors.New("unexpected") },
 		},
 		web: stubReader{
-			findItems:  func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
-			getItem:    func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
-			getRelated: func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("web should not be used") },
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
+			getItem:   func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("web should not be used")
+			},
 			getLibraryStats: func(context.Context) (LibraryStats, error) {
 				return LibraryStats{}, errors.New("unexpected")
 			},
@@ -252,9 +254,11 @@ func TestHybridReaderGetRelatedDoesNotFallbackWhenLocalIsTemporarilyUnavailable(
 			getLibraryStats: func(context.Context) (LibraryStats, error) { return LibraryStats{}, errors.New("unexpected") },
 		},
 		web: stubReader{
-			findItems:  func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
-			getItem:    func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
-			getRelated: func(context.Context, string) ([]domain.Relation, error) { return nil, errors.New("web should not be used") },
+			findItems: func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
+			getItem:   func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("web should not be used")
+			},
 			getLibraryStats: func(context.Context) (LibraryStats, error) {
 				return LibraryStats{}, errors.New("unexpected")
 			},

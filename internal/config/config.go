@@ -108,9 +108,18 @@ func loadEnvConfig() (Config, bool, error) {
 	cfg := Default()
 	found := false
 
-	type stringField struct{ key string; dst *string }
-	type intField struct{ key string; dst *int }
-	type boolField struct{ key string; dst *bool }
+	type stringField struct {
+		key string
+		dst *string
+	}
+	type intField struct {
+		key string
+		dst *int
+	}
+	type boolField struct {
+		key string
+		dst *bool
+	}
 
 	for _, f := range []stringField{
 		{"ZOT_MODE", &cfg.Mode},
