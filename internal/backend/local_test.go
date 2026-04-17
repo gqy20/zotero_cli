@@ -5,11 +5,16 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"image"
+	"image/color"
+	"image/png"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pdfcpu/pdfcpu/pkg/api"
 
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
@@ -709,4 +714,77 @@ func TestResolveAttachmentPathSupportsAbsolutePaths(t *testing.T) {
 	if got != path {
 		t.Fatalf("resolveAttachmentPath() = %q, want %q", got, path)
 	}
+}
+
+func TestLocalExtractAttachmentImagesWithPDFCPU(t *testing.T) {
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	attachmentDir := filepath.Join(storageDir, "ATT123")
+	if err := os.MkdirAll(attachmentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	imagePath := filepath.Join(attachmentDir, "figure.png")
+	if err := writeTestPNG(imagePath, 24, 18); err != nil {
+		t.Fatalf("writeTestPNG(): %v", err)
+	}
+
+	pdfPath := filepath.Join(attachmentDir, "paper.pdf")
+	if err := api.ImportImagesFile([]string{imagePath}, pdfPath, nil, nil); err != nil {
+		t.Fatalf("ImportImagesFile(): %v", err)
+	}
+
+	reader := &LocalReader{}
+	outputDir := filepath.Join(t.TempDir(), "out")
+	images, err := reader.ExtractAttachmentImages(context.Background(), domain.Attachment{
+		Key:          "ATT123",
+		Title:        "Paper PDF",
+		ContentType:  "application/pdf",
+		ResolvedPath: pdfPath,
+		Resolved:     true,
+	}, outputDir)
+	if err != nil {
+		t.Fatalf("ExtractAttachmentImages() error = %v", err)
+	}
+	if len(images) == 0 {
+		t.Fatal("ExtractAttachmentImages() returned no images")
+	}
+
+	got := images[0]
+	if got.AttachmentKey != "ATT123" {
+		t.Fatalf("AttachmentKey = %q, want ATT123", got.AttachmentKey)
+	}
+	if got.Page < 1 {
+		t.Fatalf("Page = %d, want >= 1", got.Page)
+	}
+	if got.Width <= 0 || got.Height <= 0 {
+		t.Fatalf("unexpected dimensions: %dx%d", got.Width, got.Height)
+	}
+	if got.Path == "" {
+		t.Fatalf("Path = %q, want non-empty", got.Path)
+	}
+	if _, err := os.Stat(got.Path); err != nil {
+		t.Fatalf("extracted file missing: %v", err)
+	}
+}
+
+func writeTestPNG(path string, width int, height int) error {
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.RGBA{R: uint8(10 + x), G: uint8(20 + y), B: 100, A: 255})
+		}
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	return png.Encode(f, img)
 }

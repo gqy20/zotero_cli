@@ -36,6 +36,8 @@ func Run(args []string) int {
 		return runFind(args[1:])
 	case "show":
 		return runShow(args[1:])
+	case "extract-images":
+		return runExtractImages(args[1:])
 	case "relate":
 		return runRelate(args[1:])
 	case "cite":
@@ -128,6 +130,7 @@ Commands:
   config validate  Validate library_id and api_key against Zotero
 	find           Search items in the configured Zotero library
 	show           Show item details
+  extract-images Extract images from local PDF attachments
 	relate         Show explicit item relations
 	cite           Generate a citation or bibliography entry
   export         Export bibliography entries
