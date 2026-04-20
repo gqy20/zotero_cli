@@ -153,6 +153,24 @@ func (c fullTextCache) IsFresh(meta fullTextCacheMeta, attachment domain.Attachm
 	return meta.SourceMtimeUnix == info.ModTime().Unix() && meta.SourceSize == info.Size()
 }
 
+func (c fullTextCache) IsMarkedFailed(key string) bool {
+	if strings.TrimSpace(key) == "" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(c.attachmentDir(key), ".failed"))
+	return err == nil
+}
+
+func (c fullTextCache) MarkFailed(key string) error {
+	if strings.TrimSpace(key) == "" {
+		return nil
+	}
+	dir := c.attachmentDir(key)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err	}
+	return os.WriteFile(filepath.Join(dir, ".failed"), []byte{}, 0o600)
+}
+
 func fullTextAttachmentSourceInfo(attachment domain.Attachment) (string, os.FileInfo, bool) {
 	if attachment.Resolved && strings.TrimSpace(attachment.ResolvedPath) != "" {
 		info, err := os.Stat(attachment.ResolvedPath)

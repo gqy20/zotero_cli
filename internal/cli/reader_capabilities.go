@@ -25,6 +25,12 @@ type attachmentTextReader interface {
 
 type fullTextCacheChecker interface {
 	IsFullTextCached(domain.Attachment) bool
+	IsMarkedFailed(string) bool
+}
+
+type failedMarker interface {
+	IsMarkedFailed(string) bool
+	MarkExtractFailed(string) error
 }
 
 type collectionItemKeyReader interface {

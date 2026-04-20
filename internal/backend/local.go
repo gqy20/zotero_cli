@@ -88,6 +88,14 @@ func (r *LocalReader) IsFullTextCached(attachment domain.Attachment) bool {
 	return err == nil && ok
 }
 
+func (r *LocalReader) IsMarkedFailed(key string) bool {
+	return newFullTextCache(r.FullTextCacheDir).IsMarkedFailed(key)
+}
+
+func (r *LocalReader) MarkExtractFailed(key string) error {
+	return newFullTextCache(r.FullTextCacheDir).MarkFailed(key)
+}
+
 func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
 	opts = NormalizeFindOptions(opts)
 	if opts.IncludeTrashed {

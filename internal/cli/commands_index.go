@@ -120,6 +120,7 @@ func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexB
 
 	attTextReader, hasAttText := reader.(attachmentTextReader)
 	cacheChecker, hasCacheCheck := reader.(fullTextCacheChecker)
+	failedMarker, hasFailedMark := reader.(failedMarker)
 
 	startTime := time.Now()
 
@@ -141,21 +142,28 @@ func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexB
 		if len(pdfs) == 0 {
 			continue
 		}
-		if opts.Force || !hasCacheCheck {
+		if opts.Force {
 			tasks = append(tasks, itemTask{item: item})
 			continue
 		}
 		allCached := true
+		allFailed := true
 		for _, att := range pdfs {
 			if !cacheChecker.IsFullTextCached(att) {
 				allCached = false
-				break
+			}
+			if hasFailedMark && !cacheChecker.IsMarkedFailed(att.Key) {
+				allFailed = false
 			}
 		}
 		if allCached {
 			result.Skipped++
 			continue
 		}
+		if allFailed && hasCacheCheck {
+			result.Skipped++
+			continue
+			}
 		tasks = append(tasks, itemTask{item: item})
 	}
 
@@ -206,6 +214,13 @@ func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexB
 				_, extractErr = attTextReader.ExtractItemAttachmentTexts(ctx, t.item)
 			} else {
 				_, extractErr = textReader.ExtractItemFullText(ctx, t.item)
+			}
+
+			if extractErr != nil && hasFailedMark {
+				pdfs := filterPDFAttachments(t.item.Attachments)
+				if len(pdfs) > 0 {
+					_ = failedMarker.MarkExtractFailed(pdfs[0].Key)
+				}
 			}
 
 			if extractErr != nil {
