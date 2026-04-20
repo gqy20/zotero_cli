@@ -3,10 +3,33 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 )
+
+var zoteroExePath = ""
+
+func init() {
+	candidates := []string{
+		fileExists("C:\\Program Files\\Zotero\\zotero.exe"),
+		fileExists(os.Getenv("ProgramFiles") + "\\Zotero\\zotero.exe"),
+	}
+	for _, c := range candidates {
+		if c != "" {
+			zoteroExePath = c
+			break
+		}
+	}
+}
+
+func fileExists(path string) string {
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	return ""
+}
 
 func (c *CLI) runOpen(args []string) int {
 	if isHelpOnly(args) {
@@ -46,7 +69,7 @@ func (c *CLI) runOpen(args []string) int {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", "", path)
+		cmd = openWithZotero(path, page)
 	case "darwin":
 		cmd = exec.Command("open", path)
 	default:
@@ -60,9 +83,20 @@ func (c *CLI) runOpen(args []string) int {
 	fmt.Fprintf(c.stdout, "Opened: %s\n", path)
 	fmt.Fprintf(c.stdout, "Item: %s (%s)\n", itemKey, item.Title)
 	if page > 0 {
-		fmt.Fprintf(c.stdout, "Page hint: %d (navigate manually in viewer)\n", page)
+		fmt.Fprintf(c.stdout, "Page hint: %d (press Ctrl+G in reader)\n", page)
 	}
 	return 0
+}
+
+func openWithZotero(path string, page int) *exec.Cmd {
+	if zoteroExePath == "" {
+		return exec.Command("cmd", "/c", "start", "", path)
+	}
+	fileURI := toFileURI(path)
+	if page > 0 {
+		fileURI += fmt.Sprintf("#page=%d", page)
+	}
+	return exec.Command(zoteroExePath, "--browser", fileURI)
 }
 
 func (c *CLI) parseOpenArgs(args []string) (string, int, bool) {
@@ -118,4 +152,13 @@ func parseIntArg(s string) (int, error) {
 	var n int
 	_, err := fmt.Sscanf(s, "%d", &n)
 	return n, err
+}
+
+func toFileURI(path string) string {
+	s := strings.ReplaceAll(path, "\\", "/")
+	if !strings.HasPrefix(s, "/") {
+		s = "/" + s
+	}
+	s = strings.ReplaceAll(s, " ", "%20")
+	return "file://" + s
 }
