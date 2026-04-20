@@ -50,8 +50,8 @@ func (c *CLI) runAnnotations(args []string) int {
 			return c.printErr(fmt.Errorf("delete annotations requires local reader support"))
 		}
 		req := backend.DeleteAnnotationsRequest{
-			Page:  pageFilter,
-			Type:  typeFilter,
+			Page: pageFilter,
+			Type: typeFilter,
 		}
 		result, err := lr.DeletePDFAnnotations(context.Background(), att, req)
 		if err != nil {
@@ -83,13 +83,13 @@ func (c *CLI) runAnnotations(args []string) int {
 
 	if jsonOutput {
 		data := map[string]any{
-			"item_key":       itemKey,
-			"attachment_key": att.Key,
-			"pdf_path":       att.ResolvedPath,
-			"pdf_annotations":   filteredPDF,
-			"db_annotations":    filteredDB,
-			"total_pdf":         len(filteredPDF),
-			"total_db":          len(filteredDB),
+			"item_key":        itemKey,
+			"attachment_key":  att.Key,
+			"pdf_path":        att.ResolvedPath,
+			"pdf_annotations": filteredPDF,
+			"db_annotations":  filteredDB,
+			"total_pdf":       len(filteredPDF),
+			"total_db":        len(filteredDB),
 		}
 		meta := map[string]any{
 			"total_pdf": len(filteredPDF),

@@ -175,11 +175,11 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 		}
 
 		var (
-			creatorsByItemID map[int64][]domain.Creator
-			tagsByItemID     map[int64][]string
+			creatorsByItemID      map[int64][]domain.Creator
+			tagsByItemID          map[int64][]string
 			attachmentsByParentID map[int64][]domain.Attachment
-			loadErr       error
-			wg            sync.WaitGroup
+			loadErr               error
+			wg                    sync.WaitGroup
 		)
 		wg.Add(3)
 		go func() {

@@ -16,7 +16,7 @@ import (
 
 const (
 	defaultMaxWorkers = 10
-	hardMaxWorkers  = 20
+	hardMaxWorkers    = 20
 )
 
 type indexResult struct {
@@ -187,14 +187,14 @@ func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexB
 	}
 
 	var (
-		mu          sync.Mutex
-		extractWg   sync.WaitGroup
-		doneCount   int64
+		mu           sync.Mutex
+		extractWg    sync.WaitGroup
+		doneCount    int64
 		indexedCount int64
-		failedCount int64
-		errList     []string
-		extractSem  = make(chan struct{}, opts.Workers)
-		resultCh    = make(chan extractResult, totalToIndex)
+		failedCount  int64
+		errList      []string
+		extractSem   = make(chan struct{}, opts.Workers)
+		resultCh     = make(chan extractResult, totalToIndex)
 	)
 
 	progressCh := make(chan int64, opts.Workers*2)

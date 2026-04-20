@@ -12,21 +12,21 @@ import (
 )
 
 type AnnotateRequest struct {
-	Text    string   `json:"text,omitempty"`
-	Color   string   `json:"color"`
-	Comment string   `json:"comment,omitempty"`
-	Type    string   `json:"type"` // "highlight" | "underline" | "note"
-	Page    int      `json:"page,omitempty"`
+	Text    string      `json:"text,omitempty"`
+	Color   string      `json:"color"`
+	Comment string      `json:"comment,omitempty"`
+	Type    string      `json:"type"` // "highlight" | "underline" | "note"
+	Page    int         `json:"page,omitempty"`
 	Rect    *[4]float64 `json:"rect,omitempty"`
 	Point   *[2]float64 `json:"point,omitempty"`
 }
 
 type AnnotateMatch struct {
-	Page  int       `json:"page"`
-	Text  string    `json:"text,omitempty"`
+	Page  int        `json:"page"`
+	Text  string     `json:"text,omitempty"`
 	Rect  [4]float64 `json:"rect"`
-	Type  string    `json:"type"`
-	Color string    `json:"color"`
+	Type  string     `json:"type"`
+	Color string     `json:"color"`
 }
 
 type AnnotateResult struct {

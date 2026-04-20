@@ -12,14 +12,14 @@ import (
 )
 
 type PDFAnnotation struct {
-	Page    int       `json:"page"`
-	Type    string    `json:"type"`
-	Text    string    `json:"text,omitempty"`
-	Comment string    `json:"comment,omitempty"`
-	Color   string    `json:"color,omitempty"`
+	Page    int        `json:"page"`
+	Type    string     `json:"type"`
+	Text    string     `json:"text,omitempty"`
+	Comment string     `json:"comment,omitempty"`
+	Color   string     `json:"color,omitempty"`
 	Rect    [4]float64 `json:"rect,omitempty"`
-	Author  string    `json:"author,omitempty"`
-	Date    string    `json:"date,omitempty"`
+	Author  string     `json:"author,omitempty"`
+	Date    string     `json:"date,omitempty"`
 }
 
 type ReadAnnotationsResult struct {
@@ -119,8 +119,8 @@ sys.stdout.buffer.write(payload.encode("utf-8"))
 }
 
 type DeleteAnnotationsRequest struct {
-	Page  int    `json:"page,omitempty"`
-	Type  string `json:"type,omitempty"`
+	Page   int    `json:"page,omitempty"`
+	Type   string `json:"type,omitempty"`
 	Author string `json:"author,omitempty"`
 }
 

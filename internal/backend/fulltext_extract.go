@@ -12,17 +12,17 @@ import (
 )
 
 type extractBlock struct {
-	Page  int       `json:"page"`
-	BBox  [4]float64 `json:"bbox"`
-	Text  string    `json:"text"`
-	Size  float64   `json:"size"`
-	Bold  bool      `json:"bold"`
+	Page int        `json:"page"`
+	BBox [4]float64 `json:"bbox"`
+	Text string     `json:"text"`
+	Size float64    `json:"size"`
+	Bold bool       `json:"bold"`
 }
 
 type pyMuPDFDictResult struct {
 	Blocks     []extractBlock `json:"blocks"`
-	Pages       int            `json:"pages"`
-	TotalChars  int            `json:"total_chars"`
+	Pages      int            `json:"pages"`
+	TotalChars int            `json:"total_chars"`
 }
 
 func (r *LocalReader) extractFullTextWithPyMuPDF(ctx context.Context, attachment domain.Attachment) (FullTextDocument, bool, error) {

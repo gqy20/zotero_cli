@@ -55,11 +55,11 @@ func (c *CLI) runAnnotate(args []string) int {
 
 	if jsonOutput {
 		data := map[string]any{
-			"item_key":        itemKey,
+			"item_key":       itemKey,
 			"attachment_key": result.AttachmentKey,
-			"pdf_path":        result.PDFPath,
-			"matches":         result.Matches,
-			"total_matches":   len(result.Matches),
+			"pdf_path":       result.PDFPath,
+			"matches":        result.Matches,
+			"total_matches":  len(result.Matches),
 		}
 		meta := map[string]any{
 			"total_matches": len(result.Matches),

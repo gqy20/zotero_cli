@@ -49,23 +49,23 @@ type FullTextDocument struct {
 }
 
 type chunk struct {
-	Page       int       `json:"page"`
+	Page       int        `json:"page"`
 	BBox       [4]float64 `json:"bbox"`
-	Text       string    `json:"text"`
-	BlockCount int       `json:"block_count"`
+	Text       string     `json:"text"`
+	BlockCount int        `json:"block_count"`
 }
 
 type fullTextIndexMatch struct {
-	ParentItemKey    string
-	AttachmentKey    string
-	Rank             float64
-	Title            string
-	AttachmentTitle  string
-	AttachmentName   string
-	Body             string
-	ChunkIndex       int
-	ChunkPage        int
-	ChunkBBox        [4]float64
+	ParentItemKey   string
+	AttachmentKey   string
+	Rank            float64
+	Title           string
+	AttachmentTitle string
+	AttachmentName  string
+	Body            string
+	ChunkIndex      int
+	ChunkPage       int
+	ChunkBBox       [4]float64
 }
 
 func newFullTextCache(rootDir string) fullTextCache {
@@ -393,7 +393,8 @@ func (c fullTextCache) MarkFailed(key string) error {
 	}
 	dir := c.attachmentDir(key)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err	}
+		return err
+	}
 	return os.WriteFile(filepath.Join(dir, ".failed"), []byte{}, 0o600)
 }
 
@@ -493,11 +494,11 @@ func (c fullTextCache) syncIndexWithReset(doc FullTextDocument, reset bool) erro
 	if _, err := tx.Exec(`DELETE FROM fulltext_chunks WHERE attachment_key = ?`, doc.Meta.AttachmentKey); err != nil {
 		return err
 	}
-		chunks := doc.Chunks
-		if len(chunks) == 0 && doc.Text != "" {
-			chunks = []chunk{{Page: 1, Text: doc.Text, BlockCount: 1}}
-		}
-		if len(chunks) > 0 {
+	chunks := doc.Chunks
+	if len(chunks) == 0 && doc.Text != "" {
+		chunks = []chunk{{Page: 1, Text: doc.Text, BlockCount: 1}}
+	}
+	if len(chunks) > 0 {
 		chunkStmt, err := tx.Prepare(`INSERT INTO fulltext_chunks (
 			attachment_key, parent_item_key, chunk_index, page, bbox, body
 		) VALUES (?, ?, ?, ?, ?, ?)`)
