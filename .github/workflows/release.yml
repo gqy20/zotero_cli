@@ -241,7 +241,7 @@ jobs:
     env:
       TAP_REPO: gqy20/homebrew-tap
       TAP_FORMULA_PATH: Formula/zotcli.rb
-      VERSION: ${{ env.RELEASE_VERSION }}
+      VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('manual-{0}', github.run_number) }}
       REPO: ${{ github.repository }}
     steps:
       - name: Download packaged artifacts
