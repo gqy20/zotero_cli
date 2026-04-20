@@ -1641,7 +1641,7 @@ func buildLocalShowFixture(t *testing.T, sqlitePath string, storageDir string) {
 
 	statements := []string{
 		`CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName TEXT);`,
-		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER);`,
+		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER, dateAdded TEXT);`,
 		`CREATE TABLE fieldsCombined (fieldID INTEGER PRIMARY KEY, fieldName TEXT);`,
 		`CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT);`,
 		`CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID INTEGER);`,
@@ -1719,7 +1719,7 @@ func buildLocalRelateFixture(t *testing.T, sqlitePath string, storageDir string)
 
 	statements := []string{
 		`CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName TEXT);`,
-		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER);`,
+		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER, dateAdded TEXT);`,
 		`CREATE TABLE fieldsCombined (fieldID INTEGER PRIMARY KEY, fieldName TEXT);`,
 		`CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT);`,
 		`CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID INTEGER);`,
@@ -1768,7 +1768,7 @@ func buildLocalLinkedAttachmentFixture(t *testing.T, sqlitePath string, storageD
 
 	statements := []string{
 		`CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName TEXT);`,
-		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER);`,
+		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER, dateAdded TEXT);`,
 		`CREATE TABLE fieldsCombined (fieldID INTEGER PRIMARY KEY, fieldName TEXT);`,
 		`CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT);`,
 		`CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID INTEGER);`,
@@ -1845,7 +1845,7 @@ func buildLocalStatsFixture(t *testing.T, sqlitePath string) {
 
 	statements := []string{
 		`CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName TEXT);`,
-		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER);`,
+		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER, dateAdded TEXT);`,
 		`CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, key TEXT, collectionName TEXT);`,
 		`CREATE TABLE savedSearches (savedSearchID INTEGER PRIMARY KEY, savedSearchName TEXT);`,
 	}
@@ -1879,7 +1879,7 @@ func buildLocalFindFixture(t *testing.T, dataDir string, sqlitePath string, stor
 
 	statements := []string{
 		`CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName TEXT);`,
-		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER);`,
+		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER, dateAdded TEXT);`,
 		`CREATE TABLE fieldsCombined (fieldID INTEGER PRIMARY KEY, fieldName TEXT);`,
 		`CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT);`,
 		`CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID INTEGER);`,
@@ -2668,7 +2668,7 @@ func buildLocalAnnotationFixture(t *testing.T, sqlitePath string, storageDir str
 
 	statements := []string{
 		`CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName TEXT);`,
-		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER);`,
+		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT, version INTEGER, itemTypeID INTEGER, dateAdded TEXT);`,
 		`CREATE TABLE fieldsCombined (fieldID INTEGER PRIMARY KEY, fieldName TEXT);`,
 		`CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT);`,
 		`CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID INTEGER);`,
