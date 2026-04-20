@@ -1,0 +1,52 @@
+#!/bin/bash
+# Git pre-commit hook: 格式化检查 + 静态分析 + 测试
+# 安装: make install-hooks 或 ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+PASS=true
+
+# 1. gofmt 检查
+echo "==> 检查格式化 (gofmt)..."
+UNFORMATTED=$(gofmt -l ./internal/ ./cmd/)
+if [ -n "$UNFORMATTED" ]; then
+  echo -e "${RED}以下文件需要格式化:${NC}"
+  echo "$UNFORMATTED"
+  echo -e "${YELLOW}运行 'make fmt' 自动修复${NC}"
+  PASS=false
+else
+  echo -e "${GREEN}格式化检查通过${NC}"
+fi
+
+# 2. go vet
+echo "==> 静态分析 (go vet)..."
+if ! go vet ./... 2>&1; then
+  echo -e "${RED}go vet 未通过${NC}"
+  PASS=false
+else
+  echo -e "${GREEN}静态分析通过${NC}"
+fi
+
+# 3. 测试（仅改动相关包，跳过慢测试）
+echo "==> 运行测试..."
+if ! go test ./... -short 2>&1; then
+  echo -e "${RED}测试未通过${NC}"
+  PASS=false
+else
+  echo -e "${GREEN}测试通过${NC}"
+fi
+
+# 结果
+echo ""
+if [ "$PASS" = true ]; then
+  echo -e "${GREEN}所有检查通过 ✓${NC}"
+  exit 0
+else
+  echo -e "${RED}提交被拦截 ✗ 请先修复上述问题${NC}"
+  exit 1
+fi

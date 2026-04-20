@@ -34,21 +34,17 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Check formatting
-        shell: bash
-        run: |
-          unformatted="$(find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 gofmt -l)"
-          if [[ -n "${unformatted}" ]]; then
-            echo "The following files need gofmt:"
-            echo "${unformatted}"
-            exit 1
-          fi
+      - name: Format check (gofmt)
+        run: make fmt-check
 
-      - name: Run tests
-        run: go test ./...
+      - name: Vet
+        run: make vet
+
+      - name: Test
+        run: make test
 
       - name: Build CLI
-        run: go build -trimpath -ldflags "${GO_VERSION_LDFLAGS}" ./cmd/zot
+        run: make build
 
   cross-platform-build:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
