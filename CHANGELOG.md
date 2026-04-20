@@ -6,18 +6,35 @@
 
 ## [Unreleased]
 
+### 后续改进计划（Agent 可用性增强）
+以下为规划中的改进方向，按优先级排序：
+1. **结构化错误输出**：支持 `--json` / `ZOT_JSON_ERRORS=1` 让错误以 `{ "ok": false, "error": "...", "code": N }` JSON 格式输出，便于 agent 可靠解析。
+2. **`zot overview` 发现命令**：一次性返回 library 全貌（总条目数、热门标签、集合树、最近添加、索引状态），降低 agent 使用门槛。
+3. **写操作 `--dry-run` 模式**：所有写命令支持预览将要执行的操作而不实际修改数据，提升安全性。
+4. **`find` → `export` 管道连接**：`export` 新增 `--from-find` 参数，内部执行搜索后直接导出，无需手动传递 key 列表。
+
+## [0.0.4] - 2026-04-20
+
 ### 新增
 - 新增 `zot annotate` 命令，支持通过 PyMuPDF 向 PDF 写入高亮、下划线和笔记标注。支持三种定位模式：文本搜索（全页）、矩形坐标、点位便签。
 - 新增 `zot open` 命令，在 Zotero 阅读器中打开 PDF 附件。Zotero 运行时通过 `zotero://open-pdf` 协议复用已有实例并支持页码跳转；未运行时启动新实例。
 - 新增 `zot select` 命令，通过 `zotero://select` 协议在已运行的 Zotero UI 中选中指定条目。
 - 新增 `zot annotations` 命令，双源读取 PDF 标注：Zotero Reader 数据库标注（含 dateAdded 时间戳）+ PDF 文件内标注（PyMuPDF 扫描）。支持按页码/类型过滤、JSON 输出、以及 `--clear` 删除 PDF 文件内的标注。
 - `domain.Annotation` 类型新增 `DateAdded` 字段，SQL 查询增加 `dateAdded` 列。
+- 新增 Makefile 构建系统，支持 `make build` / `make release` / `make check` / `make fmt` 等目标。release 目标自动下载 UPX 并压缩 Windows 二进制至 ~6MB。
+- 新增 pre-commit hook（gofmt + go vet + go test），通过 `make install-hooks` 安装。
+- 新增 Exit Code 规范常量（ExitOK/ExitError/ExitUsage/ExitConfig），统一所有命令的退出码语义。
+- 新增 `docs/examples/` 目录，包含 8 个命令的完整 JSON 输出示例，供 AI Agent 参考数据结构。
+- 新增 `docs/architecture.md` 技术架构文档和 `docs/commands.md` 完整命令参考。
+- 新增 `CONTRIBUTING.md` 贡献指南及 GitHub PR/Issue 模板。
+- 新增 `.claude/skills/zotero-cli/SKILL.md` Claude Code skill 文件（中文版）。
 
 ### 变更
+- README 重构为 AI 原生产品首页：按科研工作流组织内容、新增功能对照表、与 Zotero 桌面端联动说明、多平台安装方式（含 Homebrew）。
+- SKILL.md 文件全部改为中文，与项目文档语言一致。
+- CI workflow 改为使用 make 目标（fmt-check / vet / test / build）；release workflow 新增 UPX 压缩步骤。
 - `zot open` 改进：检测 Zotero 是否运行，运行中用 `zotero://open-pdf` 协议（传附件 key 而非父条目 key），未运行时启动新实例。`--page` 参数现在真正生效（通过 URI query 参数传递）。
-
-### 说明
-- 当前尚未开始新的未发布变更（以上为已实现但未正式发布的功能）。
+- 构建流程优化：`make build` / `make release` 在构建前自动清理旧产物；UPX 压缩直接覆盖为最终 `zot.exe`（通过临时文件中转）；CI workflow 同步更新。
 
 ## [0.0.3] - 2026-04-17
 
