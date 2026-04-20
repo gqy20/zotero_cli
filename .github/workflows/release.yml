@@ -237,14 +237,28 @@ jobs:
       - verify
       - build
       - publish
-    if: startsWith(github.ref, 'refs/tags/') && secrets.HOMEBREW_TAP_TOKEN != ''
+    if: startsWith(github.ref, 'refs/tags/')
     env:
       TAP_REPO: gqy20/homebrew-tap
       TAP_FORMULA_PATH: Formula/zotcli.rb
       VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('manual-{0}', github.run_number) }}
       REPO: ${{ github.repository }}
     steps:
+      - name: Check Homebrew token availability
+        id: token
+        shell: bash
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [[ -n "${TAP_TOKEN}" ]]; then
+            echo "has_token=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "has_token=false" >> "${GITHUB_OUTPUT}"
+            echo "HOMEBREW_TAP_TOKEN is not set; skipping Homebrew tap update."
+          fi
+
       - name: Download packaged artifacts
+        if: steps.token.outputs.has_token == 'true'
         uses: actions/download-artifact@v4
         with:
           path: dist
@@ -252,6 +266,7 @@ jobs:
           merge-multiple: true
 
       - name: Capture Homebrew artifact checksums
+        if: steps.token.outputs.has_token == 'true'
         id: checksums
         shell: bash
         run: |
@@ -268,6 +283,7 @@ jobs:
           echo "darwin_arm64_sha=$(sha256sum "${darwin_arm64}" | awk '{print $1}')" >> "${GITHUB_OUTPUT}"
 
       - name: Check out Homebrew tap
+        if: steps.token.outputs.has_token == 'true'
         shell: bash
         env:
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
@@ -276,6 +292,7 @@ jobs:
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" tap-repo
 
       - name: Update formula
+        if: steps.token.outputs.has_token == 'true'
         shell: python3 {0}
         working-directory: tap-repo
         env:
@@ -330,6 +347,7 @@ jobs:
               f.write(content)
 
       - name: Commit and push tap update
+        if: steps.token.outputs.has_token == 'true'
         shell: bash
         working-directory: tap-repo
         run: |
