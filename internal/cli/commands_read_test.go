@@ -44,6 +44,10 @@ func (r stubMetadataReader) GetLibraryStats(context.Context) (backend.LibrarySta
 	return r.stats, nil
 }
 
+func (r stubMetadataReader) ListNotes(context.Context) ([]domain.Note, error) {
+	return nil, nil
+}
+
 func (r stubMetadataReader) ConsumeReadMetadata() backend.ReadMetadata {
 	return r.meta
 }
@@ -105,6 +109,10 @@ func (r stubLocalExportReader) ConsumeReadMetadata() backend.ReadMetadata {
 	return r.meta
 }
 
+func (r stubLocalExportReader) ListNotes(context.Context) ([]domain.Note, error) {
+	return nil, nil
+}
+
 func (r stubLocalTextReader) GetItem(context.Context, string) (domain.Item, error) {
 	return r.item, nil
 }
@@ -135,6 +143,10 @@ func (r stubLocalTextReader) ExtractItemAttachmentTexts(context.Context, domain.
 
 func (r stubLocalTextReader) ConsumeReadMetadata() backend.ReadMetadata {
 	return r.meta
+}
+
+func (r stubLocalTextReader) ListNotes(context.Context) ([]domain.Note, error) {
+	return nil, nil
 }
 
 func TestHoldSQLiteExclusiveLockHelper(t *testing.T) {

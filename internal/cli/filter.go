@@ -91,6 +91,32 @@ func notePreview(content string) string {
 	return strings.TrimSpace(content[:limit-3]) + "..."
 }
 
+func filterVisibleNotesLocal(notes []domain.Note) []domain.Note {
+	filtered := make([]domain.Note, 0, len(notes))
+	for _, note := range notes {
+		if isMachineNote(note.Content) {
+			continue
+		}
+		filtered = append(filtered, note)
+	}
+	return filtered
+}
+
+func filterNotesByQuery(notes []domain.Note, query string) []domain.Note {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return notes
+	}
+	filtered := make([]domain.Note, 0, len(notes))
+	for _, note := range notes {
+		content := strings.ToLower(backend.StripHTMLTags(note.Content))
+		if strings.Contains(content, query) {
+			filtered = append(filtered, note)
+		}
+	}
+	return filtered
+}
+
 func mutateTags(existing []string, tag string, add bool) []string {
 	seen := make(map[string]struct{}, len(existing)+1)
 	out := make([]string, 0, len(existing)+1)

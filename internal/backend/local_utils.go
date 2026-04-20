@@ -36,7 +36,7 @@ func normalizeWhitespace(value string) string {
 }
 
 func notePreview(value string) string {
-	text := stripHTMLTags(value)
+	text := StripHTMLTags(value)
 	text = normalizeWhitespace(text)
 	if len(text) <= 80 {
 		return text
@@ -44,7 +44,7 @@ func notePreview(value string) string {
 	return text[:77] + "..."
 }
 
-func stripHTMLTags(value string) string {
+func StripHTMLTags(value string) string {
 	var b strings.Builder
 	inTag := false
 	for _, r := range value {

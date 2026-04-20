@@ -67,6 +67,23 @@ func (r *WebReader) ConsumeReadMetadata() ReadMetadata {
 	return meta
 }
 
+func (r *WebReader) ListNotes(ctx context.Context) ([]domain.Note, error) {
+	notes, err := r.client.ListNotes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.lastReadMetadata = ReadMetadata{ReadSource: "web"}
+	result := make([]domain.Note, 0, len(notes))
+	for _, n := range notes {
+		result = append(result, domain.Note{
+			Key:     n.Key,
+			Content: n.Content,
+			Preview: notePreview(n.Content),
+		})
+	}
+	return result, nil
+}
+
 func mapItems(items []zoteroapi.Item) []domain.Item {
 	out := make([]domain.Item, 0, len(items))
 	for _, item := range items {

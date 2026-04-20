@@ -3,7 +3,9 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	"zotero_cli/internal/domain"
 	"zotero_cli/internal/zoteroapi"
 )
 
@@ -62,14 +64,31 @@ func (c *CLI) runNotes(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := c.loadClient()
+	var query string
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--query=") {
+			query = strings.TrimPrefix(arg, "--query=")
+		} else if arg == "--query" {
+			continue
+		} else if query == "" && !strings.HasPrefix(arg, "--") && arg != "" {
+			// positional query argument
+			query = arg
+		}
+	}
+
+	_, reader, exitCode := c.loadReader()
 	if exitCode != 0 {
 		return exitCode
 	}
 
-	notes, err := client.ListNotes(context.Background())
+	var notes []domain.Note
+	notes, err := reader.ListNotes(context.Background())
 	if err != nil {
 		return c.printErr(err)
+	}
+
+	if query != "" {
+		notes = filterNotesByQuery(notes, query)
 	}
 
 	if limit > 0 && len(notes) > limit {
@@ -78,9 +97,9 @@ func (c *CLI) runNotes(args []string) int {
 
 	if jsonOutput {
 		meta := map[string]any{
-			"total":       len(notes),
-			"read_source": "web",
+			"total": len(notes),
 		}
+		c.appendReadMetadata(meta, reader)
 		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "notes",
@@ -89,14 +108,21 @@ func (c *CLI) runNotes(args []string) int {
 		})
 	}
 
-	visible := filterVisibleNotes(notes)
+	readMeta := c.consumeReaderReadMetadata(reader)
+	c.warnIfSnapshotRead(readMeta)
+
+	visible := filterVisibleNotesLocal(notes)
 	if len(visible) == 0 {
 		fmt.Fprintln(c.stdout, "no readable notes found in text mode; use --json to inspect all notes")
 		return 0
 	}
 
 	for _, note := range visible {
-		fmt.Fprintf(c.stdout, "%-10s  %s\n", note.Key, notePreview(note.Content))
+		parent := ""
+		if note.ParentItemKey != "" {
+			parent = fmt.Sprintf("  [%s]", note.ParentItemKey)
+		}
+		fmt.Fprintf(c.stdout, "%-10s%s  %s\n", note.Key, parent, note.Preview)
 	}
 	return 0
 }

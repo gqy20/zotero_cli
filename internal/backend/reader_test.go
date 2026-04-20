@@ -16,6 +16,7 @@ type stubReader struct {
 	getItem             func(context.Context, string) (domain.Item, error)
 	getRelated          func(context.Context, string) ([]domain.Relation, error)
 	getLibraryStats     func(context.Context) (LibraryStats, error)
+	listNotes           func(context.Context) ([]domain.Note, error)
 	consumeReadMetadata func() ReadMetadata
 }
 
@@ -38,6 +39,13 @@ func (r stubReader) GetRelated(ctx context.Context, key string) ([]domain.Relati
 
 func (r stubReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
 	return r.getLibraryStats(ctx)
+}
+
+func (r stubReader) ListNotes(ctx context.Context) ([]domain.Note, error) {
+	if r.listNotes == nil {
+		return nil, nil
+	}
+	return r.listNotes(ctx)
 }
 
 func (r stubReader) ConsumeReadMetadata() ReadMetadata {

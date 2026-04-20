@@ -55,8 +55,10 @@ type Attachment struct {
 }
 
 type Note struct {
-	Key     string `json:"key"`
-	Preview string `json:"preview,omitempty"`
+	Key           string `json:"key"`
+	ParentItemKey string `json:"parent_item_key,omitempty"`
+	Content       string `json:"content,omitempty"`
+	Preview       string `json:"preview,omitempty"`
 }
 
 // Annotation represents a Zotero reader highlight or note on a PDF attachment.

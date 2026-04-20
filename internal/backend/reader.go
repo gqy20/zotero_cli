@@ -61,6 +61,7 @@ type Reader interface {
 	GetItem(ctx context.Context, key string) (domain.Item, error)
 	GetRelated(ctx context.Context, key string) ([]domain.Relation, error)
 	GetLibraryStats(ctx context.Context) (LibraryStats, error)
+	ListNotes(ctx context.Context) ([]domain.Note, error)
 }
 
 type readMetadataReporter interface {
@@ -80,6 +81,7 @@ const (
 	readOperationGetItem         readOperation = "get_item"
 	readOperationGetRelated      readOperation = "get_related"
 	readOperationGetLibraryStats readOperation = "get_library_stats"
+	readOperationListNotes       readOperation = "list_notes"
 )
 
 func NewReader(cfg config.Config, httpClient *http.Client) (Reader, error) {
@@ -155,6 +157,17 @@ func (r *HybridReader) GetLibraryStats(ctx context.Context) (LibraryStats, error
 	)
 }
 
+func (r *HybridReader) ListNotes(ctx context.Context) ([]domain.Note, error) {
+	return readWithFallbackUsingPolicy(r,
+		func(err error) bool {
+			return shouldFallbackToWeb(readOperationListNotes, err)
+		},
+		func(reader Reader) ([]domain.Note, error) {
+			return reader.ListNotes(ctx)
+		},
+	)
+}
+
 func readWithFallbackUsingPolicy[T any](r *HybridReader, shouldFallback func(error) bool, read func(Reader) (T, error)) (T, error) {
 	var zero T
 	if r.local != nil {
@@ -220,6 +233,8 @@ func shouldFallbackToWeb(op readOperation, err error) bool {
 	case readOperationGetItem:
 		return errors.Is(err, ErrItemNotFound) || errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
 	case readOperationGetLibraryStats:
+		return errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
+	case readOperationListNotes:
 		return errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
 	case readOperationGetRelated:
 		return false

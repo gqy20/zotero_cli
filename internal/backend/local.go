@@ -423,6 +423,36 @@ func (r *LocalReader) GetLibraryStats(ctx context.Context) (LibraryStats, error)
 	return stats, nil
 }
 
+func (r *LocalReader) ListNotes(ctx context.Context) ([]domain.Note, error) {
+	var notes []domain.Note
+	err := r.withReadableDB(ctx, func(db *sql.DB) error {
+		rows, err := db.QueryContext(ctx, `
+			SELECT i.key, COALESCE(pi.key, ''), COALESCE(n.note, '')
+			FROM itemNotes n
+			JOIN items i ON i.itemID = n.itemID
+			LEFT JOIN items pi ON pi.itemID = n.parentItemID
+			ORDER BY i.key
+		`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var note domain.Note
+			var content string
+			if err := rows.Scan(&note.Key, &note.ParentItemKey, &content); err != nil {
+				return err
+			}
+			note.Content = content
+			note.Preview = notePreview(content)
+			notes = append(notes, note)
+		}
+		return rows.Err()
+	})
+	return notes, err
+}
+
 func (r *LocalReader) withReadableDB(_ context.Context, fn func(*sql.DB) error) error {
 	db, cleanup, err := r.openLiveDB()
 	if err == nil {
