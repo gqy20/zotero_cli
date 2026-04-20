@@ -22,6 +22,14 @@ type Item struct {
 	Attachments          []Attachment `json:"attachments,omitempty"`
 	Notes                []Note       `json:"notes,omitempty"`
 	Annotations          []Annotation `json:"annotations,omitempty"`
+	MatchedChunk         *MatchedChunkInfo `json:"matched_chunk,omitempty"`
+}
+
+type MatchedChunkInfo struct {
+	Text           string   `json:"text"`
+	Page           int      `json:"page"`
+	BBox           [4]float64 `json:"bbox"`
+	AttachmentKey  string   `json:"attachment_key"`
 }
 
 type Creator struct {

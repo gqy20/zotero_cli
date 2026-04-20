@@ -642,3 +642,138 @@ outer:
 	}
 	return -1
 }
+
+func blocksToChunks(blocks []extractBlock) []chunk {
+	if len(blocks) == 0 {
+		return nil
+	}
+	filtered := filterBlocksByGeometry(blocks)
+	if len(filtered) == 0 {
+		return nil
+	}
+
+	var chunks []chunk
+	var cur chunk
+	for i, b := range filtered {
+		if i == 0 {
+			cur = startChunk(b)
+			continue
+		}
+		prev := filtered[i-1]
+		if shouldSplitChunk(prev, b) {
+			chunks = append(chunks, cur)
+			cur = startChunk(b)
+		} else {
+			cur = mergeIntoChunk(cur, b)
+		}
+	}
+	if cur.Text != "" {
+		chunks = append(chunks, cur)
+	}
+	return chunks
+}
+
+func chunksToPlainText(chunks []chunk) string {
+	if len(chunks) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(chunks))
+	for _, c := range chunks {
+		if c.Text != "" {
+			parts = append(parts, c.Text)
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+func filterBlocksByGeometry(blocks []extractBlock) []extractBlock {
+	if len(blocks) <= 2 {
+		return blocks
+	}
+	result := make([]extractBlock, 0, len(blocks))
+	pageSizes := estimatePageSizes(blocks)
+	for _, b := range blocks {
+		if isHeaderFooterByGeometry(b, pageSizes) {
+			continue
+		}
+		result = append(result, b)
+	}
+	return result
+}
+
+func isHeaderFooterByGeometry(b extractBlock, pageSizes map[int][2]float64) bool {
+	size, ok := pageSizes[b.Page]
+	if !ok || size[1] == 0 {
+		return false
+	}
+	marginRatio := 0.06
+	bottomY := size[1]
+	topMargin := bottomY * marginRatio
+	bottomMargin := bottomY * (1 - marginRatio)
+
+	if b.BBox[1] < topMargin && b.Size < 9 {
+		return true
+	}
+	if b.BBox[3] > bottomMargin && b.Size < 9 {
+		return true
+	}
+	return false
+}
+
+func estimatePageSizes(blocks []extractBlock) map[int][2]float64 {
+	sizes := make(map[int][2]float64)
+	for _, b := range blocks {
+		w := b.BBox[2]
+		h := b.BBox[3]
+		existing, ok := sizes[b.Page]
+		if !ok || w > existing[0] || h > existing[1] {
+			sizes[b.Page] = [2]float64{w, h}
+		}
+	}
+	return sizes
+}
+
+func startChunk(b extractBlock) chunk {
+	return chunk{
+		Page:       b.Page,
+		BBox:       b.BBox,
+		Text:       b.Text,
+		BlockCount: 1,
+	}
+}
+
+func mergeIntoChunk(c chunk, b extractBlock) chunk {
+	c.BBox[2] = max(c.BBox[2], b.BBox[2])
+	c.BBox[3] = max(c.BBox[3], b.BBox[3])
+	c.Text = c.Text + " " + b.Text
+	c.BlockCount++
+	return c
+}
+
+func shouldSplitChunk(prev, curr extractBlock) bool {
+	if prev.Page != curr.Page {
+		return true
+	}
+	lineHeight := estimateLineHeight(prev.Size)
+	gap := curr.BBox[1] - prev.BBox[3]
+	if lineHeight > 0 && gap > lineHeight*1.8 {
+		return true
+	}
+	if prev.Size > 0 && curr.Size > 0 {
+		ratio := curr.Size / prev.Size
+		if ratio > 1.4 || ratio < 0.7 {
+			runes := []rune(curr.Text)
+			if len(runes) <= 80 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func estimateLineHeight(fontSize float64) float64 {
+	if fontSize <= 0 {
+		return 14
+	}
+	return fontSize * 1.4
+}

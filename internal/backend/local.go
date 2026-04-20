@@ -247,6 +247,14 @@ func (r *LocalReader) findItemsFromFullTextIndex(ctx context.Context, opts FindO
 			item.MatchedOn = []string{"fulltext_attachment"}
 			item.SearchScore = len(matches) - idx
 			item.SnippetAttachmentKey = match.AttachmentKey
+			if match.ChunkIndex >= 0 && match.Body != "" {
+				item.MatchedChunk = &domain.MatchedChunkInfo{
+					Text:          match.Body,
+					Page:          match.ChunkPage,
+					BBox:          match.ChunkBBox,
+					AttachmentKey: match.AttachmentKey,
+				}
+			}
 			items = append(items, item)
 		}
 		return nil

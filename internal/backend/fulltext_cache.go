@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -42,18 +43,29 @@ type fullTextCacheMeta struct {
 
 type FullTextDocument struct {
 	Text     string
+	Chunks   []chunk
 	Meta     fullTextCacheMeta
 	CacheHit bool
 }
 
+type chunk struct {
+	Page       int       `json:"page"`
+	BBox       [4]float64 `json:"bbox"`
+	Text       string    `json:"text"`
+	BlockCount int       `json:"block_count"`
+}
+
 type fullTextIndexMatch struct {
-	ParentItemKey   string
-	AttachmentKey   string
-	Rank            float64
-	Title           string
-	AttachmentTitle string
-	AttachmentName  string
-	Body            string
+	ParentItemKey    string
+	AttachmentKey    string
+	Rank             float64
+	Title            string
+	AttachmentTitle  string
+	AttachmentName   string
+	Body             string
+	ChunkIndex       int
+	ChunkPage        int
+	ChunkBBox        [4]float64
 }
 
 func newFullTextCache(rootDir string) fullTextCache {
@@ -222,27 +234,39 @@ func (c fullTextCache) writeMetaBatch(db *sql.DB, docs []FullTextDocument) error
 func (c fullTextCache) rebuildFTSIndex(db *sql.DB, docs []FullTextDocument) error {
 	for _, stmt := range []string{
 		`DROP TABLE IF EXISTS fulltext_documents;`,
+		`DROP TABLE IF EXISTS fulltext_chunks;`,
 	} {
 		if _, err := db.Exec(stmt); err != nil {
 			return err
 		}
 	}
 
-	stmt := `CREATE VIRTUAL TABLE IF NOT EXISTS fulltext_documents USING fts5(
-		attachment_key UNINDEXED,
-		parent_item_key UNINDEXED,
-		content_type UNINDEXED,
-		resolved_path UNINDEXED,
-		title,
-		creators,
-		tags,
-		attachment_title,
-		attachment_name,
-		attachment_path,
-		body
-	);`
-	if _, err := db.Exec(stmt); err != nil {
-		return err
+	for _, stmt := range []string{
+		`CREATE VIRTUAL TABLE IF NOT EXISTS fulltext_documents USING fts5(
+			attachment_key UNINDEXED,
+			parent_item_key UNINDEXED,
+			content_type UNINDEXED,
+			resolved_path UNINDEXED,
+			title,
+			creators,
+			tags,
+			attachment_title,
+			attachment_name,
+			attachment_path,
+			body
+		);`,
+		`CREATE VIRTUAL TABLE IF NOT EXISTS fulltext_chunks USING fts5(
+			attachment_key UNINDEXED,
+			parent_item_key UNINDEXED,
+			chunk_index UNINDEXED,
+			page UNINDEXED,
+			bbox UNINDEXED,
+			body
+		);`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			return err
+		}
 	}
 
 	tx, err := db.Begin()
@@ -260,7 +284,19 @@ func (c fullTextCache) rebuildFTSIndex(db *sql.DB, docs []FullTextDocument) erro
 	}
 	defer docStmt.Close()
 
+	chunkStmt, err := tx.Prepare(`INSERT INTO fulltext_chunks (
+		attachment_key, parent_item_key, chunk_index, page, bbox, body
+	) VALUES (?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer chunkStmt.Close()
+
 	for _, doc := range docs {
+		docChunks := doc.Chunks
+		if len(docChunks) == 0 && doc.Text != "" {
+			docChunks = []chunk{{Page: 1, Text: doc.Text, BlockCount: 1}}
+		}
 		if _, err := docStmt.Exec(
 			doc.Meta.AttachmentKey,
 			doc.Meta.ParentItemKey,
@@ -275,6 +311,19 @@ func (c fullTextCache) rebuildFTSIndex(db *sql.DB, docs []FullTextDocument) erro
 			doc.Text,
 		); err != nil {
 			return err
+		}
+		for ci, ch := range docChunks {
+			bboxStr := fmt.Sprintf("[%g,%g,%g,%g]", ch.BBox[0], ch.BBox[1], ch.BBox[2], ch.BBox[3])
+			if _, err := chunkStmt.Exec(
+				doc.Meta.AttachmentKey,
+				doc.Meta.ParentItemKey,
+				ci,
+				ch.Page,
+				bboxStr,
+				ch.Text,
+			); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -441,6 +490,36 @@ func (c fullTextCache) syncIndexWithReset(doc FullTextDocument, reset bool) erro
 		}
 		return err
 	}
+	if _, err := tx.Exec(`DELETE FROM fulltext_chunks WHERE attachment_key = ?`, doc.Meta.AttachmentKey); err != nil {
+		return err
+	}
+		chunks := doc.Chunks
+		if len(chunks) == 0 && doc.Text != "" {
+			chunks = []chunk{{Page: 1, Text: doc.Text, BlockCount: 1}}
+		}
+		if len(chunks) > 0 {
+		chunkStmt, err := tx.Prepare(`INSERT INTO fulltext_chunks (
+			attachment_key, parent_item_key, chunk_index, page, bbox, body
+		) VALUES (?, ?, ?, ?, ?, ?)`)
+		if err != nil {
+			return err
+		}
+		for ci, ch := range chunks {
+			bboxStr := fmt.Sprintf("[%g,%g,%g,%g]", ch.BBox[0], ch.BBox[1], ch.BBox[2], ch.BBox[3])
+			if _, err := chunkStmt.Exec(
+				doc.Meta.AttachmentKey,
+				doc.Meta.ParentItemKey,
+				ci,
+				ch.Page,
+				bboxStr,
+				ch.Text,
+			); err != nil {
+				chunkStmt.Close()
+				return err
+			}
+		}
+		chunkStmt.Close()
+	}
 	if err := tx.Commit(); err != nil {
 		if !reset && isFullTextIndexSchemaError(err) {
 			_ = db.Close()
@@ -461,6 +540,9 @@ func ensureFullTextIndexSchema(db *sql.DB) error {
 		"attachment_key", "parent_item_key", "content_type", "resolved_path",
 		"title", "creators", "tags", "attachment_title", "attachment_name", "attachment_path", "body",
 	}
+	chunkColumns := []string{
+		"attachment_key", "parent_item_key", "chunk_index", "page", "bbox", "body",
+	}
 	metaOk, err := tableHasColumns(db, "fulltext_meta", metaColumns)
 	if err != nil {
 		return err
@@ -469,10 +551,19 @@ func ensureFullTextIndexSchema(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	if !metaOk || !docOk {
+	_, chunksOk := true, true
+	if rows, e := db.Query(`PRAGMA table_info(fulltext_chunks)`); e == nil {
+		rows.Close()
+		chunksOk, _ = tableHasColumns(db, "fulltext_chunks", chunkColumns)
+	} else {
+		rows.Close()
+		chunksOk = false
+	}
+	if !metaOk || !docOk || !chunksOk {
 		for _, stmt := range []string{
 			`DROP TABLE IF EXISTS fulltext_documents;`,
 			`DROP TABLE IF EXISTS fulltext_meta;`,
+			`DROP TABLE IF EXISTS fulltext_chunks;`,
 		} {
 			if _, err := db.Exec(stmt); err != nil {
 				return err
@@ -510,6 +601,14 @@ func ensureFullTextIndexSchema(db *sql.DB) error {
 		 attachment_title,
 		 attachment_name,
 		 attachment_path,
+		 body
+		);`,
+		`CREATE VIRTUAL TABLE IF NOT EXISTS fulltext_chunks USING fts5(
+		 attachment_key UNINDEXED,
+		 parent_item_key UNINDEXED,
+		 chunk_index UNINDEXED,
+		 page UNINDEXED,
+		 bbox UNINDEXED,
 		 body
 		);`,
 	} {
@@ -587,16 +686,25 @@ func (c fullTextCache) Search(query string, any bool, limit int) ([]fullTextInde
 	if fetchLimit < 50 {
 		fetchLimit = 50
 	}
+
+	return c.searchChunks(db, matchExpr, query, fetchLimit, limit)
+}
+
+func (c fullTextCache) searchChunks(db *sql.DB, matchExpr string, query string, fetchLimit int, limit int) ([]fullTextIndexMatch, error) {
 	rows, err := db.Query(
-		`SELECT parent_item_key, attachment_key,
-		        bm25(fulltext_documents, 8.0, 6.0, 4.0, 5.0, 5.0, 3.0, 1.0),
-		        COALESCE(title, ''),
-		        COALESCE(attachment_title, ''),
-		        COALESCE(attachment_name, ''),
-		        COALESCE(body, '')
-		 FROM fulltext_documents
-		 WHERE fulltext_documents MATCH ?
-		 ORDER BY bm25(fulltext_documents, 8.0, 6.0, 4.0, 5.0, 5.0, 3.0, 1.0)
+		`SELECT fc.parent_item_key, fc.attachment_key,
+		        bm25(fulltext_chunks, 1.0),
+		        COALESCE(fm.title, ''),
+		        COALESCE(fm.attachment_title, ''),
+		        COALESCE(fm.attachment_name, ''),
+		        COALESCE(fc.body, ''),
+		        fc.chunk_index,
+		        fc.page,
+		        fc.bbox
+		 FROM fulltext_chunks fc
+		 LEFT JOIN fulltext_meta fm ON fm.attachment_key = fc.attachment_key
+		 WHERE fulltext_chunks MATCH ?
+		 ORDER BY bm25(fulltext_chunks, 1.0)
 		 LIMIT ?`,
 		matchExpr,
 		fetchLimit,
@@ -609,6 +717,7 @@ func (c fullTextCache) Search(query string, any bool, limit int) ([]fullTextInde
 	rawMatches := make([]fullTextIndexMatch, 0, fetchLimit)
 	for rows.Next() {
 		var match fullTextIndexMatch
+		var bboxStr string
 		if err := rows.Scan(
 			&match.ParentItemKey,
 			&match.AttachmentKey,
@@ -617,18 +726,32 @@ func (c fullTextCache) Search(query string, any bool, limit int) ([]fullTextInde
 			&match.AttachmentTitle,
 			&match.AttachmentName,
 			&match.Body,
+			&match.ChunkIndex,
+			&match.ChunkPage,
+			&bboxStr,
 		); err != nil {
 			return nil, err
 		}
 		if strings.TrimSpace(match.ParentItemKey) == "" {
 			continue
 		}
+		parseBBoxString(bboxStr, &match.ChunkBBox)
 		rawMatches = append(rawMatches, match)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return rankAndDedupeFullTextMatches(rawMatches, query, limit), nil
+}
+
+func parseBBoxString(s string, bbox *[4]float64) {
+	if s == "" || len(s) < 5 {
+		return
+	}
+	n, _ := fmt.Sscanf(s, "[%g,%g,%g,%g]", &bbox[0], &bbox[1], &bbox[2], &bbox[3])
+	if n != 4 {
+		*bbox = [4]float64{}
+	}
 }
 
 func fullTextIndexMatchExpr(query string, any bool) string {

@@ -1949,18 +1949,19 @@ func buildLocalFindFixture(t *testing.T, dataDir string, sqlitePath string, stor
 
 	buildGlobalFTSCacheForTest(t, dataDir,
 		[]ftsCacheRow{
-			{"ATTA1111", "ART67890", "Mixed Survey",
+			{"ATTA1111", "ART67890", "Mixed Survey", "",
 				"Mixed survey full text preview from zotero cache. Core section discusses speciation genome patterns in plants and gene flow."},
-			{"ATTB2222", "ARTFULL2", "Prefix Match Article",
+			{"ATTB2222", "ARTFULL2", "Prefix Match Article", "",
 				"Prefix Match Article discusses genomic species diversity and prefix-based search patterns."},
 		})
 }
 
 type ftsCacheRow struct {
-	AttachmentKey string
-	ParentItemKey string
-	Title         string
-	Body          string
+	AttachmentKey   string
+	ParentItemKey   string
+	Title           string
+	AttachmentTitle string
+	Body            string
 }
 
 func buildGlobalFTSCacheForTest(t *testing.T, dataDir string, rows []ftsCacheRow) {
@@ -1976,6 +1977,13 @@ func buildGlobalFTSCacheForTest(t *testing.T, dataDir string, rows []ftsCacheRow
 	}
 	defer db.Close()
 	for _, stmt := range []string{
+		`CREATE TABLE IF NOT EXISTS fulltext_meta(
+			attachment_key TEXT PRIMARY KEY,
+			parent_item_key TEXT,
+			title TEXT,
+			attachment_title TEXT,
+			attachment_name TEXT
+		)`,
 		`CREATE VIRTUAL TABLE IF NOT EXISTS fulltext_documents USING fts5(
 			attachment_key UNINDEXED,
 			parent_item_key UNINDEXED,
@@ -1989,6 +1997,14 @@ func buildGlobalFTSCacheForTest(t *testing.T, dataDir string, rows []ftsCacheRow
 			attachment_path,
 			body
 		)`,
+		`CREATE VIRTUAL TABLE IF NOT EXISTS fulltext_chunks USING fts5(
+			attachment_key UNINDEXED,
+			parent_item_key UNINDEXED,
+			chunk_index UNINDEXED,
+			page UNINDEXED,
+			bbox UNINDEXED,
+			body
+		)`,
 	} {
 		if _, err := db.Exec(stmt); err != nil {
 			t.Fatalf("exec %q: %v", stmt, err)
@@ -1996,10 +2012,22 @@ func buildGlobalFTSCacheForTest(t *testing.T, dataDir string, rows []ftsCacheRow
 	}
 	for _, row := range rows {
 		if _, err := db.Exec(
+			`INSERT OR IGNORE INTO fulltext_meta(attachment_key, parent_item_key, title, attachment_title) VALUES (?, ?, ?, ?)`,
+			row.AttachmentKey, row.ParentItemKey, row.Title, row.AttachmentTitle,
+		); err != nil {
+			t.Fatalf("insert fts meta: %v", err)
+		}
+		if _, err := db.Exec(
 			`INSERT INTO fulltext_documents(attachment_key, parent_item_key, title, body) VALUES (?, ?, ?, ?)`,
 			row.AttachmentKey, row.ParentItemKey, row.Title, row.Body,
 		); err != nil {
 			t.Fatalf("insert fts cache: %v", err)
+		}
+		if _, err := db.Exec(
+			`INSERT INTO fulltext_chunks(attachment_key, parent_item_key, chunk_index, page, bbox, body) VALUES (?, ?, 1, 1, '[0,0,0,0]', ?)`,
+			row.AttachmentKey, row.ParentItemKey, row.Body,
+		); err != nil {
+			t.Fatalf("insert fts chunks: %v", err)
 		}
 	}
 }

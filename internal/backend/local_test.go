@@ -406,7 +406,7 @@ func TestFullTextCacheSearchReturnsIndexedMatches(t *testing.T) {
 		t.Fatalf("Search() match = %#v, want ITEM123/ATT123", matches[0])
 	}
 
-	matches, err = cache.Search("genome supplement", false, 10)
+	matches, err = cache.Search("genome patterns", false, 10)
 	if err != nil {
 		t.Fatalf("Search() field query error = %v", err)
 	}

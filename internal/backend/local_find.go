@@ -11,9 +11,6 @@ import (
 )
 
 func localFindQuery(opts FindOptions) (string, []any) {
-	if opts.FullText {
-		return localFullTextFindQuery(opts)
-	}
 	query := `
 		SELECT
 			i.itemID,
@@ -45,41 +42,6 @@ func localFindQuery(opts FindOptions) (string, []any) {
 	return query, args
 }
 
-func localFullTextFindQuery(opts FindOptions) (string, []any) {
-	tokens := localFullTextTokens(opts.Query)
-	scoreExpr := localFullTextScoreExpr(tokens)
-	query := `
-		SELECT
-			i.itemID,
-			i.key,
-			COALESCE(i.version, 0),
-			it.typeName,
-			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), ''),
-			COALESCE(MAX(CASE WHEN f.fieldName = 'date' THEN v.value END), ''),
-			COALESCE(MAX(CASE WHEN f.fieldName = 'volume' THEN v.value END), ''),
-			COALESCE(MAX(CASE WHEN f.fieldName = 'issue' THEN v.value END), ''),
-			COALESCE(MAX(CASE WHEN f.fieldName = 'pages' THEN v.value END), ''),
-			COALESCE(MAX(CASE WHEN f.fieldName = 'DOI' THEN v.value END), ''),
-			COALESCE(MAX(CASE WHEN f.fieldName = 'url' THEN v.value END), ''),
-			COALESCE(MAX(CASE WHEN f.fieldName = 'publicationTitle' THEN v.value END), ''),
-			COALESCE(MAX(CASE WHEN f.fieldName = 'proceedingsTitle' THEN v.value END), ''),
-			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), ''),
-			` + scoreExpr + `
-		FROM items i
-		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
-		LEFT JOIN itemData d ON d.itemID = i.itemID
-		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
-		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
-		WHERE ` + localVisibleItemClause(opts.ItemType) + `
-		` + localFullTextMatchClause(tokens, opts.FullTextAny) + `
-		` + localTagFilterClause(opts) + `
-		GROUP BY i.itemID, i.key, i.version, it.typeName
-		ORDER BY i.key
-	`
-	args := localFullTextArgs(opts, tokens)
-	return query, args
-}
-
 func localFindArgs(opts FindOptions) []any {
 	args := []any{}
 	if opts.ItemType != "" {
@@ -103,23 +65,6 @@ func localFindArgs(opts FindOptions) []any {
 	return args
 }
 
-func localFullTextArgs(opts FindOptions, tokens []string) []any {
-	args := []any{}
-	if opts.ItemType != "" {
-		args = append(args, opts.ItemType)
-	}
-	for _, token := range tokens {
-		args = append(args, token+"%")
-	}
-	for _, token := range tokens {
-		args = append(args, token+"%")
-	}
-	for _, tag := range normalizedTags(opts.Tags) {
-		args = append(args, tag)
-	}
-	return args
-}
-
 func localVisibleItemClause(itemType string) string {
 	if itemType != "" {
 		return `it.typeName = ?`
@@ -134,68 +79,45 @@ func localVisibleItemClause(itemType string) string {
 
 func localQueryMatchClause() string {
 	return `(
-		? = ''
-		OR LOWER(i.key) LIKE ?
-		OR EXISTS (
-			SELECT 1
-			FROM itemData d2
-			JOIN itemDataValues v2 ON v2.valueID = d2.valueID
-			JOIN fieldsCombined f2 ON f2.fieldID = d2.fieldID
-			WHERE d2.itemID = i.itemID
-			AND f2.fieldName IN ('title', 'shortTitle', 'publicationTitle', 'bookTitle', 'proceedingsTitle', 'date')
-			AND LOWER(v2.value) LIKE ?
-		)
-		OR EXISTS (
-			SELECT 1
-			FROM itemCreators ic2
-			JOIN creators c2 ON c2.creatorID = ic2.creatorID
-			WHERE ic2.itemID = i.itemID
-			AND LOWER(TRIM(COALESCE(c2.firstName, '') || ' ' || COALESCE(c2.lastName, ''))) LIKE ?
-		)
-		OR EXISTS (
-			SELECT 1
-			FROM itemTags it2
-			JOIN tags t2 ON t2.tagID = it2.tagID
-			WHERE it2.itemID = i.itemID
-			AND LOWER(t2.name) LIKE ?
-		)
-		OR EXISTS (
-			SELECT 1
-			FROM itemAttachments ia2
-			LEFT JOIN itemData d3 ON d3.itemID = ia2.itemID
-			LEFT JOIN itemDataValues v3 ON v3.valueID = d3.valueID
-			LEFT JOIN fieldsCombined f3 ON f3.fieldID = d3.fieldID
-			WHERE (ia2.itemID = i.itemID OR ia2.parentItemID = i.itemID)
-			AND (
-				LOWER(COALESCE(ia2.path, '')) LIKE ?
-				OR LOWER(COALESCE(ia2.contentType, '')) LIKE ?
-				OR (f3.fieldName IN ('title', 'filename') AND LOWER(v3.value) LIKE ?)
+			? = ''
+			OR LOWER(i.key) LIKE ?
+			OR EXISTS (
+				SELECT 1
+				FROM itemData d2
+				JOIN itemDataValues v2 ON v2.valueID = d2.valueID
+				JOIN fieldsCombined f2 ON f2.fieldID = d2.fieldID
+				WHERE d2.itemID = i.itemID
+				AND f2.fieldName IN ('title', 'shortTitle', 'publicationTitle', 'bookTitle', 'proceedingsTitle', 'date')
+				AND LOWER(v2.value) LIKE ?
 			)
-		)
-	)`
-}
-
-func localFullTextMatchClause(tokens []string, any bool) string {
-	if len(tokens) == 0 {
-		return ""
-	}
-	if any {
-		parts := make([]string, 0, len(tokens))
-		for _, token := range tokens {
-			parts = append(parts, localFullTextTokenExistsClause(token))
-		}
-		return `
-		AND (` + strings.Join(parts, " OR ") + `)
-		`
-	}
-	parts := make([]string, 0, len(tokens))
-	for _, token := range tokens {
-		parts = append(parts, localFullTextTokenExistsClause(token))
-	}
-	return `
-		AND ` + strings.Join(parts, `
-		AND `) + `
-	`
+			OR EXISTS (
+				SELECT 1
+				FROM itemCreators ic2
+				JOIN creators c2 ON c2.creatorID = ic2.creatorID
+				WHERE ic2.itemID = i.itemID
+				AND LOWER(TRIM(COALESCE(c2.firstName, '') || ' ' || COALESCE(c2.lastName, ''))) LIKE ?
+			)
+			OR EXISTS (
+				SELECT 1
+				FROM itemTags it2
+				JOIN tags t2 ON t2.tagID = it2.tagID
+				WHERE it2.itemID = i.itemID
+				AND LOWER(t2.name) LIKE ?
+			)
+			OR EXISTS (
+				SELECT 1
+				FROM itemAttachments ia2
+				LEFT JOIN itemData d3 ON d3.itemID = ia2.itemID
+				LEFT JOIN itemDataValues v3 ON v3.valueID = d3.valueID
+				LEFT JOIN fieldsCombined f3 ON f3.fieldID = d3.fieldID
+				WHERE (ia2.itemID = i.itemID OR ia2.parentItemID = i.itemID)
+				AND (
+					LOWER(COALESCE(ia2.path, '')) LIKE ?
+					OR LOWER(COALESCE(ia2.contentType, '')) LIKE ?
+					OR (f3.fieldName IN ('title', 'filename') AND LOWER(v3.value) LIKE ?)
+				)
+			)
+		)`
 }
 
 func localTagFilterClause(opts FindOptions) string {
@@ -205,25 +127,25 @@ func localTagFilterClause(opts FindOptions) string {
 	}
 	if opts.TagAny {
 		return `
-		AND EXISTS (
-			SELECT 1
-			FROM itemTags it3
-			JOIN tags t3 ON t3.tagID = it3.tagID
-			WHERE it3.itemID = i.itemID
-			AND LOWER(t3.name) IN (` + placeholders(len(tags)) + `)
-		)
+			AND EXISTS (
+				SELECT 1
+				FROM itemTags it3
+				JOIN tags t3 ON t3.tagID = it3.tagID
+				WHERE it3.itemID = i.itemID
+				AND LOWER(t3.name) IN (` + placeholders(len(tags)) + `)
+			)
 		`
 	}
 	clause := ""
 	for range tags {
 		clause += `
-		AND EXISTS (
-			SELECT 1
-			FROM itemTags it3
-			JOIN tags t3 ON t3.tagID = it3.tagID
-			WHERE it3.itemID = i.itemID
-			AND LOWER(t3.name) = ?
-		)
+			AND EXISTS (
+				SELECT 1
+				FROM itemTags it3
+				JOIN tags t3 ON t3.tagID = it3.tagID
+				WHERE it3.itemID = i.itemID
+				AND LOWER(t3.name) = ?
+			)
 		`
 	}
 	return clause
@@ -265,7 +187,7 @@ func localFilterAndOrderItems(items []domain.Item, opts FindOptions) []domain.It
 		filtered = append(filtered, item)
 	}
 
-	sort.SliceStable(filtered, func(i int, j int) bool {
+	sort.SliceStable(filtered, func(i, j int) bool {
 		cmp := compareFindItems(filtered[i], filtered[j], opts.Sort)
 		if opts.Direction == "desc" {
 			return cmp > 0
@@ -317,9 +239,6 @@ func localMatchedOn(item domain.Item, opts FindOptions) []string {
 	if query == "" {
 		return nil
 	}
-	if opts.FullText {
-		return []string{"fulltext_attachment"}
-	}
 	matched := []string{}
 	add := func(reason string) {
 		for _, existing := range matched {
@@ -337,7 +256,7 @@ func localMatchedOn(item domain.Item, opts FindOptions) []string {
 		add("metadata")
 	}
 	for _, creator := range item.Creators {
-		if strings.Contains(strings.ToLower(strings.TrimSpace(creator.Name)), query) {
+		if strings.Contains(strings.ToLower(creator.Name), query) {
 			add("creator")
 			break
 		}
@@ -363,23 +282,6 @@ func localMatchedOn(item domain.Item, opts FindOptions) []string {
 		}
 	}
 	return matched
-}
-
-func localFullTextTokens(query string) []string {
-	parts := strings.Fields(strings.ToLower(strings.TrimSpace(query)))
-	tokens := make([]string, 0, len(parts))
-	seen := make(map[string]struct{}, len(parts))
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		if _, ok := seen[part]; ok {
-			continue
-		}
-		seen[part] = struct{}{}
-		tokens = append(tokens, part)
-	}
-	return tokens
 }
 
 func localItemMetadataMatches(item domain.Item, query string) bool {
@@ -413,29 +315,6 @@ func compareFindItems(left domain.Item, right domain.Item, sortBy string) int {
 		}
 	}
 	return strings.Compare(left.Key, right.Key)
-}
-
-func localFullTextScoreExpr(tokens []string) string {
-	if len(tokens) == 0 {
-		return "0"
-	}
-	parts := make([]string, 0, len(tokens))
-	for _, token := range tokens {
-		parts = append(parts, `CASE WHEN `+localFullTextTokenExistsClause(token)+` THEN 1 ELSE 0 END`)
-	}
-	return strings.Join(parts, " + ")
-}
-
-func localFullTextTokenExistsClause(token string) string {
-	_ = token
-	return `EXISTS (
-			SELECT 1
-			FROM itemAttachments iaf2
-			JOIN fulltextItemWords fiw2 ON fiw2.itemID = iaf2.itemID
-			JOIN fulltextWords fw2 ON fw2.wordID = fiw2.wordID
-			WHERE iaf2.parentItemID = i.itemID
-			AND LOWER(fw2.word) LIKE ?
-		)`
 }
 
 func paginateItems(items []domain.Item, start int, limit int) []domain.Item {

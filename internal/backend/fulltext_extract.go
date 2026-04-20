@@ -11,10 +11,18 @@ import (
 	"zotero_cli/internal/domain"
 )
 
-type pyMuPDFResult struct {
-	Text  string `json:"text"`
-	Pages int    `json:"pages"`
-	Chars int    `json:"chars"`
+type extractBlock struct {
+	Page  int       `json:"page"`
+	BBox  [4]float64 `json:"bbox"`
+	Text  string    `json:"text"`
+	Size  float64   `json:"size"`
+	Bold  bool      `json:"bold"`
+}
+
+type pyMuPDFDictResult struct {
+	Blocks     []extractBlock `json:"blocks"`
+	Pages       int            `json:"pages"`
+	TotalChars  int            `json:"total_chars"`
 }
 
 func (r *LocalReader) extractFullTextWithPyMuPDF(ctx context.Context, attachment domain.Attachment) (FullTextDocument, bool, error) {
@@ -31,15 +39,43 @@ import fitz
 
 pdf_path = sys.argv[1]
 doc = fitz.open(pdf_path)
-parts = []
-for page in doc:
-    text = page.get_text("text", flags=fitz.TEXT_PRESERVE_WHITESPACE)
-    if text.strip():
-        parts.append(text)
+blocks = []
+for pi, page in enumerate(doc):
+    try:
+        d = page.get_text("dict")
+    except Exception:
+        continue
+    for block in d.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        bbox = block.get("bbox", [0, 0, 0, 0])
+        lines_text = []
+        max_size = 0
+        has_bold = False
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                size = span.get("size", 0)
+                flags = span.get("flags", 0)
+                if size > max_size:
+                    max_size = size
+                if flags & (2**4):
+                    has_bold = True
+                st = span.get("text", "")
+                if st:
+                    lines_text.append(st)
+        text = " ".join(lines_text).strip()
+        if text:
+            blocks.append({
+                "page": pi + 1,
+                "bbox": [round(bbox[0], 1), round(bbox[1], 1), round(bbox[2], 1), round(bbox[3], 1)],
+                "text": text,
+                "size": round(max_size, 1),
+                "bold": has_bold
+            })
 payload = json.dumps({
-  "text": "\n".join(parts),
+  "blocks": blocks,
   "pages": len(doc),
-  "chars": sum(len(p) for p in parts)
+  "total_chars": sum(len(b["text"]) for b in blocks)
 }, ensure_ascii=False)
 sys.stdout.buffer.write(payload.encode("utf-8"))
 `
@@ -51,19 +87,25 @@ sys.stdout.buffer.write(payload.encode("utf-8"))
 	if err := cmd.Run(); err != nil {
 		return FullTextDocument{}, false, fmt.Errorf("pymupdf extract failed: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
-	var result pyMuPDFResult
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+	var dictResult pyMuPDFDictResult
+	if err := json.Unmarshal(stdout.Bytes(), &dictResult); err != nil {
 		return FullTextDocument{}, false, err
 	}
-	if strings.TrimSpace(result.Text) == "" {
+	if len(dictResult.Blocks) == 0 {
 		return FullTextDocument{}, false, nil
 	}
 	sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
 	if !ok {
 		return FullTextDocument{}, false, nil
 	}
+	chunks := blocksToChunks(dictResult.Blocks)
+	fullText := chunksToPlainText(chunks)
+	if fullText == "" {
+		return FullTextDocument{}, false, nil
+	}
 	return FullTextDocument{
-		Text: normalizeFullTextText(result.Text),
+		Text:   normalizeFullTextText(fullText),
+		Chunks: chunks,
 		Meta: fullTextCacheMeta{
 			AttachmentKey:   attachment.Key,
 			ResolvedPath:    sourcePath,
@@ -71,9 +113,8 @@ sys.stdout.buffer.write(payload.encode("utf-8"))
 			Extractor:       "pymupdf",
 			SourceMtimeUnix: info.ModTime().Unix(),
 			SourceSize:      info.Size(),
-			Pages:           result.Pages,
-			Chars:           result.Chars,
+			Pages:           dictResult.Pages,
+			Chars:           dictResult.TotalChars,
 		},
 	}, true, nil
 }
-
