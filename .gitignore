@@ -1,10 +1,12 @@
 # Binaries
 *.exe
+*-compressed.exe
 *.exe~
 *.dll
 *.so
 *.dylib
 zot
+tools/
 !cmd/
 !cmd/zot/
 !cmd/zot/main.go
@@ -23,7 +25,9 @@ coverage.out
 Thumbs.db
 PROFILE
 .env
-.claude/
+.claude/settings.local.json
+.claude/projects/
+.claude/memory/
 
 # Local agent and analysis artifacts
 .codex_*.json

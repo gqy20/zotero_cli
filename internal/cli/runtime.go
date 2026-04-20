@@ -17,11 +17,11 @@ func (c *CLI) loadConfig() (config.Config, int) {
 			fmt.Fprintln(c.stderr, "config not found.")
 			fmt.Fprintln(c.stderr, "required fields: library_type, library_id, api_key")
 			fmt.Fprintln(c.stderr, "run `zot config init` to set them up interactively in ~/.zot/.env")
-			return config.Config{}, 3
+			return config.Config{}, ExitConfig
 		}
 		return config.Config{}, c.printErr(err)
 	}
-	return cfg, 0
+	return cfg, ExitOK
 }
 
 func (c *CLI) loadClient() (config.Config, *zoteroapi.Client, int) {
@@ -36,7 +36,7 @@ func (c *CLI) loadClient() (config.Config, *zoteroapi.Client, int) {
 	}
 
 	baseURL := os.Getenv("ZOT_BASE_URL")
-	return cfg, zoteroapi.New(remoteCfg, baseURL, nil), 0
+	return cfg, zoteroapi.New(remoteCfg, baseURL, nil), ExitOK
 }
 
 func (c *CLI) loadReader() (config.Config, backend.Reader, int) {
@@ -49,30 +49,30 @@ func (c *CLI) loadReader() (config.Config, backend.Reader, int) {
 	if err != nil {
 		return config.Config{}, nil, c.printErr(err)
 	}
-	return cfg, reader, 0
+	return cfg, reader, ExitOK
 }
 
 func boolToInt(value bool) int {
 	if value {
-		return 1
+		return ExitError
 	}
-	return 0
+	return ExitOK
 }
 
 func (c *CLI) ensureWriteAllowed(cfg config.Config) int {
 	if cfg.AllowWrite {
-		return 0
+		return ExitOK
 	}
 	fmt.Fprintln(c.stderr, "error: writes are disabled in ~/.zot/.env; set ZOT_ALLOW_WRITE=1 to enable create/update operations")
-	return 1
+	return ExitError
 }
 
 func (c *CLI) ensureDeleteAllowed(cfg config.Config) int {
 	if cfg.AllowDelete {
-		return 0
+		return ExitOK
 	}
 	fmt.Fprintln(c.stderr, "error: delete operations are disabled in ~/.zot/.env; set ZOT_ALLOW_DELETE=1 to enable delete commands")
-	return 1
+	return ExitError
 }
 
 func (c *CLI) remoteClientConfig(cfg config.Config) (config.Config, error) {

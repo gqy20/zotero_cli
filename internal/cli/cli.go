@@ -143,7 +143,7 @@ func (c *CLI) Run(args []string) int {
 	default:
 		fmt.Fprintf(c.stderr, "unknown command: %s\n\n", args[0])
 		c.printUsage()
-		return 2
+		return ExitUsage
 	}
 }
 
