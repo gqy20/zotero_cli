@@ -3,11 +3,11 @@ package backend
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 
 	_ "modernc.org/sqlite"
 
@@ -174,17 +174,29 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 			return err
 		}
 
-		creatorsByItemID, err := r.loadCreatorsByItemIDs(ctx, db, itemIDs)
-		if err != nil {
-			return err
-		}
-		tagsByItemID, err := r.loadTagsByItemIDs(ctx, db, itemIDs)
-		if err != nil {
-			return err
-		}
-		attachmentsByParentID, err := r.loadAttachmentsByParentItemIDs(ctx, db, itemIDs)
-		if err != nil {
-			return err
+		var (
+			creatorsByItemID map[int64][]domain.Creator
+			tagsByItemID     map[int64][]string
+			attachmentsByParentID map[int64][]domain.Attachment
+			loadErr       error
+			wg            sync.WaitGroup
+		)
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			creatorsByItemID, loadErr = r.loadCreatorsByItemIDs(ctx, db, itemIDs)
+		}()
+		go func() {
+			defer wg.Done()
+			tagsByItemID, loadErr = r.loadTagsByItemIDs(ctx, db, itemIDs)
+		}()
+		go func() {
+			defer wg.Done()
+			attachmentsByParentID, loadErr = r.loadAttachmentsByParentItemIDs(ctx, db, itemIDs)
+		}()
+		wg.Wait()
+		if loadErr != nil {
+			return loadErr
 		}
 		for index, itemID := range itemIDs {
 			items[index].Creators = creatorsByItemID[itemID]
@@ -219,31 +231,37 @@ func (r *LocalReader) findItemsFromFullTextIndex(ctx context.Context, opts FindO
 		return []domain.Item{}, nil
 	}
 
-	items := make([]domain.Item, 0, len(matches))
+	var items []domain.Item
 	err = r.withReadableDB(ctx, func(db *sql.DB) error {
+		parentKeys := make([]string, 0, len(matches))
+		for _, m := range matches {
+			parentKeys = append(parentKeys, m.ParentItemKey)
+		}
+
+		itemMap, idMap, err := r.batchLoadItemsByKeys(ctx, db, parentKeys)
+		if err != nil {
+			return err
+		}
+
+		itemIDs := make([]int64, 0, len(idMap))
+		for _, id := range idMap {
+			itemIDs = append(itemIDs, id)
+		}
+
+		creatorsMap, _ := r.loadCreatorsByItemIDs(ctx, db, itemIDs)
+		tagsMap, _ := r.loadTagsByItemIDs(ctx, db, itemIDs)
+		attachMap, _ := r.loadAttachmentsByParentItemIDs(ctx, db, itemIDs)
+
+		items = make([]domain.Item, 0, len(matches))
 		for idx, match := range matches {
-			item, itemID, err := r.loadItem(ctx, db, match.ParentItemKey)
-			if err != nil {
-				if errors.Is(err, ErrItemNotFound) {
-					continue
-				}
-				return err
+			item, ok := itemMap[match.ParentItemKey]
+			if !ok {
+				continue
 			}
-			creators, err := r.loadCreators(ctx, db, itemID)
-			if err != nil {
-				return err
-			}
-			tags, err := r.loadTags(ctx, db, itemID)
-			if err != nil {
-				return err
-			}
-			attachments, err := r.loadAttachments(ctx, db, itemID)
-			if err != nil {
-				return err
-			}
-			item.Creators = creators
-			item.Tags = tags
-			item.Attachments = attachments
+			itemID := idMap[match.ParentItemKey]
+			item.Creators = creatorsMap[itemID]
+			item.Tags = tagsMap[itemID]
+			item.Attachments = attachMap[itemID]
 			item.MatchedOn = []string{"fulltext_attachment"}
 			item.SearchScore = len(matches) - idx
 			item.SnippetAttachmentKey = match.AttachmentKey
@@ -314,12 +332,12 @@ func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, err
 		if cerr != nil {
 			return cerr
 		}
+		annosMap, aerr := r.loadAnnotationsByItemIDs(ctx, db, childAttIDs)
+		if aerr != nil {
+			return aerr
+		}
 		for _, attID := range childAttIDs {
-			annos, aerr := r.loadAnnotations(ctx, db, attID)
-			if aerr != nil {
-				return aerr
-			}
-			allAnnotations = append(allAnnotations, annos...)
+			allAnnotations = append(allAnnotations, annosMap[attID]...)
 		}
 
 		loadedItem.Annotations = allAnnotations
@@ -340,13 +358,21 @@ func (r *LocalReader) GetRelated(ctx context.Context, key string) ([]domain.Rela
 			return err
 		}
 
-		outgoing, err := r.loadOutgoingRelations(ctx, db, itemID)
-		if err != nil {
-			return err
-		}
-		incoming, err := r.loadIncomingRelations(ctx, db, key)
-		if err != nil {
-			return err
+		var outgoing, incoming []domain.Relation
+		var relErr error
+		var relWg sync.WaitGroup
+		relWg.Add(2)
+		go func() {
+			defer relWg.Done()
+			outgoing, relErr = r.loadOutgoingRelations(ctx, db, itemID)
+		}()
+		go func() {
+			defer relWg.Done()
+			incoming, relErr = r.loadIncomingRelations(ctx, db, key)
+		}()
+		relWg.Wait()
+		if relErr != nil {
+			return relErr
 		}
 		relations = append(outgoing, incoming...)
 		sort.SliceStable(relations, func(i int, j int) bool {

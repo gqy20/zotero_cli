@@ -389,3 +389,73 @@ func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (dom
 	item.Date = normalizeLocalDate(item.Date)
 	return item, itemID, nil
 }
+
+func (r *LocalReader) batchLoadItemsByKeys(ctx context.Context, db *sql.DB, keys []string) (map[string]domain.Item, map[string]int64, error) {
+	result := make(map[string]domain.Item, len(keys))
+	idMap := make(map[string]int64, len(keys))
+	if len(keys) == 0 {
+		return result, idMap, nil
+	}
+
+	args := make([]any, 0, len(keys))
+	for _, k := range keys {
+		args = append(args, k)
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+			i.itemID,
+			i.key,
+			COALESCE(i.version, 0),
+			it.typeName,
+			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'date' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'volume' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'issue' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'pages' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'DOI' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'url' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'publicationTitle' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'proceedingsTitle' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), '')
+		FROM items i
+		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
+		LEFT JOIN itemData d ON d.itemID = i.itemID
+		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
+		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
+		WHERE i.key IN (`+placeholders(len(keys))+`)
+		GROUP BY i.itemID, i.key, i.version, it.typeName
+	`, args...)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var itemID int64
+		var item domain.Item
+		var publicationTitle, proceedingsTitle, bookTitle string
+		if err := rows.Scan(
+			&itemID,
+			&item.Key,
+			&item.Version,
+			&item.ItemType,
+			&item.Title,
+			&item.Date,
+			&item.Volume,
+			&item.Issue,
+			&item.Pages,
+			&item.DOI,
+			&item.URL,
+			&publicationTitle,
+			&proceedingsTitle,
+			&bookTitle,
+		); err != nil {
+			return nil, nil, err
+		}
+		item.Container = firstNonEmptyString(publicationTitle, proceedingsTitle, bookTitle)
+		item.Date = normalizeLocalDate(item.Date)
+		result[item.Key] = item
+		idMap[item.Key] = itemID
+	}
+	return result, idMap, rows.Err()
+}

@@ -669,7 +669,7 @@ func (c fullTextCache) Search(query string, any bool, limit int) ([]fullTextInde
 		}
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", c.indexPath())
+	db, err := sql.Open("sqlite", c.indexPath()+"?_busy_timeout=5000")
 	if err != nil {
 		return nil, err
 	}

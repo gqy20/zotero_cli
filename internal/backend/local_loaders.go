@@ -65,6 +65,45 @@ func (r *LocalReader) loadItemRefByID(ctx context.Context, db *sql.DB, itemID in
 	}
 	return ref, nil
 }
+func (r *LocalReader) batchLoadItemRefsByIDs(ctx context.Context, db *sql.DB, itemIDs []int64) (map[int64]domain.ItemRef, error) {
+	result := make(map[int64]domain.ItemRef, len(itemIDs))
+	if len(itemIDs) == 0 {
+		return result, nil
+	}
+
+	args := make([]any, 0, len(itemIDs))
+	for _, id := range itemIDs {
+		args = append(args, id)
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+			i.itemID,
+			i.key,
+			it.typeName,
+			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), '')
+		FROM items i
+		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
+		LEFT JOIN itemData d ON d.itemID = i.itemID
+		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
+		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
+		WHERE i.itemID IN (`+placeholders(len(itemIDs))+`)
+		GROUP BY i.itemID, i.key, it.typeName
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id int64
+		var ref domain.ItemRef
+		if err := rows.Scan(&id, &ref.Key, &ref.ItemType, &ref.Title); err != nil {
+			return nil, err
+		}
+		result[id] = ref
+	}
+	return result, rows.Err()
+}
 
 func (r *LocalReader) loadOutgoingRelations(ctx context.Context, db *sql.DB, itemID int64) ([]domain.Relation, error) {
 	rows, err := db.QueryContext(ctx, `
@@ -113,24 +152,40 @@ func (r *LocalReader) loadIncomingRelations(ctx context.Context, db *sql.DB, key
 	}
 	defer rows.Close()
 
-	relations := []domain.Relation{}
+	type pendingRelation struct {
+		itemID    int64
+		predicate string
+	}
+	var pending []pendingRelation
 	for rows.Next() {
-		var itemID int64
-		var predicate string
-		if err := rows.Scan(&itemID, &predicate); err != nil {
+		var p pendingRelation
+		if err := rows.Scan(&p.itemID, &p.predicate); err != nil {
 			return nil, err
 		}
-		target, err := r.loadItemRefByID(ctx, db, itemID)
-		if err != nil {
-			return nil, err
-		}
+		pending = append(pending, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	itemIDs := make([]int64, 0, len(pending))
+	for _, p := range pending {
+		itemIDs = append(itemIDs, p.itemID)
+	}
+	refMap, err := r.batchLoadItemRefsByIDs(ctx, db, itemIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	relations := make([]domain.Relation, 0, len(pending))
+	for _, p := range pending {
 		relations = append(relations, domain.Relation{
-			Predicate: predicate,
+			Predicate: p.predicate,
 			Direction: "incoming",
-			Target:    target,
+			Target:    refMap[p.itemID],
 		})
 	}
-	return relations, rows.Err()
+	return relations, nil
 }
 
 func relationObjectKey(value string) string {
@@ -488,6 +543,71 @@ func (r *LocalReader) loadAnnotations(ctx context.Context, db *sql.DB, parentIte
 		annotations = append(annotations, a)
 	}
 	return annotations, rows.Err()
+}
+
+func (r *LocalReader) loadAnnotationsByItemIDs(ctx context.Context, db *sql.DB, parentItemIDs []int64) (map[int64][]domain.Annotation, error) {
+	result := make(map[int64][]domain.Annotation, len(parentItemIDs))
+	if len(parentItemIDs) == 0 {
+		return result, nil
+	}
+
+	args := make([]any, 0, len(parentItemIDs))
+	for _, id := range parentItemIDs {
+		args = append(args, id)
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+			ia.parentItemID,
+			i.key,
+			ia.type,
+			COALESCE(ia.authorName, ''),
+			COALESCE(ia.text, ''),
+			COALESCE(ia.comment, ''),
+			COALESCE(ia.color, ''),
+			COALESCE(ia.pageLabel, ''),
+			COALESCE(ia.position, ''),
+			COALESCE(ia.sortIndex, ''),
+			ia.isExternal
+		FROM itemAnnotations ia
+		JOIN items i ON i.itemID = ia.itemID
+		WHERE ia.parentItemID IN (`+placeholders(len(parentItemIDs))+`)
+		ORDER BY ia.parentItemID, ia.sortIndex
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var parentID int64
+		var a domain.Annotation
+		var atype int
+		var isExternal int
+		var authorName string
+
+		if err := rows.Scan(
+			&parentID,
+			&a.Key,
+			&atype,
+			&authorName,
+			&a.Text,
+			&a.Comment,
+			&a.Color,
+			&a.PageLabel,
+			&a.Position,
+			&a.SortIndex,
+			&isExternal,
+		); err != nil {
+			return nil, err
+		}
+
+		a.Type = annotationTypeString(atype)
+		a.IsExternal = isExternal != 0
+		a.PageIndex = extractAnnotationPageIndex(a.Position)
+
+		result[parentID] = append(result[parentID], a)
+	}
+	return result, rows.Err()
 }
 
 // loadChildAttachmentIDs returns the itemIDs of all attachment children of the given parent item.
