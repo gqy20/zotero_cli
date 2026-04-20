@@ -503,7 +503,8 @@ func (r *LocalReader) loadAnnotations(ctx context.Context, db *sql.DB, parentIte
 			COALESCE(ia.pageLabel, ''),
 			COALESCE(ia.position, ''),
 			COALESCE(ia.sortIndex, ''),
-			ia.isExternal
+			ia.isExternal,
+			COALESCE(i.dateAdded, '')
 		FROM itemAnnotations ia
 		JOIN items i ON i.itemID = ia.itemID
 		WHERE ia.parentItemID = ?
@@ -532,6 +533,7 @@ func (r *LocalReader) loadAnnotations(ctx context.Context, db *sql.DB, parentIte
 			&a.Position,
 			&a.SortIndex,
 			&isExternal,
+			&a.DateAdded,
 		); err != nil {
 			return nil, err
 		}
@@ -567,7 +569,8 @@ func (r *LocalReader) loadAnnotationsByItemIDs(ctx context.Context, db *sql.DB, 
 			COALESCE(ia.pageLabel, ''),
 			COALESCE(ia.position, ''),
 			COALESCE(ia.sortIndex, ''),
-			ia.isExternal
+			ia.isExternal,
+				COALESCE(i.dateAdded, '')
 		FROM itemAnnotations ia
 		JOIN items i ON i.itemID = ia.itemID
 		WHERE ia.parentItemID IN (`+placeholders(len(parentItemIDs))+`)
@@ -597,6 +600,7 @@ func (r *LocalReader) loadAnnotationsByItemIDs(ctx context.Context, db *sql.DB, 
 			&a.Position,
 			&a.SortIndex,
 			&isExternal,
+			&a.DateAdded,
 		); err != nil {
 			return nil, err
 		}

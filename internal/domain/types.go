@@ -71,6 +71,7 @@ type Annotation struct {
 	Position   string `json:"position,omitempty"`   // raw position JSON
 	SortIndex  string `json:"sort_index,omitempty"`
 	IsExternal bool   `json:"is_external"`
+	DateAdded  string `json:"date_added,omitempty"`
 }
 
 type ItemRef struct {
