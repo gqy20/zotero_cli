@@ -31,6 +31,23 @@ func fileExists(path string) string {
 	return ""
 }
 
+func isZoteroRunning() bool {
+	switch runtime.GOOS {
+	case "windows":
+		out, err := exec.Command("tasklist", "/FI", "IMAGENAME eq zotero.exe", "/NH").Output()
+		if err != nil {
+			return false
+		}
+		return strings.Contains(string(out), "zotero.exe")
+	case "darwin":
+		out, err := exec.Command("pgrep", "-x", "Zotero").Output()
+		return err == nil && len(out) > 0
+	default:
+		out, err := exec.Command("pgrep", "-x", "zotero").Output()
+		return err == nil && len(out) > 0
+	}
+}
+
 func (c *CLI) runOpen(args []string) int {
 	if isHelpOnly(args) {
 		return c.printCommandUsage(usageOpen)
@@ -61,19 +78,39 @@ func (c *CLI) runOpen(args []string) int {
 		return c.printErr(fmt.Errorf("item %s has no PDF attachment", itemKey))
 	}
 
+	attachmentKey := pdfs[0].Key
 	path := pdfs[0].ResolvedPath
 	if path == "" {
 		return c.printErr(fmt.Errorf("PDF path not resolved for item %s", itemKey))
 	}
 
 	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = openWithZotero(path, page)
-	case "darwin":
-		cmd = exec.Command("open", path)
-	default:
-		cmd = exec.Command("xdg-open", path)
+	if isZoteroRunning() {
+		uri := fmt.Sprintf("zotero://open-pdf/library/items/%s", attachmentKey)
+		if page > 0 {
+			uri += fmt.Sprintf("?page=%d", page)
+		}
+		switch runtime.GOOS {
+		case "windows":
+			cmd = exec.Command("cmd", "/c", "start", "", uri)
+		case "darwin":
+			cmd = exec.Command("open", uri)
+		default:
+			cmd = exec.Command("xdg-open", uri)
+		}
+	} else {
+		switch runtime.GOOS {
+		case "windows":
+			if zoteroExePath != "" {
+				cmd = exec.Command(zoteroExePath, "--browser", path)
+			} else {
+				cmd = exec.Command("cmd", "/c", "start", "", path)
+			}
+		case "darwin":
+			cmd = exec.Command("open", path)
+		default:
+			cmd = exec.Command("xdg-open", path)
+		}
 	}
 
 	if err := cmd.Start(); err != nil {
@@ -83,20 +120,9 @@ func (c *CLI) runOpen(args []string) int {
 	fmt.Fprintf(c.stdout, "Opened: %s\n", path)
 	fmt.Fprintf(c.stdout, "Item: %s (%s)\n", itemKey, item.Title)
 	if page > 0 {
-		fmt.Fprintf(c.stdout, "Page hint: %d (press Ctrl+G in reader)\n", page)
+		fmt.Fprintf(c.stdout, "Page hint: %d\n", page)
 	}
 	return 0
-}
-
-func openWithZotero(path string, page int) *exec.Cmd {
-	if zoteroExePath == "" {
-		return exec.Command("cmd", "/c", "start", "", path)
-	}
-	fileURI := toFileURI(path)
-	if page > 0 {
-		fileURI += fmt.Sprintf("#page=%d", page)
-	}
-	return exec.Command(zoteroExePath, "--browser", fileURI)
 }
 
 func (c *CLI) parseOpenArgs(args []string) (string, int, bool) {
@@ -152,13 +178,4 @@ func parseIntArg(s string) (int, error) {
 	var n int
 	_, err := fmt.Sscanf(s, "%d", &n)
 	return n, err
-}
-
-func toFileURI(path string) string {
-	s := strings.ReplaceAll(path, "\\", "/")
-	if !strings.HasPrefix(s, "/") {
-		s = "/" + s
-	}
-	s = strings.ReplaceAll(s, " ", "%20")
-	return "file://" + s
 }
