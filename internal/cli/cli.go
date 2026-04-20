@@ -58,6 +58,8 @@ func (c *CLI) Run(args []string) int {
 		return c.runShow(args[1:])
 	case "extract-text":
 		return c.runExtractText(args[1:])
+	case "annotate":
+		return c.runAnnotate(args[1:])
 	case "relate":
 		return c.runRelate(args[1:])
 	case "cite":
@@ -155,6 +157,7 @@ Commands:
 	find           Search items in the configured Zotero library
 	show           Show item details
   extract-text   Extract text from local PDF attachments
+  annotate       Annotate a PDF attachment with highlights/underlines
   index          Build or manage full-text search index
 	relate         Show explicit item relations
 	cite           Generate a citation or bibliography entry
