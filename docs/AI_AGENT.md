@@ -32,6 +32,8 @@ go run .\cmd\zot config validate
 .\zot.exe find "hybrid speciation" --json
 .\zot.exe show SA6DHVIM --json
 .\zot.exe relate SA6DHVIM --json
+.\zot.exe annotations SA6DHVIM --json       # 读取 PDF 标注（双源，含时间戳）
+.\zot.exe select SA6DHVIM                     # 跳转到 Zotero UI 选中条目
 .\zot.exe stats --json
 ```
 
