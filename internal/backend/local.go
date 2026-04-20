@@ -82,6 +82,12 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 	}, nil
 }
 
+func (r *LocalReader) IsFullTextCached(attachment domain.Attachment) bool {
+	cache := newFullTextCache(r.FullTextCacheDir)
+	_, ok, err := cache.Load(attachment)
+	return err == nil && ok
+}
+
 func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
 	opts = NormalizeFindOptions(opts)
 	if opts.IncludeTrashed {

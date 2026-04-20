@@ -130,6 +130,8 @@ func (c *CLI) Run(args []string) int {
 		return c.runDeleteSearch(args[1:])
 	case "setup":
 		return c.runSetup(args[1:])
+	case "index":
+		return c.runIndex(args[1:])
 	default:
 		fmt.Fprintf(c.stderr, "unknown command: %s\n\n", args[0])
 		c.printUsage()
@@ -153,6 +155,7 @@ Commands:
 	find           Search items in the configured Zotero library
 	show           Show item details
   extract-text   Extract text from local PDF attachments
+  index          Build or manage full-text search index
 	relate         Show explicit item relations
 	cite           Generate a citation or bibliography entry
   export         Export bibliography entries

@@ -23,6 +23,10 @@ type attachmentTextReader interface {
 	ExtractItemAttachmentTexts(context.Context, domain.Item) (backend.ItemFullTextResult, error)
 }
 
+type fullTextCacheChecker interface {
+	IsFullTextCached(domain.Attachment) bool
+}
+
 type collectionItemKeyReader interface {
 	CollectionItemKeys(context.Context, string, int) ([]string, error)
 }
