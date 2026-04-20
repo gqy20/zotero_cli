@@ -27,6 +27,12 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
+      - name: Check YAML formatting
+        uses: ibiqlik/action-yaml-lint@v3
+        with:
+          config_file: .yamllint.yml
+          strict: true
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -218,6 +224,12 @@ jobs:
           files: dist/*
           make_latest: true
 
+      - name: Check YAML formatting
+        uses: ibiqlik/action-yaml-lint@v3
+        with:
+          config_file: .yamllint.yml
+          strict: true
+
   update-homebrew-tap:
     name: Update Homebrew Tap
     runs-on: ubuntu-latest
@@ -264,42 +276,43 @@ jobs:
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" tap-repo
 
       - name: Update formula
-        shell: bash
+        shell: python3
         working-directory: tap-repo
         env:
           LINUX_AMD64_SHA: ${{ steps.checksums.outputs.linux_amd64_sha }}
           LINUX_ARM64_SHA: ${{ steps.checksums.outputs.linux_arm64_sha }}
           DARWIN_AMD64_SHA: ${{ steps.checksums.outputs.darwin_amd64_sha }}
           DARWIN_ARM64_SHA: ${{ steps.checksums.outputs.darwin_arm64_sha }}
+          VERSION: ${{ env.RELEASE_VERSION }}
+          REPO: ${{ github.repository }}
+          TAP_FORMULA_PATH: Formula/zotcli.rb
         run: |
-          set -euo pipefail
-
-          cat > "${TAP_FORMULA_PATH}" <<RUBYEOF
-          class Zotcli < Formula
+          import os
+          content = f'''class Zotcli < Formula
             desc "Zotero CLI for terminal, scripts, and AI agents"
-            homepage "https://github.com/${REPO}"
+            homepage "https://github.com/{os.environ["REPO"]}"
             license "MIT"
-            version "${VERSION}"
+            version "{os.environ["VERSION"]}"
 
             on_macos do
               on_intel do
-                url "https://github.com/${REPO}/releases/download/${VERSION}/zot_${VERSION}_darwin_amd64.tar.gz"
-                sha256 "${DARWIN_AMD64_SHA}"
+                url "https://github.com/{os.environ["REPO"]}/releases/download/{os.environ["VERSION"]}/zot_{os.environ["VERSION"]}_darwin_amd64.tar.gz"
+                sha256 "{os.environ["DARWIN_AMD64_SHA"]}"
               end
               on_arm do
-                url "https://github.com/${REPO}/releases/download/${VERSION}/zot_${VERSION}_darwin_arm64.tar.gz"
-                sha256 "${DARWIN_ARM64_SHA}"
+                url "https://github.com/{os.environ["REPO"]}/releases/download/{os.environ["VERSION"]}/zot_{os.environ["VERSION"]}_darwin_arm64.tar.gz"
+                sha256 "{os.environ["DARWIN_ARM64_SHA"]}"
               end
             end
 
             on_linux do
               on_intel do
-                url "https://github.com/${REPO}/releases/download/${VERSION}/zot_${VERSION}_linux_amd64.tar.gz"
-                sha256 "${LINUX_AMD64_SHA}"
+                url "https://github.com/{os.environ["REPO"]}/releases/download/{os.environ["VERSION"]}/zot_{os.environ["VERSION"]}_linux_amd64.tar.gz"
+                sha256 "{os.environ["LINUX_AMD64_SHA"]}"
               end
               on_arm do
-                url "https://github.com/${REPO}/releases/download/${VERSION}/zot_${VERSION}_linux_arm64.tar.gz"
-                sha256 "${LINUX_ARM64_SHA}"
+                url "https://github.com/{os.environ["REPO"]}/releases/download/{os.environ["VERSION"]}/zot_{os.environ["VERSION"]}_linux_arm64.tar.gz"
+                sha256 "{os.environ["LINUX_ARM64_SHA"]}"
               end
             end
 
@@ -308,13 +321,13 @@ jobs:
             end
 
             test do
-              assert_match "zot", shell_output("#{bin}/zot --help")
+              assert_match "zot", shell_output("#{{bin}}/zot --help")
             end
           end
-          RUBYEOF
-
-          # 去除 heredoc 引入的前导空格（YAML 缩进导致）
-          sed -i 's/^[[:space:]]\{10\}//' "${TAP_FORMULA_PATH}"
+          '''
+          os.makedirs(os.path.dirname(os.environ["TAP_FORMULA_PATH"]), exist_ok=True)
+          with open(os.environ["TAP_FORMULA_PATH"], "w") as f:
+              f.write(content)
 
       - name: Commit and push tap update
         shell: bash
