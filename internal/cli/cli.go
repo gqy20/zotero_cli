@@ -60,6 +60,8 @@ func (c *CLI) Run(args []string) int {
 		return c.runExtractText(args[1:])
 	case "annotate":
 		return c.runAnnotate(args[1:])
+	case "open":
+		return c.runOpen(args[1:])
 	case "relate":
 		return c.runRelate(args[1:])
 	case "cite":
@@ -158,6 +160,7 @@ Commands:
 	show           Show item details
   extract-text   Extract text from local PDF attachments
   annotate       Annotate a PDF attachment with highlights/underlines
+  open           Open a PDF attachment in the default viewer
   index          Build or manage full-text search index
 	relate         Show explicit item relations
 	cite           Generate a citation or bibliography entry

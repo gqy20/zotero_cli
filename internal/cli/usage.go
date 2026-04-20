@@ -42,4 +42,5 @@ const (
 	usageSetupPdfExtract      = "usage: zot setup pdf-extract [--check]"
 	usageIndex                = "usage: zot index build [--force] [--workers N] [--json]"
 	usageAnnotate             = "usage: zot annotate <item-key> (--text TEXT | --page N (--rect x0,y0,x1,y2 | --point x,y)) [--color COLOR] [--comment TEXT] [--type highlight|underline|note] [--json]"
+	usageOpen                 = "usage: zot open <item-key> [--page N]"
 )
