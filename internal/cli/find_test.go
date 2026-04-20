@@ -494,7 +494,7 @@ func TestRunFindLocalTextOutputSupportsBibliographicIncludeFields(t *testing.T) 
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -529,7 +529,7 @@ func TestRunFindLocalTextOutputShowsMatchedOnInFullMode(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -562,7 +562,7 @@ func TestRunFindLocalTextOutputShowsFullTextMatchedOnInFullMode(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -595,7 +595,7 @@ func TestRunFindLocalTextOutputIncludesFullTextPreviewWhenSnippetRequested(t *te
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)

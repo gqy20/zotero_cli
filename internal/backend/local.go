@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	_ "modernc.org/sqlite"
 
@@ -91,8 +90,8 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 	if opts.QMode != "" {
 		return nil, newUnsupportedFeatureErrorWithHint("local", "find --qmode", "set ZOT_MODE=web or ZOT_MODE=hybrid to use this feature")
 	}
-	if opts.FullText && useExperimentalFullTextIndex() {
-		return r.findItemsFromExperimentalIndex(ctx, opts)
+	if opts.FullText {
+		return r.findItemsFromFullTextIndex(ctx, opts)
 	}
 
 	items := []domain.Item{}
@@ -197,12 +196,7 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 	return items, nil
 }
 
-func useExperimentalFullTextIndex() bool {
-	value := strings.TrimSpace(strings.ToLower(os.Getenv("ZOT_EXPERIMENTAL_FTS")))
-	return value == "1" || value == "true" || value == "yes"
-}
-
-func (r *LocalReader) findItemsFromExperimentalIndex(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
+func (r *LocalReader) findItemsFromFullTextIndex(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
 	matches, err := newFullTextCache(r.FullTextCacheDir).Search(opts.Query, opts.FullTextAny, opts.Limit)
 	if err != nil {
 		return nil, err

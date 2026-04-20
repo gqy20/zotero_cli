@@ -124,15 +124,12 @@ ZOT_API_KEY=replace-me
 .\zot.exe find "genome" --has-pdf                      # 仅返回有 PDF 附件的条目
 .\zot.exe find "genome" --attachment-type pdf           # 按附件类型过滤
 
-# 全文检索（local/hybrid 模式）
-.\zot.exe find "speciation" --fulltext                  # Zotero 内置全文索引
+# 全文检索（local/hybrid 模式，基于 FTS5 索引）
+.\zot.exe find "speciation" --fulltext                  # 搜索 PDF 全文
 .\zot.exe find "speciation" --fulltext --fulltext-any   # 任一词匹配
 
 # 全文片段（需要本地全文可读）
 .\zot.exe find "speciation" --fulltext --snippet
-
-# 实验性全文索引（需设置 ZOT_EXPERIMENTAL_FTS=1）
-.\zot.exe find "CRISPR" --full                          # 使用本地构建的 PDF 全文索引
 
 # 输出控制
 .\zot.exe find "genome" --json                          # JSON 格式
@@ -153,7 +150,7 @@ ZOT_API_KEY=replace-me
 | `--qmode` | 查询模式（titleCreatorYear / everything） | web only |
 | `--include-trashed` | 包含回收站 | web only |
 | `--include-fields` | 指定包含字段 | 全部 |
-| `--fulltext` | Zotero 全文索引搜索 | local / hybrid |
+| `--fulltext` | PDF 全文搜索（FTS5 索引） | local / hybrid |
 | `--fulltext-any` | 全文任一词匹配 | local / hybrid |
 | `--snippet` | 返回全文匹配片段 | local / hybrid |
 | `--full` | 完整字段 + 附件详情 | 全部 |
@@ -167,7 +164,7 @@ ZOT_API_KEY=replace-me
 - `local`：支持 metadata 检索、标签/日期过滤、附件过滤、全文检索、snippet，但不支持 `--qmode`、`--include-trashed`
 - `hybrid`：优先本地；仅在 `web` 能正确承接请求时才回退。也就是说：
   - `find --qmode ...`、`find --include-trashed` 可回退到 Web
-  - `find --fulltext`、`find --snippet`、附件过滤不可回退到 Web
+  - `find --fulltext`、`find --snippet`、附件过滤不可回退到 Web（使用本地 FTS5 索引）
 
 ### 查看条目 (`show`)
 
@@ -240,10 +237,29 @@ JSON 输出包含完整字段：`creators`、`tags`、`collections`、`attachmen
 - `csljson` 在 `local` / `hybrid` 下优先使用本地导出。
 - `hybrid` 下的 `csljson` 只会在可预期的本地缺失或暂时不可用场景下回退到 Web；不会吞掉异常的本地错误。
 
+### 环境配置 (`setup`)
+
+```powershell
+.\zot.exe setup pdf-extract --check   # 检查 PyMuPDF 就绪状态
+.\zot.exe setup pdf-extract           # 创建 venv 并安装 PyMuPDF
+```
+
+自动在 `{ZOT_DATA_DIR}/.zotero_cli/venv/` 下管理 Python 虚拟环境，优先使用 `uv`，回退到系统 `python -m venv`。
+
 ### PDF 文本提取 (`extract-text`)
 
-> 仅 **local** 和 **hybrid** 模式支持。使用 go-pdfium WASM 引擎提取 PDF 正文。  
+> 仅 **local** 和 **hybrid** 模式支持。默认使用 **PyMuPDF**（Python）提取，自动回退到 **go-pdfium WASM** 引擎。  
 > `hybrid` 下该命令仍依赖本地数据，不会回退到 Web。
+
+首次使用前需配置 Python 环境：
+
+```powershell
+# 检查当前状态（无需安装即可运行）
+.\zot.exe setup pdf-extract --check
+
+# 一键安装 PyMuPDF（推荐安装 uv 以加速）
+.\zot.exe setup pdf-extract
+```
 
 ```powershell
 # 提取主附件全文（文本输出）
@@ -271,7 +287,7 @@ JSON 输出示例：
         "resolved_path": "D:\\zotero\\storage\\ATTACHPDF\\paper.pdf",
         "text": "...该附件的提取文本...",
         "total": 12345,
-        "full_text_source": "pdfium",
+        "full_text_source": "pymupdf",
         "full_text_cache_hit": false
       }
     ]
@@ -279,6 +295,8 @@ JSON 输出示例：
   "meta": { "total": 12345 }
 }
 ```
+
+**提取器优先级**：PyMuPDF（默认）→ pdfium WASM（回退）。PyMuPDF 在 Unicode 处理、双栏排版、断行修复方面表现更优。
 
 ### 高亮与注释提取
 
@@ -380,15 +398,19 @@ zot (CLI)
 │   │   ├── commands_write.go# create/update/delete, tag ops
 │   │   ├── commands_list.go # collections, notes, tags, stats...
 │   │   ├── commands_config.go# config init/show/validate
-│   │   └── commands_pdf.go  # PDF 文本提取
+│   │   ├── commands_pdf.go  # PDF 文本提取
+│   │   └── commands_setup.go# 环境配置 (pdf-extract)
 │   ├── backend/             # 数据访问层
 │   │   ├── reader.go        # Reader 接口定义
 │   │   ├── local.go         # LocalReader (SQLite)
 │   │   ├── local_find.go    # 本地查询构建
+│   │   ├── local_fulltext_preview.go # 全文预览与缓存
+│   │   ├── fulltext_cache.go         # FTS5 全文索引
+│   │   ├── python_venv.go   # Python venv 管理 (PyMuPDF)
 │   │   ├── local_loaders.go # 数据加载器 (creators, tags, attachments, notes, annotations...)
 │   │   ├── web.go           # WebReader (Zotero Web API)
 │   │   ├── hybrid.go        # HybridReader (本地优先 + 回退)
-│   │   └── pdfium.go        # PDF 文本提取引擎 (go-pdfium WASM)
+│   │   └── pdf_extract_text.go       # PDF 提取 (PyMuPDF / pdfium)
 │   ├── domain/types.go      # 领域模型 (Item, Annotation, Attachment, Note...)
 │   ├── config/              # 配置加载与环境变量
 │   └── zoteroapi/           # Zotero Web API 客户端
@@ -407,8 +429,8 @@ zot (CLI)
 - 从 `zotero.sqlite` 直接读取元数据、创建者、标签、收藏夹、附件、笔记
 - 通过 `itemAnnotations` 表读取 PDF 高亮/批注/手绘（经附件子项链路）
 - 通过 `itemRelations` 表读取显式条目关系
-- PDF 全文提取（go-pdfium WASM 引擎，带缓存）
-- Zotero 内置全文索引搜索 (`--fulltext`)
+- PDF 全文提取（PyMuPDF 默认，pdfium 回退，带 FTS5 全文索引）
+- FTS5 全文搜索 (`--fulltext`)，基于本地构建的 PDF 全文索引
 - 自动快照回退机制（当数据库被 Zotero 锁定时）
 
 ### 领域模型
@@ -466,7 +488,9 @@ go build -o zot.exe .\cmd\zot
 | 依赖 | 用途 |
 |------|------|
 | `modernc.org/sqlite` | 纯 Go SQLite 驱动（无需 CGO） |
-| `klippa-app/go-pdfium` | PDF 文本提取（WASM 引擎，跨平台） |
+| `klippa-app/go-pdfium` | PDF 文本提取回退引擎（WASM，跨平台） |
+| **Python + PyMuPDF** | PDF 文本提取默认引擎（需 `zot setup pdf-extract` 配置） |
+| **uv**（可选） | Python 包管理器，加速 venv 创建与依赖安装 |
 
 ### 关键设计决策
 

@@ -374,7 +374,7 @@ func TestRunFindLocalJSONUsesSnapshotFallbackUnderRealLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
-	buildLocalFindFixture(t, sqlitePath, storageDir)
+	buildLocalFindFixture(t, dataDir, sqlitePath, storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stopHelper := startSQLiteLockHelper(t, sqlitePath)
@@ -517,7 +517,7 @@ func TestRunFindLocalJSONFiltersNonTopItemsByDefault(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -558,7 +558,7 @@ func TestRunFindLocalJSONSupportsItemTypeAndLimit(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -592,7 +592,7 @@ func TestRunFindLocalJSONMatchesAttachmentFilename(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -639,7 +639,7 @@ func TestRunFindLocalJSONMatchesFullTextAttachmentTerms(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -686,7 +686,7 @@ func TestRunFindLocalJSONIncludesFullTextPreviewWhenSnippetRequested(t *testing.
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -728,7 +728,7 @@ func TestRunFindLocalJSONUsesMatchedSnippetForFullTextQuery(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -755,19 +755,18 @@ func TestRunFindLocalJSONUsesMatchedSnippetForFullTextQuery(t *testing.T) {
 	}
 }
 
-func TestRunFindLocalJSONSupportsExperimentalFullTextIndex(t *testing.T) {
+func TestRunFindLocalJSONSupportsFullTextIndex(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
 	t.Setenv("ZOT_MODE", "local")
-	t.Setenv("ZOT_EXPERIMENTAL_FTS", "1")
 
 	dataDir := t.TempDir()
 	storageDir := filepath.Join(dataDir, "storage")
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	reader, err := backend.NewLocalReader(config.Config{DataDir: dataDir})
@@ -821,7 +820,7 @@ func TestRunFindLocalJSONSupportsFullTextAnyAndPrefixMatching(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -915,7 +914,7 @@ func TestRunFindLocalJSONSupportsHasPDFAndAttachmentTypeFilters(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -993,7 +992,7 @@ func TestRunFindLocalAllJSON(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -1023,7 +1022,7 @@ func TestRunFindLocalJSONSupportsMultipleTagsWithAndSemantics(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -1057,7 +1056,7 @@ func TestRunFindLocalJSONSupportsTagAnySemantics(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -1087,7 +1086,7 @@ func TestRunFindLocalJSONSupportsDateRangeFiltering(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -1121,7 +1120,7 @@ func TestRunFindLocalJSONSupportsSortingAndPagination(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -1155,7 +1154,7 @@ func TestRunFindLocalRejectsQMode(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	_, stderr := captureOutput(t)
@@ -1179,7 +1178,7 @@ func TestRunFindLocalRejectsIncludeTrashed(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	_, stderr := captureOutput(t)
@@ -1857,7 +1856,7 @@ func buildLocalStatsFixture(t *testing.T, sqlitePath string) {
 	}
 }
 
-func buildLocalFindFixture(t *testing.T, sqlitePath string, storageDir string) {
+func buildLocalFindFixture(t *testing.T, dataDir string, sqlitePath string, storageDir string) {
 	t.Helper()
 
 	db, err := sql.Open("sqlite", sqlitePath)
@@ -1946,6 +1945,62 @@ func buildLocalFindFixture(t *testing.T, sqlitePath string, storageDir string) {
 	}
 	if err := os.WriteFile(filepath.Join(attachmentDir, "prefix.pdf"), []byte("pdf"), 0o600); err != nil {
 		t.Fatal(err)
+	}
+
+	buildGlobalFTSCacheForTest(t, dataDir,
+		[]ftsCacheRow{
+			{"ATTA1111", "ART67890", "Mixed Survey",
+				"Mixed survey full text preview from zotero cache. Core section discusses speciation genome patterns in plants and gene flow."},
+			{"ATTB2222", "ARTFULL2", "Prefix Match Article",
+				"Prefix Match Article discusses genomic species diversity and prefix-based search patterns."},
+		})
+}
+
+type ftsCacheRow struct {
+	AttachmentKey string
+	ParentItemKey string
+	Title         string
+	Body          string
+}
+
+func buildGlobalFTSCacheForTest(t *testing.T, dataDir string, rows []ftsCacheRow) {
+	t.Helper()
+	cacheDir := filepath.Join(dataDir, ".zotero_cli", "fulltext")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dbPath := filepath.Join(cacheDir, "index.sqlite")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, stmt := range []string{
+		`CREATE VIRTUAL TABLE IF NOT EXISTS fulltext_documents USING fts5(
+			attachment_key UNINDEXED,
+			parent_item_key UNINDEXED,
+			content_type UNINDEXED,
+			resolved_path UNINDEXED,
+			title,
+			creators,
+			tags,
+			attachment_title,
+			attachment_name,
+			attachment_path,
+			body
+		)`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatalf("exec %q: %v", stmt, err)
+		}
+	}
+	for _, row := range rows {
+		if _, err := db.Exec(
+			`INSERT INTO fulltext_documents(attachment_key, parent_item_key, title, body) VALUES (?, ?, ?, ?)`,
+			row.AttachmentKey, row.ParentItemKey, row.Title, row.Body,
+		); err != nil {
+			t.Fatalf("insert fts cache: %v", err)
+		}
 	}
 }
 
@@ -2123,7 +2178,7 @@ func TestRunExportCSLJSONLocalByItemKey(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -2179,7 +2234,7 @@ func TestRunExportCSLJSONHybridPrefersLocalByItemKey(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 	t.Setenv("ZOT_BASE_URL", "http://127.0.0.1:1")
 
@@ -2280,7 +2335,7 @@ func TestRunExportCSLJSONLocalByQuery(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
@@ -2315,7 +2370,7 @@ func TestRunExportCSLJSONLocalByCollection(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	buildLocalFindFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
