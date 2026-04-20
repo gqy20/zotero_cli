@@ -113,14 +113,14 @@ func (r *LocalReader) FullTextSnippet(ctx context.Context, item domain.Item, que
 	return buildFullTextSnippet(doc.Text, query), nil
 }
 
-func (r *LocalReader) loadFullTextDocument(_ context.Context, item domain.Item, query string) (fullTextDocument, bool, error) {
+func (r *LocalReader) loadFullTextDocument(_ context.Context, item domain.Item, query string) (FullTextDocument, bool, error) {
 	cache := newFullTextCache(r.FullTextCacheDir)
-	bestDoc := fullTextDocument{}
+	bestDoc := FullTextDocument{}
 	bestScore := -1
 	for _, attachment := range item.Attachments {
 		doc, ok, err := r.loadFullTextDocumentForAttachment(item, attachment, cache)
 		if err != nil {
-			return fullTextDocument{}, false, err
+			return FullTextDocument{}, false, err
 		}
 		if !ok || doc.Text == "" {
 			continue
@@ -141,7 +141,7 @@ func (r *LocalReader) loadFullTextDocument(_ context.Context, item domain.Item, 
 		}
 	}
 	if bestScore < 0 {
-		return fullTextDocument{}, false, nil
+		return FullTextDocument{}, false, nil
 	}
 	r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, ReadMetadata{
 		FullTextSource:        bestDoc.Meta.Extractor,
@@ -181,17 +181,17 @@ func (r *HybridReader) FullTextSnippet(ctx context.Context, item domain.Item, qu
 	return snippet, nil
 }
 
-func (r *LocalReader) buildFullTextDocument(item domain.Item, attachment domain.Attachment) (fullTextDocument, bool, error) {
+func (r *LocalReader) buildFullTextDocument(item domain.Item, attachment domain.Attachment) (FullTextDocument, bool, error) {
 	text, err := r.readAttachmentFullTextText(attachment.Key)
 	if err != nil {
-		return fullTextDocument{}, false, err
+		return FullTextDocument{}, false, err
 	}
 	if text != "" {
 		sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
 		if !ok {
-			return fullTextDocument{}, false, nil
+			return FullTextDocument{}, false, nil
 		}
-		return fullTextDocument{
+		return FullTextDocument{
 			Text: normalizeFullTextText(text),
 			Meta: fullTextCacheMeta{
 				AttachmentKey:   attachment.Key,
@@ -218,10 +218,10 @@ func (r *LocalReader) buildFullTextDocument(item domain.Item, attachment domain.
 		doc, ok, err = extractFullTextWithPDFiumFunc(context.Background(), r, attachment)
 	}
 	if err != nil {
-		return fullTextDocument{}, false, err
+		return FullTextDocument{}, false, err
 	}
 	if !ok {
-		return fullTextDocument{}, false, nil
+		return FullTextDocument{}, false, nil
 	}
 	doc.Meta.ParentItemKey = item.Key
 	doc.Meta.Title = item.Title
@@ -234,15 +234,45 @@ func (r *LocalReader) buildFullTextDocument(item domain.Item, attachment domain.
 	return doc, true, nil
 }
 
-func (r *LocalReader) loadFullTextDocumentForAttachment(item domain.Item, attachment domain.Attachment, cache fullTextCache) (fullTextDocument, bool, error) {
+func (r *LocalReader) ExtractAttachmentFullText(ctx context.Context, item domain.Item, att domain.Attachment) (FullTextDocument, bool, error) {
+	return r.loadFullTextDocumentForAttachment(item, att, newFullTextCache(r.FullTextCacheDir))
+}
+
+func (r *LocalReader) ExtractAttachmentFullTextOnly(ctx context.Context, item domain.Item, att domain.Attachment) (FullTextDocument, bool, error) {
+	doc, ok, err := newFullTextCache(r.FullTextCacheDir).Load(att)
+	if err != nil {
+		return FullTextDocument{}, false, err
+	}
+	if ok && doc.Text != "" {
+		doc.Text = normalizeFullTextText(doc.Text)
+		doc.Meta.ParentItemKey = firstNonEmptyString(doc.Meta.ParentItemKey, item.Key)
+		doc.CacheHit = true
+		return doc, true, nil
+	}
+	doc, ok, err = r.buildFullTextDocument(item, att)
+	if err != nil {
+		return FullTextDocument{}, false, err
+	}
+	return doc, ok, nil
+}
+
+func (r *LocalReader) SaveFullText(doc FullTextDocument) error {
+	return newFullTextCache(r.FullTextCacheDir).Save(doc)
+}
+
+func (r *LocalReader) SaveFullTextBatch(docs []FullTextDocument) error {
+	return newFullTextCache(r.FullTextCacheDir).SaveBatch(docs)
+}
+
+func (r *LocalReader) loadFullTextDocumentForAttachment(item domain.Item, attachment domain.Attachment, cache fullTextCache) (FullTextDocument, bool, error) {
 	doc, ok, err := cache.Load(attachment)
 	if err != nil {
-		return fullTextDocument{}, false, err
+		return FullTextDocument{}, false, err
 	}
 	if ok && doc.Text != "" {
 		doc.Text = normalizeFullTextText(doc.Text)
 		if err := cache.syncIndex(doc); err != nil {
-			return fullTextDocument{}, false, err
+			return FullTextDocument{}, false, err
 		}
 		doc.Meta.ParentItemKey = firstNonEmptyString(doc.Meta.ParentItemKey, item.Key)
 		doc.CacheHit = true
@@ -250,13 +280,13 @@ func (r *LocalReader) loadFullTextDocumentForAttachment(item domain.Item, attach
 	}
 	doc, ok, err = r.buildFullTextDocument(item, attachment)
 	if err != nil {
-		return fullTextDocument{}, false, err
+		return FullTextDocument{}, false, err
 	}
 	if !ok || doc.Text == "" {
-		return fullTextDocument{}, false, nil
+		return FullTextDocument{}, false, nil
 	}
 	if err := cache.Save(doc); err != nil {
-		return fullTextDocument{}, false, err
+		return FullTextDocument{}, false, err
 	}
 	return doc, true, nil
 }

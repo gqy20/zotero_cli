@@ -20,12 +20,13 @@ const (
 )
 
 type indexResult struct {
-	TotalItems int       `json:"total_items_with_pdf"`
-	Indexed    int       `json:"indexed"`
-	Skipped    int       `json:"skipped"`
-	Failed     int       `json:"failed"`
-	Errors     []string  `json:"errors,omitempty"`
-	Elapsed    float64   `json:"elapsed_seconds"`
+	TotalItems       int      `json:"total_items_with_pdf"`
+	TotalAttachments int      `json:"total_attachments"`
+	Indexed          int      `json:"indexed"`
+	Skipped          int      `json:"skipped"`
+	Failed           int      `json:"failed"`
+	Errors           []string `json:"errors,omitempty"`
+	Elapsed          float64  `json:"elapsed_seconds"`
 }
 
 func (c *CLI) runIndex(args []string) int {
@@ -113,12 +114,12 @@ type indexBuildOpts struct {
 func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexBuildOpts) (indexResult, error) {
 	result := indexResult{}
 
-	textReader, ok := reader.(fullTextReader)
+	extractor, ok := reader.(attachmentFullTextExtractor)
 	if !ok {
 		return result, fmt.Errorf("index build requires local mode with full-text extraction support")
 	}
 
-	attTextReader, hasAttText := reader.(attachmentTextReader)
+	writer, hasWriter := reader.(fullTextWriter)
 	cacheChecker, hasCacheCheck := reader.(fullTextCacheChecker)
 	failedMarker, hasFailedMark := reader.(failedMarker)
 
@@ -132,42 +133,45 @@ func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexB
 		return result, err
 	}
 
-	type itemTask struct {
-		item domain.Item
+	type attachmentTask struct {
+		item       domain.Item
+		attachment domain.Attachment
 	}
 
-	var tasks []itemTask
+	type extractResult struct {
+		task    attachmentTask
+		doc     backend.FullTextDocument
+		success bool
+		err     error
+	}
+
+	var tasks []attachmentTask
+	totalAttachments := 0
 	for _, item := range allItems {
 		pdfs := filterPDFAttachments(item.Attachments)
 		if len(pdfs) == 0 {
 			continue
 		}
-		if opts.Force {
-			tasks = append(tasks, itemTask{item: item})
-			continue
-		}
-		allCached := true
-		allFailed := true
+		totalAttachments += len(pdfs)
 		for _, att := range pdfs {
-			if !cacheChecker.IsFullTextCached(att) {
-				allCached = false
+			if opts.Force {
+				tasks = append(tasks, attachmentTask{item: item, attachment: att})
+				continue
 			}
-			if hasFailedMark && !cacheChecker.IsMarkedFailed(att.Key) {
-				allFailed = false
+			if hasCacheCheck && cacheChecker.IsFullTextCached(att) {
+				result.Skipped++
+				continue
 			}
+			if hasFailedMark && cacheChecker.IsMarkedFailed(att.Key) {
+				result.Skipped++
+				continue
+			}
+			tasks = append(tasks, attachmentTask{item: item, attachment: att})
 		}
-		if allCached {
-			result.Skipped++
-			continue
-		}
-		if allFailed && hasCacheCheck {
-			result.Skipped++
-			continue
-			}
-		tasks = append(tasks, itemTask{item: item})
 	}
 
 	result.TotalItems = len(allItems)
+	result.TotalAttachments = totalAttachments
 	totalToIndex := len(tasks)
 	if totalToIndex == 0 {
 		result.Elapsed = time.Since(startTime).Seconds()
@@ -176,20 +180,21 @@ func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexB
 
 	if !opts.JSONOutput {
 		fmt.Fprintf(c.stdout, "Indexing PDF full-text...\n")
-		fmt.Fprintf(c.stdout, "  Items with PDF: %d\n", result.TotalItems)
-		fmt.Fprintf(c.stdout, "  Need indexing:  %d (%d cached, skipped)\n", totalToIndex, result.Skipped)
-		fmt.Fprintf(c.stdout, "  Workers:        %d\n\n", opts.Workers)
+		fmt.Fprintf(c.stdout, "  Items with PDF:   %d\n", result.TotalItems)
+		fmt.Fprintf(c.stdout, "  Total attachments: %d\n", totalAttachments)
+		fmt.Fprintf(c.stdout, "  Need indexing:     %d (%d cached/failed, skipped)\n", totalToIndex, result.Skipped)
+		fmt.Fprintf(c.stdout, "  Workers:           %d\n\n", opts.Workers)
 	}
 
 	var (
-		mu           sync.Mutex
-		extractWg    sync.WaitGroup
-		doneCount    int64
+		mu          sync.Mutex
+		extractWg   sync.WaitGroup
+		doneCount   int64
 		indexedCount int64
-		failedCount  int64
-		errList      []string
-		extractSem   = make(chan struct{}, opts.Workers)
-		writeSem     = make(chan struct{}, 1)
+		failedCount int64
+		errList     []string
+		extractSem  = make(chan struct{}, opts.Workers)
+		resultCh    = make(chan extractResult, totalToIndex)
 	)
 
 	progressCh := make(chan int64, opts.Workers*2)
@@ -207,32 +212,20 @@ func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexB
 			extractSem <- struct{}{}
 			defer func() { <-extractSem }()
 
-			writeSem <- struct{}{}
+			doc, docOk, extractErr := extractor.ExtractAttachmentFullTextOnly(ctx, t.item, t.attachment)
+			success := docOk && extractErr == nil
 
-			var extractErr error
-			if hasAttText {
-				_, extractErr = attTextReader.ExtractItemAttachmentTexts(ctx, t.item)
-			} else {
-				_, extractErr = textReader.ExtractItemFullText(ctx, t.item)
-			}
-
-			if extractErr != nil && hasFailedMark {
-				pdfs := filterPDFAttachments(t.item.Attachments)
-				if len(pdfs) > 0 {
-					_ = failedMarker.MarkExtractFailed(pdfs[0].Key)
-				}
+			if !success && hasFailedMark {
+				_ = failedMarker.MarkExtractFailed(t.attachment.Key)
 			}
 
 			if extractErr != nil {
 				mu.Lock()
-				errList = append(errList, fmt.Sprintf("%s: %s", t.item.Key, extractErr.Error()))
+				errList = append(errList, fmt.Sprintf("%s/%s: %s", t.item.Key, t.attachment.Key, extractErr.Error()))
 				mu.Unlock()
-				atomic.AddInt64(&failedCount, 1)
-			} else {
-				atomic.AddInt64(&indexedCount, 1)
 			}
 
-			<-writeSem
+			resultCh <- extractResult{task: t, doc: doc, success: success, err: extractErr}
 
 			done := atomic.AddInt64(&doneCount, 1)
 			select {
@@ -243,6 +236,41 @@ func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexB
 	}
 
 	extractWg.Wait()
+	close(resultCh)
+
+	var successDocs []backend.FullTextDocument
+
+	for res := range resultCh {
+		if res.success {
+			successDocs = append(successDocs, res.doc)
+			atomic.AddInt64(&indexedCount, 1)
+		} else if res.err != nil {
+			atomic.AddInt64(&failedCount, 1)
+		} else {
+			atomic.AddInt64(&failedCount, 1)
+		}
+	}
+
+	if len(successDocs) > 0 && hasWriter {
+		batchWriter, hasBatch := reader.(fullTextBatchWriter)
+		if !opts.JSONOutput {
+			fmt.Fprintf(c.stdout, "\n  Writing index (%d docs)...\n", len(successDocs))
+		}
+		var writeErr error
+		if hasBatch {
+			writeErr = batchWriter.SaveFullTextBatch(successDocs)
+		} else {
+			for _, doc := range successDocs {
+				if err := writer.SaveFullText(doc); err != nil {
+					writeErr = err
+					break
+				}
+			}
+		}
+		if writeErr != nil {
+			errList = append(errList, fmt.Sprintf("batch write failed: %s", writeErr.Error()))
+		}
+	}
 
 	result.Errors = errList
 	result.Indexed = int(atomic.LoadInt64(&indexedCount))

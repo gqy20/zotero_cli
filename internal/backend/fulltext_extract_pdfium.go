@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	extractFullTextWithPDFiumFunc = func(ctx context.Context, reader *LocalReader, attachment domain.Attachment) (fullTextDocument, bool, error) {
+	extractFullTextWithPDFiumFunc = func(ctx context.Context, reader *LocalReader, attachment domain.Attachment) (FullTextDocument, bool, error) {
 		return reader.extractFullTextWithPDFium(ctx, attachment)
 	}
 
@@ -40,36 +40,36 @@ func getPDFiumPool() (pdfium.Pool, error) {
 	return pdfiumPoolRef, nil
 }
 
-func (r *LocalReader) extractFullTextWithPDFium(ctx context.Context, attachment domain.Attachment) (fullTextDocument, bool, error) {
+func (r *LocalReader) extractFullTextWithPDFium(ctx context.Context, attachment domain.Attachment) (FullTextDocument, bool, error) {
 	if !attachment.Resolved || strings.TrimSpace(attachment.ResolvedPath) == "" {
-		return fullTextDocument{}, false, nil
+		return FullTextDocument{}, false, nil
 	}
 
 	pdfBytes, err := os.ReadFile(attachment.ResolvedPath)
 	if err != nil {
-		return fullTextDocument{}, false, err
+		return FullTextDocument{}, false, err
 	}
 
 	pool, err := getPDFiumPool()
 	if err != nil {
-		return fullTextDocument{}, false, fmt.Errorf("init pdfium: %w", err)
+		return FullTextDocument{}, false, fmt.Errorf("init pdfium: %w", err)
 	}
 
 	instance, err := pool.GetInstance(30 * time.Second)
 	if err != nil {
-		return fullTextDocument{}, false, fmt.Errorf("get pdfium instance: %w", err)
+		return FullTextDocument{}, false, fmt.Errorf("get pdfium instance: %w", err)
 	}
 	defer instance.Close()
 
 	doc, err := instance.OpenDocument(&requests.OpenDocument{File: &pdfBytes})
 	if err != nil {
-		return fullTextDocument{}, false, fmt.Errorf("open pdf with pdfium: %w", err)
+		return FullTextDocument{}, false, fmt.Errorf("open pdf with pdfium: %w", err)
 	}
 	defer instance.FPDF_CloseDocument(&requests.FPDF_CloseDocument{Document: doc.Document})
 
 	pageCount, err := instance.FPDF_GetPageCount(&requests.FPDF_GetPageCount{Document: doc.Document})
 	if err != nil {
-		return fullTextDocument{}, false, fmt.Errorf("get pdf page count: %w", err)
+		return FullTextDocument{}, false, fmt.Errorf("get pdf page count: %w", err)
 	}
 
 	pageTexts := make([]string, 0, pageCount.PageCount)
@@ -84,7 +84,7 @@ func (r *LocalReader) extractFullTextWithPDFium(ctx context.Context, attachment 
 			},
 		})
 		if err != nil {
-			return fullTextDocument{}, false, fmt.Errorf("extract pdf text for page %d: %w", pageIndex+1, err)
+			return FullTextDocument{}, false, fmt.Errorf("extract pdf text for page %d: %w", pageIndex+1, err)
 		}
 		totalChars += len([]rune(pageText.Text))
 		if strings.TrimSpace(pageText.Text) != "" {
@@ -94,15 +94,15 @@ func (r *LocalReader) extractFullTextWithPDFium(ctx context.Context, attachment 
 
 	text := strings.Join(pageTexts, "\n")
 	if strings.TrimSpace(text) == "" {
-		return fullTextDocument{}, false, nil
+		return FullTextDocument{}, false, nil
 	}
 
 	sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
 	if !ok {
-		return fullTextDocument{}, false, nil
+		return FullTextDocument{}, false, nil
 	}
 
-	return fullTextDocument{
+	return FullTextDocument{
 		Text: normalizeFullTextText(text),
 		Meta: fullTextCacheMeta{
 			AttachmentKey:   attachment.Key,

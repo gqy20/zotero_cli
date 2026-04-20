@@ -40,7 +40,7 @@ type fullTextCacheMeta struct {
 	Chars           int    `json:"chars,omitempty"`
 }
 
-type fullTextDocument struct {
+type FullTextDocument struct {
 	Text     string
 	Meta     fullTextCacheMeta
 	CacheHit bool
@@ -76,36 +76,36 @@ func (c fullTextCache) indexPath() string {
 	return filepath.Join(c.rootDir, "index.sqlite")
 }
 
-func (c fullTextCache) Load(attachment domain.Attachment) (fullTextDocument, bool, error) {
+func (c fullTextCache) Load(attachment domain.Attachment) (FullTextDocument, bool, error) {
 	key := strings.TrimSpace(attachment.Key)
 	if key == "" {
-		return fullTextDocument{}, false, nil
+		return FullTextDocument{}, false, nil
 	}
 	content, err := os.ReadFile(c.contentPath(key))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fullTextDocument{}, false, nil
+			return FullTextDocument{}, false, nil
 		}
-		return fullTextDocument{}, false, err
+		return FullTextDocument{}, false, err
 	}
 	metaBytes, err := os.ReadFile(c.metaPath(key))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fullTextDocument{}, false, nil
+			return FullTextDocument{}, false, nil
 		}
-		return fullTextDocument{}, false, err
+		return FullTextDocument{}, false, err
 	}
 	var meta fullTextCacheMeta
 	if err := json.Unmarshal(metaBytes, &meta); err != nil {
-		return fullTextDocument{}, false, err
+		return FullTextDocument{}, false, err
 	}
 	if !c.IsFresh(meta, attachment) {
-		return fullTextDocument{}, false, nil
+		return FullTextDocument{}, false, nil
 	}
-	return fullTextDocument{Text: string(content), Meta: meta, CacheHit: true}, true, nil
+	return FullTextDocument{Text: string(content), Meta: meta, CacheHit: true}, true, nil
 }
 
-func (c fullTextCache) Save(doc fullTextDocument) error {
+func (c fullTextCache) Save(doc FullTextDocument) error {
 	key := strings.TrimSpace(doc.Meta.AttachmentKey)
 	if key == "" {
 		return nil
@@ -134,6 +134,183 @@ func (c fullTextCache) Save(doc fullTextDocument) error {
 		return err
 	}
 	return c.syncIndex(doc)
+}
+
+func (c fullTextCache) SaveBatch(docs []FullTextDocument) error {
+	if len(docs) == 0 {
+		return nil
+	}
+
+	for i := range docs {
+		docs[i] = c.prepareDoc(docs[i])
+		if err := c.writeFilesOnly(docs[i]); err != nil {
+			return err
+		}
+	}
+
+	db, err := sql.Open("sqlite", c.indexPath())
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	if err := ensureFullTextIndexSchema(db); err != nil {
+		return err
+	}
+
+	if err := c.writeMetaBatch(db, docs); err != nil {
+		return err
+	}
+
+	return c.rebuildFTSIndex(db, docs)
+}
+
+func (c fullTextCache) writeMetaBatch(db *sql.DB, docs []FullTextDocument) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	metaStmt, err := tx.Prepare(`INSERT OR REPLACE INTO fulltext_meta (
+		attachment_key, parent_item_key, resolved_path, content_type,
+		title, creators, tags, attachment_title, attachment_name, attachment_path,
+		extractor, source_mtime_unix, source_size, text_hash, extracted_at, pages, chars
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer metaStmt.Close()
+
+	delMetaStmt, err := tx.Prepare(`DELETE FROM fulltext_meta WHERE attachment_key = ?`)
+	if err != nil {
+		return err
+	}
+	defer delMetaStmt.Close()
+
+	for _, doc := range docs {
+		key := doc.Meta.AttachmentKey
+		if _, err := delMetaStmt.Exec(key); err != nil {
+			return err
+		}
+		if _, err := metaStmt.Exec(
+			doc.Meta.AttachmentKey,
+			doc.Meta.ParentItemKey,
+			doc.Meta.ResolvedPath,
+			doc.Meta.ContentType,
+			doc.Meta.Title,
+			doc.Meta.Creators,
+			doc.Meta.Tags,
+			doc.Meta.AttachmentTitle,
+			doc.Meta.AttachmentName,
+			doc.Meta.AttachmentPath,
+			doc.Meta.Extractor,
+			doc.Meta.SourceMtimeUnix,
+			doc.Meta.SourceSize,
+			doc.Meta.TextHash,
+			doc.Meta.ExtractedAt,
+			doc.Meta.Pages,
+			doc.Meta.Chars,
+		); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (c fullTextCache) rebuildFTSIndex(db *sql.DB, docs []FullTextDocument) error {
+	for _, stmt := range []string{
+		`DROP TABLE IF EXISTS fulltext_documents;`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			return err
+		}
+	}
+
+	stmt := `CREATE VIRTUAL TABLE IF NOT EXISTS fulltext_documents USING fts5(
+		attachment_key UNINDEXED,
+		parent_item_key UNINDEXED,
+		content_type UNINDEXED,
+		resolved_path UNINDEXED,
+		title,
+		creators,
+		tags,
+		attachment_title,
+		attachment_name,
+		attachment_path,
+		body
+	);`
+	if _, err := db.Exec(stmt); err != nil {
+		return err
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	docStmt, err := tx.Prepare(`INSERT INTO fulltext_documents (
+		attachment_key, parent_item_key, content_type, resolved_path,
+		title, creators, tags, attachment_title, attachment_name, attachment_path, body
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer docStmt.Close()
+
+	for _, doc := range docs {
+		if _, err := docStmt.Exec(
+			doc.Meta.AttachmentKey,
+			doc.Meta.ParentItemKey,
+			doc.Meta.ContentType,
+			doc.Meta.ResolvedPath,
+			doc.Meta.Title,
+			doc.Meta.Creators,
+			doc.Meta.Tags,
+			doc.Meta.AttachmentTitle,
+			doc.Meta.AttachmentName,
+			doc.Meta.AttachmentPath,
+			doc.Text,
+		); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (c fullTextCache) prepareDoc(doc FullTextDocument) FullTextDocument {
+	if doc.Meta.TextHash == "" && doc.Text != "" {
+		hash := sha256.Sum256([]byte(doc.Text))
+		doc.Meta.TextHash = "sha256:" + hex.EncodeToString(hash[:])
+	}
+	if doc.Meta.ExtractedAt == "" {
+		doc.Meta.ExtractedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	if doc.Meta.Chars == 0 && doc.Text != "" {
+		doc.Meta.Chars = len([]rune(doc.Text))
+	}
+	return doc
+}
+
+func (c fullTextCache) writeFilesOnly(doc FullTextDocument) error {
+	key := strings.TrimSpace(doc.Meta.AttachmentKey)
+	if key == "" {
+		return nil
+	}
+	if err := os.MkdirAll(c.attachmentDir(key), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(c.contentPath(key), []byte(doc.Text), 0o600); err != nil {
+		return err
+	}
+	metaBytes, err := json.MarshalIndent(doc.Meta, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(c.metaPath(key), metaBytes, 0o600)
 }
 
 func (c fullTextCache) IsFresh(meta fullTextCacheMeta, attachment domain.Attachment) bool {
@@ -181,11 +358,11 @@ func fullTextAttachmentSourceInfo(attachment domain.Attachment) (string, os.File
 	return "", nil, false
 }
 
-func (c fullTextCache) syncIndex(doc fullTextDocument) error {
+func (c fullTextCache) syncIndex(doc FullTextDocument) error {
 	return c.syncIndexWithReset(doc, false)
 }
 
-func (c fullTextCache) syncIndexWithReset(doc fullTextDocument, reset bool) error {
+func (c fullTextCache) syncIndexWithReset(doc FullTextDocument, reset bool) error {
 	if reset {
 		_ = os.Remove(c.indexPath())
 	}

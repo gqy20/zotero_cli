@@ -17,13 +17,13 @@ type pyMuPDFResult struct {
 	Chars int    `json:"chars"`
 }
 
-func (r *LocalReader) extractFullTextWithPyMuPDF(ctx context.Context, attachment domain.Attachment) (fullTextDocument, bool, error) {
+func (r *LocalReader) extractFullTextWithPyMuPDF(ctx context.Context, attachment domain.Attachment) (FullTextDocument, bool, error) {
 	if !attachment.Resolved || strings.TrimSpace(attachment.ResolvedPath) == "" {
-		return fullTextDocument{}, false, nil
+		return FullTextDocument{}, false, nil
 	}
 	pythonCmd, ok := findPythonCommandFunc(r.DataDir)
 	if !ok {
-		return fullTextDocument{}, false, nil
+		return FullTextDocument{}, false, nil
 	}
 	script := `
 import json, sys
@@ -49,20 +49,20 @@ sys.stdout.buffer.write(payload.encode("utf-8"))
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fullTextDocument{}, false, fmt.Errorf("pymupdf extract failed: %w: %s", err, strings.TrimSpace(stderr.String()))
+		return FullTextDocument{}, false, fmt.Errorf("pymupdf extract failed: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	var result pyMuPDFResult
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		return fullTextDocument{}, false, err
+		return FullTextDocument{}, false, err
 	}
 	if strings.TrimSpace(result.Text) == "" {
-		return fullTextDocument{}, false, nil
+		return FullTextDocument{}, false, nil
 	}
 	sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
 	if !ok {
-		return fullTextDocument{}, false, nil
+		return FullTextDocument{}, false, nil
 	}
-	return fullTextDocument{
+	return FullTextDocument{
 		Text: normalizeFullTextText(result.Text),
 		Meta: fullTextCacheMeta{
 			AttachmentKey:   attachment.Key,

@@ -23,6 +23,22 @@ type attachmentTextReader interface {
 	ExtractItemAttachmentTexts(context.Context, domain.Item) (backend.ItemFullTextResult, error)
 }
 
+type attachmentFullTextReader interface {
+	ExtractAttachmentFullText(context.Context, domain.Item, domain.Attachment) (backend.FullTextDocument, bool, error)
+}
+
+type attachmentFullTextExtractor interface {
+	ExtractAttachmentFullTextOnly(context.Context, domain.Item, domain.Attachment) (backend.FullTextDocument, bool, error)
+}
+
+type fullTextWriter interface {
+	SaveFullText(backend.FullTextDocument) error
+}
+
+type fullTextBatchWriter interface {
+	SaveFullTextBatch([]backend.FullTextDocument) error
+}
+
 type fullTextCacheChecker interface {
 	IsFullTextCached(domain.Attachment) bool
 	IsMarkedFailed(string) bool

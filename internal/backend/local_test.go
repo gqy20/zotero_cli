@@ -29,7 +29,7 @@ func TestFullTextCacheSaveAndLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	doc := fullTextDocument{
+	doc := FullTextDocument{
 		Text: "normalized text",
 		Meta: fullTextCacheMeta{
 			AttachmentKey:   "ATT123",
@@ -99,7 +99,7 @@ func TestFullTextCacheLoadRejectsStaleEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc := fullTextDocument{
+	doc := FullTextDocument{
 		Text: "normalized text",
 		Meta: fullTextCacheMeta{
 			AttachmentKey:   "ATT123",
@@ -237,12 +237,12 @@ func TestLocalFullTextPreviewFallsBackToPDFiumAndCachesResult(t *testing.T) {
 
 	previous := extractFullTextWithPDFiumFunc
 	t.Cleanup(func() { extractFullTextWithPDFiumFunc = previous })
-	extractFullTextWithPDFiumFunc = func(_ context.Context, _ *LocalReader, attachment domain.Attachment) (fullTextDocument, bool, error) {
+	extractFullTextWithPDFiumFunc = func(_ context.Context, _ *LocalReader, attachment domain.Attachment) (FullTextDocument, bool, error) {
 		sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
 		if !ok {
-			return fullTextDocument{}, false, nil
+			return FullTextDocument{}, false, nil
 		}
-		return fullTextDocument{
+		return FullTextDocument{
 			Text: "pdfium extracted text",
 			Meta: fullTextCacheMeta{
 				AttachmentKey:   attachment.Key,
@@ -373,7 +373,7 @@ func TestFullTextCacheSearchReturnsIndexedMatches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc := fullTextDocument{
+	doc := FullTextDocument{
 		Text: "Core section discusses speciation genome patterns in plants.",
 		Meta: fullTextCacheMeta{
 			AttachmentKey:   "ATT123",
@@ -429,7 +429,7 @@ func TestFullTextCacheSearchDedupesParentItems(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		doc := fullTextDocument{
+		doc := FullTextDocument{
 			Text: "Hybridization and speciation in plants with genomic evidence.",
 			Meta: fullTextCacheMeta{
 				AttachmentKey:   attachmentKey,
@@ -476,7 +476,7 @@ func TestFullTextCacheSearchPrefersExactTitlePhrase(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		doc := fullTextDocument{
+		doc := FullTextDocument{
 			Text: text,
 			Meta: fullTextCacheMeta{
 				AttachmentKey:   attachmentKey,
@@ -522,7 +522,7 @@ func TestFullTextCacheSearchPrefersBalancedTokenCoverage(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		doc := fullTextDocument{
+		doc := FullTextDocument{
 			Text: text,
 			Meta: fullTextCacheMeta{
 				AttachmentKey:   attachmentKey,
@@ -780,12 +780,12 @@ func TestLocalExtractItemFullTextUsesPDFAttachment(t *testing.T) {
 
 	previous := extractFullTextWithPDFiumFunc
 	t.Cleanup(func() { extractFullTextWithPDFiumFunc = previous })
-	extractFullTextWithPDFiumFunc = func(_ context.Context, _ *LocalReader, attachment domain.Attachment) (fullTextDocument, bool, error) {
+	extractFullTextWithPDFiumFunc = func(_ context.Context, _ *LocalReader, attachment domain.Attachment) (FullTextDocument, bool, error) {
 		sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
 		if !ok {
-			return fullTextDocument{}, false, nil
+			return FullTextDocument{}, false, nil
 		}
-		return fullTextDocument{
+		return FullTextDocument{
 			Text: "full extracted text",
 			Meta: fullTextCacheMeta{
 				AttachmentKey:   attachment.Key,
@@ -848,12 +848,12 @@ func TestLocalExtractItemAttachmentTextsIncludesAllPDFAttachments(t *testing.T) 
 
 	previous := extractFullTextWithPDFiumFunc
 	t.Cleanup(func() { extractFullTextWithPDFiumFunc = previous })
-	extractFullTextWithPDFiumFunc = func(_ context.Context, _ *LocalReader, attachment domain.Attachment) (fullTextDocument, bool, error) {
+	extractFullTextWithPDFiumFunc = func(_ context.Context, _ *LocalReader, attachment domain.Attachment) (FullTextDocument, bool, error) {
 		sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
 		if !ok {
-			return fullTextDocument{}, false, nil
+			return FullTextDocument{}, false, nil
 		}
-		return fullTextDocument{
+		return FullTextDocument{
 			Text: attachment.Key + " text",
 			Meta: fullTextCacheMeta{
 				AttachmentKey:   attachment.Key,
@@ -925,16 +925,16 @@ func TestLocalExtractItemAttachmentTextsPrefersMainPDFOverSupplement(t *testing.
 
 	previous := extractFullTextWithPDFiumFunc
 	t.Cleanup(func() { extractFullTextWithPDFiumFunc = previous })
-	extractFullTextWithPDFiumFunc = func(_ context.Context, _ *LocalReader, attachment domain.Attachment) (fullTextDocument, bool, error) {
+	extractFullTextWithPDFiumFunc = func(_ context.Context, _ *LocalReader, attachment domain.Attachment) (FullTextDocument, bool, error) {
 		sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
 		if !ok {
-			return fullTextDocument{}, false, nil
+			return FullTextDocument{}, false, nil
 		}
 		text := "Abstract\nHybrid speciation via inheritance of alternate alleles."
 		if attachment.Key == "ATT456" {
 			text = "Supplementary Information\nAdditional methods and figures."
 		}
-		return fullTextDocument{
+		return FullTextDocument{
 			Text: text,
 			Meta: fullTextCacheMeta{
 				AttachmentKey:   attachment.Key,
