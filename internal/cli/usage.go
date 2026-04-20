@@ -8,7 +8,7 @@ const (
 	usageCite                 = "usage: zot cite <item-key> [--format citation|bib] [--style STYLE] [--locale LOCALE] [--json]"
 	usageExport               = "usage: zot export <query> [--limit N] [--format bib|bibtex|biblatex|csljson|ris] [--json] | zot export --item-key KEY [--format bib|bibtex|biblatex|csljson|ris] [--json] | zot export --collection KEY [--format bib|bibtex|biblatex|csljson|ris] [--json]"
 	usageCollections          = "usage: zot collections [--limit N] [--json]"
-	usageNotes                = "usage: zot notes [QUERY] [--query QUERY] [--limit N] [--json]"
+	usageNotes                = "usage: zot notes [--query QUERY] [--limit N] [--json]"
 	usageTags                 = "usage: zot tags [--limit N] [--json]"
 	usageSearches             = "usage: zot searches [--limit N] [--json]"
 	usageDeleted              = "usage: zot deleted [--json]"

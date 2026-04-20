@@ -59,21 +59,22 @@ func (c *CLI) runCollections(args []string) int {
 }
 
 func (c *CLI) runNotes(args []string) int {
-	jsonOutput, limit, ok := c.parseJSONAndLimitArgs(args, usageNotes)
-	if !ok {
-		return 2
+	var query string
+	filteredArgs := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--query" && i+1 < len(args) {
+			query = args[i+1]
+			i++
+		} else if strings.HasPrefix(args[i], "--query=") {
+			query = strings.TrimPrefix(args[i], "--query=")
+		} else {
+			filteredArgs = append(filteredArgs, args[i])
+		}
 	}
 
-	var query string
-	for _, arg := range args {
-		if strings.HasPrefix(arg, "--query=") {
-			query = strings.TrimPrefix(arg, "--query=")
-		} else if arg == "--query" {
-			continue
-		} else if query == "" && !strings.HasPrefix(arg, "--") && arg != "" {
-			// positional query argument
-			query = arg
-		}
+	jsonOutput, limit, ok := c.parseJSONAndLimitArgs(filteredArgs, usageNotes)
+	if !ok {
+		return 2
 	}
 
 	_, reader, exitCode := c.loadReader()
