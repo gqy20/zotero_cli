@@ -274,7 +274,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          cat > "${TAP_FORMULA_PATH}" <<EOF
+          cat > "${TAP_FORMULA_PATH}" <<RUBYEOF
           class Zotcli < Formula
             desc "Zotero CLI for terminal, scripts, and AI agents"
             homepage "https://github.com/${REPO}"
@@ -311,7 +311,10 @@ jobs:
               assert_match "zot", shell_output("#{bin}/zot --help")
             end
           end
-          EOF
+          RUBYEOF
+
+          # 去除 heredoc 引入的前导空格（YAML 缩进导致）
+          sed -i 's/^[[:space:]]\{10\}//' "${TAP_FORMULA_PATH}"
 
       - name: Commit and push tap update
         shell: bash
