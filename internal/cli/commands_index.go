@@ -174,13 +174,14 @@ func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexB
 	}
 
 	var (
-		mu            sync.Mutex
-		wg            sync.WaitGroup
-		doneCount     int64
-		indexedCount  int64
-		failedCount   int64
-		errList       []string
-		sem           = make(chan struct{}, opts.Workers)
+		mu           sync.Mutex
+		extractWg    sync.WaitGroup
+		doneCount    int64
+		indexedCount int64
+		failedCount  int64
+		errList      []string
+		extractSem   = make(chan struct{}, opts.Workers)
+		writeSem     = make(chan struct{}, 1)
 	)
 
 	progressCh := make(chan int64, opts.Workers*2)
@@ -191,12 +192,14 @@ func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexB
 	}
 
 	for _, task := range tasks {
-		wg.Add(1)
+		extractWg.Add(1)
 		t := task
 		go func() {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
+			defer extractWg.Done()
+			extractSem <- struct{}{}
+			defer func() { <-extractSem }()
+
+			writeSem <- struct{}{}
 
 			var extractErr error
 			if hasAttText {
@@ -214,6 +217,8 @@ func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexB
 				atomic.AddInt64(&indexedCount, 1)
 			}
 
+			<-writeSem
+
 			done := atomic.AddInt64(&doneCount, 1)
 			select {
 			case progressCh <- done:
@@ -222,8 +227,8 @@ func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexB
 		}()
 	}
 
-	wg.Wait()
-	close(progressCh)
+	extractWg.Wait()
+
 	result.Errors = errList
 	result.Indexed = int(atomic.LoadInt64(&indexedCount))
 	result.Failed = int(atomic.LoadInt64(&failedCount))
