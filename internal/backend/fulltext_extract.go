@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"zotero_cli/internal/domain"
@@ -18,28 +17,29 @@ type pyMuPDFResult struct {
 	Chars int    `json:"chars"`
 }
 
-var findPythonCommandFunc = findPythonCommand
-
 func (r *LocalReader) extractFullTextWithPyMuPDF(ctx context.Context, attachment domain.Attachment) (fullTextDocument, bool, error) {
 	if !attachment.Resolved || strings.TrimSpace(attachment.ResolvedPath) == "" {
 		return fullTextDocument{}, false, nil
 	}
-	pythonCmd, ok := findPythonCommandFunc()
+	pythonCmd, ok := findPythonCommandFunc(r.DataDir)
 	if !ok {
 		return fullTextDocument{}, false, nil
 	}
 	script := `
-import json
+import json, sys
 import fitz
-import sys
 
 pdf_path = sys.argv[1]
 doc = fitz.open(pdf_path)
-text = "\n".join(page.get_text() for page in doc)
+parts = []
+for page in doc:
+    text = page.get_text("text", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+    if text.strip():
+        parts.append(text)
 payload = json.dumps({
-  "text": text,
+  "text": "\n".join(parts),
   "pages": len(doc),
-  "chars": len(text)
+  "chars": sum(len(p) for p in parts)
 }, ensure_ascii=False)
 sys.stdout.buffer.write(payload.encode("utf-8"))
 `
@@ -77,21 +77,3 @@ sys.stdout.buffer.write(payload.encode("utf-8"))
 	}, true, nil
 }
 
-func findPythonCommand() (string, bool) {
-	candidates := []string{
-		filepath.Join(`C:\Users\gqy17\miniforge3`, "python.exe"),
-		"python",
-	}
-	for _, candidate := range candidates {
-		if strings.Contains(candidate, `\`) {
-			if _, err := exec.LookPath(candidate); err == nil {
-				return candidate, true
-			}
-			continue
-		}
-		if _, err := exec.LookPath(candidate); err == nil {
-			return candidate, true
-		}
-	}
-	return "", false
-}

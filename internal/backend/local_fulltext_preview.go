@@ -26,6 +26,10 @@ var punctuationSpacingPattern = regexp.MustCompile(`([,;:])([A-Za-z])`)
 var closeParenSpacingPattern = regexp.MustCompile(`(\))([A-Za-z])`)
 var etAlSpacingPattern = regexp.MustCompile(`\b([A-Z][a-z]+)et al\.`)
 
+var figureCaptionPattern = regexp.MustCompile(`(?i)^(FIG\.?|Figure\s+\d|Table\s+\d)`)
+var runningHeaderPattern = regexp.MustCompile(`(?i)^.{5,80}\set\s?al\.\s*doi:|^.{5,80}\s\d{4}\s*;\s*\d+.*\|\s*\d+\s+of\s+\d+`)
+var standalonePageNumberPattern = regexp.MustCompile(`^\d+$`)
+
 var fullTextPhraseFixes = map[string]string{
 	"Also,these":            "Also, these",
 	"Also,in":               "Also, in",
@@ -207,12 +211,11 @@ func (r *LocalReader) buildFullTextDocument(item domain.Item, attachment domain.
 			},
 		}, true, nil
 	}
-	doc, ok, err := extractFullTextWithPDFiumFunc(context.Background(), r, attachment)
-	if err != nil {
-		return fullTextDocument{}, false, err
-	}
-	if !ok {
-		doc, ok, err = r.extractFullTextWithPyMuPDF(context.Background(), attachment)
+	// Priority 2: PyMuPDF (default best quality)
+	doc, ok, err := r.extractFullTextWithPyMuPDF(context.Background(), attachment)
+	if err != nil || !ok {
+		// PyMuPDF failed or unavailable -> fall back to pdfium
+		doc, ok, err = extractFullTextWithPDFiumFunc(context.Background(), r, attachment)
 	}
 	if err != nil {
 		return fullTextDocument{}, false, err
@@ -334,6 +337,35 @@ func normalizeHyphenatedLineBreaks(value string) string {
 	}
 }
 
+func detectPDFiumCorruption(text string) bool {
+	if len(text) < 200 {
+		return false
+	}
+	runes := []rune(text)
+	if len(runes) == 0 {
+		return false
+	}
+	nfdCount := 0
+	for _, r := range runes {
+		if r >= '\u0300' && r <= '\u036f' {
+			nfdCount++
+		}
+	}
+	if float64(nfdCount)/float64(len(runes)) > 0.005 {
+		return true
+	}
+	asciiCount := 0
+	for _, r := range runes {
+		if r < 127 {
+			asciiCount++
+		}
+	}
+	if float64(asciiCount)/float64(len(runes)) > 0.98 {
+		return true
+	}
+	return false
+}
+
 func shouldDropFullTextLine(line string) bool {
 	if line == "" {
 		return false
@@ -360,6 +392,12 @@ func shouldDropFullTextLine(line string) bool {
 		return true
 	case doiLinePattern.MatchString(line):
 		return true
+	case figureCaptionPattern.MatchString(line):
+		return true
+	case runningHeaderPattern.MatchString(line):
+		return true
+	case standalonePageNumberPattern.MatchString(line):
+		return len(line) <= 3
 	}
 	return false
 }

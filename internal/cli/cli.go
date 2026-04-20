@@ -128,6 +128,8 @@ func (c *CLI) Run(args []string) int {
 		return c.runUpdateSearch(args[1:])
 	case "delete-search":
 		return c.runDeleteSearch(args[1:])
+	case "setup":
+		return c.runSetup(args[1:])
 	default:
 		fmt.Fprintf(c.stderr, "unknown command: %s\n\n", args[0])
 		c.printUsage()

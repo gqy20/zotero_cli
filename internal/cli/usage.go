@@ -39,4 +39,5 @@ const (
 	usageCreateSearch         = "usage: zot create-search (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
 	usageUpdateSearch         = "usage: zot update-search <search-key> (--data JSON | --from-file PATH) [--if-unmodified-since-version N] [--json]"
 	usageDeleteSearch         = "usage: zot delete-search <search-key> --if-unmodified-since-version N [--json]"
+	usageSetupPdfExtract      = "usage: zot setup pdf-extract [--check]"
 )
