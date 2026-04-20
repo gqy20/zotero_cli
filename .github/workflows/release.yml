@@ -276,7 +276,7 @@ jobs:
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" tap-repo
 
       - name: Update formula
-        shell: python3
+        shell: python3 {0}
         working-directory: tap-repo
         env:
           LINUX_AMD64_SHA: ${{ steps.checksums.outputs.linux_amd64_sha }}
