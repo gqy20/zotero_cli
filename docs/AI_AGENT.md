@@ -179,6 +179,111 @@ go run .\cmd\zot config validate
 .\zot.exe versions items --since 100 --if-modified-since-version 120 --json
 ```
 
+### PDF 文本提取
+
+```powershell
+# 提取单篇 PDF 正文（local / hybrid）
+.\zot.exe extract-text ITEMKEY --json
+# JSON 输出包含：主附件文本、所有 PDF 附件文本、缓存命中状态、来源元信息
+```
+
+> 提取器优先级：**PyMuPDF** → Zotero ft-cache → pdfium WASM。首次使用需 `zot setup pdf-extract`。
+
+### PDF 标注操作
+
+```powershell
+# 双源读取标注（Zotero Reader 数据库 + PDF 文件内）
+.\zot.exe annotations ITEMKEY --json
+# 按类型/页码过滤
+.\zot.exe annotations ITEMKEY --type highlight --page 3 --json
+# 删除 PDF 文件内特定类型的标注
+.\zot.exe annotations ITEMKEY --clear --type highlight
+
+# 写入高亮标注到 PDF
+.\zot.exe annotate ITEMKEY --text "关键概念" --color red --comment "重要"
+# 写入下划线
+.\zot.exe annotate ITEMKEY --text "speciation" --type underline --color blue
+# 在指定位置添加笔记
+.\zot.exe annotate ITEMKEY --page 5 --point 150,300 --comment "发现" --type note
+```
+
+### 与 Zotero 桌面端联动
+
+```powershell
+# 在 Zotero 阅读器中打开 PDF（支持页码跳转）
+.\zot.exe open ITEMKEY --page 5
+# 在 Zotero 主界面选中条目
+.\zot.exe select ITEMKEY
+```
+
+### 笔记搜索
+
+```powershell
+# 列出所有子笔记
+.\zot.exe notes --json
+# 按关键词过滤笔记内容
+.\zot.exe notes --query "CRISPR" --limit 20 --json
+```
+
+### 全文检索最佳实践
+
+```powershell
+# local / hybrid 模式下，FTS 索引有数据时自动启用全文检索
+.\zot.exe find "同源多倍体" --snippet --json
+# 等价于（显式指定）：
+.\zot.exe find "同源多倍体" --fulltext --snippet --json
+
+# snippet 默认限制 50 条（批量安全限制）
+# 需要更多结果时显式指定 --limit
+.\zot.exe find "基因编辑" --snippet --limit 200 --json
+
+# 任一词匹配（而非默认的短语匹配）
+.\zot.exe find "基因 编辑" --fulltext-any --snippet --json
+```
+
+### 高级过滤组合
+
+```powershell
+# 组合多个过滤条件
+.\zot.exe find "CRISPR" `
+    --collection ABC123 `
+    --tag "高引用" `
+    --exclude-tag "已读" `
+    --date-after 2023 `
+    --has-pdf `
+    --attachment-name PDF `
+    --modified-within 90d `
+    --json
+
+# 排除特定类型
+.\zot.exe find "review" --no-type "journalArticle" --json
+
+# 标签模糊匹配
+.\zot.exe find "" --tag-contains "进化" --json
+```
+
+## 性能优化建议
+
+### 检索性能
+
+- **`--snippet` 默认限制 50 条**：使用 `--fulltext --snippet` 时若未指定 `--limit`，自动限制为 50 条以保护批量提取性能。需要更多结果时显式加 `--limit N`。
+- **自动全文检索**：local / hybrid 模式下 FTS5 索引有数据时，即使不加 `--fulltext` 也会自动走全文检索路径。无需每次显式指定。
+- **`--include-fields` 减少传输**：只需要特定字段时用 `--include-fields url,doi,version` 减少 JSON 体积。
+- **优先 `--full` 而非先 `find` 再逐条 `show`**：一次获取完整数据比多次往返更高效。
+
+### API 调优
+
+- **重试参数**（高频脚本场景）：
+  - `ZOT_RETRY_MAX_ATTEMPTS=5` — 最大重试次数
+  - `ZOT_RETRY_BASE_DELAY_MS=1000` — 基础延迟
+  - `ZOT_RETRY_JITTER_FRACTION=0.3` — 抖动比例（避免惊群）
+- 遇到 `429` 时自动指数退避 + 抖动，但高频批量脚本仍应主动降速。
+
+### 缓存行为
+
+- `extract-text` 结果会缓存，重复提取同一 PDF 直接命中缓存。
+- 全文检索的 snippet 提取也有缓存层，相同查询片段不会重复扫描 PDF。
+
 ## 失败时的处理建议
 
 - `401` / `403`
@@ -197,7 +302,8 @@ go run .\cmd\zot config validate
 
 如果你是一个通用 agent，不确定该用哪条命令：
 
-1. 读优先：`find` / `show` / `relate` / `stats`
-2. 导出优先：`export --collection` 或 `export --item-key`
-3. 变更次之：`create-*` / `update-*`
-4. 删除最后：只有在用户明确要求时才考虑
+1. **读优先**：`find` / `show` / `relate` / `stats` / `notes`
+2. **PDF 读取**：`extract-text` / `annotations` / `open`
+3. **导出**：`export --collection` 或 `export --item-key`
+4. **变更次之**：`create-*` / `update-*` / `add-tag` / `remove-tag` / `annotate`
+5. **删除最后**：只有在用户明确要求时才考虑

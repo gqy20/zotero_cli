@@ -22,15 +22,31 @@ zot find "query" --all                  # 不限数量
 
 | 选项 | 说明 | 模式 |
 |------|------|------|
+| **元数据过滤** |||
 | `--item-type TYPE` | 按文献类型过滤 | 全部 |
+| `--no-type TYPE` | 排除某文献类型 | 全部 |
+| **标签过滤** |||
 | `--tag TAG` | 标签过滤（AND，可多个） | web / local / hybrid |
 | `--tag-any` | 标签过滤（OR） | 同上 |
+| `--tag-contains WORD` | 标签模糊匹配（包含指定词） | local / hybrid |
+| `--exclude-tag TAG` | 排除含某标签的条目 | local / hybrid |
+| **收藏夹过滤** |||
+| `--collection KEY` | 仅返回指定收藏夹内的条目 | local / hybrid |
+| `--no-collection KEY` | 排除某收藏夹内的条目 | local / hybrid |
+| **日期过滤** |||
 | `--date-after DATE` | 起始日期 `YYYY` / `YYYY-MM` / `YYYY-MM-DD` | web / local / hybrid |
 | `--date-before DATE` | 截止日期 | 同上 |
+| `--modified-within DURATION` | 最近修改时间范围（如 `7d`、`2w`） | local / hybrid |
+| `--added-since DURATION` | 最近添加时间范围 | local / hybrid |
+| **附件过滤** |||
 | `--has-pdf` | 仅返回有 PDF 附件的条目 | local / hybrid |
 | `--attachment-type TYPE` | 附件类型过滤 | local / hybrid |
+| `--attachment-name TEXT` | 附件文件名包含指定文本 | local / hybrid |
+| `--attachment-path TEXT` | 附件路径包含指定文本 | local / hybrid |
+| **Web 专属** |||
 | `--qmode MODE` | 查询模式：`titleCreatorYear` / `everything` | **web only** |
 | `--include-trashed` | 包含回收站条目 | **web only** |
+| **字段控制** |||
 | `--include-fields FIELDS` | 指定返回字段（逗号分隔） | 全部 |
 
 ### 全文检索（local / hybrid）
@@ -41,14 +57,20 @@ zot find "query" --all                  # 不限数量
 | `--fulltext-any` | 全文任一词匹配 |
 | `--snippet` | 返回全文匹配片段预览 |
 
+> **自动启用**：在 local / hybrid 模式下，如果 FTS5 全文索引已有数据，即使不指定 `--fulltext`，查询也会自动走全文检索路径。显式指定 `--fulltext` 可确保始终使用全文搜索。
+
 ### 输出控制
 
 | 选项 | 说明 |
 |------|------|
 | `--json` | JSON 格式输出 |
 | `--full` | 完整字段 + 附件详情 |
-| `--sort FIELD` | 排序方式（如 `date-desc`） |
-| `--start N` / --limit N | 分页 |
+| `--sort FIELD` | 排序方式（如 `date`） |
+| `--direction asc\|desc` | 排序方向（默认 `desc`） |
+| `--start N` | 分页偏移量（从第 N 条开始） |
+| `--limit N` | 返回结果数量上限 |
+
+> **注意**：使用 `--snippet` 时，若未指定 `--limit`，默认限制为 **50** 条（批量提取安全限制）。
 
 ### 模式边界
 
@@ -88,7 +110,7 @@ zot extract-text ITEMKEY          # 提取主附件文本
 zot extract-text ITEMKEY --json   # JSON（含缓存状态）
 ```
 
-提取器优先级：PyMuPDF（默认）→ pdfium WASM（回退）。
+提取器优先级：**PyMuPDF**（首选）→ Zotero ft-cache（本地缓存回退）→ pdfium WASM（最终回退）。
 
 ---
 
@@ -185,11 +207,19 @@ zot annotations KEY --clear --type highlight  # 删除 PDF 文件内的标注
 ## 引文生成 (`cite`)
 
 ```bash
-zot cite KEY                # APA（默认）
-zot cite KEY --format chicago
-zot cite KEY --format bib       # BibTeX
-zot cite KEY --style STYLE --locale LOCALE
+zot cite KEY                        # citation 格式（默认 apa 样式）
+zot cite KEY --format bib           # BibTeX 格式
+zot cite KEY --style chicago --locale zh-CN   # 指定引文样式和语言
+zot cite KEY --json
 ```
+
+### 选项
+
+| 选项 | 说明 | 默认值 |
+|------|------|--------|
+| `--format` | `citation`（内联引文）或 `bib`（参考文献条目） | `citation` |
+| `--style` | CSL 引文样式名称（如 `apa`、`chicago`、`ieee`） | `apa` |
+| `--locale` | 输出语言（如 `en-US`、`zh-CN`） | `en-US` |
 
 ---
 
@@ -226,16 +256,35 @@ zot relate KEY [--json]
 |------|------|
 | `collections` | 收藏夹列表 |
 | `collections-top` | 仅顶层收藏夹 |
-| `notes` | 子笔记列表 |
+| `notes` | 子笔记列表（支持 `--query` 过滤） |
 | `tags` | 所有标签 |
 | `searches` | 已保存搜索 |
 | `trash` | 回收站条目 |
 | `publications` | My Publications |
 | `deleted` | 已删除对象 key |
 | `stats` | 库统计（条目/收藏夹/搜索数） |
-| `versions items --since N` | 版本变更列表 |
+| `versions <type> --since N` | 版本变更列表（`items` / `collections` / `searches` / `items-top`） |
 
-用法：`zot collections [--limit N] [--json]`
+用法：`zot collections [--limit N] [--json]`、`zot notes [--query QUERY] [--limit N] [--json]`
+
+### `notes` 过滤
+
+```bash
+zot notes                          # 列出所有子笔记
+zot notes --query "CRISPR"        # 按关键词过滤笔记内容
+zot notes --query "method" --limit 20 --json
+```
+
+### `versions` 子类型
+
+```bash
+zot versions items --since 100 --json              # 条目变更
+zot versions collections --since 100 --json        # 收藏夹变更
+zot versions searches --since 100 --json           # 已保存搜索变更
+zot versions items-top --since 100 --json          # 顶层条目变更
+zot versions items --since 0 --include-trashed --json   # 含回收站
+zot versions items --since 100 --if-modified-since-version 120 --json  # 增量同步
+```
 
 ---
 
@@ -318,6 +367,9 @@ zot version            # 版本信息
 | `ZOT_TIMEOUT_SECONDS` | API 超时秒数 | `20` |
 | `ZOT_ALLOW_WRITE` | 允许写操作 | `1` |
 | `ZOT_ALLOW_DELETE` | 允许删除操作 | `0` |
+| `ZOT_RETRY_MAX_ATTEMPTS` | API 请求最大重试次数（429 等可重试错误） | `5` |
+| `ZOT_RETRY_BASE_DELAY_MS` | 重试基础延迟毫秒数 | `1000` |
+| `ZOT_RETRY_JITTER_FRACTION` | 重试抖动比例（避免惊群效应） | `0.3` |
 
 ### PDF 环境
 

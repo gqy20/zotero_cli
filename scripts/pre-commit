@@ -1,6 +1,9 @@
 #!/bin/bash
 # Git pre-commit hook: 格式化检查 + 静态分析 + 测试 + YAML 校验
 # 安装: make install-hooks 或 ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
+#
+# 智能跳过：仅当暂存区包含 .go 文件时才运行 gofmt/vet/test，
+# 纯文档/配置变更会跳过这些耗时步骤。
 
 set -euo pipefail
 
@@ -11,41 +14,58 @@ NC='\033[0m'
 
 PASS=true
 
-# 1. gofmt 检查
-echo "==> 检查格式化 (gofmt)..."
-UNFORMATTED=$(gofmt -l ./internal/ ./cmd/)
-if [ -n "$UNFORMATTED" ]; then
-  echo -e "${RED}以下文件需要格式化:${NC}"
-  echo "$UNFORMATTED"
-  echo -e "${YELLOW}运行 'make fmt' 自动修复${NC}"
-  PASS=false
+# 检测暂存区中的文件类型
+STAGED_GO=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
+STAGED_YAML=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(yml|yaml)$' | grep -v vendor | grep -v '.gocache' | grep -v '.tmp-' || true)
+
+if [ -z "$STAGED_GO" ]; then
+  echo -e "${YELLOW}暂存区无 .go 文件，跳过 gofmt / vet / test${NC}"
 else
-  echo -e "${GREEN}格式化检查通过${NC}"
+  # 1. gofmt 检查
+  echo "==> 检查格式化 (gofmt)..."
+  UNFORMATTED=$(gofmt -l ./internal/ ./cmd/)
+  if [ -n "$UNFORMATTED" ]; then
+    echo -e "${RED}以下文件需要格式化:${NC}"
+    echo "$UNFORMATTED"
+    echo -e "${YELLOW}运行 'make fmt' 自动修复${NC}"
+    PASS=false
+  else
+    echo -e "${GREEN}格式化检查通过${NC}"
+  fi
+
+  # 2. go vet
+  echo "==> 静态分析 (go vet)..."
+  if ! go vet ./... 2>&1; then
+    echo -e "${RED}go vet 未通过${NC}"
+    PASS=false
+  else
+    echo -e "${GREEN}静态分析通过${NC}"
+  fi
+
+  # 3. 测试
+  echo "==> 运行测试..."
+  if ! go test ./... -short 2>&1; then
+    echo -e "${RED}测试未通过${NC}"
+    PASS=false
+  else
+    echo -e "${GREEN}测试通过${NC}"
+  fi
 fi
 
-# 2. go vet
-echo "==> 静态分析 (go vet)..."
-if ! go vet ./... 2>&1; then
-  echo -e "${RED}go vet 未通过${NC}"
-  PASS=false
-else
-  echo -e "${GREEN}静态分析通过${NC}"
-fi
-
-# 3. YAML 格式校验（使用 yamllint 或 python yaml 模块）
+# 4. YAML 格式校验（仅当有 YAML 变更时）
 echo "==> 检查 YAML 格式..."
-YAML_FILES=$(find . -name '*.yml' -o -name '*.yaml' | grep -v vendor | grep -v '.gocache' | grep -v '.tmp-' || true)
-if [ -n "$YAML_FILES" ]; then
-  if command -v yamllint &>/dev/null; then
-    if ! yamllint --strict -c .yamllint.yml $YAML_FILES 2>&1; then
-      echo -e "${RED}YAML 格式未通过 (yamllint)${NC}"
-      echo "运行 'yamllint -c .yamllint.yml .' 手动查看详情"
-      PASS=false
-    else
-      echo -e "${GREEN}YAML 检查通过 (yamllint)${NC}"
-    fi
-  elif command -v python3 &>/dev/null; then
-    ERRORS=$(python3 -c "
+if [ -z "$STAGED_YAML" ]; then
+  echo -e "${GREEN}暂存区无 YAML 文件，跳过${NC}"
+elif command -v yamllint &>/dev/null; then
+  if ! yamllint --strict -c .yamllint.yml $STAGED_YAML 2>&1; then
+    echo -e "${RED}YAML 格式未通过 (yamllint)${NC}"
+    echo "运行 'yamllint -c .yamllint.yml .' 手动查看详情"
+    PASS=false
+  else
+    echo -e "${GREEN}YAML 检查通过 (yamllint)${NC}"
+  fi
+elif command -v python3 &>/dev/null; then
+  ERRORS=$(python3 -c "
 import sys, yaml, os
 for f in sys.argv[1:]:
     with open(f) as fh:
@@ -53,28 +73,16 @@ for f in sys.argv[1:]:
             list(yaml.safe_load_all(fh))
         except yaml.YAMLError as e:
             print(f'{f}: {e}', file=sys.stderr)
-" $YAML_FILES 2>&1 || true)
-    if [ -n "$ERRORS" ]; then
-      echo -e "${RED}YAML 格式错误:${NC}"
-      echo "$ERRORS"
-      PASS=false
-    else
-      echo -e "${GREEN}YAML 检查通过 (python yaml)${NC}"
-    fi
+" $STAGED_YAML 2>&1 || true)
+  if [ -n "$ERRORS" ]; then
+    echo -e "${RED}YAML 格式错误:${NC}"
+    echo "$ERRORS"
+    PASS=false
   else
-    echo -e "${YELLOW}跳过: 无 yamllint/python3，安装其一以启用 YAML 检查${NC}"
+    echo -e "${GREEN}YAML 检查通过 (python yaml)${NC}"
   fi
 else
-  echo -e "${GREEN}无 YAML 文件，跳过${NC}"
-fi
-
-# 4. 测试
-echo "==> 运行测试..."
-if ! go test ./... -short 2>&1; then
-  echo -e "${RED}测试未通过${NC}"
-  PASS=false
-else
-  echo -e "${GREEN}测试通过${NC}"
+  echo -e "${YELLOW}跳过: 无 yamllint/python3，安装其一以启用 YAML 检查${NC}"
 fi
 
 # 结果

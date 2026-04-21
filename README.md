@@ -101,14 +101,20 @@ zot find "CRISPR" --date-after 2023 --date-before 2025 --json
 zot find "基因编辑" --tag "高引用" --tag "综述" --json
 zot find "基因编辑" --tag "高引用" --tag-any --json
 
+# 高级过滤：收藏夹、排除标签、附件名、最近修改
+zot find "CRISPR" --collection ABC123 --exclude-tag "已读" --attachment-name PDF --modified-within 30d --json
+
 # 全文搜索 PDF 内容（local / hybrid）
+# 注意：FTS 索引有数据时会自动启用全文检索，无需手动加 --fulltext
 zot find "同源多倍体" --fulltext --snippet --json
+# snippet 默认限制 50 条，需要更多结果时显式指定 --limit
+zot find "同源多倍体" --snippet --limit 200 --json
 ```
 
 ### PDF 阅读与标注
 
 ```bash
-# 提取 PDF 正文供 AI 分析
+# 提取 PDF 正文供 AI 分析（PyMuPDF 优先 → ft-cache 回退）
 zot extract-text KEY --json
 
 # 查看 PDF 标注（双源：Zotero 阅读器标注 + PDF 文件内标注）
@@ -154,9 +160,9 @@ zot relate KEY --json
 zot export --collection COLLKEY --format csljson --json
 
 # 生成引文
-zot cite KEY                    # APA（默认）
-zot cite KEY --format bibtex    # BibTeX
-zot cite KEY --format chicago   # Chicago 格式
+zot cite KEY                        # citation 格式（默认 apa）
+zot cite KEY --format bib           # BibTeX 格式
+zot cite KEY --style chicago        # Chicago 样式
 ```
 
 ### 库管理
@@ -204,7 +210,7 @@ zot versions items --since 0 --json  # 版本变更记录
 
 | 类别 | 命令 | 说明 |
 |------|------|------|
-| **检索** | `find` | 关键词 / 全文搜索，支持日期/标签/附件过滤 |
+| **检索** | `find` | 关键词/全文搜索，支持日期/标签/收藏夹/附件/类型等 20+ 过滤选项 |
 | **查看** | `show` | 条目详情（含标注/附件/笔记） |
 | **关系** | `relate` | 条目间显式关系查询 |
 | **PDF** | `extract-text` | 提取 PDF 正文 |

@@ -104,6 +104,7 @@ jobs:
           ARCHIVE_FORMAT: ${{ matrix.archive }}
           VERSION: ${{ env.RELEASE_VERSION }}
           GO_VERSION_LDFLAGS: >-
+            -s -w
             -X zotero_cli/internal/cli.version=${{ env.RELEASE_VERSION }}
             -X zotero_cli/internal/cli.commit=${{ github.sha }}
             -X zotero_cli/internal/cli.buildDate=${{ needs.verify.outputs.build_date }}
