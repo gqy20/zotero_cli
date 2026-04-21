@@ -209,7 +209,7 @@ func (r *LocalReader) buildFullTextDocument(item domain.Item, attachment domain.
 			sourcePath, info, srcOk := fullTextAttachmentSourceInfo(attachment)
 			if srcOk {
 				return FullTextDocument{
-					Text: normalizeFullTextText(text),
+					Text: text,
 					Meta: fullTextCacheMeta{
 						AttachmentKey:   attachment.Key,
 						ParentItemKey:   item.Key,
@@ -259,7 +259,6 @@ func (r *LocalReader) ExtractAttachmentFullTextOnly(ctx context.Context, item do
 		return FullTextDocument{}, false, err
 	}
 	if ok && doc.Text != "" {
-		doc.Text = normalizeFullTextText(doc.Text)
 		doc.Meta.ParentItemKey = firstNonEmptyString(doc.Meta.ParentItemKey, item.Key)
 		doc.CacheHit = true
 		return doc, true, nil
@@ -267,6 +266,9 @@ func (r *LocalReader) ExtractAttachmentFullTextOnly(ctx context.Context, item do
 	doc, ok, err = r.buildFullTextDocument(item, att)
 	if err != nil {
 		return FullTextDocument{}, false, err
+	}
+	if ok && doc.Text != "" {
+		doc.Text = normalizeFullTextText(doc.Text)
 	}
 	return doc, ok, nil
 }
@@ -285,7 +287,6 @@ func (r *LocalReader) loadFullTextDocumentForAttachment(item domain.Item, attach
 		return FullTextDocument{}, false, err
 	}
 	if ok && doc.Text != "" {
-		doc.Text = normalizeFullTextText(doc.Text)
 		doc.Meta.ParentItemKey = firstNonEmptyString(doc.Meta.ParentItemKey, item.Key)
 		doc.CacheHit = true
 		return doc, true, nil
@@ -297,6 +298,7 @@ func (r *LocalReader) loadFullTextDocumentForAttachment(item domain.Item, attach
 	if !ok || doc.Text == "" {
 		return FullTextDocument{}, false, nil
 	}
+	doc.Text = normalizeFullTextText(doc.Text)
 	if err := cache.Save(doc); err != nil {
 		return FullTextDocument{}, false, err
 	}
