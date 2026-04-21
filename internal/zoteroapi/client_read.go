@@ -90,6 +90,7 @@ func (c *Client) GetItem(ctx context.Context, key string) (Item, error) {
 		return Item{}, err
 	}
 	item.Attachments = mapAttachments(children)
+	item.Notes = mapNotes(children)
 
 	return item, nil
 }

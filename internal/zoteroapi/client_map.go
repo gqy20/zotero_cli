@@ -286,3 +286,17 @@ func mapAttachments(items []apiItem) []Attachment {
 	}
 	return out
 }
+
+func mapNotes(items []apiItem) []Note {
+	out := make([]Note, 0, len(items))
+	for _, item := range items {
+		if item.Data.ItemType != "note" {
+			continue
+		}
+		out = append(out, Note{
+			Key:     item.Key,
+			Content: compactWhitespace(stripHTML(item.Data.Note)),
+		})
+	}
+	return out
+}

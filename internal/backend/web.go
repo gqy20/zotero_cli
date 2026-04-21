@@ -152,3 +152,14 @@ func mapAttachments(attachments []zoteroapi.Attachment) []domain.Attachment {
 	}
 	return out
 }
+
+func mapDomainNotes(notes []zoteroapi.Note) []domain.Note {
+	out := make([]domain.Note, 0, len(notes))
+	for _, n := range notes {
+		out = append(out, domain.Note{
+			Key:     n.Key,
+			Content: n.Content,
+		})
+	}
+	return out
+}

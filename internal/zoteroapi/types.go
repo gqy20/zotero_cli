@@ -158,6 +158,7 @@ type Item struct {
 	URL         string       `json:"url,omitempty"`
 	Tags        []string     `json:"tags,omitempty"`
 	Attachments []Attachment `json:"attachments,omitempty"`
+	Notes       []Note       `json:"notes,omitempty"`
 }
 
 type Creator struct {
@@ -197,6 +198,7 @@ type apiItemData struct {
 	Pages            string       `json:"pages"`
 	Creators         []apiCreator `json:"creators"`
 	Tags             []apiTag     `json:"tags"`
+	Note             string       `json:"note"`
 }
 
 type apiCreator struct {
