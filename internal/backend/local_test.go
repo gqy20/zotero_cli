@@ -727,6 +727,43 @@ func TestNewLocalReaderLoadsDataDirAndAttachmentBaseDirFromPrefs(t *testing.T) {
 	}
 }
 
+func TestFindDefaultDataDirFallsBackToHomeZotero(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("APPDATA", t.TempDir())
+	t.Setenv("USERPROFILE", home)
+
+	defaultDir := filepath.Join(home, "Zotero")
+	storageDir := filepath.Join(defaultDir, "storage")
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sqlitePath := filepath.Join(defaultDir, "zotero.sqlite")
+	if err := os.WriteFile(sqlitePath, []byte("sqlite"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reader, err := NewLocalReader(config.Config{})
+	if err != nil {
+		t.Fatalf("NewLocalReader() error = %v", err)
+	}
+	if reader.DataDir != defaultDir {
+		t.Fatalf("reader.DataDir = %q, want %q (default fallback)", reader.DataDir, defaultDir)
+	}
+}
+
+func TestFindDefaultDataDirReturnsEmptyWhenNoSQLite(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("APPDATA", t.TempDir())
+	realHome, _ := os.UserHomeDir()
+
+	result := findDefaultDataDir()
+	if result != "" && !strings.HasPrefix(result, realHome) {
+		t.Fatalf("findDefaultDataDir() = %q, want empty string (or real home fallback)", result)
+	}
+}
+
 func TestResolveAttachmentPathSupportsAttachmentsRelativeBaseDir(t *testing.T) {
 	baseDir := t.TempDir()
 	relativePath := filepath.Join("papers", "example.pdf")

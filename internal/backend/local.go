@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"sync"
 
@@ -40,7 +41,10 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 		dataDirInput = prefs.DataDir
 	}
 	if dataDirInput == "" {
-		return nil, fmt.Errorf("local mode requires data_dir")
+		dataDirInput = findDefaultDataDir()
+	}
+	if dataDirInput == "" {
+		return nil, fmt.Errorf("local mode requires data_dir (set ZOT_DATA_DIR or configure in Zotero)")
 	}
 
 	dataDir, err := filepath.Abs(dataDirInput)
@@ -601,4 +605,33 @@ func (r *LocalReader) snapshotFunc() func(string) (string, string, error) {
 		return r.createSnapshot
 	}
 	return createSQLiteSnapshot
+}
+
+func findDefaultDataDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	candidates := []string{}
+	switch runtime.GOOS {
+	case "windows":
+		candidates = []string{
+			filepath.Join(home, "Zotero"),
+		}
+	case "darwin":
+		candidates = []string{
+			filepath.Join(home, "Zotero"),
+		}
+	default:
+		candidates = []string{
+			filepath.Join(home, "Zotero"),
+		}
+	}
+	for _, c := range candidates {
+		sqlitePath := filepath.Join(c, "zotero.sqlite")
+		if _, err := os.Stat(sqlitePath); err == nil {
+			return c
+		}
+	}
+	return ""
 }

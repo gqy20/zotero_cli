@@ -6,6 +6,11 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -212,13 +217,14 @@ Options:
   --library-type TYPE   Library type: user | group
   --library-id ID       Your Zotero library numeric ID
   --api-key KEY         Zotero Web API key
-  --data-dir PATH       Zotero local data directory (required for local/hybrid)
+  --data-dir PATH       Zotero local data directory (required for local/hybrid; auto-detected if omitted)
   --pdf                 Force PyMuPDF setup after config creation
   --no-pdf              Skip PyMuPDF setup
   --check-pdf           Check PyMuPDF status without installing
 
 Provide all required flags for non-interactive mode.
 Omit flags for interactive mode with guided prompts.
+Data directory is auto-detected from Zotero prefs.js or default location when possible.
 
 Examples:
   zot init                              # Interactive guided setup
@@ -226,3 +232,47 @@ Examples:
   zot init --mode web --library-type user --library-id 123 --api-key key  # Fully non-interactive
   zot init --check-pdf                   # Check PyMuPDF installation status
 `
+
+func discoverDataDir() string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+	prefsDir := os.Getenv("APPDATA")
+	if prefsDir == "" {
+		return ""
+	}
+	pattern := filepath.Join(prefsDir, "Zotero", "Zotero", "Profiles", "*", "prefs.js")
+	matches, err := filepath.Glob(pattern)
+	if err != nil || len(matches) == 0 {
+		return ""
+	}
+	for _, p := range matches {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		re := regexp.MustCompile(`^user_pref\("extensions\.zotero\.dataDir",\s*(.+)\);$`)
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			m := re.FindStringSubmatch(line)
+			if len(m) == 2 {
+				unquoted, err := strconv.Unquote(strings.TrimSpace(m[1]))
+				if err == nil && unquoted != "" {
+					sqlitePath := filepath.Join(unquoted, "zotero.sqlite")
+					if _, err := os.Stat(sqlitePath); err == nil {
+						return unquoted
+					}
+				}
+			}
+		}
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	defaultDir := filepath.Join(home, "Zotero")
+	if _, err := os.Stat(filepath.Join(defaultDir, "zotero.sqlite")); err == nil {
+		return defaultDir
+	}
+	return ""
+}

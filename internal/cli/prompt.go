@@ -69,14 +69,27 @@ func (c *CLI) promptInitSetup(cfg config.Config, provided map[string]bool, reade
 
 	if cfg.Mode == "local" || cfg.Mode == "hybrid" {
 		if !provided["data_dir"] {
-			dataDir, err := c.promptRequired(reader, "Zotero data directory: ", func(value string) error {
-				if strings.TrimSpace(value) == "" {
-					return fmt.Errorf("cannot be empty in local/hybrid mode")
+			autoDir := discoverDataDir()
+			var dataDir string
+			var err error
+			if autoDir != "" {
+				dataDir, err = c.promptWithDefault(reader, fmt.Sprintf("Zotero data directory [%s]: ", autoDir))
+				if err != nil {
+					return config.Config{}, err
 				}
-				return nil
-			})
-			if err != nil {
-				return config.Config{}, err
+				if dataDir == "" {
+					dataDir = autoDir
+				}
+			} else {
+				dataDir, err = c.promptRequired(reader, "Zotero data directory: ", func(value string) error {
+					if strings.TrimSpace(value) == "" {
+						return fmt.Errorf("cannot be empty in local/hybrid mode")
+					}
+					return nil
+				})
+				if err != nil {
+					return config.Config{}, err
+				}
 			}
 			cfg.DataDir = dataDir
 		}

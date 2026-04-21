@@ -57,6 +57,11 @@ func resolveZoteroExePath(cfg config.Config) {
 		zoteroResolved = true
 		return
 	}
+	if path := findFromStartMenu(); path != "" {
+		zoteroExePath = path
+		zoteroResolved = true
+		return
+	}
 	if path := findFromDataDir(cfg); path != "" {
 		zoteroExePath = path
 		zoteroResolved = true
@@ -73,49 +78,39 @@ func findFromRegistry() string {
 	if runtime.GOOS != "windows" {
 		return ""
 	}
-	uninstallPaths := []string{
-		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`,
-		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`,
-		`HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall`,
+	cmdKey := `HKLM\SOFTWARE\Classes\zotero\shell\open\command`
+	out, err := exec.Command("reg", "query", cmdKey, "/ve").Output()
+	if err != nil {
+		return ""
 	}
-	for _, base := range uninstallPaths {
-		if path := searchUninstallKey(base); path != "" {
-			return path
-		}
+	raw := parseRegValue(out)
+	if raw == "" {
+		return ""
+	}
+	exePath := extractExeFromCommand(raw)
+	if fileExists(exePath) != "" {
+		return exePath
 	}
 	return ""
 }
 
-func searchUninstallKey(base string) string {
-	out, err := exec.Command("reg", "query", base).Output()
-	if err != nil {
+func extractExeFromCommand(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if len(raw) < 2 {
 		return ""
 	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if !strings.Contains(line, "Zotero") || !strings.HasPrefix(base+"\\", line) {
-			continue
+	if raw[0] == '"' {
+		end := strings.Index(raw[1:], `"`)
+		if end < 0 {
+			return ""
 		}
-		subkey := line
-		locOut, err := exec.Command("reg", "query", subkey, "/v", "InstallLocation").Output()
-		if err != nil {
-			continue
-		}
-		dir := parseRegValue(locOut)
-		if dir == "" {
-			continue
-		}
-		for _, candidate := range []string{
-			filepath.Join(dir, "zotero.exe"),
-			filepath.Join(dir, "Zotero", "zotero.exe"),
-		} {
-			if fileExists(candidate) != "" {
-				return candidate
-			}
-		}
+		return raw[1 : end+1]
 	}
-	return ""
+	fields := strings.Fields(raw)
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
 }
 
 func parseRegValue(out []byte) string {
@@ -143,6 +138,58 @@ func findFromDataDir(cfg config.Config) string {
 		}
 	}
 	return ""
+}
+
+func findFromStartMenu() string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+	dirs := []string{
+		filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs"),
+		filepath.Join(os.Getenv("ProgramData"), "Microsoft", "Windows", "Start Menu", "Programs"),
+	}
+	for _, dir := range dirs {
+		if path := scanStartMenuDir(dir); path != "" {
+			return path
+		}
+	}
+	return ""
+}
+
+func scanStartMenuDir(dir string) string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	for _, entry := range entries {
+		name := strings.ToLower(entry.Name())
+		if !strings.Contains(name, "zotero") {
+			continue
+		}
+		if entry.IsDir() {
+			if sub := scanStartMenuDir(filepath.Join(dir, entry.Name())); sub != "" {
+				return sub
+			}
+			continue
+		}
+		if !strings.HasSuffix(name, ".lnk") {
+			continue
+		}
+		lnkPath := filepath.Join(dir, entry.Name())
+		if target := resolveShortcut(lnkPath); target != "" && fileExists(target) != "" {
+			return target
+		}
+	}
+	return ""
+}
+
+func resolveShortcut(lnkPath string) string {
+	psCmd := fmt.Sprintf("(New-Object -ComObject WScript.Shell).CreateShortcut('%s').TargetPath", lnkPath)
+	out, err := exec.Command("powershell", "-NoProfile", "-Command", psCmd).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func findFromPATH() string {
