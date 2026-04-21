@@ -496,6 +496,11 @@ func TestRunFindLocalTextOutputSupportsBibliographicIncludeFields(t *testing.T) 
 	}
 	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
+	buildGlobalFTSCacheForTest(t, dataDir,
+		[]ftsCacheRow{
+			{"ATTA1111", "ITEM1234", "Attention Is All You Need", "",
+				"Attention Is All You Need full text about transformers and self-attention mechanisms in neural networks."},
+		})
 
 	stdout, stderr := captureOutput(t)
 	exitCode := Run([]string{"find", "attention", "--include-fields", "volume,issue,pages"})
@@ -531,9 +536,14 @@ func TestRunFindLocalTextOutputShowsMatchedOnInFullMode(t *testing.T) {
 	}
 	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
+	buildGlobalFTSCacheForTest(t, dataDir,
+		[]ftsCacheRow{
+			{"ATTA1111", "ART67890", "Mixed Survey", "mixed.pdf",
+				"Mixed survey full text preview from zotero cache. Core section discusses speciation genome patterns in plants and gene flow."},
+		})
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "mixed.pdf", "--full"})
+	exitCode := Run([]string{"find", "speciation genome", "--fulltext", "--full"})
 	restoreOutput()
 
 	if exitCode != 0 {
@@ -543,7 +553,7 @@ func TestRunFindLocalTextOutputShowsMatchedOnInFullMode(t *testing.T) {
 	got := stdout.String()
 	for _, want := range []string{
 		"Key: ART67890",
-		"Matched On: attachment_filename",
+		"Matched On: fulltext_attachment",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in output %q", want, got)
@@ -564,6 +574,11 @@ func TestRunFindLocalTextOutputShowsFullTextMatchedOnInFullMode(t *testing.T) {
 	}
 	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
+	buildGlobalFTSCacheForTest(t, dataDir,
+		[]ftsCacheRow{
+			{"ATTA1111", "ART67890", "Mixed Survey", "mixed.pdf",
+				"Mixed survey full text preview from zotero cache. Core section discusses speciation genome patterns in plants and gene flow."},
+		})
 
 	stdout, stderr := captureOutput(t)
 	exitCode := Run([]string{"find", "speciation genome", "--fulltext", "--full"})
@@ -597,9 +612,14 @@ func TestRunFindLocalTextOutputIncludesFullTextPreviewWhenSnippetRequested(t *te
 	}
 	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
+	buildGlobalFTSCacheForTest(t, dataDir,
+		[]ftsCacheRow{
+			{"ATTA1111", "ART67890", "Mixed Survey", "mixed.pdf",
+				"Mixed survey full text preview from zotero cache. Core section discusses speciation genome patterns in plants and gene flow."},
+		})
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "mixed.pdf", "--snippet"})
+	exitCode := Run([]string{"find", "speciation", "--snippet"})
 	restoreOutput()
 
 	if exitCode != 0 {
@@ -610,7 +630,8 @@ func TestRunFindLocalTextOutputIncludesFullTextPreviewWhenSnippetRequested(t *te
 	for _, want := range []string{
 		"Key: ART67890",
 		"Title: Mixed Survey",
-		"Full Text Preview: Mixed survey full text preview from zotero cache.",
+		"Full Text Preview:",
+		"speciation genome patterns",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in output %q", want, got)

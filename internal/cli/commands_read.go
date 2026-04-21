@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"zotero_cli/internal/backend"
@@ -44,9 +46,15 @@ func (c *CLI) runFind(args []string) int {
 		return 2
 	}
 
-	_, reader, exitCode := c.loadReader()
+	cfg, reader, exitCode := c.loadReader()
 	if exitCode != 0 {
 		return exitCode
+	}
+
+	if !opts.FullText && cfg.Mode != "web" {
+		if hasFullTextData(reader) {
+			opts.FullText = true
+		}
 	}
 
 	requestedIncludeFields := append([]string(nil), opts.IncludeFields...)
@@ -387,6 +395,19 @@ func (c *CLI) consumeReaderReadMetadata(reader backend.Reader) backend.ReadMetad
 		return backend.ReadMetadata{}
 	}
 	return reporter.ConsumeReadMetadata()
+}
+
+func hasFullTextData(reader backend.Reader) bool {
+	lr, ok := reader.(*backend.LocalReader)
+	if !ok {
+		return false
+	}
+	indexPath := filepath.Join(lr.FullTextCacheDir, "index.sqlite")
+	info, err := os.Stat(indexPath)
+	if err != nil {
+		return false
+	}
+	return info.Size() > 4096
 }
 
 func (c *CLI) warnIfSnapshotRead(readMeta backend.ReadMetadata) {

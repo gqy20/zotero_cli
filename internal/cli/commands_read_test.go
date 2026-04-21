@@ -653,6 +653,11 @@ func TestRunFindLocalJSONMatchesFullTextAttachmentTerms(t *testing.T) {
 	}
 	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
+	buildGlobalFTSCacheForTest(t, dataDir,
+		[]ftsCacheRow{
+			{"ATTA1111", "ART67890", "Mixed Survey", "",
+				"Mixed survey full text preview from zotero cache. Core section discusses speciation genome patterns in plants and gene flow."},
+		})
 
 	stdout, stderr := captureOutput(t)
 	exitCode := Run([]string{"find", "speciation genome", "--fulltext", "--json"})
@@ -742,6 +747,11 @@ func TestRunFindLocalJSONUsesMatchedSnippetForFullTextQuery(t *testing.T) {
 	}
 	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
+	buildGlobalFTSCacheForTest(t, dataDir,
+		[]ftsCacheRow{
+			{"ATTA1111", "ART67890", "Mixed Survey", "",
+				"Mixed survey full text preview from zotero cache. Core section discusses speciation genome patterns in plants and gene flow."},
+		})
 
 	stdout, stderr := captureOutput(t)
 	exitCode := Run([]string{"find", "speciation genome", "--fulltext", "--snippet", "--json"})
@@ -834,6 +844,13 @@ func TestRunFindLocalJSONSupportsFullTextAnyAndPrefixMatching(t *testing.T) {
 	}
 	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
+	buildGlobalFTSCacheForTest(t, dataDir,
+		[]ftsCacheRow{
+			{"ATTA1111", "ART67890", "Mixed Survey", "",
+				"Mixed survey full text preview from zotero cache. Core section discusses speciation genome patterns in plants and gene flow."},
+			{"ATTB2222", "ARTFULL2", "Prefix Match Article", "",
+				"Prefix Match Article discusses genomic species diversity and prefix-based search patterns."},
+		})
 
 	stdout, stderr := captureOutput(t)
 	exitCode := Run([]string{"find", "specia genom", "--fulltext", "--fulltext-any", "--json"})
@@ -1958,14 +1975,6 @@ func buildLocalFindFixture(t *testing.T, dataDir string, sqlitePath string, stor
 	if err := os.WriteFile(filepath.Join(attachmentDir, "prefix.pdf"), []byte("pdf"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-
-	buildGlobalFTSCacheForTest(t, dataDir,
-		[]ftsCacheRow{
-			{"ATTA1111", "ART67890", "Mixed Survey", "",
-				"Mixed survey full text preview from zotero cache. Core section discusses speciation genome patterns in plants and gene flow."},
-			{"ATTB2222", "ARTFULL2", "Prefix Match Article", "",
-				"Prefix Match Article discusses genomic species diversity and prefix-based search patterns."},
-		})
 }
 
 type ftsCacheRow struct {
