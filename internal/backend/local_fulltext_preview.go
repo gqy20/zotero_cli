@@ -268,9 +268,6 @@ func (r *LocalReader) loadFullTextDocumentForAttachment(item domain.Item, attach
 	}
 	if ok && doc.Text != "" {
 		doc.Text = normalizeFullTextText(doc.Text)
-		if err := cache.syncIndex(doc); err != nil {
-			return FullTextDocument{}, false, err
-		}
 		doc.Meta.ParentItemKey = firstNonEmptyString(doc.Meta.ParentItemKey, item.Key)
 		doc.CacheHit = true
 		return doc, true, nil
