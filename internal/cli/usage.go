@@ -56,8 +56,19 @@ Examples:
 	usageUpdateSearch         = "usage: zot update-search <search-key> (--data JSON | --from-file PATH) [--if-unmodified-since-version N] [--json]"
 	usageDeleteSearch         = "usage: zot delete-search <search-key> --if-unmodified-since-version N [--json]"
 	usageIndex                = "usage: zot index build [--force] [--workers N] [--json]"
-	usageAnnotate             = "usage: zot annotate <item-key> (--text TEXT | --page N (--rect x0,y0,x1,y2 | --point x,y)) [--color COLOR] [--comment TEXT] [--type highlight|underline|note] [--json]"
-	usageOpen                 = "usage: zot open <item-key> [--page N]"
-	usageSelect               = "usage: zot select <item-key>"
-	usageAnnotations          = "usage: zot annotations <item-key> [--json] [--clear] [--page N] [--type highlight|note|underline]"
+	usageOverview             = `usage: zot overview [--json]
+
+One-shot library overview for agents. Returns stats, top collections,
+top tags, recent items, and FTS index status in a single call.
+
+Examples:
+  zot overview                          # Text summary
+  zot overview --json                     # Full structured data for agents
+
+This command is designed for AI agents that need a quick library
+snapshot without making multiple API calls.`
+	usageAnnotate    = "usage: zot annotate <item-key> (--text TEXT | --page N (--rect x0,y0,x1,y2 | --point x,y)) [--color COLOR] [--comment TEXT] [--type highlight|underline|note] [--json]"
+	usageOpen        = "usage: zot open <item-key> [--page N]"
+	usageSelect      = "usage: zot select <item-key>"
+	usageAnnotations = "usage: zot annotations <item-key> [--json] [--clear] [--page N] [--type highlight|note|underline]"
 )

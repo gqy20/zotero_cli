@@ -264,8 +264,33 @@ zot relate KEY [--json]
 | `deleted` | 已删除对象 key |
 | `stats` | 库统计（条目/收藏夹/搜索数） |
 | `versions <type> --since N` | 版本变更列表（`items` / `collections` / `searches` / `items-top`） |
+| **`overview`** | **一站式库概览（统计 + 收藏夹 + 标签 + 最近条目 + 索引状态）** |
 
 用法：`zot collections [--limit N] [--json]`、`zot notes [--query QUERY] [--limit N] [--json]`
+
+### `overview` — 一站式库概览
+
+> 为 AI Agent 设计的发现命令，一次调用返回库的全貌快照，无需多次 API 请求。
+
+```bash
+zot overview                        # 文本摘要
+zot overview --json                  # 完整结构化数据
+```
+
+**文本输出**包含：
+- 库信息（type:id）、条目/收藏夹/搜索数、版本号
+- Top 5 收藏夹（名称 + 条目数）
+- Top 10 标签（名称 + 条目数）
+- 最近 5 条条目（key + 标题 + 作者）
+- FTS 索引状态（`unavailable` / `available` / `not_configured` / `data_dir_missing`）
+
+**JSON 输出** (`--json`) 额外包含：
+- `data.stats` — LibraryStats 对象
+- `data.collections` — 收藏夹列表（最多 5 个）
+- `data.tags` — 标签列表（最多 10 个）
+- `data.recent_items` — 最近条目（最多 5 个）
+- `meta.index_status` — 索引状态
+- `meta.read_source` 等 — 读取元数据
 
 ### `notes` 过滤
 

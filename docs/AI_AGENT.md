@@ -145,6 +145,14 @@ go run .\cmd\zot config validate
 
 ## 常见工作流
 
+### 快速库概览（Agent 入口）
+
+```powershell
+.\zot.exe overview --json          # 一次获取统计、收藏夹、标签、最近条目
+```
+
+返回 `data.stats` / `data.collections` / `data.tags` / `data.recent_items`，无需多次 API 调用。适合作为 agent 首次连接时的发现命令。
+
 ### 查找并查看详情
 
 ```powershell
@@ -297,12 +305,28 @@ go run .\cmd\zot config validate
 - 配置缺失
   - 运行 `zot init`
 
+### 结构化错误输出
+
+设置 `ZOT_JSON_ERRORS=1` 后，所有错误以 JSON 格式输出到 stdout（而非 stderr 纯文本），便于 agent 可靠解析：
+
+```json
+{"ok": false, "command": "show", "data": "item not found: ABCD", "code": 1}
+```
+
+- `ok`: 始终 `false`
+- `command`: 出错的命令名
+- `data`: 错误消息字符串
+- `code`: 退出码（`1`=运行时错误, `2`=用法错误, `3`=配置错误）
+
+未设置时保持原有纯文本行为（stderr 输出 + 非零退出码）。
+
 ## 优先级建议
 
 如果你是一个通用 agent，不确定该用哪条命令：
 
-1. **读优先**：`find` / `show` / `relate` / `stats` / `notes`
-2. **PDF 读取**：`extract-text` / `annotations` / `open`
-3. **导出**：`export --collection` 或 `export --item-key`
-4. **变更次之**：`create-*` / `update-*` / `add-tag` / `remove-tag` / `annotate`
+1. **发现**：`overview --json`（一站式库快照）
+2. **读优先**：`find` / `show` / `relate` / `stats` / `notes`
+3. **PDF 读取**：`extract-text` / `annotations` / `open`
+4. **导出**：`export --collection` 或 `export --item-key`
+5. **变更次之**：`create-*` / `update-*` / `add-tag` / `remove-tag` / `annotate`
 5. **删除最后**：只有在用户明确要求时才考虑

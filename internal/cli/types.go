@@ -1,5 +1,7 @@
 package cli
 
+import "fmt"
+
 // Exit codes — 统一规范，供 AI Agent 解析命令执行结果
 const (
 	ExitOK     = 0 // 成功
@@ -19,4 +21,19 @@ type jsonResponse struct {
 	Command string         `json:"command"`
 	Data    any            `json:"data"`
 	Meta    map[string]any `json:"meta,omitempty"`
+	Code    int            `json:"code,omitempty"`
+}
+
+func (c *CLI) jsonError(err error, command string) int {
+	code := ExitError
+	var msg string
+	if e, ok := err.(interface{ Code() int }); ok {
+		code = e.Code()
+	}
+	msg = err.Error()
+	if c.jsonErrorsEnabled() {
+		return c.writeJSON(jsonResponse{OK: false, Command: command, Data: msg, Code: code})
+	}
+	fmt.Fprintf(c.stderr, "error: %s\n", msg)
+	return code
 }

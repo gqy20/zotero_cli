@@ -93,6 +93,8 @@ func (c *CLI) Run(args []string) int {
 		return c.runVersions(args[1:])
 	case "schema":
 		return c.runSchema(args[1:])
+	case "overview":
+		return c.runOverview(args[1:])
 	case "key-info":
 		return c.runKeyInfo(args[1:])
 	case "groups":
@@ -168,6 +170,7 @@ Commands:
   stats          Show library item, collection, and search counts
   versions       Show changed object versions since a library version
   schema         Introspect Zotero metadata schema (types, fields, templates)
+  overview       One-shot library overview (stats, collections, tags, recent items)
   key-info       Show the owner and privileges for an API key
   groups        List groups accessible to a user
   trash         List items currently in the trash
@@ -218,8 +221,11 @@ func (c *CLI) printConfigUsage() {
 }
 
 func (c *CLI) printErr(err error) int {
-	fmt.Fprintln(c.stderr, "error:", err)
-	return 1
+	return c.jsonError(err, "")
+}
+
+func (c *CLI) jsonErrorsEnabled() bool {
+	return os.Getenv("ZOT_JSON_ERRORS") == "1"
 }
 
 func isHelpOnly(args []string) bool {

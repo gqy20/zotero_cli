@@ -1,6 +1,11 @@
 package cli
 
-import "testing"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+	"testing"
+)
 
 func TestExitCodeConstants(t *testing.T) {
 	tests := []struct {
@@ -64,5 +69,65 @@ func TestBoolToInt(t *testing.T) {
 	}
 	if boolToInt(false) != ExitOK {
 		t.Error("boolToInt(false) should be ExitOK")
+	}
+}
+
+func TestJSONErrorsEnabledOutputsStructuredError(t *testing.T) {
+	t.Setenv("ZOT_JSON_ERRORS", "1")
+
+	stdout, stderr := captureOutput(t)
+	cli := New()
+	cli.stdout = stdout
+	cli.stderr = stderr
+
+	err := fmt.Errorf("test error: item not found")
+	exitCode := cli.jsonError(err, "show")
+
+	// JSON mode always returns exit 0; error details are in the JSON payload
+	if exitCode != ExitOK {
+		t.Fatalf("expected exit code %d (JSON mode), got %d", ExitOK, exitCode)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+
+	if got["ok"] != false {
+		t.Fatalf("expected ok=false, got: %#v", got["ok"])
+	}
+	if got["command"] != "show" {
+		t.Fatalf("expected command=show, got: %#v", got["command"])
+	}
+	if _, ok := got["code"]; !ok {
+		t.Fatal("expected 'code' field in JSON error response")
+	}
+}
+
+func TestJSONErrorsDisabledOutputsPlainText(t *testing.T) {
+	t.Setenv("ZOT_JSON_ERRORS", "0")
+
+	stdout, stderr := captureOutput(t)
+	cli := New()
+	cli.stdout = stdout
+	cli.stderr = stderr
+
+	err := fmt.Errorf("test error: something failed")
+	exitCode := cli.jsonError(err, "find")
+
+	if exitCode != ExitError {
+		t.Fatalf("expected exit code %d, got %d", ExitError, exitCode)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "error:") {
+		t.Fatalf("expected plain text error prefix, got: %q", got)
+	}
+	if !strings.Contains(got, "something failed") {
+		t.Fatalf("expected error message in output, got: %q", got)
+	}
+
+	if stdout.Len() > 0 {
+		t.Fatalf("expected no stdout for plain text mode, got: %q", stdout.String())
 	}
 }

@@ -10,18 +10,18 @@
 - **统一 `zot init` 入口**：新增一站式初始化命令，替代分散的 `config init` + `setup pdf-extract` 流程。交互式仅提示关键字段（mode / type / id / key），支持 `--mode` / `--api-key` / `--library-id` 等标志实现非交互模式。local/hybrid 模式可选一步安装 PyMuPDF（`--pdf`）。
 - **`zot init --check-pdf`**：诊断 PyMuPDF 安装状态（原 `setup pdf-extract --check` 功能迁移）。
 - **`config init` 重定向**：运行时提示用户改用 `zot init`，不再执行旧版 7 问题交互流程。已删除 `promptConfigSetup()` 和 `runConfigInit()` 旧代码。
+- **`zot overview` 发现命令**：一次性返回库全貌快照（统计 + Top 收藏夹 + Top 标签 + 最近条目 + FTS 索引状态），专为 AI Agent 设计。文本模式输出人类可读摘要，`--json` 返回完整结构化数据含 `meta.index_status` 和 `meta.read_source`。降低 agent 使用门槛，无需多次 API 调用即可获得库概览。
+- **结构化 JSON 错误输出**：设置 `ZOT_JSON_ERRORS=1` 后所有命令错误以 `{ "ok": false, "command": "...", "data": "error msg", "code": N }` JSON 格式输出到 stdout，便于 agent 可靠解析。未设置时保持原有 stderr 纯文本行为。`jsonResponse` 新增 `Code` 字段，`printErr` 统一走 `jsonError` 路径。
 
 ### 变更
 - **`zot schema` 元数据子命令**：将 6 个碎片化的 schema 内省命令（item-types / item-fields / creator-fields / item-type-fields / item-type-creator-types / item-template）合并为 `zot schema <sub>` 统一入口（types / fields / creator-types / fields-for / creator-types-for / template）。旧命令名已移除，直接报 unknown command。
 - **移除复数条目命令**：删除 `create-items` / `update-items` / `delete-items`，统一使用单数形式 `create-item` / `update-item` / `delete-item`。消除智能体的选择困惑，与 collection/search/tag 命令风格保持一致。同时清理了 `parseWriteBatchArgs` 解析函数和 `errEmptyBatchPayload` 错误函数。
 - **命令表面精简**：`setup pdf-extract` 安装模式重定向到 `zot init --pdf`；`--check` 诊断模式保留在 `zot setup pdf-extract --check` 和 `zot init --check-pdf` 双入口；`setup` 从主命令路由移除。
-- **文档全面同步**：README、AI_AGENT、commands、MVP、architecture、CONTRIBUTING、error 示例、`.claude/` 和 `.codex/` skill 文件中全部 `config init` / `setup pdf-extract` 引用更新为 `zot init` / `zot init --pdf`；commands 写操作章节更新为仅保留单数形式。
+- **文档全面同步**：README、AI_AGENT、commands、MVP、architecture、CONTRIBUTING、error 示例、`.claude/` 和 `.codex/` skill 文件中全部 `config init` / `setup pdf-extract` 引用更新为 `zot init` / `zot init --pdf`；commands 写操作章节更新为仅保留单数形式；新增 overview 命令文档和 JSON 错误输出说明。
 - **净减代码 ~250 行**：删除 promptConfigSetup()（74 行）、runConfigInit() 含 --example（49 行）、performPdfExtractSetup()（24 行）、3 个复数处理函数（~90 行）、parseWriteBatchArgs（~65 行）及对应 usage 常量/error 函数。
 
 ### 后续改进计划（Agent 可用性增强）
 以下为规划中的改进方向，按优先级排序：
-1. **结构化错误输出**：支持 `--json` / `ZOT_JSON_ERRORS=1` 让错误以 `{ "ok": false, "error": "...", "code": N }` JSON 格式输出，便于 agent 可靠解析。
-2. **`zot overview` 发现命令**：一次性返回 library 全貌（总条目数、热门标签、集合树、最近添加、索引状态），降低 agent 使用门槛。
 3. **写操作 `--dry-run` 模式**：所有写命令支持预览将要执行的操作而不实际修改数据，提升安全性。
 4. **`find` → `export` 管道连接**：`export` 新增 `--from-find` 参数，内部执行搜索后直接导出，无需手动传递 key 列表。
 5. **图片解析与分析（`extract-images`）**：从 PDF 中提取图片资源（图表、示意图、照片等），支持按页码/尺寸过滤，输出图片文件路径或 base64 内嵌 JSON。为 agent 提供视觉内容理解能力，配合多模态模型实现「读图→分析→总结」的科研工作流（如自动解读论文中的实验数据图、流程图、分子结构图）。

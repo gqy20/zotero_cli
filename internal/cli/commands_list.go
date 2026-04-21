@@ -3,8 +3,10 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
+	"zotero_cli/internal/backend"
 	"zotero_cli/internal/domain"
 	"zotero_cli/internal/zoteroapi"
 )
@@ -304,6 +306,130 @@ func (c *CLI) runVersions(args []string) int {
 		fmt.Fprintf(c.stdout, "%-10s  %d\n", key, version)
 	}
 	return 0
+}
+func (c *CLI) runOverview(args []string) int {
+	if isHelpOnly(args) {
+		return c.printCommandUsage(usageOverview)
+	}
+
+	jsonOutput, ok := c.parseJSONOnlyArgs(args, usageOverview)
+	if !ok {
+		return 2
+	}
+
+	cfg, reader, exitCode := c.loadReader()
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	stats, err := reader.GetLibraryStats(context.Background())
+	if err != nil {
+		return c.jsonError(err, "overview")
+	}
+
+	// Top collections via client (Reader interface has no ListCollections)
+	var collections []zoteroapi.Collection
+	_, client, clientExit := c.loadClient()
+	if clientExit == 0 {
+		if colls, collErr := client.ListCollections(context.Background()); collErr == nil {
+			collections = colls
+			if len(collections) > 5 {
+				collections = collections[:5]
+			}
+		}
+	}
+
+	// Tags summary (no limit param on Reader interface; truncate after fetch)
+	var tags []backend.Tag
+	if tagList, tagErr := reader.ListTags(context.Background()); tagErr == nil {
+		tags = tagList
+		if len(tags) > 10 {
+			tags = tags[:10]
+		}
+	}
+
+	// Recent items (limit 5 for overview)
+	var items []domain.Item
+	if itemList, itemErr := reader.FindItems(context.Background(), backend.FindOptions{Limit: 5}); itemErr == nil {
+		items = itemList
+	}
+
+	// Index status — simple mode-based check
+	indexStatus := "unavailable"
+	if cfg.Mode == "local" || cfg.Mode == "hybrid" {
+		if cfg.DataDir != "" {
+			if _, statErr := os.Stat(cfg.DataDir); statErr == nil {
+				indexStatus = "available"
+			} else {
+				indexStatus = "data_dir_missing"
+			}
+		} else {
+			indexStatus = "not_configured"
+		}
+	}
+
+	if jsonOutput {
+		meta := map[string]any{
+			"mode":               stats.LibraryType,
+			"library_id":         stats.LibraryID,
+			"total_items":        stats.TotalItems,
+			"collections_count":  len(collections),
+			"tags_count":         len(tags),
+			"recent_items_count": len(items),
+			"index_status":       indexStatus,
+		}
+		c.appendReadMetadata(meta, reader)
+		return c.writeJSON(jsonResponse{
+			OK: true, Command: "overview",
+			Data: map[string]any{
+				"stats":        stats,
+				"collections":  collections,
+				"tags":         tags,
+				"recent_items": items,
+			},
+			Meta: meta,
+		})
+	}
+
+	// Text output
+	fmt.Fprintf(c.stdout, "Library: %s:%s\n", stats.LibraryType, stats.LibraryID)
+	fmt.Fprintf(c.stdout, "Items: %d | Collections: %d | Searches: %d\n", stats.TotalItems, stats.TotalCollections, stats.TotalSearches)
+	if stats.LastLibraryVersion > 0 {
+		fmt.Fprintf(c.stdout, "Version: %d\n", stats.LastLibraryVersion)
+	}
+	fmt.Fprintln(c.stdout)
+
+	if len(collections) > 0 {
+		fmt.Fprintln(c.stdout, "Top Collections:")
+		for _, col := range collections {
+			fmt.Fprintf(c.stdout, "  %s (%d items)\n", col.Name, col.NumItems)
+		}
+	}
+
+	if len(tags) > 0 {
+		fmt.Fprintln(c.stdout, "Top Tags:")
+		for _, tag := range tags {
+			fmt.Fprintf(c.stdout, "  %s (%d items)\n", tag.Name, tag.NumItems)
+		}
+	}
+
+	if len(items) > 0 {
+		fmt.Fprintln(c.stdout, "Recent Items:")
+		for _, item := range items {
+			creators := shortCreators(item.Creators)
+			fmt.Fprintf(c.stdout, "  %-10s  %-40s  %s\n", item.Key, truncate(item.Title, 38), creators)
+		}
+	}
+
+	fmt.Fprintf(c.stdout, "Index: %s\n", indexStatus)
+	return 0
+}
+
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max-3] + "..."
 }
 
 func (c *CLI) runSchema(args []string) int {
