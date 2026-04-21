@@ -110,6 +110,10 @@ func (r *WebReader) ListCollections(ctx context.Context) ([]Collection, error) {
 	return collections, nil
 }
 
+func (r *WebReader) GetAttachmentFile(ctx context.Context, key string) (string, string, error) {
+	return "", "", newUnsupportedFeatureErrorWithHint("web", "attachment file", "set ZOT_MODE=local or ZOT_MODE=hybrid to use this feature")
+}
+
 func mapItems(items []zoteroapi.Item) []domain.Item {
 	out := make([]domain.Item, 0, len(items))
 	for _, item := range items {

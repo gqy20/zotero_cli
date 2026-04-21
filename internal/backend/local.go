@@ -354,6 +354,36 @@ func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, err
 	return item, nil
 }
 
+func (r *LocalReader) GetAttachmentFile(ctx context.Context, key string) (string, string, error) {
+	var contentType, zoteroPath, filename string
+	err := r.withReadableDB(ctx, func(db *sql.DB) error {
+		row := db.QueryRowContext(ctx, `
+			SELECT COALESCE(ia.contentType, ''), COALESCE(ia.path, ''),
+			       COALESCE(MAX(CASE WHEN f.fieldName = 'filename' THEN v.value END), '')
+			FROM itemAttachments ia
+			JOIN items i ON i.itemID = ia.itemID
+			LEFT JOIN itemData d ON d.itemID = i.itemID
+			LEFT JOIN itemDataValues v ON v.valueID = d.valueID
+			LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
+			WHERE i.key = ?
+			GROUP BY ia.contentType, ia.path
+		`, key)
+		err := row.Scan(&contentType, &zoteroPath, &filename)
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("attachment not found: %s", key)
+		}
+		return err
+	})
+	if err != nil {
+		return "", "", err
+	}
+	resolved, ok := r.resolveAttachmentPath(key, zoteroPath, filename)
+	if !ok {
+		return "", "", fmt.Errorf("attachment file not resolved: %s", key)
+	}
+	return resolved, contentType, nil
+}
+
 func (r *LocalReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
 	var relations []domain.Relation
 	err := r.withReadableDB(ctx, func(db *sql.DB) error {

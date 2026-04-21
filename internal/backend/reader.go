@@ -82,6 +82,7 @@ type Reader interface {
 	ListNotes(ctx context.Context) ([]domain.Note, error)
 	ListTags(ctx context.Context) ([]Tag, error)
 	ListCollections(ctx context.Context) ([]Collection, error)
+	GetAttachmentFile(ctx context.Context, key string) (filePath string, contentType string, err error)
 }
 
 type readMetadataReporter interface {
@@ -210,6 +211,13 @@ func (r *HybridReader) ListCollections(ctx context.Context) ([]Collection, error
 			return reader.ListCollections(ctx)
 		},
 	)
+}
+
+func (r *HybridReader) GetAttachmentFile(ctx context.Context, key string) (string, string, error) {
+	if r.local != nil {
+		return r.local.GetAttachmentFile(ctx, key)
+	}
+	return "", "", fmt.Errorf("no local reader available")
 }
 
 func readWithFallbackUsingPolicy[T any](r *HybridReader, shouldFallback func(error) bool, read func(Reader) (T, error)) (T, error) {

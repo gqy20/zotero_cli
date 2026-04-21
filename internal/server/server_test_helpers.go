@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"io"
 	"net/http"
 
 	"zotero_cli/internal/backend"
@@ -44,13 +45,27 @@ func (m *mockReader) ListCollections(ctx context.Context) ([]backend.Collection,
 	return []backend.Collection{}, nil
 }
 
+func (m *mockReader) GetAttachmentFile(ctx context.Context, key string) (string, string, error) {
+	return "", "", nil
+}
+
+// NewMockServer creates a basic test server without logging middleware.
 func NewMockServer() http.Handler {
 	mux := http.NewServeMux()
 	h := NewHandler(&mockReader{})
 	h.RegisterRoutes(mux)
-	return corsMiddleware(recoverMiddleware(mux))
+	return corsMiddleware(recoverMiddleware(DefaultLogger())(mux))
 }
 
+// NewMockServerWithReader returns a server with request ID + structured logging.
 func NewMockServerWithReader() http.Handler {
-	return NewMockServer()
+	logger := NewLogger(io.Discard, "info")
+	mux := http.NewServeMux()
+	h := NewHandler(&mockReader{})
+	h.RegisterRoutes(mux)
+	return corsMiddleware(
+		requestIDMiddleware(logger)(
+			recoverMiddleware(logger)(mux),
+		),
+	)
 }

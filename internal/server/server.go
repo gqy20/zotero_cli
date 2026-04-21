@@ -3,8 +3,9 @@ package server
 import (
 	"context"
 	"fmt"
-	"log"
+	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"zotero_cli/internal/backend"
@@ -15,33 +16,42 @@ type Server struct {
 	handler *Handler
 	addr    string
 	srv     *http.Server
+	logger  *Logger
 }
 
 func NewServer(reader backend.Reader, addr string) *Server {
+	return NewServerWithLogger(reader, addr, DefaultLogger())
+}
+
+func NewServerWithLogger(reader backend.Reader, addr string, logger *Logger) *Server {
 	mux := http.NewServeMux()
 	h := NewHandler(reader)
 	h.RegisterRoutes(mux)
 	RegisterStaticRoutes(mux)
 
 	handler := corsMiddleware(
-		recoverMiddleware(
-			loggingMiddleware(mux),
+		requestIDMiddleware(logger)(
+			recoverMiddleware(logger)(
+				loggingMiddleware(logger)(mux),
+			),
 		),
 	)
 
 	return &Server{
 		handler: h,
 		addr:    addr,
+		logger:  logger,
 		srv:     &http.Server{Addr: addr, Handler: handler},
 	}
 }
 
 func (s *Server) Start() error {
-	log.Printf("zotero-web server starting on %s", s.addr)
+	s.logger.Info("server starting", "addr", s.addr)
 	return s.srv.ListenAndServe()
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.logger.Info("server shutting down")
 	return s.srv.Shutdown(ctx)
 }
 
@@ -56,11 +66,18 @@ func ServeFromConfig(cfg config.Config) (func(), error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create reader: %w", err)
 	}
+
+	logLevel := os.Getenv("ZOT_SERVER_LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "info"
+	}
+	logger := NewLogger(os.Stdout, logLevel)
 	addr := ":8080"
-	s := NewServer(reader, addr)
+	s := NewServerWithLogger(reader, addr, logger)
 	go func() {
 		if err := s.Start(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server error: %v", err)
+			logger.Error("server fatal error", "err", err)
+			os.Exit(1)
 		}
 	}()
 	shutdown := func() {
@@ -69,4 +86,18 @@ func ServeFromConfig(cfg config.Config) (func(), error) {
 		s.Shutdown(ctx)
 	}
 	return shutdown, nil
+}
+
+// NewMockServerWithCustomLog creates a test server with a custom log output.
+func NewMockServerWithCustomLog(logOutput io.Writer) http.Handler {
+	logger := NewLogger(logOutput, "debug")
+	mux := http.NewServeMux()
+	h := NewHandler(&mockReader{})
+	h.RegisterRoutes(mux)
+	handler := requestIDMiddleware(logger)(
+		recoverMiddleware(logger)(
+			loggingMiddleware(logger)(corsMiddleware(mux)),
+		),
+	)
+	return handler
 }

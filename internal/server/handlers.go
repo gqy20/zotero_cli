@@ -2,8 +2,11 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -28,6 +31,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/collections", h.getCollections)
 	mux.HandleFunc("GET /api/v1/tags", h.getTags)
 	mux.HandleFunc("GET /api/v1/notes", h.getNotes)
+	mux.HandleFunc("GET /api/v1/files/{key}", h.serveFile)
 }
 
 func (h *Handler) healthCheck(w http.ResponseWriter, r *http.Request) {
@@ -89,6 +93,25 @@ func (h *Handler) getNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, notes, Meta{})
+}
+
+func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("key")
+	filePath, contentType, err := h.reader.GetAttachmentFile(r.Context(), key)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		writeError(w, http.StatusNotFound, fmt.Errorf("file not found: %s", filePath))
+		return
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", `inline; filename="`+filepath.Base(filePath)+`"`)
+	http.ServeFile(w, r, filePath)
 }
 
 type OverviewResponse struct {

@@ -56,6 +56,10 @@ func (r stubMetadataReader) ConsumeReadMetadata() backend.ReadMetadata {
 	return r.meta
 }
 
+func (r stubMetadataReader) GetAttachmentFile(context.Context, string) (string, string, error) {
+	return "", "", nil
+}
+
 type stubLocalExportReader struct {
 	keys      []string
 	payload   []map[string]any
@@ -125,6 +129,10 @@ func (r stubLocalExportReader) ListCollections(context.Context) ([]backend.Colle
 	return nil, nil
 }
 
+func (r stubLocalExportReader) GetAttachmentFile(context.Context, string) (string, string, error) {
+	return "", "", nil
+}
+
 func (r stubLocalTextReader) GetItem(context.Context, string) (domain.Item, error) {
 	return r.item, nil
 }
@@ -167,6 +175,10 @@ func (r stubLocalTextReader) ListTags(context.Context) ([]backend.Tag, error) {
 
 func (r stubLocalTextReader) ListCollections(context.Context) ([]backend.Collection, error) {
 	return nil, nil
+}
+
+func (r stubLocalTextReader) GetAttachmentFile(context.Context, string) (string, string, error) {
+	return "", "", nil
 }
 
 func TestHoldSQLiteExclusiveLockHelper(t *testing.T) {

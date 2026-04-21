@@ -71,6 +71,10 @@ func (r stubReader) ListCollections(ctx context.Context) ([]Collection, error) {
 	return r.listCollections(ctx)
 }
 
+func (r stubReader) GetAttachmentFile(ctx context.Context, key string) (string, string, error) {
+	return "", "", nil
+}
+
 func (r stubPreviewReader) FullTextPreview(ctx context.Context, item domain.Item) (string, error) {
 	return r.fullTextPreview(ctx, item)
 }
