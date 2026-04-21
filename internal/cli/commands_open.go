@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -12,9 +13,28 @@ import (
 var zoteroExePath = ""
 
 func init() {
-	candidates := []string{
-		fileExists("C:\\Program Files\\Zotero\\zotero.exe"),
-		fileExists(os.Getenv("ProgramFiles") + "\\Zotero\\zotero.exe"),
+	var candidates []string
+	switch runtime.GOOS {
+	case "windows":
+		candidates = []string{
+			fileExists("C:\\Program Files\\Zotero\\zotero.exe"),
+			fileExists(os.Getenv("ProgramFiles") + "\\Zotero\\zotero.exe"),
+			fileExists(os.Getenv("ProgramFiles(x86)") + "\\Zotero\\zotero.exe"),
+		}
+	case "darwin":
+		candidates = []string{
+			fileExists("/Applications/Zotero.app/Contents/MacOS/zotero"),
+			fileExists(filepath.Join(os.Getenv("HOME"), "Applications", "Zotero.app", "Contents", "MacOS", "zotero")),
+		}
+	default:
+		candidates = []string{
+			fileExists("/usr/bin/zotero"),
+			fileExists("/opt/zotero/zotero"),
+			fileExists("/usr/local/bin/zotero"),
+			fileExists(filepath.Join(os.Getenv("HOME"), ".local", "share", "zotero", "zotero")),
+			fileExists("/snap/bin/zotero"),
+			fileExists("/var/lib/flatpak/exports/bin/org.zotero.Zotero"),
+		}
 	}
 	for _, c := range candidates {
 		if c != "" {
