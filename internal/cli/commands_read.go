@@ -71,6 +71,9 @@ func (c *CLI) runFind(args []string) int {
 	items = filterDefaultFindItems(items, opts)
 
 	if snippet {
+		if opts.Limit <= 0 {
+			opts.Limit = 50
+		}
 		snippeter, ok := reader.(snippetReader)
 		if !ok {
 			return c.printErr(fmt.Errorf("find --snippet requires local or hybrid mode with local data"))
