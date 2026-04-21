@@ -18,6 +18,7 @@ type stubReader struct {
 	getLibraryStats     func(context.Context) (LibraryStats, error)
 	listNotes           func(context.Context) ([]domain.Note, error)
 	listTags            func(context.Context) ([]Tag, error)
+	listCollections     func(context.Context) ([]Collection, error)
 	consumeReadMetadata func() ReadMetadata
 }
 
@@ -62,6 +63,14 @@ func (r stubReader) ListTags(ctx context.Context) ([]Tag, error) {
 	}
 	return r.listTags(ctx)
 }
+
+func (r stubReader) ListCollections(ctx context.Context) ([]Collection, error) {
+	if r.listCollections == nil {
+		return nil, nil
+	}
+	return r.listCollections(ctx)
+}
+
 func (r stubPreviewReader) FullTextPreview(ctx context.Context, item domain.Item) (string, error) {
 	return r.fullTextPreview(ctx, item)
 }

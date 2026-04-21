@@ -479,6 +479,32 @@ func (r *LocalReader) ListTags(ctx context.Context) ([]Tag, error) {
 	return tags, err
 }
 
+func (r *LocalReader) ListCollections(ctx context.Context) ([]Collection, error) {
+	var collections []Collection
+	err := r.withReadableDB(ctx, func(db *sql.DB) error {
+		rows, err := db.QueryContext(ctx, `
+			SELECT c.key, c.collectionName, COUNT(ci.itemID) as cnt
+			FROM collections c
+			LEFT JOIN collectionItems ci ON ci.collectionID = c.collectionID
+			GROUP BY c.collectionID
+			ORDER BY cnt DESC, c.collectionName
+		`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var col Collection
+			if err := rows.Scan(&col.Key, &col.Name, &col.NumItems); err != nil {
+				return err
+			}
+			collections = append(collections, col)
+		}
+		return rows.Err()
+	})
+	return collections, err
+}
+
 func (r *LocalReader) withReadableDB(_ context.Context, fn func(*sql.DB) error) error {
 	db, cleanup, err := r.openLiveDB()
 	if err == nil {

@@ -48,6 +48,10 @@ func (r stubMetadataReader) ListTags(context.Context) ([]backend.Tag, error) {
 	return nil, nil
 }
 
+func (r stubMetadataReader) ListCollections(context.Context) ([]backend.Collection, error) {
+	return nil, nil
+}
+
 func (r stubMetadataReader) ConsumeReadMetadata() backend.ReadMetadata {
 	return r.meta
 }
@@ -117,6 +121,10 @@ func (r stubLocalExportReader) ListTags(context.Context) ([]backend.Tag, error) 
 	return nil, nil
 }
 
+func (r stubLocalExportReader) ListCollections(context.Context) ([]backend.Collection, error) {
+	return nil, nil
+}
+
 func (r stubLocalTextReader) GetItem(context.Context, string) (domain.Item, error) {
 	return r.item, nil
 }
@@ -154,6 +162,10 @@ func (r stubLocalTextReader) ListNotes(context.Context) ([]domain.Note, error) {
 }
 
 func (r stubLocalTextReader) ListTags(context.Context) ([]backend.Tag, error) {
+	return nil, nil
+}
+
+func (r stubLocalTextReader) ListCollections(context.Context) ([]backend.Collection, error) {
 	return nil, nil
 }
 

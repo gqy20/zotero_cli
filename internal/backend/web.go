@@ -97,6 +97,19 @@ func (r *WebReader) ListTags(ctx context.Context) ([]Tag, error) {
 	return tags, nil
 }
 
+func (r *WebReader) ListCollections(ctx context.Context) ([]Collection, error) {
+	raw, err := r.client.ListCollections(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.lastReadMetadata = ReadMetadata{ReadSource: "web"}
+	collections := make([]Collection, 0, len(raw))
+	for _, c := range raw {
+		collections = append(collections, Collection{Key: c.Key, Name: c.Name, NumItems: c.NumItems})
+	}
+	return collections, nil
+}
+
 func mapItems(items []zoteroapi.Item) []domain.Item {
 	out := make([]domain.Item, 0, len(items))
 	for _, item := range items {

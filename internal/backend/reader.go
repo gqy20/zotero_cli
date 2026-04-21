@@ -68,6 +68,12 @@ type Tag struct {
 	NumItems int    `json:"num_items,omitempty"`
 }
 
+type Collection struct {
+	Key      string `json:"key"`
+	Name     string `json:"name"`
+	NumItems int    `json:"num_items,omitempty"`
+}
+
 type Reader interface {
 	FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error)
 	GetItem(ctx context.Context, key string) (domain.Item, error)
@@ -75,6 +81,7 @@ type Reader interface {
 	GetLibraryStats(ctx context.Context) (LibraryStats, error)
 	ListNotes(ctx context.Context) ([]domain.Note, error)
 	ListTags(ctx context.Context) ([]Tag, error)
+	ListCollections(ctx context.Context) ([]Collection, error)
 }
 
 type readMetadataReporter interface {
@@ -96,6 +103,7 @@ const (
 	readOperationGetLibraryStats readOperation = "get_library_stats"
 	readOperationListNotes       readOperation = "list_notes"
 	readOperationListTags        readOperation = "list_tags"
+	readOperationListCollections readOperation = "list_collections"
 )
 
 func NewReader(cfg config.Config, httpClient *http.Client) (Reader, error) {
@@ -193,6 +201,17 @@ func (r *HybridReader) ListTags(ctx context.Context) ([]Tag, error) {
 	)
 }
 
+func (r *HybridReader) ListCollections(ctx context.Context) ([]Collection, error) {
+	return readWithFallbackUsingPolicy(r,
+		func(err error) bool {
+			return shouldFallbackToWeb(readOperationListCollections, err)
+		},
+		func(reader Reader) ([]Collection, error) {
+			return reader.ListCollections(ctx)
+		},
+	)
+}
+
 func readWithFallbackUsingPolicy[T any](r *HybridReader, shouldFallback func(error) bool, read func(Reader) (T, error)) (T, error) {
 	var zero T
 	if r.local != nil {
@@ -262,6 +281,8 @@ func shouldFallbackToWeb(op readOperation, err error) bool {
 	case readOperationListNotes:
 		return errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
 	case readOperationListTags:
+		return errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
+	case readOperationListCollections:
 		return errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
 	case readOperationGetRelated:
 		return false

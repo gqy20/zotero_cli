@@ -323,14 +323,12 @@ func (c *CLI) runOverview(args []string) int {
 		return exitCode
 	}
 
-	_, client, clientExit := c.loadClient()
-
 	ctx := context.Background()
 
 	type result struct {
 		stats       backend.LibraryStats
 		statsErr    error
-		collections []zoteroapi.Collection
+		collections []backend.Collection
 		tags        []backend.Tag
 		items       []domain.Item
 	}
@@ -347,10 +345,8 @@ func (c *CLI) runOverview(args []string) int {
 
 	go func() {
 		defer wg.Done()
-		if clientExit == 0 && client != nil {
-			if colls, err := client.ListCollections(ctx); err == nil {
-				r.collections = colls
-			}
+		if colls, err := reader.ListCollections(ctx); err == nil {
+			r.collections = colls
 		}
 	}()
 
