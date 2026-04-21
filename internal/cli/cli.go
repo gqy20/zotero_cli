@@ -165,7 +165,6 @@ Commands:
   version        Show CLI version
   init           Initialize ~/.zot/.env (streamlined setup with mode selection)
   config path    Print config path
-  config init    Interactively create ~/.zot/.env
   config show    Show active config with masked secrets
 	config validate  Validate library_id and api_key against Zotero
 	find           Search items in the configured Zotero library
@@ -239,8 +238,6 @@ func (c *CLI) printVersion() {
 func (c *CLI) printConfigUsage() {
 	fmt.Fprint(c.stdout, `Usage:
   zot config path
-  zot config init
-  zot config init --example
   zot config show
   zot config validate
 `)

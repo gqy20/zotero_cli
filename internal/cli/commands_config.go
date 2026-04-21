@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/config"
@@ -30,7 +29,7 @@ func (c *CLI) runConfig(args []string) int {
 		cfg, path, err := config.Load()
 		if err != nil {
 			if errors.Is(err, config.ErrNotFound) {
-				fmt.Fprintf(c.stderr, "config not found; run `zot config init` first\n")
+				fmt.Fprintf(c.stderr, "config not found; run `zot init` first\n")
 				return 3
 			}
 			return c.printErr(err)
@@ -43,63 +42,14 @@ func (c *CLI) runConfig(args []string) int {
 	case "validate":
 		return c.runConfigValidate()
 	case "init":
-		return c.runConfigInit(args[1:])
+		fmt.Fprintln(c.stderr, "`zot config init` has been replaced by `zot init`")
+		fmt.Fprintln(c.stderr, "run `zot init` for streamlined setup with mode selection and optional PyMuPDF installation")
+		return 2
 	default:
 		fmt.Fprintf(c.stderr, "unknown config command: %s\n\n", args[0])
 		c.printConfigUsage()
 		return 2
 	}
-}
-
-func (c *CLI) runConfigInit(args []string) int {
-	path, err := config.DefaultPath()
-	if err != nil {
-		return c.printErr(err)
-	}
-
-	if len(args) > 0 && args[0] == "--example" {
-		cfg := config.Default()
-		cfg.LibraryType = "user"
-		cfg.LibraryID = "123456"
-		cfg.APIKey = "replace-me"
-		fmt.Fprint(c.stdout, strings.Join([]string{
-			"ZOT_MODE=web",
-			"ZOT_DATA_DIR=",
-			"ZOT_LIBRARY_TYPE=user",
-			"ZOT_LIBRARY_ID=123456",
-			"ZOT_API_KEY=replace-me",
-			"ZOT_STYLE=apa",
-			"ZOT_LOCALE=en-US",
-			fmt.Sprintf("ZOT_TIMEOUT_SECONDS=%d", cfg.TimeoutSeconds),
-			fmt.Sprintf("ZOT_RETRY_MAX_ATTEMPTS=%d", cfg.RetryMaxAttempts),
-			fmt.Sprintf("ZOT_RETRY_BASE_DELAY_MS=%d", cfg.RetryBaseDelayMilliseconds),
-			fmt.Sprintf("ZOT_ALLOW_WRITE=%d", boolToInt(cfg.AllowWrite)),
-			fmt.Sprintf("ZOT_ALLOW_DELETE=%d", boolToInt(cfg.AllowDelete)),
-			"",
-		}, "\n"))
-		return 0
-	}
-
-	if _, err := os.Stat(path); err == nil {
-		fmt.Fprintf(c.stderr, "config already exists at %s\n", path)
-		fmt.Fprintf(c.stderr, "edit it manually or remove it before re-running init\n")
-		return 3
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return c.printErr(err)
-	}
-
-	cfg, err := c.promptConfigSetup()
-	if err != nil {
-		return c.printErr(err)
-	}
-	if err := config.Save(cfg); err != nil {
-		return c.printErr(err)
-	}
-
-	fmt.Fprintf(c.stdout, "created config at %s\n", path)
-	fmt.Fprintln(c.stdout, "you can edit ~/.zot/.env later if you want to change keys or permissions")
-	fmt.Fprintln(c.stdout, "tip: use `zot init` for a streamlined setup with mode selection and optional PyMuPDF installation")
-	return 0
 }
 
 func (c *CLI) runConfigValidate() int {
@@ -108,7 +58,7 @@ func (c *CLI) runConfigValidate() int {
 		if errors.Is(err, config.ErrNotFound) {
 			fmt.Fprintln(c.stderr, "config not found.")
 			fmt.Fprintln(c.stderr, "required fields: library_type, library_id, api_key")
-			fmt.Fprintln(c.stderr, "run `zot config init` to set them up interactively in ~/.zot/.env")
+			fmt.Fprintln(c.stderr, "run `zot init` to set them up interactively in ~/.zot/.env")
 			return 3
 		}
 		return c.printErr(err)
@@ -134,9 +84,9 @@ func configValidateMeta(cfg config.Config, path string) map[string]any {
 	meta := map[string]any{
 		"config_path":         path,
 		"mode":                cfg.Mode,
-		"data_dir_configured": strings.TrimSpace(cfg.DataDir) != "",
+		"data_dir_configured": cfg.DataDir != "",
 	}
-	if strings.TrimSpace(cfg.DataDir) == "" {
+	if cfg.DataDir == "" {
 		return meta
 	}
 

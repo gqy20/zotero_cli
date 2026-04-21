@@ -202,25 +202,3 @@ func TestRunInitNoPdfFlagSkipsPdfSetup(t *testing.T) {
 		t.Fatal("--no-pdf should skip PyMuPDF prompt")
 	}
 }
-
-func TestRunInitBackwardCompatConfigInitStillWorks(t *testing.T) {
-	configRoot := t.TempDir()
-	setTestConfigDir(t, configRoot)
-
-	stdout, stderr := captureOutput(t)
-	oldStdin := testCLI.stdin
-	testCLI.stdin = strings.NewReader("user\n123456\nsecret\n\n\ny\nn\n")
-	t.Cleanup(func() { testCLI.stdin = oldStdin })
-
-	exitCode := Run([]string{"config", "init"})
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "tip: use `zot init`") {
-		t.Fatalf("expected tip about zot init, got %q", stdout.String())
-	}
-	configPath := filepath.Join(configRoot, ".zot", ".env")
-	if _, err := os.Stat(configPath); err != nil {
-		t.Fatalf("config file should still be created by config init, err=%v", err)
-	}
-}

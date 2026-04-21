@@ -8,36 +8,14 @@ import (
 	"testing"
 )
 
-func TestRunConfigInitCreatesFileWhenOnlyEnvConfigExists(t *testing.T) {
-	configRoot := t.TempDir()
-	setTestConfigDir(t, configRoot)
-
-	stdout, stderr := captureOutput(t)
-	oldStdin := testCLI.stdin
-	testCLI.stdin = strings.NewReader("user\n123456\nsecret\n\n\ny\nn\n")
-	t.Cleanup(func() {
-		testCLI.stdin = oldStdin
-	})
+func TestRunConfigInitRedirectsToZotInit(t *testing.T) {
+	_, stderr := captureOutput(t)
 	exitCode := Run([]string{"config", "init"})
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	if exitCode != 2 {
+		t.Fatalf("expected exit code 2 (redirect), got %d; stderr=%q", exitCode, stderr.String())
 	}
-
-	configPath := filepath.Join(configRoot, ".zot", ".env")
-	if _, err := os.Stat(configPath); err != nil {
-		t.Fatalf("expected config file to be created, stat err=%v", err)
-	}
-	if !strings.Contains(stdout.String(), "created config at") {
-		t.Fatalf("expected success message, got %q", stdout.String())
-	}
-	for _, want := range []string{
-		"https://www.zotero.org/settings/keys",
-		"https://www.zotero.org/groups",
-		"https://www.zotero.org/support/dev/web_api/v3/basics",
-	} {
-		if !strings.Contains(stdout.String(), want) {
-			t.Fatalf("expected %q in init output, got %q", want, stdout.String())
-		}
+	if !strings.Contains(stderr.String(), "replaced by `zot init`") {
+		t.Fatalf("expected redirect message, got %q", stderr.String())
 	}
 }
 

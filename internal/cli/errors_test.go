@@ -124,7 +124,7 @@ func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 			if exitCode != 3 {
 				t.Fatalf("expected exit code 3, got %d; stderr=%q", exitCode, stderr.String())
 			}
-			if !strings.Contains(stderr.String(), "config not found.") || !strings.Contains(stderr.String(), "run `zot config init`") {
+			if !strings.Contains(stderr.String(), "config not found.") || !strings.Contains(stderr.String(), "run `zot init`") {
 				t.Fatalf("expected config-not-found message, got %q", stderr.String())
 			}
 		})

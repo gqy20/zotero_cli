@@ -66,7 +66,7 @@ func (c *CLI) runSetupPdfExtract(args []string) int {
 		return exitCode
 	}
 	if cfg.DataDir == "" {
-		fmt.Fprintln(c.stderr, "error: ZOT_DATA_DIR is required; run 'zot config init' first")
+		fmt.Fprintln(c.stderr, "error: ZOT_DATA_DIR is required; run 'zot init' first")
 		return 3
 	}
 

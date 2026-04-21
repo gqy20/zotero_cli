@@ -16,7 +16,7 @@ func (c *CLI) loadConfig() (config.Config, int) {
 		if errors.Is(err, config.ErrNotFound) {
 			fmt.Fprintln(c.stderr, "config not found.")
 			fmt.Fprintln(c.stderr, "required fields: library_type, library_id, api_key")
-			fmt.Fprintln(c.stderr, "run `zot config init` to set them up interactively in ~/.zot/.env")
+			fmt.Fprintln(c.stderr, "run `zot init` to set them up interactively in ~/.zot/.env")
 			return config.Config{}, ExitConfig
 		}
 		return config.Config{}, c.printErr(err)
