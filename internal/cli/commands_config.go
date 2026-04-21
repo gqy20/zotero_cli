@@ -98,6 +98,7 @@ func (c *CLI) runConfigInit(args []string) int {
 
 	fmt.Fprintf(c.stdout, "created config at %s\n", path)
 	fmt.Fprintln(c.stdout, "you can edit ~/.zot/.env later if you want to change keys or permissions")
+	fmt.Fprintln(c.stdout, "tip: use `zot init` for a streamlined setup with mode selection and optional PyMuPDF installation")
 	return 0
 }
 

@@ -10,6 +10,81 @@ import (
 	"zotero_cli/internal/config"
 )
 
+func (c *CLI) promptInitSetup(cfg config.Config, provided map[string]bool, reader *bufio.Reader) (config.Config, error) {
+
+	fmt.Fprintln(c.stdout, "Initialize ~/.zot/.env")
+	fmt.Fprintln(c.stdout, "help:")
+	fmt.Fprintln(c.stdout, "  API keys: https://www.zotero.org/settings/keys")
+	fmt.Fprintln(c.stdout, "  User library ID: check your userID on https://www.zotero.org/settings/keys")
+	fmt.Fprintln(c.stdout, "  Group library IDs: https://www.zotero.org/groups")
+
+	if !provided["mode"] {
+		mode, err := c.promptWithDefault(reader, "Mode [web]: ")
+		if err != nil {
+			return config.Config{}, err
+		}
+		if mode != "" {
+			cfg.Mode = mode
+		}
+	}
+
+	if !provided["library_type"] {
+		libraryType, err := c.promptRequired(reader, "Library type (user/group): ", func(value string) error {
+			if value != "user" && value != "group" {
+				return fmt.Errorf("must be user or group")
+			}
+			return nil
+		})
+		if err != nil {
+			return config.Config{}, err
+		}
+		cfg.LibraryType = libraryType
+	}
+
+	if !provided["library_id"] {
+		libraryID, err := c.promptRequired(reader, "Library ID: ", func(value string) error {
+			if strings.TrimSpace(value) == "" {
+				return fmt.Errorf("cannot be empty")
+			}
+			return nil
+		})
+		if err != nil {
+			return config.Config{}, err
+		}
+		cfg.LibraryID = libraryID
+	}
+
+	if !provided["api_key"] {
+		apiKey, err := c.promptRequired(reader, "API key: ", func(value string) error {
+			if strings.TrimSpace(value) == "" {
+				return fmt.Errorf("cannot be empty")
+			}
+			return nil
+		})
+		if err != nil {
+			return config.Config{}, err
+		}
+		cfg.APIKey = apiKey
+	}
+
+	if cfg.Mode == "local" || cfg.Mode == "hybrid" {
+		if !provided["data_dir"] {
+			dataDir, err := c.promptRequired(reader, "Zotero data directory: ", func(value string) error {
+				if strings.TrimSpace(value) == "" {
+					return fmt.Errorf("cannot be empty in local/hybrid mode")
+				}
+				return nil
+			})
+			if err != nil {
+				return config.Config{}, err
+			}
+			cfg.DataDir = dataDir
+		}
+	}
+
+	return cfg, nil
+}
+
 func (c *CLI) promptConfigSetup() (config.Config, error) {
 	reader := bufio.NewReader(c.stdin)
 	cfg := config.Default()
@@ -129,7 +204,7 @@ func (c *CLI) promptBool(reader *bufio.Reader, label string, defaultValue bool) 
 			fmt.Fprintln(c.stderr, "error:", err)
 			continue
 		}
-		return parsed, nil
+		return parsed, err
 	}
 }
 

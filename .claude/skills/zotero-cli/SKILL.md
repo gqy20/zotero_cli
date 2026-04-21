@@ -127,7 +127,8 @@ CLI 配置存储在 `~/.zot/.env`。
 常用命令：
 
 ```powershell
-.\zot.exe config init       # 初始化配置
+.\zot.exe init                    # 一键初始化（推荐，含模式选择和可选 PyMuPDF 安装）
+.\zot.exe init --mode hybrid --api-key ...  # 非交互模式
 .\zot.exe config show       # 查看当前配置
 .\zot.exe config validate   # 校验配置有效性
 ```

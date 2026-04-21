@@ -143,6 +143,8 @@ func (c *CLI) Run(args []string) int {
 		return c.runDeleteSearch(args[1:])
 	case "setup":
 		return c.runSetup(args[1:])
+	case "init":
+		return c.runInit(args[1:])
 	case "index":
 		return c.runIndex(args[1:])
 	default:
@@ -161,6 +163,7 @@ Usage:
 
 Commands:
   version        Show CLI version
+  init           Initialize ~/.zot/.env (streamlined setup with mode selection)
   config path    Print config path
   config init    Interactively create ~/.zot/.env
   config show    Show active config with masked secrets
