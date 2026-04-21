@@ -514,7 +514,7 @@ func TestRunVersionsTextShowsNotModifiedMessageOn304(t *testing.T) {
 	}
 }
 
-func TestRunItemTypesJSON(t *testing.T) {
+func TestRunSchemaTypesJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -524,7 +524,7 @@ func TestRunItemTypesJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"item-types", "--json"})
+	exitCode := Run([]string{"schema", "types", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -538,7 +538,7 @@ func TestRunItemTypesJSON(t *testing.T) {
 	}
 }
 
-func TestRunItemFieldsText(t *testing.T) {
+func TestRunSchemaFieldsText(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -548,7 +548,7 @@ func TestRunItemFieldsText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"item-fields"})
+	exitCode := Run([]string{"schema", "fields"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -561,7 +561,7 @@ func TestRunItemFieldsText(t *testing.T) {
 	}
 }
 
-func TestRunCreatorFieldsText(t *testing.T) {
+func TestRunSchemaCreatorTypesText(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -571,7 +571,7 @@ func TestRunCreatorFieldsText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"creator-fields"})
+	exitCode := Run([]string{"schema", "creator-types"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -584,7 +584,7 @@ func TestRunCreatorFieldsText(t *testing.T) {
 	}
 }
 
-func TestRunItemTypeFieldsJSON(t *testing.T) {
+func TestRunSchemaFieldsForJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -594,7 +594,7 @@ func TestRunItemTypeFieldsJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"item-type-fields", "book", "--json"})
+	exitCode := Run([]string{"schema", "fields-for", "book", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -608,7 +608,7 @@ func TestRunItemTypeFieldsJSON(t *testing.T) {
 	}
 }
 
-func TestRunItemTypeCreatorTypesText(t *testing.T) {
+func TestRunSchemaCreatorTypesForText(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -618,7 +618,7 @@ func TestRunItemTypeCreatorTypesText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"item-type-creator-types", "book"})
+	exitCode := Run([]string{"schema", "creator-types-for", "book"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -631,7 +631,7 @@ func TestRunItemTypeCreatorTypesText(t *testing.T) {
 	}
 }
 
-func TestRunItemTemplateJSON(t *testing.T) {
+func TestRunSchemaTemplateJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -641,7 +641,7 @@ func TestRunItemTemplateJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"item-template", "book", "--json"})
+	exitCode := Run([]string{"schema", "template", "book", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -943,6 +943,58 @@ func TestRunCollectionsTopTextShowsFriendlyMessageWhenNoCollectionsExist(t *test
 	}
 	if got := stdout.String(); !strings.Contains(got, "no top-level collections found") {
 		t.Fatalf("expected friendly empty collections-top message, got %q", got)
+	}
+}
+
+func TestRunSchemaHelpShowsUsage(t *testing.T) {
+	stdout, _ := captureOutput(t)
+	exitCode := Run([]string{"schema", "--help"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	got := stdout.String()
+	for _, want := range []string{"schema", "subcommand", "types", "fields", "template"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in help output %q", want, got)
+		}
+	}
+}
+
+func TestRunSchemaNoSubcommandShowsUsageAndError(t *testing.T) {
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"schema"})
+	if exitCode != ExitUsage {
+		t.Fatalf("expected exit code %d, got %d", ExitUsage, exitCode)
+	}
+	gotErr := stderr.String()
+	if !strings.Contains(gotErr, "subcommands:") {
+		t.Fatalf("expected subcommand list in stderr, got %q", gotErr)
+	}
+	gotOut := stdout.String()
+	if !strings.Contains(gotOut, "usage: zot schema") {
+		t.Fatalf("expected usage in stdout, got %q", gotOut)
+	}
+}
+
+func TestRunSchemaUnknownSubcommand(t *testing.T) {
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"schema", "bogus"})
+	if exitCode != ExitUsage {
+		t.Fatalf("expected exit code %d, got %d", ExitUsage, exitCode)
+	}
+	if got := stderr.String(); !strings.Contains(got, "unknown schema subcommand") {
+		t.Fatalf("expected error message, got %q", got)
+	}
+}
+
+func TestRunSchemaFieldsForMissingArg(t *testing.T) {
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"schema", "fields-for"})
+	if exitCode != ExitUsage {
+		t.Fatalf("expected exit code %d, got %d", ExitUsage, exitCode)
+	}
+	if got := stderr.String(); !strings.Contains(got, "fields-for <item-type>") {
+		t.Fatalf("expected usage hint, got %q", got)
 	}
 }
 

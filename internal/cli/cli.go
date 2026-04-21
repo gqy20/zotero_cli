@@ -91,18 +91,8 @@ func (c *CLI) Run(args []string) int {
 		return c.runStats(args[1:])
 	case "versions":
 		return c.runVersions(args[1:])
-	case "item-types":
-		return c.runItemTypes(args[1:])
-	case "item-fields":
-		return c.runItemFields(args[1:])
-	case "creator-fields":
-		return c.runCreatorFields(args[1:])
-	case "item-type-fields":
-		return c.runItemTypeFields(args[1:])
-	case "item-type-creator-types":
-		return c.runItemTypeCreatorTypes(args[1:])
-	case "item-template":
-		return c.runItemTemplate(args[1:])
+	case "schema":
+		return c.runSchema(args[1:])
 	case "key-info":
 		return c.runKeyInfo(args[1:])
 	case "groups":
@@ -183,13 +173,8 @@ Commands:
   deleted        Show deleted object keys
   stats          Show library item, collection, and search counts
   versions       Show changed object versions since a library version
-  item-types     List Zotero item types
-  item-fields    List Zotero item fields
-  creator-fields List Zotero creator fields
-  item-type-fields          List valid fields for an item type
-  item-type-creator-types   List valid creator types for an item type
-  item-template             Show template for a new item type
-  key-info      Show the owner and privileges for an API key
+  schema         Introspect Zotero metadata schema (types, fields, templates)
+  key-info       Show the owner and privileges for an API key
   groups        List groups accessible to a user
   trash         List items currently in the trash
   collections-top  List only top-level collections

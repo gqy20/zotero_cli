@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### 新增
+- **统一 `zot init` 入口**：新增一站式初始化命令，替代分散的 `config init` + `setup pdf-extract` 流程。交互式仅提示关键字段（mode / type / id / key），支持 `--mode` / `--api-key` / `--library-id` 等标志实现非交互模式。local/hybrid 模式可选一步安装 PyMuPDF（`--pdf`）。
+- **`zot init --check-pdf`**：诊断 PyMuPDF 安装状态（原 `setup pdf-extract --check` 功能迁移）。
+- **`config init` 重定向**：运行时提示用户改用 `zot init`，不再执行旧版 7 问题交互流程。已删除 `promptConfigSetup()` 和 `runConfigInit()` 旧代码。
+
+### 变更
+- **命令表面精简**：`setup pdf-extract` 安装模式重定向到 `zot init --pdf`；`--check` 诊断模式保留在 `zot setup pdf-extract --check` 和 `zot init --check-pdf` 双入口；`setup` 从主命令路由移除。
+- **文档全面同步**：README、AI_AGENT、commands、MVP、architecture、CONTRIBUTING、error 示例、`.claude/` 和 `.codex/` skill 文件中全部 `config init` / `setup pdf-extract` 引用更新为 `zot init` / `zot init --pdf`。
+- **净减代码 ~200 行**：删除 promptConfigSetup()（74 行）、runConfigInit() 含 --example（49 行）、performPdfExtractSetup()（24 行）、usageSetupPdfExtract 常量及相关 import。
+
 ### 后续改进计划（Agent 可用性增强）
 以下为规划中的改进方向，按优先级排序：
 1. **结构化错误输出**：支持 `--json` / `ZOT_JSON_ERRORS=1` 让错误以 `{ "ok": false, "error": "...", "code": N }` JSON 格式输出，便于 agent 可靠解析。
@@ -13,6 +23,7 @@
 3. **写操作 `--dry-run` 模式**：所有写命令支持预览将要执行的操作而不实际修改数据，提升安全性。
 4. **`find` → `export` 管道连接**：`export` 新增 `--from-find` 参数，内部执行搜索后直接导出，无需手动传递 key 列表。
 5. **图片解析与分析（`extract-images`）**：从 PDF 中提取图片资源（图表、示意图、照片等），支持按页码/尺寸过滤，输出图片文件路径或 base64 内嵌 JSON。为 agent 提供视觉内容理解能力，配合多模态模型实现「读图→分析→总结」的科研工作流（如自动解读论文中的实验数据图、流程图、分子结构图）。
+6. **`zot schema` 元数据子命令**：将 6 个碎片化的 schema 内省命令（item-types / item-fields / creator-fields / item-type-fields / item-type-creator-types / item-template）合并为 `zot schema <sub>` 统一入口，缩减命令表膨胀。
 
 ## [0.0.5] - 2026-04-21
 

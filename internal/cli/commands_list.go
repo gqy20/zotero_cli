@@ -306,6 +306,50 @@ func (c *CLI) runVersions(args []string) int {
 	return 0
 }
 
+func (c *CLI) runSchema(args []string) int {
+	if isHelpOnly(args) {
+		return c.printCommandUsage(usageSchema)
+	}
+
+	if len(args) == 0 {
+		fmt.Fprintf(c.stderr, "usage: zot schema <subcommand> [--json]\n")
+		fmt.Fprintf(c.stderr, "subcommands: types, fields, creator-types, fields-for, creator-types-for, template\n\n")
+		fmt.Fprint(c.stdout, usageSchema)
+		return ExitUsage
+	}
+
+	switch args[0] {
+	case "types":
+		return c.runItemTypes(args[1:])
+	case "fields":
+		return c.runItemFields(args[1:])
+	case "creator-types":
+		return c.runCreatorFields(args[1:])
+	case "fields-for":
+		if len(args) < 2 {
+			fmt.Fprintf(c.stderr, "usage: zot schema fields-for <item-type> [--json]\n")
+			return ExitUsage
+		}
+		return c.runItemTypeFields(args[1:])
+	case "creator-types-for":
+		if len(args) < 2 {
+			fmt.Fprintf(c.stderr, "usage: zot schema creator-types-for <item-type> [--json]\n")
+			return ExitUsage
+		}
+		return c.runItemTypeCreatorTypes(args[1:])
+	case "template":
+		if len(args) < 2 {
+			fmt.Fprintf(c.stderr, "usage: zot schema template <item-type> [--json]\n")
+			return ExitUsage
+		}
+		return c.runItemTemplate(args[1:])
+	default:
+		fmt.Fprintf(c.stderr, "unknown schema subcommand: %s\n", args[0])
+		fmt.Fprintf(c.stderr, "subcommands: types, fields, creator-types, fields-for, creator-types-for, template\n")
+		return ExitUsage
+	}
+}
+
 func (c *CLI) runItemTypes(args []string) int {
 	jsonOutput, ok := c.parseJSONOnlyArgs(args, usageItemTypes)
 	if !ok {
