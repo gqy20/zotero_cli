@@ -115,6 +115,27 @@ func (r *LocalReader) FullTextSnippet(ctx context.Context, item domain.Item, que
 
 func (r *LocalReader) loadFullTextDocument(_ context.Context, item domain.Item, query string) (FullTextDocument, bool, error) {
 	cache := newFullTextCache(r.FullTextCacheDir)
+
+	if item.SnippetAttachmentKey != "" {
+		for _, attachment := range item.Attachments {
+			if attachment.Key == item.SnippetAttachmentKey {
+				doc, ok, err := r.loadFullTextDocumentForAttachment(item, attachment, cache)
+				if err != nil {
+					return FullTextDocument{}, false, err
+				}
+				if ok && doc.Text != "" {
+					r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, ReadMetadata{
+						FullTextSource:        doc.Meta.Extractor,
+						FullTextAttachmentKey: doc.Meta.AttachmentKey,
+						FullTextCacheHit:      doc.CacheHit,
+					})
+					return doc, true, nil
+				}
+				break
+			}
+		}
+	}
+
 	bestDoc := FullTextDocument{}
 	bestScore := -1
 	for _, attachment := range item.Attachments {
@@ -126,9 +147,6 @@ func (r *LocalReader) loadFullTextDocument(_ context.Context, item domain.Item, 
 			continue
 		}
 		score := fullTextAttachmentMatchScore(attachment, doc.Text, query)
-		if item.SnippetAttachmentKey != "" && item.SnippetAttachmentKey == attachment.Key {
-			score += 100
-		}
 		if query == "" {
 			score = 0
 		}
