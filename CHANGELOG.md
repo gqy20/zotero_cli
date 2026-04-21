@@ -12,6 +12,35 @@
 2. **`zot overview` 发现命令**：一次性返回 library 全貌（总条目数、热门标签、集合树、最近添加、索引状态），降低 agent 使用门槛。
 3. **写操作 `--dry-run` 模式**：所有写命令支持预览将要执行的操作而不实际修改数据，提升安全性。
 4. **`find` → `export` 管道连接**：`export` 新增 `--from-find` 参数，内部执行搜索后直接导出，无需手动传递 key 列表。
+5. **图片解析与分析（`extract-images`）**：从 PDF 中提取图片资源（图表、示意图、照片等），支持按页码/尺寸过滤，输出图片文件路径或 base64 内嵌 JSON。为 agent 提供视觉内容理解能力，配合多模态模型实现「读图→分析→总结」的科研工作流（如自动解读论文中的实验数据图、流程图、分子结构图）。
+
+## [0.0.5] - 2026-04-21
+
+### 新增
+- **`find` 高级过滤**：新增 11 个过滤选项，覆盖收藏夹（`--collection` / `--no-collection`）、标签模糊匹配（`--tag-contains`）、排除过滤（`--exclude-tag` / `--no-type`）、相对时间（`--modified-within` / `--added-since`）、附件细节（`--attachment-name` / `--attachment-path`）、排序方向（`--direction`）和分页偏移（`--start`）。
+- **自动全文检索**：local / hybrid 模式下 FTS5 索引有数据时，即使不指定 `--fulltext` 也会自动走全文检索路径，降低 agent 使用门槛。
+- **Snippet 安全限制**：`--snippet` 未指定 `--limit` 时默认限制为 50 条，防止批量提取意外消耗大量资源。
+
+### 性能
+- **Snippet 缓存命中加速 ~20x**：缓存命中时跳过冗余的 `syncIndex` 调用，snippet 响应从秒级降至毫秒级。
+- **文本归一化去重**：正文归一化操作提前到缓存保存前仅执行一次，缓存命中路径完全跳过。
+- **附件扫描捷径**：使用 `SnippetAttachmentKey` 快捷键跳过冗余的附件元数据扫描。
+- **Agent 模式 P1 优化**：reader 层减少不必要的 fallback 判定、web 层精简响应解析、cli 层缩短数据流转路径。
+
+### 修复
+- **Annotation 显示截断**：长文本标注不再被截断，完整展示 text 和 comment 内容。
+- **Annotation type 映射**：修正 PDF 文件内标注的类型映射，确保 highlight/note/underline/ink 分类准确。
+- **PDF 提取优先级**：PyMuPDF 固定为首选提取器，Zotero ft-cache 作为中间回退，pdfium WASM 为最终兜底。此前优先级不稳定可能导致低质量文本输出。
+- **Release CI 构建一致性**：CI ldflags 补充 `-s -w`（剥离调试符号），与本地 `make release` 产物大小一致。
+
+### 文档
+- **commands.md 全面补全**：find 过滤选项按类别分组表格化（新增 11 个）；输出控制补充 `--direction` / `--start`；全文检索补充 auto-enable 说明 + snippet limit 注意；extract-text 更新三级提取器优先级；cite 重写为正确的 `citation|bib` 格式 + 选项表；notes 补充 `--query` 参数；versions 补充 4 种子类型及完整用法示例；环境变量表新增 3 个 retry 参数。
+- **AI_AGENT.md 扩展**：新增 6 个工作流小节（PDF 文本提取、PDF 标注操作、Zotero 桌面端联动、笔记搜索、全文检索最佳实践、高级过滤组合）；新增「性能优化建议」章节（检索性能/API 调优/缓存行为）；优先级建议扩充至 5 级。
+- **README 更新**：科研工作流补充高级过滤组合示例和全文检索 auto-enable 说明；cite 示例修正为实际支持的格式；命令速查表 find 描述更新。
+- **SKILL.md 同步**（`.claude` + `.codex`）：全面重写，与 commands.md 和 AI_AGENT.md 保持一致，补充全部 find 高级选项、PDF 操作示例、笔记查询、环境变量速查表和性能注意。
+
+### 工具链
+- **pre-commit hook 智能跳过**：检测暂存区文件类型——无 `.go` 文件时跳过 gofmt/vet/test（纯文档提交秒过）；无 YAML 文件时跳过 yamllint 检查。两者均无变更时直接放行。
 
 ## [0.0.4] - 2026-04-20
 
