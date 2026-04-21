@@ -226,6 +226,10 @@ Provide all required flags for non-interactive mode.
 Omit flags for interactive mode with guided prompts.
 Data directory is auto-detected from Zotero prefs.js or default location when possible.
 
+If you are running this command via an AI assistant with browser access,
+it can navigate to https://www.zotero.org/settings/keys to obtain
+your library ID and API key automatically.
+
 Examples:
   zot init                              # Interactive guided setup
   zot init --mode hybrid --library-id 123 --api-key abc  # Partial flags, prompts for the rest

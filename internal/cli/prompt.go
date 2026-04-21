@@ -17,6 +17,9 @@ func (c *CLI) promptInitSetup(cfg config.Config, provided map[string]bool, reade
 	fmt.Fprintln(c.stdout, "  API keys: https://www.zotero.org/settings/keys")
 	fmt.Fprintln(c.stdout, "  User library ID: check your userID on https://www.zotero.org/settings/keys")
 	fmt.Fprintln(c.stdout, "  Group library IDs: https://www.zotero.org/groups")
+	fmt.Fprintln(c.stdout, "")
+	fmt.Fprintln(c.stdout, "  Tip: if you are using an AI assistant with browser access,")
+	fmt.Fprintln(c.stdout, "  it can navigate to the pages above and fill these values for you.")
 
 	if !provided["mode"] {
 		mode, err := c.promptWithDefault(reader, "Mode [web]: ")
