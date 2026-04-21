@@ -134,12 +134,12 @@ func (c *CLI) runTags(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := c.loadClient()
+	_, reader, exitCode := c.loadReader()
 	if exitCode != 0 {
 		return exitCode
 	}
 
-	tags, err := client.ListTags(context.Background())
+	tags, err := reader.ListTags(context.Background())
 	if err != nil {
 		return c.printErr(err)
 	}
@@ -149,16 +149,19 @@ func (c *CLI) runTags(args []string) int {
 	}
 
 	if jsonOutput {
+		meta := map[string]any{
+			"total": len(tags),
+		}
+		c.appendReadMetadata(meta, reader)
 		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "tags",
 			Data:    tags,
-			Meta: map[string]any{
-				"total":       len(tags),
-				"read_source": "web",
-			},
+			Meta:    meta,
 		})
 	}
+
+	c.warnIfSnapshotRead(c.consumeReaderReadMetadata(reader))
 
 	if len(tags) == 0 {
 		fmt.Fprintln(c.stdout, "no tags found")

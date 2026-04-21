@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/config"
+	"zotero_cli/internal/zoteroapi"
 )
 
 type CLI struct {
@@ -17,6 +19,8 @@ type CLI struct {
 	stdin            io.Reader
 	backendNewReader func(config.Config, *http.Client) (backend.Reader, error)
 	newLocalReader   func(config.Config) (backend.Reader, error)
+	citeCache        map[string]zoteroapi.CitationResult
+	citeCacheMu      sync.RWMutex
 }
 
 var (
@@ -34,6 +38,7 @@ func New() *CLI {
 		newLocalReader: func(cfg config.Config) (backend.Reader, error) {
 			return backend.NewLocalReader(cfg)
 		},
+		citeCache: make(map[string]zoteroapi.CitationResult),
 	}
 }
 

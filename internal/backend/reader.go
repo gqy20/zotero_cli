@@ -56,12 +56,18 @@ type ReadMetadata struct {
 	FullTextCacheHit      bool   `json:"full_text_cache_hit,omitempty"`
 }
 
+type Tag struct {
+	Name     string `json:"name"`
+	NumItems int    `json:"num_items,omitempty"`
+}
+
 type Reader interface {
 	FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error)
 	GetItem(ctx context.Context, key string) (domain.Item, error)
 	GetRelated(ctx context.Context, key string) ([]domain.Relation, error)
 	GetLibraryStats(ctx context.Context) (LibraryStats, error)
 	ListNotes(ctx context.Context) ([]domain.Note, error)
+	ListTags(ctx context.Context) ([]Tag, error)
 }
 
 type readMetadataReporter interface {
@@ -82,6 +88,7 @@ const (
 	readOperationGetRelated      readOperation = "get_related"
 	readOperationGetLibraryStats readOperation = "get_library_stats"
 	readOperationListNotes       readOperation = "list_notes"
+	readOperationListTags        readOperation = "list_tags"
 )
 
 func NewReader(cfg config.Config, httpClient *http.Client) (Reader, error) {
@@ -168,6 +175,17 @@ func (r *HybridReader) ListNotes(ctx context.Context) ([]domain.Note, error) {
 	)
 }
 
+func (r *HybridReader) ListTags(ctx context.Context) ([]Tag, error) {
+	return readWithFallbackUsingPolicy(r,
+		func(err error) bool {
+			return shouldFallbackToWeb(readOperationListTags, err)
+		},
+		func(reader Reader) ([]Tag, error) {
+			return reader.ListTags(ctx)
+		},
+	)
+}
+
 func readWithFallbackUsingPolicy[T any](r *HybridReader, shouldFallback func(error) bool, read func(Reader) (T, error)) (T, error) {
 	var zero T
 	if r.local != nil {
@@ -235,6 +253,8 @@ func shouldFallbackToWeb(op readOperation, err error) bool {
 	case readOperationGetLibraryStats:
 		return errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
 	case readOperationListNotes:
+		return errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
+	case readOperationListTags:
 		return errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
 	case readOperationGetRelated:
 		return false

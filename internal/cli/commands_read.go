@@ -475,9 +475,24 @@ func (c *CLI) runCite(args []string) int {
 		opts.Locale = cfg.Locale
 	}
 
-	result, err := client.GetCitation(context.Background(), key, opts)
-	if err != nil {
-		return c.printErr(err)
+	cacheKey := key + "\x00" + opts.Format + "\x00" + opts.Style + "\x00" + opts.Locale
+
+	c.citeCacheMu.RLock()
+	cached, hit := c.citeCache[cacheKey]
+	c.citeCacheMu.RUnlock()
+
+	var result zoteroapi.CitationResult
+	if hit {
+		result = cached
+	} else {
+		var citeErr error
+		result, citeErr = client.GetCitation(context.Background(), key, opts)
+		if citeErr != nil {
+			return c.printErr(citeErr)
+		}
+		c.citeCacheMu.Lock()
+		c.citeCache[cacheKey] = result
+		c.citeCacheMu.Unlock()
 	}
 
 	if jsonOutput {

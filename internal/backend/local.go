@@ -453,6 +453,32 @@ func (r *LocalReader) ListNotes(ctx context.Context) ([]domain.Note, error) {
 	return notes, err
 }
 
+func (r *LocalReader) ListTags(ctx context.Context) ([]Tag, error) {
+	var tags []Tag
+	err := r.withReadableDB(ctx, func(db *sql.DB) error {
+		rows, err := db.QueryContext(ctx, `
+			SELECT t.name, COUNT(it.itemID) as cnt
+			FROM tags t
+			JOIN itemTags it ON it.tagID = t.tagID
+			GROUP BY t.name
+			ORDER BY cnt DESC, t.name
+		`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var t Tag
+			if err := rows.Scan(&t.Name, &t.NumItems); err != nil {
+				return err
+			}
+			tags = append(tags, t)
+		}
+		return rows.Err()
+	})
+	return tags, err
+}
+
 func (r *LocalReader) withReadableDB(_ context.Context, fn func(*sql.DB) error) error {
 	db, cleanup, err := r.openLiveDB()
 	if err == nil {

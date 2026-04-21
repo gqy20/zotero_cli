@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -145,6 +146,22 @@ func newTestAPI(t *testing.T) (string, func()) {
 
 			if itemKey != "" && format == "bibtex" {
 				_, _ = w.Write([]byte("@article{vaswani2017,\n  title = {Attention Is All You Need}\n}\n"))
+				return
+			}
+			if itemKey != "" && format == "bib" {
+				keys := strings.Split(itemKey, ",")
+				var buf strings.Builder
+				for _, k := range keys {
+					switch strings.TrimSpace(k) {
+					case "ART12345":
+						buf.WriteString("Lovelace, A. (2024). Primary Article.\n\n")
+					case "ART67890", "ITEM5678":
+						buf.WriteString("Hopper, G. (2023). Secondary Article.\n\n")
+					default:
+						buf.WriteString("Unknown Article.\n\n")
+					}
+				}
+				_, _ = w.Write([]byte(buf.String()))
 				return
 			}
 			if itemKey != "" && format == "csljson" {

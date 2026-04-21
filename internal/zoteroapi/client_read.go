@@ -141,35 +141,20 @@ func (c *Client) ExportItems(ctx context.Context, keys []string, opts ExportOpti
 		format = "bib"
 	}
 
-	if format == "bib" {
-		results := make([]CitationResult, 0, len(keys))
-		for _, key := range keys {
-			result, err := c.GetCitation(ctx, key, CitationOptions{
-				Format: "bib",
-				Style:  opts.Style,
-				Locale: opts.Locale,
-			})
-			if err != nil {
-				return ExportResult{}, err
-			}
-			results = append(results, result)
-		}
-
-		texts := make([]string, 0, len(results))
-		for _, result := range results {
-			texts = append(texts, result.Text)
-		}
-		return ExportResult{
-			Format: "bib",
-			Text:   strings.Join(texts, "\n\n"),
-			Data:   results,
-		}, nil
-	}
-
-	resp, err := c.doRequest(ctx, "items", FindOptions{}, map[string]string{
+	extra := map[string]string{
 		"itemKey": strings.Join(keys, ","),
 		"format":  format,
-	})
+	}
+	if format == "bib" {
+		if opts.Style != "" {
+			extra["style"] = opts.Style
+		}
+		if opts.Locale != "" {
+			extra["locale"] = opts.Locale
+		}
+	}
+
+	resp, err := c.doRequest(ctx, "items", FindOptions{}, extra)
 	if err != nil {
 		return ExportResult{}, err
 	}

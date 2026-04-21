@@ -84,6 +84,19 @@ func (r *WebReader) ListNotes(ctx context.Context) ([]domain.Note, error) {
 	return result, nil
 }
 
+func (r *WebReader) ListTags(ctx context.Context) ([]Tag, error) {
+	raw, err := r.client.ListTags(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.lastReadMetadata = ReadMetadata{ReadSource: "web"}
+	tags := make([]Tag, 0, len(raw))
+	for _, t := range raw {
+		tags = append(tags, Tag{Name: t.Name, NumItems: t.NumItems})
+	}
+	return tags, nil
+}
+
 func mapItems(items []zoteroapi.Item) []domain.Item {
 	out := make([]domain.Item, 0, len(items))
 	for _, item := range items {
