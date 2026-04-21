@@ -647,6 +647,8 @@ func annotationTypeString(t int) string {
 		return "image"
 	case 3:
 		return "ink"
+	case 4:
+		return "area"
 	default:
 		return fmt.Sprintf("unknown(%d)", t)
 	}

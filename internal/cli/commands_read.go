@@ -291,7 +291,11 @@ func (c *CLI) runShow(args []string) int {
 	if len(item.Annotations) > 0 {
 		fmt.Fprintf(c.stdout, "Annotations: %d\n", len(item.Annotations))
 		for _, a := range item.Annotations {
-			fmt.Fprintf(c.stdout, "  - [%s] color=%s page=%s: %s", a.Type, a.Color, a.PageLabel, a.Text)
+			text := a.Text
+			if len(text) > 60 {
+				text = text[:60] + "..."
+			}
+			fmt.Fprintf(c.stdout, "  - [%s] color=%s page=%s: %s", a.Type, a.Color, a.PageLabel, text)
 			if a.Comment != "" {
 				fmt.Fprintf(c.stdout, " | %s", a.Comment)
 			}
