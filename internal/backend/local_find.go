@@ -32,9 +32,11 @@ func localFindQuery(opts FindOptions) (string, []any) {
 		LEFT JOIN itemData d ON d.itemID = i.itemID
 		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
 		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
-		WHERE ` + localVisibleItemClause(opts.ItemType) + `
+		WHERE ` + localVisibleItemClause(opts) + `
 		AND ` + localQueryMatchClause() + `
 		` + localTagFilterClause(opts) + `
+		` + localCollectionClause(opts) + `
+		` + localDateRangeClause(opts) + `
 		GROUP BY i.itemID, i.key, i.version, it.typeName
 		ORDER BY i.key
 	`
@@ -62,19 +64,45 @@ func localFindArgs(opts FindOptions) []any {
 	for _, tag := range normalizedTags(opts.Tags) {
 		args = append(args, tag)
 	}
+	for _, key := range opts.Collection {
+		args = append(args, strings.ToLower(key))
+	}
+	for _, key := range opts.NoCollection {
+		args = append(args, strings.ToLower(key))
+	}
+	for _, tag := range opts.TagContains {
+		args = append(args, "%"+tag+"%")
+	}
+	for _, tag := range opts.ExcludeTags {
+		args = append(args, tag)
+	}
+	if opts.DateModifiedAfter != "" {
+		if expr, ok := parseRelativeDate(opts.DateModifiedAfter); ok {
+			args = append(args, expr)
+		}
+	}
+	if opts.DateAddedAfter != "" {
+		if expr, ok := parseRelativeDate(opts.DateAddedAfter); ok {
+			args = append(args, expr)
+		}
+	}
 	return args
 }
 
-func localVisibleItemClause(itemType string) string {
-	if itemType != "" {
+func localVisibleItemClause(opts FindOptions) string {
+	if opts.ItemType != "" {
 		return `it.typeName = ?`
 	}
-	return `
+	clause := `
 		NOT EXISTS (SELECT 1 FROM itemAttachments ia WHERE ia.itemID = i.itemID)
 		AND NOT EXISTS (SELECT 1 FROM itemNotes n WHERE n.itemID = i.itemID)
 		AND NOT EXISTS (SELECT 1 FROM itemAnnotations a WHERE a.itemID = i.itemID)
 		AND it.typeName <> 'annotation'
 	`
+	if opts.ExcludeItemType != "" {
+		clause += "\n\t\tAND it.typeName <> '" + opts.ExcludeItemType + "'"
+	}
+	return clause
 }
 
 func localQueryMatchClause() string {
@@ -121,34 +149,94 @@ func localQueryMatchClause() string {
 }
 
 func localTagFilterClause(opts FindOptions) string {
+	var parts []string
+
 	tags := normalizeFindTags(opts.Tags)
-	if len(tags) == 0 {
-		return ""
+	if len(tags) > 0 {
+		if opts.TagAny {
+			parts = append(parts,
+				`AND EXISTS (
+					SELECT 1
+					FROM itemTags it3
+					JOIN tags t3 ON t3.tagID = it3.tagID
+					WHERE it3.itemID = i.itemID
+					AND LOWER(t3.name) IN (`+placeholders(len(tags))+`)
+				)`)
+		} else {
+			for range tags {
+				parts = append(parts,
+					`AND EXISTS (
+						SELECT 1
+						FROM itemTags it3
+						JOIN tags t3 ON t3.tagID = it3.tagID
+						WHERE it3.itemID = i.itemID
+						AND LOWER(t3.name) = ?
+					)`)
+			}
+		}
 	}
-	if opts.TagAny {
-		return `
-			AND EXISTS (
+
+	for range opts.TagContains {
+		parts = append(parts,
+			`AND EXISTS (
 				SELECT 1
-				FROM itemTags it3
-				JOIN tags t3 ON t3.tagID = it3.tagID
-				WHERE it3.itemID = i.itemID
-				AND LOWER(t3.name) IN (` + placeholders(len(tags)) + `)
-			)
-		`
+				FROM itemTags itc
+				JOIN tags tc ON tc.tagID = itc.tagID
+				WHERE itc.itemID = i.itemID
+				AND LOWER(tc.name) LIKE ?
+			)`)
 	}
-	clause := ""
-	for range tags {
-		clause += `
-			AND EXISTS (
+
+	for range opts.ExcludeTags {
+		parts = append(parts,
+			`AND NOT EXISTS (
 				SELECT 1
-				FROM itemTags it3
-				JOIN tags t3 ON t3.tagID = it3.tagID
-				WHERE it3.itemID = i.itemID
-				AND LOWER(t3.name) = ?
-			)
-		`
+				FROM itemTags ite
+				JOIN tags te ON te.tagID = ite.tagID
+				WHERE ite.itemID = i.itemID
+				AND LOWER(te.name) = ?
+			)`)
 	}
-	return clause
+
+	return strings.Join(parts, "\n\t\t")
+}
+
+func localCollectionClause(opts FindOptions) string {
+	var parts []string
+	if len(opts.Collection) > 0 {
+		parts = append(parts,
+			`AND EXISTS (
+				SELECT 1 FROM collectionItems ci
+				JOIN collections c ON c.collectionID = ci.collectionID
+				WHERE ci.itemID = i.itemID
+				AND LOWER(c.key) IN (`+placeholders(len(opts.Collection))+`)
+			)`)
+	}
+	if len(opts.NoCollection) > 0 {
+		parts = append(parts,
+			`AND NOT EXISTS (
+				SELECT 1 FROM collectionItems ci2
+				JOIN collections c2 ON c2.collectionID = ci2.collectionID
+				WHERE ci2.itemID = i.itemID
+				AND LOWER(c2.key) IN (`+placeholders(len(opts.NoCollection))+`)
+			)`)
+	}
+	return strings.Join(parts, "\n\t\t")
+}
+
+func localDateRangeClause(opts FindOptions) string {
+	var parts []string
+	if opts.DateModifiedAfter != "" {
+		if expr, ok := parseRelativeDate(opts.DateModifiedAfter); ok {
+			parts = append(parts, "AND i.dateModified >= "+expr)
+		}
+	}
+	if opts.DateAddedAfter != "" {
+		if expr, ok := parseRelativeDate(opts.DateAddedAfter); ok {
+			parts = append(parts, "AND i.dateAdded >= "+expr)
+		}
+	}
+	return strings.Join(parts, "\n\t\t")
 }
 
 func normalizedTags(tags []string) []string {

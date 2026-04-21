@@ -14,28 +14,35 @@ import (
 )
 
 type FindOptions struct {
-	Query          string
-	FullText       bool
-	FullTextAny    bool
-	All            bool
-	Full           bool
-	ItemType       string
-	Limit          int
-	Start          int
-	Tag            string
-	Tags           []string
-	TagAny         bool
-	IncludeFields  []string
-	Sort           string
-	Direction      string
-	QMode          string
-	IncludeTrashed bool
-	DateAfter      string
-	DateBefore     string
-	HasPDF         bool
-	AttachmentName string
-	AttachmentPath string
-	AttachmentType string
+	Query             string
+	FullText          bool
+	FullTextAny       bool
+	All               bool
+	Full              bool
+	ItemType          string
+	Limit             int
+	Start             int
+	Tag               string
+	Tags              []string
+	TagAny            bool
+	IncludeFields     []string
+	Sort              string
+	Direction         string
+	QMode             string
+	IncludeTrashed    bool
+	DateAfter         string
+	DateBefore        string
+	HasPDF            bool
+	AttachmentName    string
+	AttachmentPath    string
+	AttachmentType    string
+	Collection        []string
+	NoCollection      []string
+	TagContains       []string
+	ExcludeTags       []string
+	ExcludeItemType   string
+	DateModifiedAfter string
+	DateAddedAfter    string
 }
 
 type LibraryStats struct {

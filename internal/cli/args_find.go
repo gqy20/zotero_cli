@@ -138,6 +138,48 @@ func parseFindArgs(args []string) (findParsedArgs, error) {
 			}
 			i++
 			opts.AttachmentType = strings.TrimSpace(args[i])
+		case "--collection":
+			if i+1 >= len(args) {
+				return findParsedArgs{}, fmt.Errorf("missing value for --collection")
+			}
+			i++
+			opts.Collection = append(opts.Collection, strings.TrimSpace(args[i]))
+		case "--no-collection":
+			if i+1 >= len(args) {
+				return findParsedArgs{}, fmt.Errorf("missing value for --no-collection")
+			}
+			i++
+			opts.NoCollection = append(opts.NoCollection, strings.TrimSpace(args[i]))
+		case "--tag-contains":
+			if i+1 >= len(args) {
+				return findParsedArgs{}, fmt.Errorf("missing value for --tag-contains")
+			}
+			i++
+			opts.TagContains = append(opts.TagContains, strings.TrimSpace(strings.ToLower(args[i])))
+		case "--exclude-tag":
+			if i+1 >= len(args) {
+				return findParsedArgs{}, fmt.Errorf("missing value for --exclude-tag")
+			}
+			i++
+			opts.ExcludeTags = append(opts.ExcludeTags, strings.TrimSpace(strings.ToLower(args[i])))
+		case "--no-type":
+			if i+1 >= len(args) {
+				return findParsedArgs{}, fmt.Errorf("missing value for --no-type")
+			}
+			i++
+			opts.ExcludeItemType = strings.TrimSpace(args[i])
+		case "--modified-within":
+			if i+1 >= len(args) {
+				return findParsedArgs{}, fmt.Errorf("missing value for --modified-within")
+			}
+			i++
+			opts.DateModifiedAfter = strings.TrimSpace(args[i])
+		case "--added-since":
+			if i+1 >= len(args) {
+				return findParsedArgs{}, fmt.Errorf("missing value for --added-since")
+			}
+			i++
+			opts.DateAddedAfter = strings.TrimSpace(args[i])
 		case "--include-trashed":
 			opts.IncludeTrashed = true
 		default:

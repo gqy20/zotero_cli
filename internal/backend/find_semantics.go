@@ -1,6 +1,8 @@
 package backend
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -16,6 +18,13 @@ func NormalizeFindOptions(opts FindOptions) FindOptions {
 	opts.AttachmentName = strings.TrimSpace(opts.AttachmentName)
 	opts.AttachmentPath = strings.TrimSpace(opts.AttachmentPath)
 	opts.AttachmentType = strings.TrimSpace(opts.AttachmentType)
+	opts.ExcludeItemType = strings.TrimSpace(opts.ExcludeItemType)
+	opts.DateModifiedAfter = strings.TrimSpace(opts.DateModifiedAfter)
+	opts.DateAddedAfter = strings.TrimSpace(opts.DateAddedAfter)
+	opts.Collection = normalizeFindTags(opts.Collection)
+	opts.NoCollection = normalizeFindTags(opts.NoCollection)
+	opts.TagContains = normalizeFindTags(opts.TagContains)
+	opts.ExcludeTags = normalizeFindTags(opts.ExcludeTags)
 	opts.Tags = normalizeFindTags(opts.Tags)
 	opts.Tag = ""
 	if len(opts.Tags) == 1 {
@@ -52,7 +61,22 @@ func isDefaultFindVisibleItemType(itemType string) bool {
 }
 
 func requiresLocalFindSupport(opts FindOptions) bool {
-	return opts.FullText || hasAttachmentFindFilters(opts)
+	if opts.FullText || hasAttachmentFindFilters(opts) {
+		return true
+	}
+	if len(opts.Collection) > 0 || len(opts.NoCollection) > 0 {
+		return true
+	}
+	if len(opts.TagContains) > 0 || len(opts.ExcludeTags) > 0 {
+		return true
+	}
+	if opts.ExcludeItemType != "" {
+		return true
+	}
+	if opts.DateModifiedAfter != "" || opts.DateAddedAfter != "" {
+		return true
+	}
+	return false
 }
 
 func hasAttachmentFindFilters(opts FindOptions) bool {
@@ -183,5 +207,39 @@ func parseDateRange(value string) (time.Time, time.Time, bool) {
 			return start, end, true
 		}
 		return time.Time{}, time.Time{}, false
+	}
+}
+
+func parseRelativeDate(s string) (string, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", false
+	}
+	if strings.HasSuffix(s, "d") {
+		days, err := strconv.Atoi(s[:len(s)-1])
+		if err != nil || days < 0 {
+			return "", false
+		}
+		return fmt.Sprintf("datetime('now', '-%d days', 'start of day')", days), true
+	}
+	switch len(s) {
+	case len("2006"):
+		if _, err := time.Parse("2006", s); err != nil {
+			return "", false
+		}
+		return fmt.Sprintf("datetime('%s-01-01')", s), true
+	case len("2006-01"):
+		if _, err := time.Parse("2006-01", s); err != nil {
+			return "", false
+		}
+		return fmt.Sprintf("datetime('%s-01')", s), true
+	default:
+		if len(s) >= len("2006-01-02") {
+			if _, err := time.Parse("2006-01-02", s[:10]); err != nil {
+				return "", false
+			}
+			return fmt.Sprintf("datetime('%s')", s[:10]), true
+		}
+		return "", false
 	}
 }
