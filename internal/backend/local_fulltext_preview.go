@@ -182,39 +182,36 @@ func (r *HybridReader) FullTextSnippet(ctx context.Context, item domain.Item, qu
 }
 
 func (r *LocalReader) buildFullTextDocument(item domain.Item, attachment domain.Attachment) (FullTextDocument, bool, error) {
-	text, err := r.readAttachmentFullTextText(attachment.Key)
-	if err != nil {
-		return FullTextDocument{}, false, err
-	}
-	if text != "" {
-		sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
-		if !ok {
-			return FullTextDocument{}, false, nil
-		}
-		return FullTextDocument{
-			Text: normalizeFullTextText(text),
-			Meta: fullTextCacheMeta{
-				AttachmentKey:   attachment.Key,
-				ParentItemKey:   item.Key,
-				ResolvedPath:    sourcePath,
-				ContentType:     attachment.ContentType,
-				Title:           item.Title,
-				Creators:        joinFullTextCreators(item.Creators),
-				Tags:            strings.Join(item.Tags, " "),
-				AttachmentTitle: attachment.Title,
-				AttachmentName:  firstNonEmptyString(attachment.Filename, attachment.Title),
-				AttachmentPath:  firstNonEmptyString(attachment.ResolvedPath, attachment.ZoteroPath),
-				Extractor:       "zotero_ft_cache",
-				SourceMtimeUnix: info.ModTime().Unix(),
-				SourceSize:      info.Size(),
-				ExtractedAt:     time.Now().UTC().Format(time.RFC3339),
-			},
-		}, true, nil
-	}
-	// Priority 2: PyMuPDF (default best quality)
+	// Priority 1: PyMuPDF (best quality with structured blocks, geometry-based header/footer removal)
 	doc, ok, err := r.extractFullTextWithPyMuPDF(context.Background(), attachment)
 	if err != nil || !ok {
-		// PyMuPDF failed or unavailable -> fall back to pdfium
+		// Priority 2: Zotero .zotero-ft-cache (fast but lower quality, especially for CJK/scan PDFs)
+		text, readErr := r.readAttachmentFullTextText(attachment.Key)
+		if readErr == nil && text != "" {
+			sourcePath, info, srcOk := fullTextAttachmentSourceInfo(attachment)
+			if srcOk {
+				return FullTextDocument{
+					Text: normalizeFullTextText(text),
+					Meta: fullTextCacheMeta{
+						AttachmentKey:   attachment.Key,
+						ParentItemKey:   item.Key,
+						ResolvedPath:    sourcePath,
+						ContentType:     attachment.ContentType,
+						Title:           item.Title,
+						Creators:        joinFullTextCreators(item.Creators),
+						Tags:            strings.Join(item.Tags, " "),
+						AttachmentTitle: attachment.Title,
+						AttachmentName:  firstNonEmptyString(attachment.Filename, attachment.Title),
+						AttachmentPath:  firstNonEmptyString(attachment.ResolvedPath, attachment.ZoteroPath),
+						Extractor:       "zotero_ft_cache",
+						SourceMtimeUnix: info.ModTime().Unix(),
+						SourceSize:      info.Size(),
+						ExtractedAt:     time.Now().UTC().Format(time.RFC3339),
+					},
+				}, true, nil
+			}
+		}
+		// Priority 3: pdfium fallback
 		doc, ok, err = extractFullTextWithPDFiumFunc(context.Background(), r, attachment)
 	}
 	if err != nil {
