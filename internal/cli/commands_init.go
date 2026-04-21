@@ -24,6 +24,10 @@ func (c *CLI) runInit(args []string) int {
 		return c.printCommandUsage(usageInit)
 	}
 
+	if flags.CheckPDF {
+		return c.runInitCheckPdf()
+	}
+
 	path, err := config.DefaultPath()
 	if err != nil {
 		return c.printErr(err)
@@ -94,7 +98,7 @@ func (c *CLI) runInit(args []string) int {
 		return 0
 	}
 	if cfg.DataDir == "" {
-		fmt.Fprintln(c.stdout, "\nTip: run 'zot setup pdf-extract' to set up PyMuPDF after configuring ZOT_DATA_DIR.")
+		fmt.Fprintln(c.stdout, "\nTip: run 'zot init --mode hybrid --data-dir /path --pdf' to set up config and PyMuPDF together.")
 		return 0
 	}
 
@@ -106,7 +110,7 @@ func (c *CLI) runInit(args []string) int {
 		}
 	}
 	if !wantPDF {
-		fmt.Fprintln(c.stdout, "\nYou can set up PyMuPDF later with: zot setup pdf-extract")
+		fmt.Fprintln(c.stdout, "\nYou can install PyMuPDF later with: zot init --pdf")
 		return 0
 	}
 
@@ -128,6 +132,18 @@ func (c *CLI) runInit(args []string) int {
 	return 0
 }
 
+func (c *CLI) runInitCheckPdf() int {
+	cfg, exitCode := c.loadConfig()
+	if exitCode != 0 {
+		return exitCode
+	}
+	if cfg.DataDir == "" {
+		fmt.Fprintln(c.stderr, "error: ZOT_DATA_DIR is required; run 'zot init' first")
+		return 3
+	}
+	return c.reportPdfExtractStatus(cfg.DataDir)
+}
+
 type initFlags struct {
 	Mode        string
 	LibraryType string
@@ -136,6 +152,7 @@ type initFlags struct {
 	DataDir     string
 	SetupPDF    bool
 	NoPDF       bool
+	CheckPDF    bool
 }
 
 func parseInitFlags(args []string) (initFlags, []string) {
@@ -177,6 +194,8 @@ func parseInitFlags(args []string) (initFlags, []string) {
 			f.SetupPDF = true
 		case "--no-pdf":
 			f.NoPDF = true
+		case "--check-pdf":
+			f.CheckPDF = true
 		default:
 			rest = append(rest, args[i])
 		}
@@ -184,7 +203,7 @@ func parseInitFlags(args []string) (initFlags, []string) {
 	return f, rest
 }
 
-const usageInit = `usage: zot init [--mode MODE] [--library-type TYPE] [--library-id ID] [--api-key KEY] [--data-dir PATH] [--pdf] [--no-pdf]
+const usageInit = `usage: zot init [--mode MODE] [--library-type TYPE] [--library-id ID] [--api-key KEY] [--data-dir PATH] [--pdf] [--no-pdf] [--check-pdf]
 
 Initialize ~/.zot/.env with a streamlined interactive setup.
 
@@ -196,6 +215,7 @@ Options:
   --data-dir PATH       Zotero local data directory (required for local/hybrid)
   --pdf                 Force PyMuPDF setup after config creation
   --no-pdf              Skip PyMuPDF setup
+  --check-pdf           Check PyMuPDF status without installing
 
 Provide all required flags for non-interactive mode.
 Omit flags for interactive mode with guided prompts.
@@ -204,4 +224,5 @@ Examples:
   zot init                              # Interactive guided setup
   zot init --mode hybrid --library-id 123 --api-key abc  # Partial flags, prompts for the rest
   zot init --mode web --library-type user --library-id 123 --api-key key  # Fully non-interactive
+  zot init --check-pdf                   # Check PyMuPDF installation status
 `

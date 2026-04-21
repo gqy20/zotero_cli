@@ -11,7 +11,7 @@
 先做三步：
 
 ```powershell
-.\zot.exe config init
+.\zot.exe init
 .\zot.exe config validate
 .\zot.exe stats --json
 ```
@@ -187,7 +187,7 @@ go run .\cmd\zot config validate
 # JSON 输出包含：主附件文本、所有 PDF 附件文本、缓存命中状态、来源元信息
 ```
 
-> 提取器优先级：**PyMuPDF** → Zotero ft-cache → pdfium WASM。首次使用需 `zot setup pdf-extract`。
+> 提取器优先级：**PyMuPDF** → Zotero ft-cache → pdfium WASM。首次使用需 `zot init --pdf` 或在 init 交互中确认安装。
 
 ### PDF 标注操作
 
@@ -296,7 +296,7 @@ go run .\cmd\zot config validate
 - local temporary unavailable
   - 对 `find --fulltext`、`find --snippet`、`relate`、`extract-text` 这类本地能力，优先保留本地错误，不要强行改走 Web
 - 配置缺失
-  - 运行 `zot config init`
+  - 运行 `zot init`
 
 ## 优先级建议
 

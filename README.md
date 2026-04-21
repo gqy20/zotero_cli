@@ -47,7 +47,7 @@
 
 > "帮我初始化 zot 的配置，我的 Zotero 数据目录在 XXX"
 
-AI 会读取内置 skill 文件，自动完成 `config init` → `config validate` → `setup pdf-extract` 全流程。
+AI 会读取内置 skill 文件，自动完成 `zot init`（含模式选择和可选 PyMuPDF 安装）→ `config validate` 全流程。
 
 ### 手动安装
 
@@ -60,13 +60,13 @@ AI 会读取内置 skill 文件，自动完成 `config init` → `config validat
 zot version
 
 # 3. 初始化配置
-zot config init          # 交互式填写 API key、库 ID、数据目录等
+zot init                 # 一键初始化（交互式：模式、API key、库 ID，local/hybrid 可选 PyMuPDF）
 
 # 4. 验证配置
 zot config validate
 ```
 
-`config init` 需要的信息：
+`zot init` 的交互提示：
 
 | 配置项 | 获取方式 | 说明 |
 |--------|----------|------|
@@ -75,7 +75,7 @@ zot config validate
 | `ZOT_DATA_DIR` | Zotero → 编辑 → 首选项 → 高级 | 本地数据目录路径 |
 | `ZOT_MODE` | 选择 | `web` / `local` / `hybrid`（推荐） |
 
-> local/hybrid 模式需额外执行 `zot setup pdf-extract` 安装 PyMuPDF。
+> local/hybrid 模式下 `zot init` 会询问是否安装 PyMuPDF，也可事后执行 `zot init --pdf` 安装，或 `zot init --check-pdf` 诊断状态。
 
 ### 源码构建
 
@@ -202,7 +202,7 @@ zot versions items --since 0 --json  # 版本变更记录
 | `local` | 本地 SQLite + storage/ | ZOT_DATA_DIR | 离线操作、PDF 处理、全文搜索 |
 | `hybrid`（推荐） | 本地优先，Web 回退 | 两者都要 | 日常使用，兼顾速度与完整性 |
 
-通过 `ZOT_MODE` 环境变量或 `config init` 设置。hybrid 模式下本地独有能力（全文检索、PDF 标注）不会误回退 Web。
+通过 `ZOT_MODE` 环境变量或 `zot init` 设置。hybrid 模式下本地独有能力（全文检索、PDF 标注）不会误回退 Web。
 
 ---
 
@@ -223,7 +223,7 @@ zot versions items --since 0 --json  # 版本变更记录
 | **写操作** | `create-item` / `update-item` / `delete-item` | 条目 CRUD（受权限保护） |
 | **标签** | `add-tag` / `remove-tag` | 批量标签管理 |
 | **收藏夹** | `collections` / `create-collection` | 收藏夹查看与创建 |
-| **配置** | `config init / show / validate` | 配置管理 |
+| **配置** | `init / config show / validate` | 配置管理 |
 | **其他** | `stats` / `tags` / `notes` / `searches` / `trash` | 库信息查看 |
 
 完整选项说明见 [命令参考](docs/commands.md)，AI Agent 使用规范见 [AI Agent 指南](docs/AI_AGENT.md)，技术架构见 [架构文档](docs/architecture.md)。

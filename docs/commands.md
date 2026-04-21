@@ -103,7 +103,7 @@ JSON 输出包含完整字段 + annotations（含 type/text/comment/color/pageIn
 
 ## PDF 文本提取 (`extract-text`)
 
-> 仅 **local** 和 **hybrid** 模式。依赖 PyMuPDF（需先 `zot setup pdf-extract`）。
+> 仅 **local** 和 **hybrid** 模式。依赖 PyMuPDF（需先 `zot init --pdf` 或在 init 交互中安装）。
 
 ```bash
 zot extract-text ITEMKEY          # 提取主附件文本
@@ -347,7 +347,7 @@ zot delete-search KEY --if-unmodified-since-version N [--json]
 
 ```bash
 zot config path        # 配置文件路径
-zot config init        # 交互式创建 ~/.zot/.env
+zot init               # 一键初始化 ~/.zot/.env（含模式选择和可选 PyMuPDF）
 zot config show        # 当前配置（密钥脱敏）
 zot config validate  # 校验 API key 和 library ID
 zot version            # 版本信息
@@ -374,8 +374,9 @@ zot version            # 版本信息
 ### PDF 环境
 
 ```bash
-zot setup pdf-extract --check   # 检查 PyMuPDF 就绪状态
-zot setup pdf-extract           # 安装 PyMuPDF 到 venv
+zot init --check-pdf            # 检查 PyMuPDF 就绪状态
+zot init --pdf                 # 安装 PyMuPDF（含配置初始化）
+zot init --mode hybrid ... --pdf  # 非交互：一步完成配置 + PyMuPDF
 ```
 
 自动在 `{ZOT_DATA_DIR}/.zotero_cli/venv/` 管理 Python 环境，优先 `uv`。

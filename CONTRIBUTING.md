@@ -32,7 +32,7 @@ make check          # fmt-check + vet + test
 go build -o zot.exe ./cmd/zot
 
 # 运行（需要先配置）
-./zot.exe config init
+./zot.exe init
 ./zot.exe version
 ```
 

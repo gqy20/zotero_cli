@@ -141,8 +141,6 @@ func (c *CLI) Run(args []string) int {
 		return c.runUpdateSearch(args[1:])
 	case "delete-search":
 		return c.runDeleteSearch(args[1:])
-	case "setup":
-		return c.runSetup(args[1:])
 	case "init":
 		return c.runInit(args[1:])
 	case "index":

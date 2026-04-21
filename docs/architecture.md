@@ -259,7 +259,7 @@ Python 环境自动管理在 `{ZOT_DATA_DIR}/.zotero_cli/venv/`，优先使用 `
 
 | 工具 | 用途 | 安装方式 |
 |------|------|----------|
-| PyMuPDF | PDF 标注读写、文本提取首选 | `zot setup pdf-extract` 自动安装 |
+| PyMuPDF | PDF 标注读写、文本提取首选 | `zot init --pdf` 自动安装 |
 | pdfium WASM | 文本提取回退 | Go 模块内置 |
 | `uv` / `pip` | Python 包管理 | 自动检测，优先 uv |
 

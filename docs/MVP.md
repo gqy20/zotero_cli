@@ -116,15 +116,16 @@ Implication:
 
 The command surface should stay small.
 
-### `zot config init`
+### `zot init` (formerly `config init`)
 
-Interactive setup for:
+Streamlined interactive setup for:
 
+- mode: `web` / `local` / `hybrid`
 - library type: `user` or `group`
 - library ID
 - API key
-- default citation style
-- default locale
+- data directory (local/hybrid only)
+- optional PyMuPDF installation
 
 Behavior:
 
@@ -617,7 +618,7 @@ Key manual checks:
 Deliverable:
 
 - `zot version`
-- `zot config init`
+- `zot init`
 - `zot config show`
 
 ### Milestone 2: Core read path
@@ -690,7 +691,7 @@ Mitigation:
 
 Mitigation:
 
-- make `config init` interactive and friendly
+- make `zot init` interactive and streamlined (mode selection + optional PyMuPDF)
 - include config validation command
 
 
@@ -712,7 +713,7 @@ Start narrow and finish a good small tool.
 
 Recommended implementation order:
 
-1. `config init`
+1. `init`
 2. `config show`
 3. `find`
 4. `show`

@@ -128,7 +128,7 @@ zot find "test" --json
 {
   "ok": false,
   "command": "find",
-  "error": "配置文件不存在: ~/.zot/.env。请先运行 'zot config init' 初始化配置",
+  "error": "配置文件不存在: ~/.zot/.env。请先运行 'zot init' 初始化配置",
   "meta": {}
 }
 ```
@@ -140,7 +140,7 @@ zot find "test" --json
 | **0** | 成功 | 正常消费 data |
 | **1** | 运行时错误 | 向用户报告 error 内容，建议修复方案 |
 | **2** | 参数/用法错误 | 显示 usage 信息，提示正确参数 |
-| **3** | 配置错误 | 引导用户运行 `zot config init` 或检查环境变量 |
+| **3** | 配置错误 | 引导用户运行 `zot init` 或检查环境变量 |
 
 ## AI Agent 错误处理建议
 
