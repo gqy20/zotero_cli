@@ -17,8 +17,8 @@ export function truncate(str: string, len: number): string {
   return str.slice(0, len) + '...'
 }
 
-export function formatAuthors(creators: { name: string }[]): string {
-  if (!creators.length) return ''
+export function formatAuthors(creators: { name: string }[] | null | undefined): string {
+  if (!creators || !creators.length) return ''
   if (creators.length === 1) return creators[0].name
   return `${creators[0].name} et al.`
 }

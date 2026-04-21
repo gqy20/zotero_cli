@@ -78,9 +78,9 @@ export default function Library() {
                       <Link to={`/items/${item.key}`} className="font-medium text-red-700 hover:text-red-800 hover:underline">
                         {item.title}
                       </Link>
-                      {item.tags.length > 0 && (
+                      {(item.tags ?? []).length > 0 && (
                         <div className="flex gap-1 mt-1 flex-wrap">
-                          {item.tags.slice(0, 3).map(tag => (
+                          {(item.tags ?? []).slice(0, 3).map(tag => (
                             <span key={tag} className="inline-block px-1.5 py-0.5 text-[10px] bg-gray-100 text-gray-600 rounded">{tag}</span>
                           ))}
                         </div>

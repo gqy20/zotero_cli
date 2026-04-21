@@ -1,11 +1,15 @@
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import type { Item } from '@/types/item'
 import { formatAuthors } from '@/lib/utils'
+import PdfViewer from '@/components/PdfViewer'
 
 export default function ItemDetail() {
   const { key } = useParams<{ key: string }>()
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
   const { data, isLoading } = useQuery({
     queryKey: ['item', key],
     queryFn: () => api.item(key!),
@@ -49,9 +53,9 @@ export default function ItemDetail() {
           } />
         )}
 
-        {item.tags.length > 0 && (
+        {(item.tags ?? []).length > 0 && (
           <div className="flex gap-2 flex-wrap">
-            {item.tags.map(tag => (
+            {(item.tags ?? []).map(tag => (
               <span key={tag} className="px-2 py-0.5 text-xs bg-red-50 text-red-700 rounded-full border border-red-200">{tag}</span>
             ))}
           </div>
@@ -59,14 +63,17 @@ export default function ItemDetail() {
       </div>
 
       {/* Attachments */}
-      {item.attachments.length > 0 && (
-        <Section title={`附件 (${item.attachments.length})`}>
+      {(item.attachments ?? []).length > 0 && (
+        <Section title={`附件 (${(item.attachments ?? []).length})`}>
           <div className="space-y-2">
-            {item.attachments.map(att => (
+            {(item.attachments ?? []).map(att => (
               <div key={att.key} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-md text-sm">
                 <span className="flex-1 truncate">{att.filename || att.title || att.key}</span>
                 {att.content_type === 'application/pdf' && (
-                  <button className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors">
+                  <button
+                    onClick={() => setPreviewUrl(`/api/v1/files/${att.key}`)}
+                    className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                  >
                     预览
                   </button>
                 )}
@@ -77,10 +84,10 @@ export default function ItemDetail() {
       )}
 
       {/* Notes */}
-      {item.notes.length > 0 && (
-        <Section title={`笔记 (${item.notes.length})`}>
+      {(item.notes ?? []).length > 0 && (
+        <Section title={`笔记 (${(item.notes ?? []).length})`}>
           <div className="space-y-2">
-            {item.notes.map(note => (
+            {(item.notes ?? []).map(note => (
               <div key={note.key} className="p-3 bg-yellow-50 rounded-md text-sm border border-yellow-200">
                 <p dangerouslySetInnerHTML={{ __html: note.content || note.preview || '' }} />
               </div>
@@ -90,10 +97,10 @@ export default function ItemDetail() {
       )}
 
       {/* Annotations */}
-      {item.annotations.length > 0 && (
-        <Section title={`标注 (${item.annotations.length})`}>
+      {(item.annotations ?? []).length > 0 && (
+        <Section title={`标注 (${(item.annotations ?? []).length})`}>
           <div className="space-y-2">
-            {item.annotations.map(ann => (
+            {(item.annotations ?? []).map(ann => (
               <div key={ann.key} className="flex items-start gap-2 px-3 py-2 rounded-md text-sm" style={{ backgroundColor: ann.color ? `${ann.color}20` : '#f9fafb' }}>
                 <span
                   className="w-2 h-2 rounded-full mt-1.5 shrink-0"
@@ -108,6 +115,21 @@ export default function ItemDetail() {
             ))}
           </div>
         </Section>
+      )}
+
+      {/* PDF Preview Modal */}
+      {previewUrl && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setPreviewUrl(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+              <h3 className="font-medium text-sm">PDF 预览</h3>
+              <button onClick={() => setPreviewUrl(null)} className="text-gray-400 hover:text-gray-600 text-lg">&times;</button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <PdfViewer url={previewUrl} />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
