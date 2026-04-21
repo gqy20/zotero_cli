@@ -9,7 +9,6 @@ var (
 	errWritePayloadMissing = errors.New("missing write payload")
 	errDataSourcesConflict = errors.New("conflicting write payload sources")
 	errMissingItemKeyValue = errors.New("missing item key")
-	errEmptyBatch          = errors.New("empty batch payload")
 )
 
 func errMissingFlagValue(flag string) error {
@@ -42,8 +41,4 @@ func errInvalidJSONPayload(err error) error {
 
 func errMissingItemKey() error {
 	return errMissingItemKeyValue
-}
-
-func errEmptyBatchPayload() error {
-	return errEmptyBatch
 }

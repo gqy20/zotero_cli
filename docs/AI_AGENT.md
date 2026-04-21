@@ -133,7 +133,6 @@ go run .\cmd\zot config validate
 对 agent 来说，下面这些命令都属于高风险：
 
 - `delete-item`
-- `delete-items`
 - `delete-collection`
 - `delete-search`
 

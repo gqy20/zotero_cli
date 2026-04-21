@@ -109,12 +109,6 @@ func (c *CLI) Run(args []string) int {
 		return c.runUpdateItem(args[1:])
 	case "delete-item":
 		return c.runDeleteItem(args[1:])
-	case "create-items":
-		return c.runCreateItems(args[1:])
-	case "update-items":
-		return c.runUpdateItems(args[1:])
-	case "delete-items":
-		return c.runDeleteItems(args[1:])
 	case "add-tag":
 		return c.runAddTag(args[1:])
 	case "remove-tag":
@@ -182,9 +176,6 @@ Commands:
   create-item   Create a new item from JSON data
   update-item   Update an existing item from JSON data
   delete-item   Delete an item using a version precondition
-  create-items  Create multiple items from a JSON array
-  update-items  Update multiple items from a JSON array
-  delete-items  Delete multiple items by key
   add-tag       Add a tag to multiple items
   remove-tag    Remove a tag from multiple items
   create-collection  Create a collection from JSON data

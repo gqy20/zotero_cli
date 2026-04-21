@@ -325,9 +325,6 @@ zot schema template book                  # 新建条目的 JSON 模板
 zot create-item (--data JSON \| --from-file PATH) --if-unmodified-since-version N [--json]
 zot update-item KEY (--data JSON \| --from-file PATH) --if-unmodified-since-version N [--json]
 zot delete-item KEY --if-unmodified-since-version N [--json]
-zot create-items (--data JSON \| --from-file PATH) --if-unmodified-since-version N [--json]
-zot update-items (--data JSON \| --from-file PATH) [--if-unmodified-since-version N] [--json]
-zot delete-items --items K1,K2 [--if-unmodified-since-version N] [--json]
 ```
 
 ### 标签操作

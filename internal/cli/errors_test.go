@@ -100,9 +100,6 @@ func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 		{name: "create item", args: []string{"create-item", "--data", `{"itemType":"book"}`, "--if-unmodified-since-version", "1"}},
 		{name: "update item", args: []string{"update-item", "ABCD2345", "--data", `{"title":"Updated"}`, "--if-unmodified-since-version", "1"}},
 		{name: "delete item", args: []string{"delete-item", "ABCD2345", "--if-unmodified-since-version", "1"}},
-		{name: "create items", args: []string{"create-items", "--data", `[{"itemType":"book"}]`, "--if-unmodified-since-version", "1"}},
-		{name: "update items", args: []string{"update-items", "--data", `[{"key":"ABCD2345","version":1,"title":"Updated"}]`}},
-		{name: "delete items", args: []string{"delete-items", "--items", "ABCD2345,EFGH6789"}},
 		{name: "add tag", args: []string{"add-tag", "--items", "ABCD2345", "--tag", "ai"}},
 		{name: "remove tag", args: []string{"remove-tag", "--items", "ABCD2345", "--tag", "ai"}},
 		{name: "create collection", args: []string{"create-collection", "--data", `{"name":"New Collection"}`, "--if-unmodified-since-version", "1"}},
@@ -347,25 +344,30 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			wantUsage: usageDeleteItem,
 		},
 		{
-			name:      "create items missing data",
-			args:      []string{"create-items"},
-			wantUsage: usageCreateItems,
+
+			name: "create items is now unknown command",
+
+			args: []string{"create-items"},
+
+			wantStderr: "unknown command: create-items",
 		},
+
 		{
-			name:       "create items invalid json",
-			args:       []string{"create-items", "--data", `[`, "--if-unmodified-since-version", "1"},
-			wantUsage:  usageCreateItems,
-			wantStderr: "error: invalid JSON payload",
+
+			name: "update items is now unknown command",
+
+			args: []string{"update-items"},
+
+			wantStderr: "unknown command: update-items",
 		},
+
 		{
-			name:      "update items missing data",
-			args:      []string{"update-items"},
-			wantUsage: usageUpdateItems,
-		},
-		{
-			name:      "delete items missing keys",
-			args:      []string{"delete-items"},
-			wantUsage: usageDeleteItems,
+
+			name: "delete items is now unknown command",
+
+			args: []string{"delete-items"},
+
+			wantStderr: "unknown command: delete-items",
 		},
 		{
 			name:      "add tag missing tag",
