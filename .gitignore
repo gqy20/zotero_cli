@@ -32,3 +32,17 @@ PROFILE
 # Local agent and analysis artifacts
 .codex_*.json
 .codex_*.sqlite
+
+# MCP tool artifacts
+.playwright-mcp/
+
+# Frontend (web/)
+web/node_modules/
+web/dist/
+web/.vite/
+web/tsconfig.tsbuildinfo
+
+# Frontend env
+web/.env
+web/.env.local
+web/.env.*.local
