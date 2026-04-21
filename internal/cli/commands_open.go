@@ -8,9 +8,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"zotero_cli/internal/config"
 )
 
 var zoteroExePath = ""
+var zoteroResolved bool
 
 func init() {
 	var candidates []string
@@ -39,9 +42,122 @@ func init() {
 	for _, c := range candidates {
 		if c != "" {
 			zoteroExePath = c
+			zoteroResolved = true
 			break
 		}
 	}
+}
+
+func resolveZoteroExePath(cfg config.Config) {
+	if zoteroResolved {
+		return
+	}
+	if path := findFromRegistry(); path != "" {
+		zoteroExePath = path
+		zoteroResolved = true
+		return
+	}
+	if path := findFromDataDir(cfg); path != "" {
+		zoteroExePath = path
+		zoteroResolved = true
+		return
+	}
+	if path := findFromPATH(); path != "" {
+		zoteroExePath = path
+		zoteroResolved = true
+		return
+	}
+}
+
+func findFromRegistry() string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+	uninstallPaths := []string{
+		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`,
+		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`,
+		`HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall`,
+	}
+	for _, base := range uninstallPaths {
+		if path := searchUninstallKey(base); path != "" {
+			return path
+		}
+	}
+	return ""
+}
+
+func searchUninstallKey(base string) string {
+	out, err := exec.Command("reg", "query", base).Output()
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if !strings.Contains(line, "Zotero") || !strings.HasPrefix(base+"\\", line) {
+			continue
+		}
+		subkey := line
+		locOut, err := exec.Command("reg", "query", subkey, "/v", "InstallLocation").Output()
+		if err != nil {
+			continue
+		}
+		dir := parseRegValue(locOut)
+		if dir == "" {
+			continue
+		}
+		for _, candidate := range []string{
+			filepath.Join(dir, "zotero.exe"),
+			filepath.Join(dir, "Zotero", "zotero.exe"),
+		} {
+			if fileExists(candidate) != "" {
+				return candidate
+			}
+		}
+	}
+	return ""
+}
+
+func parseRegValue(out []byte) string {
+	s := strings.TrimSpace(string(out))
+	idx := strings.LastIndex(s, "REG_SZ")
+	if idx < 0 {
+		return ""
+	}
+	return strings.TrimSpace(s[idx+len("REG_SZ"):])
+}
+
+func findFromDataDir(cfg config.Config) string {
+	if cfg.DataDir == "" {
+		return ""
+	}
+	dataDir := cfg.DataDir
+	parent := filepath.Dir(dataDir)
+	for _, candidate := range []string{
+		filepath.Join(parent, "zotero.exe"),
+		filepath.Join(parent, "Zotero", "zotero.exe"),
+		filepath.Join(dataDir, "zotero.exe"),
+	} {
+		if fileExists(candidate) != "" {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func findFromPATH() string {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("where", "zotero.exe")
+	default:
+		cmd = exec.Command("which", "zotero")
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func fileExists(path string) string {
@@ -82,6 +198,8 @@ func (c *CLI) runOpen(args []string) int {
 	if exitCode != 0 {
 		return exitCode
 	}
+
+	resolveZoteroExePath(cfg)
 
 	localReader, err := c.newLocalReader(cfg)
 	if err != nil {
