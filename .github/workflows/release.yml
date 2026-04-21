@@ -192,26 +192,25 @@ jobs:
           fi
 
           {
-            echo "# ${VERSION}"
+            echo "### 下载"
             echo
-            echo "## 下载"
+            echo "| 平台 | 文件 |"
+            echo "|------|------|"
+            echo "| Windows（推荐） | \`${binary_name}_${VERSION}_windows_amd64.exe\` (~6MB, UPX) |"
+            echo "| Windows（完整包） | \`${binary_name}_${VERSION}_windows_amd64.zip\` |"
+            echo "| macOS (Apple Silicon) | \`${binary_name}_${VERSION}_darwin_arm64.tar.gz\` |"
+            echo "| macOS (Intel) | \`${binary_name}_${VERSION}_darwin_amd64.tar.gz\` |"
+            echo "| Linux (x86_64) | \`${binary_name}_${VERSION}_linux_amd64.tar.gz\` |"
+            echo "| Linux (arm64) | \`${binary_name}_${VERSION}_linux_arm64.tar.gz\` |"
+            echo "| 校验和 | \`checksums.txt\` |"
             echo
-            echo "- **Windows（推荐）**: \`${binary_name}_${VERSION}_windows_amd64.exe\` — UPX 压缩版 (~6MB)"
-            echo "- **Windows（完整包）**: \`${binary_name}_${VERSION}_windows_amd64.zip\`"
-            echo "- macOS (Apple Silicon): \`${binary_name}_${VERSION}_darwin_arm64.tar.gz\`"
-            echo "- macOS (Intel): \`${binary_name}_${VERSION}_darwin_amd64.tar.gz\`"
-            echo "- Linux (x86_64): \`${binary_name}_${VERSION}_linux_amd64.tar.gz\`"
-            echo "- Linux (arm64): \`${binary_name}_${VERSION}_linux_arm64.tar.gz\`"
-            echo "- 校验文件: \`checksums.txt\`"
-            echo
-            echo "## 更新内容"
+            echo "### 更新内容"
             echo
             cat "${notes_file}"
             echo
             echo "---"
             echo
-            echo "查看完整更新日志："
-            echo "https://github.com/${{ github.repository }}/blob/${VERSION}/CHANGELOG.md"
+            echo "[完整更新日志](https://github.com/${{ github.repository }}/blob/${VERSION}/CHANGELOG.md)"
           } > "${notes_file}.tmp"
 
           mv "${notes_file}.tmp" "${notes_file}"
