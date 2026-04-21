@@ -94,3 +94,4 @@ time ./zot.exe overview --json # JSON 序列化开销
 
 > 注：所有耗时包含进程启动 + 配置加载 + TLS 连接（~300ms 固定开销）。
 > Agent 场景下若使用 daemon 模式可消除此开销。
+test
