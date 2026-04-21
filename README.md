@@ -64,6 +64,9 @@ zot init                 # 一键初始化（交互式：模式、API key、库 
 
 # 4. 验证配置
 zot config validate
+
+# 5. 一站式库概览（AI Agent 推荐入口）
+zot overview --json
 ```
 
 `zot init` 的交互提示：

@@ -6,12 +6,21 @@
 
 ## [Unreleased]
 
+### 后续改进计划（Agent 可用性增强）
+以下为规划中的改进方向，按优先级排序：
+1. **写操作 `--dry-run` 模式**：所有写命令支持预览将要执行的操作而不实际修改数据，提升安全性。
+2. **`find` → `export` 管道连接**：`export` 新增 `--from-find` 参数，内部执行搜索后直接导出，无需手动传递 key 列表。
+3. **图片解析与分析（`extract-images`）**：从 PDF 中提取图片资源（图表、示意图、照片等），支持按页码/尺寸过滤，输出图片文件路径或 base64 内嵌 JSON。为 agent 提供视觉内容理解能力，配合多模态模型实现「读图→分析→总结」的科研工作流（如自动解读论文中的实验数据图、流程图、分子结构图）。
+
+## [0.0.6] - 2026-04-22
+
 ### 新增
 - **统一 `zot init` 入口**：新增一站式初始化命令，替代分散的 `config init` + `setup pdf-extract` 流程。交互式仅提示关键字段（mode / type / id / key），支持 `--mode` / `--api-key` / `--library-id` 等标志实现非交互模式。local/hybrid 模式可选一步安装 PyMuPDF（`--pdf`）。
 - **`zot init --check-pdf`**：诊断 PyMuPDF 安装状态（原 `setup pdf-extract --check` 功能迁移）。
 - **`config init` 重定向**：运行时提示用户改用 `zot init`，不再执行旧版 7 问题交互流程。已删除 `promptConfigSetup()` 和 `runConfigInit()` 旧代码。
 - **`zot overview` 发现命令**：一次性返回库全貌快照（统计 + Top 收藏夹 + Top 标签 + 最近条目 + FTS 索引状态），专为 AI Agent 设计。文本模式输出人类可读摘要，`--json` 返回完整结构化数据含 `meta.index_status` 和 `meta.read_source`。降低 agent 使用门槛，无需多次 API 调用即可获得库概览。
 - **结构化 JSON 错误输出**：设置 `ZOT_JSON_ERRORS=1` 后所有命令错误以 `{ "ok": false, "command": "...", "data": "error msg", "code": N }` JSON 格式输出到 stdout，便于 agent 可靠解析。未设置时保持原有 stderr 纯文本行为。`jsonResponse` 新增 `Code` 字段，`printErr` 统一走 `jsonError` 路径。
+- **Zotero 路径自动发现**：`zot init` 和 `zot open` / `zot select` 自动检测 Zotero 数据目录和可执行文件路径。Windows 通过注册表 Uninstall key 查询，Linux/macOS 通过常见安装路径探测。减少手动配置 `ZOT_DATA_DIR` 的需求。
 
 ### 变更
 - **`zot schema` 元数据子命令**：将 6 个碎片化的 schema 内省命令（item-types / item-fields / creator-fields / item-type-fields / item-type-creator-types / item-template）合并为 `zot schema <sub>` 统一入口（types / fields / creator-types / fields-for / creator-types-for / template）。旧命令名已移除，直接报 unknown command。
@@ -19,12 +28,19 @@
 - **命令表面精简**：`setup pdf-extract` 安装模式重定向到 `zot init --pdf`；`--check` 诊断模式保留在 `zot setup pdf-extract --check` 和 `zot init --check-pdf` 双入口；`setup` 从主命令路由移除。
 - **文档全面同步**：README、AI_AGENT、commands、MVP、architecture、CONTRIBUTING、error 示例、`.claude/` 和 `.codex/` skill 文件中全部 `config init` / `setup pdf-extract` 引用更新为 `zot init` / `zot init --pdf`；commands 写操作章节更新为仅保留单数形式；新增 overview 命令文档和 JSON 错误输出说明。
 - **净减代码 ~250 行**：删除 promptConfigSetup()（74 行）、runConfigInit() 含 --example（49 行）、performPdfExtractSetup()（24 行）、3 个复数处理函数（~90 行）、parseWriteBatchArgs（~65 行）及对应 usage 常量/error 函数。
+- **测试模块拆分**：将大型测试文件拆分为聚焦模块（commands_read_test → 5 个文件，client_read_test → 3 个文件，find/list 测试独立），提升编译速度和可维护性。
 
-### 后续改进计划（Agent 可用性增强）
-以下为规划中的改进方向，按优先级排序：
-3. **写操作 `--dry-run` 模式**：所有写命令支持预览将要执行的操作而不实际修改数据，提升安全性。
-4. **`find` → `export` 管道连接**：`export` 新增 `--from-find` 参数，内部执行搜索后直接导出，无需手动传递 key 列表。
-5. **图片解析与分析（`extract-images`）**：从 PDF 中提取图片资源（图表、示意图、照片等），支持按页码/尺寸过滤，输出图片文件路径或 base64 内嵌 JSON。为 agent 提供视觉内容理解能力，配合多模态模型实现「读图→分析→总结」的科研工作流（如自动解读论文中的实验数据图、流程图、分子结构图）。
+### 性能
+- **overview 并行化加速 ~3x**：4 路 API 调用（stats / collections / tags / recent items）由串行改为 `sync.WaitGroup` 并行执行，overview 从 ~20s 降至 ~6s。
+- **collections 全本地化**：Reader 接口新增 `ListCollections()` 方法，local 模式直接查 SQLite（JOIN collections + collectionItems），hybrid 模式不再强制走 Web API。collections 命令从 3.3s 降至 ~6s 级别与其他本地调用对齐。
+- **性能基线文档**：新增 `docs/PERF.md`，记录全部 16 个命令的耗时基线和 P0/P1/P2 优化方向，为后续性能优化提供量化依据。
+
+### 修复
+- **web/hybrid 模式子笔记缺失**：`GetItem` 在 web 和 hybrid fallback 路径下现在正确填充子笔记（child notes），与 local 模式的 show 输出保持一致。
+- **Zotero 跨平台检测增强**：Windows 改用注册表 Uninstall key 查询定位 Zotero 安装路径；新增 Linux（`/usr/bin/zotero` 等）和 macOS（`/Applications/Zotero.app`）的可执行文件探测支持。
+
+### 工具链
+- **pre-commit hook 智能跳过**：检测暂存区文件类型——无 `.go` 文件时跳过 gofmt/vet/test（纯文档提交秒过）；无 YAML 文件时跳过 yamllint 检查。两者均无变更时直接放行。
 
 ## [0.0.5] - 2026-04-21
 
