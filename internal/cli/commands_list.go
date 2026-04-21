@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/domain"
@@ -322,36 +323,63 @@ func (c *CLI) runOverview(args []string) int {
 		return exitCode
 	}
 
-	stats, err := reader.GetLibraryStats(context.Background())
-	if err != nil {
-		return c.jsonError(err, "overview")
+	_, client, clientExit := c.loadClient()
+
+	ctx := context.Background()
+
+	type result struct {
+		stats       backend.LibraryStats
+		statsErr    error
+		collections []zoteroapi.Collection
+		tags        []backend.Tag
+		items       []domain.Item
 	}
 
-	// Top collections via client (Reader interface has no ListCollections)
-	var collections []zoteroapi.Collection
-	_, client, clientExit := c.loadClient()
-	if clientExit == 0 {
-		if colls, collErr := client.ListCollections(context.Background()); collErr == nil {
-			collections = colls
-			if len(collections) > 5 {
-				collections = collections[:5]
+	var r result
+	var wg sync.WaitGroup
+
+	wg.Add(4)
+
+	go func() {
+		defer wg.Done()
+		r.stats, r.statsErr = reader.GetLibraryStats(ctx)
+	}()
+
+	go func() {
+		defer wg.Done()
+		if clientExit == 0 && client != nil {
+			if colls, err := client.ListCollections(ctx); err == nil {
+				r.collections = colls
 			}
 		}
-	}
+	}()
 
-	// Tags summary (no limit param on Reader interface; truncate after fetch)
-	var tags []backend.Tag
-	if tagList, tagErr := reader.ListTags(context.Background()); tagErr == nil {
-		tags = tagList
-		if len(tags) > 10 {
-			tags = tags[:10]
+	go func() {
+		defer wg.Done()
+		if tagList, err := reader.ListTags(ctx); err == nil {
+			r.tags = tagList
 		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if itemList, err := reader.FindItems(ctx, backend.FindOptions{Limit: 5}); err == nil {
+			r.items = itemList
+		}
+	}()
+
+	wg.Wait()
+
+	if r.statsErr != nil {
+		return c.jsonError(r.statsErr, "overview")
 	}
 
-	// Recent items (limit 5 for overview)
-	var items []domain.Item
-	if itemList, itemErr := reader.FindItems(context.Background(), backend.FindOptions{Limit: 5}); itemErr == nil {
-		items = itemList
+	stats := r.stats
+	if len(r.collections) > 5 {
+		r.collections = r.collections[:5]
+	}
+	if len(r.tags) > 10 {
+		r.tags = r.tags[:10]
 	}
 
 	// Index status — simple mode-based check
@@ -373,9 +401,9 @@ func (c *CLI) runOverview(args []string) int {
 			"mode":               stats.LibraryType,
 			"library_id":         stats.LibraryID,
 			"total_items":        stats.TotalItems,
-			"collections_count":  len(collections),
-			"tags_count":         len(tags),
-			"recent_items_count": len(items),
+			"collections_count":  len(r.collections),
+			"tags_count":         len(r.tags),
+			"recent_items_count": len(r.items),
 			"index_status":       indexStatus,
 		}
 		c.appendReadMetadata(meta, reader)
@@ -383,9 +411,9 @@ func (c *CLI) runOverview(args []string) int {
 			OK: true, Command: "overview",
 			Data: map[string]any{
 				"stats":        stats,
-				"collections":  collections,
-				"tags":         tags,
-				"recent_items": items,
+				"collections":  r.collections,
+				"tags":         r.tags,
+				"recent_items": r.items,
 			},
 			Meta: meta,
 		})
@@ -399,23 +427,23 @@ func (c *CLI) runOverview(args []string) int {
 	}
 	fmt.Fprintln(c.stdout)
 
-	if len(collections) > 0 {
+	if len(r.collections) > 0 {
 		fmt.Fprintln(c.stdout, "Top Collections:")
-		for _, col := range collections {
+		for _, col := range r.collections {
 			fmt.Fprintf(c.stdout, "  %s (%d items)\n", col.Name, col.NumItems)
 		}
 	}
 
-	if len(tags) > 0 {
+	if len(r.tags) > 0 {
 		fmt.Fprintln(c.stdout, "Top Tags:")
-		for _, tag := range tags {
+		for _, tag := range r.tags {
 			fmt.Fprintf(c.stdout, "  %s (%d items)\n", tag.Name, tag.NumItems)
 		}
 	}
 
-	if len(items) > 0 {
+	if len(r.items) > 0 {
 		fmt.Fprintln(c.stdout, "Recent Items:")
-		for _, item := range items {
+		for _, item := range r.items {
 			creators := shortCreators(item.Creators)
 			fmt.Fprintf(c.stdout, "  %-10s  %-40s  %s\n", item.Key, truncate(item.Title, 38), creators)
 		}
