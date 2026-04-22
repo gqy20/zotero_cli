@@ -2,6 +2,7 @@ package zoteroapi
 
 import (
 	"context"
+	"encoding/json"
 	"html"
 	"net/http"
 	"sort"
@@ -224,7 +225,26 @@ func mapItem(item apiItem) Item {
 		DOI:       item.Data.DOI,
 		URL:       item.Data.URL,
 		Tags:      mapTags(item.Data.Tags),
+		Relations: parseRelationMap(item.Data.Relations),
 	}
+}
+
+func parseRelationMap(raw map[string]json.RawMessage) map[string][]string {
+	if raw == nil {
+		return nil
+	}
+	result := make(map[string][]string, len(raw))
+	for k, v := range raw {
+		var uris []string
+		if err := json.Unmarshal(v, &uris); err != nil {
+			var single string
+			if json.Unmarshal(v, &single) == nil {
+				uris = []string{single}
+			}
+		}
+		result[k] = uris
+	}
+	return result
 }
 
 func mapCreators(creators []apiCreator) []Creator {

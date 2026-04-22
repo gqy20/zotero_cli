@@ -509,6 +509,20 @@ func keyOrTitle(key, title string) string {
 	return "[" + key + "]"
 }
 
+var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
+
+func stripHTMLTags(s string) string {
+	return htmlTagRe.ReplaceAllString(s, "")
+}
+
+func snapshotReadMetadata(sqlitePath, cacheDir string) ReadMetadata {
+	stale := false
+	if cacheDir != "" && sqlitePath != "" {
+		stale = !isSnapshotValid(sqlitePath, cacheDir)
+	}
+	return ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true, SnapshotStale: stale}
+}
+
 func (r *LocalReader) GetAttachmentFile(ctx context.Context, key string) (string, string, error) {
 	var contentType, zoteroPath, filename string
 	err := r.withReadableDB(ctx, func(db *sql.DB) error {
@@ -579,6 +593,124 @@ func (r *LocalReader) GetRelated(ctx context.Context, key string) ([]domain.Rela
 		return nil, err
 	}
 	return relations, nil
+}
+
+func (r *LocalReader) GetRelatedAggregate(ctx context.Context, key string) (*domain.AggregatedRelations, error) {
+	result := &domain.AggregatedRelations{}
+	err := r.withReadableDB(ctx, func(db *sql.DB) error {
+		_, itemID, err := r.loadItemRefByKey(ctx, db, key)
+		if err != nil {
+			return err
+		}
+
+		var selfRelations []domain.Relation
+		var noteRelationsList []domain.NoteRelations
+		var relErr error
+		var wg sync.WaitGroup
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var outgoing, incoming []domain.Relation
+			var wg2 sync.WaitGroup
+			wg2.Add(2)
+			go func() {
+				defer wg2.Done()
+				outgoing, relErr = r.loadOutgoingRelations(ctx, db, itemID)
+			}()
+			go func() {
+				defer wg2.Done()
+				incoming, relErr = r.loadIncomingRelations(ctx, db, key)
+			}()
+			wg2.Wait()
+			selfRelations = append(outgoing, incoming...)
+			sort.SliceStable(selfRelations, func(i, j int) bool {
+				if selfRelations[i].Predicate != selfRelations[j].Predicate {
+					return selfRelations[i].Predicate < selfRelations[j].Predicate
+				}
+				if selfRelations[i].Direction != selfRelations[j].Direction {
+					return selfRelations[i].Direction < selfRelations[j].Direction
+				}
+				return selfRelations[i].Target.Key < selfRelations[j].Target.Key
+			})
+		}()
+
+		rows, err := db.QueryContext(ctx, `
+			SELECT i.key, COALESCE(SUBSTR(n.note, 1, 300), '')
+			FROM itemNotes n
+			JOIN items i ON i.itemID = n.itemID
+			WHERE n.parentItemID = ?
+			ORDER BY i.key
+		`, itemID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		type noteInfo struct {
+			key     string
+			preview string
+		}
+		var notes []noteInfo
+		for rows.Next() {
+			var ni noteInfo
+			if err := rows.Scan(&ni.key, &ni.preview); err != nil {
+				return err
+			}
+			notes = append(notes, ni)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for _, ni := range notes {
+				noteRef, noteItemID, loadErr := r.loadItemRefByKey(ctx, db, ni.key)
+				if loadErr != nil {
+					continue
+				}
+				var outgoing, incoming []domain.Relation
+				var wg3 sync.WaitGroup
+				wg3.Add(2)
+				go func() {
+					defer wg3.Done()
+					outgoing, _ = r.loadOutgoingRelations(ctx, db, noteItemID)
+				}()
+				go func() {
+					defer wg3.Done()
+					incoming, _ = r.loadIncomingRelations(ctx, db, ni.key)
+				}()
+				wg3.Wait()
+
+				allRels := append(outgoing, incoming...)
+				if len(allRels) == 0 {
+					continue
+				}
+				sort.SliceStable(allRels, func(i, j int) bool {
+					if allRels[i].Predicate != allRels[j].Predicate {
+						return allRels[i].Predicate < allRels[j].Predicate
+					}
+					return allRels[i].Target.Key < allRels[j].Target.Key
+				})
+				noteRelationsList = append(noteRelationsList, domain.NoteRelations{
+					Source:    noteRef,
+					Preview:   stripHTMLTags(ni.preview),
+					Relations: allRels,
+				})
+			}
+		}()
+
+		wg.Wait()
+		result.Self = selfRelations
+		result.Notes = noteRelationsList
+		return relErr
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (r *LocalReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
@@ -728,7 +860,7 @@ func (r *LocalReader) withReadableDB(_ context.Context, fn func(*sql.DB) error) 
 	if closeErr != nil {
 		return newLocalTemporarilyUnavailableError(closeErr)
 	}
-	r.lastReadMetadata = ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true}
+	r.lastReadMetadata = snapshotReadMetadata(r.SQLitePath, r.SnapshotCacheDir)
 	return nil
 }
 
@@ -759,7 +891,7 @@ func (r *LocalReader) openDB() (*sql.DB, func(), error) {
 	if err != nil {
 		return nil, nil, newLocalTemporarilyUnavailableError(err)
 	}
-	r.lastReadMetadata = ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true}
+	r.lastReadMetadata = snapshotReadMetadata(r.SQLitePath, r.SnapshotCacheDir)
 	return db, cleanup, nil
 }
 

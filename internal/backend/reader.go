@@ -57,6 +57,7 @@ type LibraryStats struct {
 type ReadMetadata struct {
 	ReadSource            string `json:"read_source,omitempty"`
 	SQLiteFallback        bool   `json:"sqlite_fallback,omitempty"`
+	SnapshotStale         bool   `json:"snapshot_stale,omitempty"`
 	FullTextEngine        string `json:"full_text_engine,omitempty"`
 	FullTextSource        string `json:"full_text_source,omitempty"`
 	FullTextAttachmentKey string `json:"full_text_attachment_key,omitempty"`
@@ -308,7 +309,7 @@ func shouldFallbackToWeb(op readOperation, err error) bool {
 	case readOperationCiteItem:
 		return errors.Is(err, ErrItemNotFound) || errors.Is(err, ErrLocalTemporarilyUnavailable)
 	case readOperationGetRelated:
-		return false
+		return true
 	default:
 		return false
 	}

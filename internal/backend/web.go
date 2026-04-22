@@ -42,7 +42,12 @@ func (r *WebReader) GetItem(ctx context.Context, key string) (domain.Item, error
 }
 
 func (r *WebReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
-	return nil, newUnsupportedFeatureErrorWithHint("web", "relate", "set ZOT_MODE=local or ZOT_MODE=hybrid to use this feature")
+	rawItem, err := r.client.GetItem(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	r.lastReadMetadata = ReadMetadata{ReadSource: "web"}
+	return extractRelationsFromAPIItem(rawItem), nil
 }
 
 func (r *WebReader) CiteItem(ctx context.Context, key string, opts domain.CitationOptions) (domain.CitationResult, error) {
@@ -196,4 +201,25 @@ func mapDomainNotes(notes []zoteroapi.Note) []domain.Note {
 		})
 	}
 	return out
+}
+
+func extractRelationsFromAPIItem(item zoteroapi.Item) []domain.Relation {
+	if item.Relations == nil || len(item.Relations) == 0 {
+		return nil
+	}
+	var relations []domain.Relation
+	for predicate, uris := range item.Relations {
+		for _, uri := range uris {
+			targetKey := relationObjectKey(uri)
+			if targetKey == "" {
+				continue
+			}
+			relations = append(relations, domain.Relation{
+				Predicate: predicate,
+				Direction: "outgoing",
+				Target:    domain.ItemRef{Key: targetKey},
+			})
+		}
+	}
+	return relations
 }

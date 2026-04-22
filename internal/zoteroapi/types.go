@@ -1,6 +1,7 @@
 package zoteroapi
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -144,21 +145,22 @@ type LibraryStats struct {
 }
 
 type Item struct {
-	Version     int          `json:"version,omitempty"`
-	Key         string       `json:"key"`
-	ItemType    string       `json:"item_type"`
-	Title       string       `json:"title"`
-	Date        string       `json:"date"`
-	Creators    []Creator    `json:"creators"`
-	Container   string       `json:"container,omitempty"`
-	Volume      string       `json:"volume,omitempty"`
-	Issue       string       `json:"issue,omitempty"`
-	Pages       string       `json:"pages,omitempty"`
-	DOI         string       `json:"doi,omitempty"`
-	URL         string       `json:"url,omitempty"`
-	Tags        []string     `json:"tags,omitempty"`
-	Attachments []Attachment `json:"attachments,omitempty"`
-	Notes       []Note       `json:"notes,omitempty"`
+	Version     int                 `json:"version,omitempty"`
+	Key         string              `json:"key"`
+	ItemType    string              `json:"item_type"`
+	Title       string              `json:"title"`
+	Date        string              `json:"date"`
+	Creators    []Creator           `json:"creators"`
+	Container   string              `json:"container,omitempty"`
+	Volume      string              `json:"volume,omitempty"`
+	Issue       string              `json:"issue,omitempty"`
+	Pages       string              `json:"pages,omitempty"`
+	DOI         string              `json:"doi,omitempty"`
+	URL         string              `json:"url,omitempty"`
+	Tags        []string            `json:"tags,omitempty"`
+	Attachments []Attachment        `json:"attachments,omitempty"`
+	Notes       []Note              `json:"notes,omitempty"`
+	Relations   map[string][]string `json:"relations,omitempty"`
 }
 
 type Creator struct {
@@ -182,23 +184,24 @@ type apiItem struct {
 }
 
 type apiItemData struct {
-	ItemType         string       `json:"itemType"`
-	Title            string       `json:"title"`
-	Date             string       `json:"date"`
-	DOI              string       `json:"DOI"`
-	URL              string       `json:"url"`
-	ContentType      string       `json:"contentType"`
-	LinkMode         string       `json:"linkMode"`
-	Filename         string       `json:"filename"`
-	PublicationTitle string       `json:"publicationTitle"`
-	ProceedingsTitle string       `json:"proceedingsTitle"`
-	BookTitle        string       `json:"bookTitle"`
-	Volume           string       `json:"volume"`
-	Issue            string       `json:"issue"`
-	Pages            string       `json:"pages"`
-	Creators         []apiCreator `json:"creators"`
-	Tags             []apiTag     `json:"tags"`
-	Note             string       `json:"note"`
+	ItemType         string                     `json:"itemType"`
+	Title            string                     `json:"title"`
+	Date             string                     `json:"date"`
+	DOI              string                     `json:"DOI"`
+	URL              string                     `json:"url"`
+	ContentType      string                     `json:"contentType"`
+	LinkMode         string                     `json:"linkMode"`
+	Filename         string                     `json:"filename"`
+	PublicationTitle string                     `json:"publicationTitle"`
+	ProceedingsTitle string                     `json:"proceedingsTitle"`
+	BookTitle        string                     `json:"bookTitle"`
+	Volume           string                     `json:"volume"`
+	Issue            string                     `json:"issue"`
+	Pages            string                     `json:"pages"`
+	Creators         []apiCreator               `json:"creators"`
+	Tags             []apiTag                   `json:"tags"`
+	Note             string                     `json:"note"`
+	Relations        map[string]json.RawMessage `json:"relations,omitempty"`
 }
 
 type apiCreator struct {

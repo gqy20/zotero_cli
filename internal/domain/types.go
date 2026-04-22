@@ -89,6 +89,23 @@ type Relation struct {
 	Target    ItemRef `json:"target"`
 }
 
+type AggregatedRelations struct {
+	Self      []Relation       `json:"self"`
+	Notes     []NoteRelations  `json:"notes"`
+	Citations []CitationSource `json:"citations"`
+}
+
+type NoteRelations struct {
+	Source    ItemRef    `json:"source"`
+	Preview   string     `json:"preview,omitempty"`
+	Relations []Relation `json:"relations"`
+}
+
+type CitationSource struct {
+	SourceKey string    `json:"source_key"`
+	Targets   []ItemRef `json:"targets"`
+}
+
 type CitationOptions struct {
 	Format string // "citation" | "bib"
 	Style  string

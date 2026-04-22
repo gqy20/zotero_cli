@@ -349,17 +349,37 @@ func (c *CLI) runRelate(args []string) int {
 	}
 
 	jsonOutput := false
+	aggregate := false
+	predicate := ""
 	key := ""
+	nextFlag := ""
 	for _, arg := range args {
-		if arg == "--json" {
+		if nextFlag != "" {
+			switch nextFlag {
+			case "predicate":
+				predicate = arg
+			}
+			nextFlag = ""
+			continue
+		}
+		switch arg {
+		case "--json":
 			jsonOutput = true
-			continue
+		case "--aggregate":
+			aggregate = true
+		case "--predicate":
+			nextFlag = "predicate"
+		default:
+			if key == "" {
+				key = arg
+			} else {
+				fmt.Fprintln(c.stderr, usageRelate)
+				return 2
+			}
 		}
-		if key == "" {
-			key = arg
-			continue
-		}
-		fmt.Fprintln(c.stderr, usageRelate)
+	}
+	if nextFlag != "" {
+		fmt.Fprintf(c.stderr, "missing value for --%s\n", nextFlag)
 		return 2
 	}
 
@@ -373,9 +393,17 @@ func (c *CLI) runRelate(args []string) int {
 		return exitCode
 	}
 
+	if aggregate {
+		return c.runRelateAggregate(reader, key, predicate, jsonOutput)
+	}
+
 	relations, err := reader.GetRelated(context.Background(), key)
 	if err != nil {
 		return c.printErr(err)
+	}
+
+	if predicate != "" {
+		relations = filterRelationsByPredicate(relations, predicate)
 	}
 
 	if jsonOutput {
@@ -397,6 +425,88 @@ func (c *CLI) runRelate(args []string) int {
 		fmt.Fprintf(c.stdout, "  - [%s][%s] %s\n", relation.Predicate, relation.Direction, relateSummary(relation.Target))
 	}
 	return 0
+}
+
+func (c *CLI) runRelateAggregate(reader backend.Reader, key, predicate string, jsonOutput bool) int {
+	localReader, ok := reader.(*backend.LocalReader)
+	if !ok {
+		if jsonOutput {
+			return c.writeJSON(jsonResponse{
+				OK:      false,
+				Command: "relate",
+				Data:    nil,
+				Meta:    map[string]any{"error": "--aggregate requires local or hybrid mode (ZOT_MODE=local or ZOT_MODE=hybrid)"},
+			})
+		}
+		fmt.Fprintln(c.stderr, "--aggregate requires local or hybrid mode (set ZOT_MODE=local or ZOT_MODE=hybrid)")
+		return 1
+	}
+
+	agg, err := localReader.GetRelatedAggregate(context.Background(), key)
+	if err != nil {
+		return c.printErr(err)
+	}
+
+	if predicate != "" {
+		agg.Self = filterRelationsByPredicate(agg.Self, predicate)
+		for i := range agg.Notes {
+			agg.Notes[i].Relations = filterRelationsByPredicate(agg.Notes[i].Relations, predicate)
+		}
+	}
+
+	if jsonOutput {
+		meta := map[string]any{}
+		c.appendReadMetadata(meta, reader)
+		return c.writeJSON(jsonResponse{OK: true, Command: "relate", Data: agg, Meta: meta})
+	}
+	c.warnIfSnapshotRead(c.consumeReaderReadMetadata(reader))
+
+	fmt.Fprintf(c.stdout, "Item: %s (aggregated)\n", key)
+
+	fmt.Fprintf(c.stdout, "\nSelf Relations: %d\n", len(agg.Self))
+	for _, rel := range agg.Self {
+		fmt.Fprintf(c.stdout, "  - [%s][%s] %s\n", rel.Predicate, rel.Direction, relateSummary(rel.Target))
+	}
+
+	fmt.Fprintf(c.stdout, "\nNote Relations: %d\n", len(agg.Notes))
+	for _, nr := range agg.Notes {
+		fmt.Fprintf(c.stdout, "  Note: %s", nr.Source.Key)
+		if nr.Preview != "" {
+			preview := nr.Preview
+			if len(preview) > 80 {
+				preview = preview[:80] + "..."
+			}
+			fmt.Fprintf(c.stdout, " (%s)", preview)
+		}
+		fmt.Fprintln(c.stdout)
+		for _, rel := range nr.Relations {
+			fmt.Fprintf(c.stdout, "    - [%s][%s] %s\n", rel.Predicate, rel.Direction, relateSummary(rel.Target))
+		}
+	}
+
+	if len(agg.Citations) > 0 {
+		fmt.Fprintf(c.stdout, "\nEmbedded Citations: %d\n", len(agg.Citations))
+		for _, cit := range agg.Citations {
+			fmt.Fprintf(c.stdout, "  From %s:\n", cit.SourceKey)
+			for _, t := range cit.Targets {
+				fmt.Fprintf(c.stdout, "    - %s\n", relateSummary(t))
+			}
+		}
+	}
+	return 0
+}
+
+func filterRelationsByPredicate(relations []domain.Relation, predicate string) []domain.Relation {
+	if predicate == "" {
+		return relations
+	}
+	filtered := make([]domain.Relation, 0, len(relations))
+	for _, r := range relations {
+		if r.Predicate == predicate {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
 }
 
 func (c *CLI) appendReadMetadata(meta map[string]any, reader backend.Reader) {
@@ -450,6 +560,9 @@ func (c *CLI) warnIfSnapshotRead(readMeta backend.ReadMetadata) {
 		return
 	}
 	fmt.Fprintln(c.stderr, "note: using snapshot fallback for local Zotero data")
+	if readMeta.SnapshotStale {
+		fmt.Fprintln(c.stderr, "warning: snapshot may be stale (Zotero may have newer data)")
+	}
 }
 
 func fullTextSourceLine(readMeta backend.ReadMetadata) string {

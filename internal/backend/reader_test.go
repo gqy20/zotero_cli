@@ -251,7 +251,7 @@ func TestHybridReaderGetItemFallsBackToWeb(t *testing.T) {
 	}
 }
 
-func TestHybridReaderGetRelatedDoesNotFallbackOnLocalItemNotFound(t *testing.T) {
+func TestHybridReaderGetRelatedFallsBackToWebOnLocalItemNotFound(t *testing.T) {
 	reader := &HybridReader{
 		local: stubReader{
 			findItems: func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
@@ -265,7 +265,7 @@ func TestHybridReaderGetRelatedDoesNotFallbackOnLocalItemNotFound(t *testing.T) 
 			findItems: func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
 			getItem:   func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
 			getRelated: func(context.Context, string) ([]domain.Relation, error) {
-				return nil, errors.New("web should not be used")
+				return []domain.Relation{{Predicate: "dc:relation", Direction: "outgoing", Target: domain.ItemRef{Key: "WEB123"}}}, nil
 			},
 			getLibraryStats: func(context.Context) (LibraryStats, error) {
 				return LibraryStats{}, errors.New("unexpected")
@@ -273,13 +273,16 @@ func TestHybridReaderGetRelatedDoesNotFallbackOnLocalItemNotFound(t *testing.T) 
 		},
 	}
 
-	_, err := reader.GetRelated(context.Background(), "ITEM1")
-	if err == nil || err.Error() != "item not found: ITEM1" {
-		t.Fatalf("GetRelated() error = %v, want local item-not-found error", err)
+	relations, err := reader.GetRelated(context.Background(), "ITEM1")
+	if err != nil {
+		t.Fatalf("GetRelated() unexpected error: %v", err)
+	}
+	if len(relations) != 1 || relations[0].Target.Key != "WEB123" {
+		t.Fatalf("GetRelated() = %v, want web fallback result", relations)
 	}
 }
 
-func TestHybridReaderGetRelatedDoesNotFallbackWhenLocalIsTemporarilyUnavailable(t *testing.T) {
+func TestHybridReaderGetRelatedFallsBackToWebWhenLocalIsTemporarilyUnavailable(t *testing.T) {
 	reader := &HybridReader{
 		local: stubReader{
 			findItems: func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
@@ -293,7 +296,7 @@ func TestHybridReaderGetRelatedDoesNotFallbackWhenLocalIsTemporarilyUnavailable(
 			findItems: func(context.Context, FindOptions) ([]domain.Item, error) { return nil, errors.New("unexpected") },
 			getItem:   func(context.Context, string) (domain.Item, error) { return domain.Item{}, errors.New("unexpected") },
 			getRelated: func(context.Context, string) ([]domain.Relation, error) {
-				return nil, errors.New("web should not be used")
+				return []domain.Relation{{Predicate: "dc:relation", Direction: "outgoing", Target: domain.ItemRef{Key: "WEB456"}}}, nil
 			},
 			getLibraryStats: func(context.Context) (LibraryStats, error) {
 				return LibraryStats{}, errors.New("unexpected")
@@ -301,9 +304,12 @@ func TestHybridReaderGetRelatedDoesNotFallbackWhenLocalIsTemporarilyUnavailable(
 		},
 	}
 
-	_, err := reader.GetRelated(context.Background(), "ITEM1")
-	if err == nil || err.Error() != "local Zotero database is temporarily unavailable: SQLITE_BUSY" {
-		t.Fatalf("GetRelated() error = %v, want local temporary-unavailable error", err)
+	relations, err := reader.GetRelated(context.Background(), "ITEM1")
+	if err != nil {
+		t.Fatalf("GetRelated() unexpected error: %v", err)
+	}
+	if len(relations) != 1 || relations[0].Target.Key != "WEB456" {
+		t.Fatalf("GetRelated() = %v, want web fallback result", relations)
 	}
 }
 
