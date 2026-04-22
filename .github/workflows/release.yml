@@ -92,7 +92,10 @@ jobs:
           go-version-file: go.mod
 
       - name: Install UPX
-        run: sudo apt-get update && sudo apt-get install -y upx-ucl
+        uses: crazy-max/ghaction-upx@v3
+        with:
+          install-only: true
+          version: latest
 
       - name: Build release archive
         shell: bash

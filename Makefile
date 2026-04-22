@@ -5,9 +5,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev
 BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 LDFLAGS := -ldflags "-X zotero_cli/internal/cli.version=$(VERSION) -X zotero_cli/internal/cli.commit=$(COMMIT) -X zotero_cli/internal/cli.buildDate=$(BUILD_DATE) -s -w"
-UPX := tools/upx.exe
-UPX_VERSION := 4.2.4
-UPX_URL := https://github.com/upx/upx/releases/download/v$(UPX_VERSION)/upx-$(UPX_VERSION)-win64.zip
+UPX := upx
 
 # --- 格式化 ---
 
@@ -46,14 +44,7 @@ build:
 
 # --- 发布（含 upx 压缩）---
 
-$(UPX):
-	@mkdir -p tools
-	curl -sL "$(UPX_URL)" -o /tmp/upx.zip
-	unzip -o /tmp/upx.zip -d /tmp/upx_pkg
-	cp /tmp/upx_pkg/upx-$(UPX_VERSION)-win64/upx.exe $(UPX)
-	rm -rf /tmp/upx.zip /tmp/upx_pkg
-
-release: build | $(UPX)
+release: build
 	$(UPX) --best --lzma -o $(BINARY).exe.tmp $(BINARY).exe && mv $(BINARY).exe.tmp $(BINARY).exe
 	@echo "---"
 	@ls -lh $(BINARY).exe
