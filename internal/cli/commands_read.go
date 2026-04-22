@@ -90,6 +90,9 @@ func (c *CLI) runFind(args []string) int {
 		return c.printErr(err)
 	}
 	items = filterDefaultFindItems(items, opts)
+	for i := range items {
+		enrichWithJournalRank(&items[i])
+	}
 
 	if snippet {
 		if opts.Limit <= 0 {
@@ -234,6 +237,7 @@ func (c *CLI) runShow(args []string) int {
 	if err != nil {
 		return c.printErr(err)
 	}
+	enrichWithJournalRank(&item)
 	if snippet {
 		previewer, ok := reader.(previewReader)
 		if !ok {
@@ -272,6 +276,9 @@ func (c *CLI) runShow(args []string) int {
 	}
 	if item.Container != "" {
 		fmt.Fprintf(c.stdout, "Container: %s\n", item.Container)
+	}
+	if item.JournalRank != nil && len(item.JournalRank.Ranks) > 0 {
+		c.renderJournalRank(item.JournalRank)
 	}
 	if item.Volume != "" {
 		fmt.Fprintf(c.stdout, "Volume: %s\n", item.Volume)
@@ -457,6 +464,89 @@ func fullTextSourceLine(readMeta backend.ReadMetadata) string {
 		line += " [" + readMeta.FullTextAttachmentKey + "]"
 	}
 	return line
+}
+
+func enrichWithJournalRank(item *domain.Item) {
+	if item.Container == "" {
+		return
+	}
+	rank := backend.LookupJournalRank(item.Container)
+	item.JournalRank = rank
+}
+
+func (c *CLI) renderJournalRank(rank *domain.JournalRank) {
+	fmt.Fprintln(c.stdout, "Journal Rank:")
+	priorityFields := []string{"sciif", "sci", "sciUp", "jci", "esi"}
+	var extra []string
+	for _, key := range priorityFields {
+		if val, ok := rank.Ranks[key]; ok {
+			label := fieldLabel(key)
+			extra = append(extra, fmt.Sprintf("  %s: %s", label, val))
+		}
+	}
+	for key, val := range rank.Ranks {
+		skip := false
+		for _, p := range priorityFields {
+			if key == p {
+				skip = true
+				break
+			}
+		}
+		if skip {
+			continue
+		}
+		label := fieldLabel(key)
+		extra = append(extra, fmt.Sprintf("  %s: %s", label, val))
+	}
+	for _, line := range extra {
+		fmt.Fprintln(c.stdout, line)
+	}
+}
+
+func fieldLabel(key string) string {
+	labels := map[string]string{
+		"sciif":             "SCI-IF",
+		"sciif5":            "SCI-IF5",
+		"sci":               "SCI-JCR",
+		"ssci":              "SSCI",
+		"jci":               "JCI",
+		"esi":               "ESI",
+		"eii":               "EI",
+		"sciBase":           "中科院基础版",
+		"sciUp":             "中科院升级版",
+		"sciUpSmall":        "中科院小类",
+		"sciUpTop":          "中科院TOP",
+		"cscd":              "CSCD",
+		"cssci":             "CSSCI",
+		"pku":               "北大核心",
+		"swjtu":             "西南交大",
+		"sdufe":             "山东财经",
+		"swufe":             "西南财经",
+		"cufe":              "中央财经",
+		"uibe":              "对外经贸",
+		"nju":               "南京大学",
+		"sjtu":              "上海交大",
+		"fdu":               "复旦",
+		"hhu":               "河海大学",
+		"cug":               "中国地质",
+		"zju":               "浙大",
+		"xju":               "新疆大学",
+		"xdu":               "西电",
+		"ruc":               "人大",
+		"xmu":               "厦大",
+		"scu":               "川大",
+		"cpu":               "中国药科",
+		"cju":               "长江大学",
+		"cqu":               "重庆大学",
+		"ccf":               "CCF",
+		"fms":               "FMS",
+		"ajg":               "ABS",
+		"zhongguokejihexin": "科技核心",
+	}
+	if label, ok := labels[key]; ok {
+		return label
+	}
+	return key
 }
 
 func relateSummary(ref domain.ItemRef) string {

@@ -29,6 +29,16 @@ zot show ABC123DE --json
       { "key": "COLL2", "name": "To Read" }
     ],
     "container": "Nature Ecology & Evolution",
+    "journal_rank": {
+      "matched_name": "Nature Ecology & Evolution",
+      "ranks": {
+        "sciif": "15.7",
+        "sci": "Q1",
+        "jci": "3.34",
+        "sciUp": "生物1区",
+        "esi": "环境／生态学"
+      }
+    },
     "volume": "8",
     "issue": "3",
     "pages": "456-467",
@@ -123,3 +133,7 @@ zot show ABC123DE --json
 |------|------|
 | `link_mode` | `imported_file`（已导入）/ `linked_file`（链接）/ `embedded_image` |
 | `resolved` | `true` 表示 `resolved_path` 可用 |
+
+### journal_rank（期刊等级）
+
+当条目为期刊文章且匹配到期刊排名数据时，会自动附加 `journal_rank` 字段。详细字段说明见 [find 命令文档](./find.md#journal_rank-字段说明)。

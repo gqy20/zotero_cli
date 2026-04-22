@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+### 新增
+- **期刊等级查询**：所有读命令（`show`/`find`）自动展示期刊等级信息（SCI-IF、中科院分区、JCI、ESI、各高校认定等级等），数据来自 [EasyScholar](https://www.easyscholar.cc/console/user/open)（需安装[绿青蛙插件](https://www.easyscholar.cc/blogs/10009)），从 `zotero_file/zoterostyle.json` 自动加载。`show` 和 `find --full` 命令在文本输出中显示等级，`find --json` 在 JSON 中包含 `journal_rank` 字段。支持期刊名模糊匹配（缩写、大小写、中英文）。
+
 ## [0.0.7] - 2026-04-22
 
 ### 新增

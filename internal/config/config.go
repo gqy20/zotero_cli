@@ -25,6 +25,7 @@ type Config struct {
 	RetryBaseDelayMilliseconds int    `json:"retry_base_delay_ms"`
 	AllowWrite                 bool   `json:"allow_write"`
 	AllowDelete                bool   `json:"allow_delete"`
+	JournalRankPath            string `json:"journal_rank_path,omitempty"`
 }
 
 func Default() Config {
@@ -129,6 +130,7 @@ func loadEnvConfig() (Config, bool, error) {
 		{"ZOT_API_KEY", &cfg.APIKey},
 		{"ZOT_STYLE", &cfg.Style},
 		{"ZOT_LOCALE", &cfg.Locale},
+		{"ZOT_JOURNAL_RANK_PATH", &cfg.JournalRankPath},
 	} {
 		if value := firstNonEmpty(os.Getenv(f.key), envFile[f.key]); value != "" {
 			*f.dst = value

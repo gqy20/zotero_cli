@@ -49,6 +49,9 @@ func (c *CLI) loadReader() (config.Config, backend.Reader, int) {
 	if err != nil {
 		return config.Config{}, nil, c.printErr(err)
 	}
+	if err := backend.AutoLoadJournalRank(cfg.DataDir); err != nil {
+		fmt.Fprintln(c.stderr, "warning: failed to load journal rank data:", err)
+	}
 	return cfg, reader, ExitOK
 }
 

@@ -23,6 +23,7 @@ type Item struct {
 	Notes                []Note            `json:"notes,omitempty"`
 	Annotations          []Annotation      `json:"annotations,omitempty"`
 	MatchedChunk         *MatchedChunkInfo `json:"matched_chunk,omitempty"`
+	JournalRank          *JournalRank      `json:"journal_rank,omitempty"`
 }
 
 type MatchedChunkInfo struct {
@@ -99,4 +100,9 @@ type CitationResult struct {
 	Format string `json:"format"`
 	Style  string `json:"style,omitempty"`
 	Text   string `json:"text"`
+}
+
+type JournalRank struct {
+	MatchedName string            `json:"matched_name,omitempty"`
+	Ranks       map[string]string `json:"ranks,omitempty"`
 }

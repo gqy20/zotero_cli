@@ -26,6 +26,16 @@ zot find "hybrid speciation" --json
       "tags": ["speciation", "hybrid", "evolution"],
       "collections": [{ "key": "COLL1", "name": "My Papers" }],
       "container": "Nature Ecology & Evolution",
+      "journal_rank": {
+        "matched_name": "Nature Ecology & Evolution",
+        "ranks": {
+          "sciif": "15.7",
+          "sci": "Q1",
+          "jci": "3.34",
+          "sciUp": "生物1区",
+          "esi": "环境／生态学"
+        }
+      },
       "volume": "8",
       "issue": "3",
       "pages": "456-467",
@@ -74,12 +84,46 @@ zot find "hybrid speciation" --json
 ## 字段说明
 
 | 字段 | 类型 | 说明 |
-|------|------|------|
+|------|------|
 | `key` | string | Zotero 条目唯一标识 |
 | `item_type` | string | 文献类型（journalArticle / book / preprint 等） |
 | `matched_on` | []string | 命中原因（title / creators / tags / fulltext） |
 | `attachments[].resolved` | bool | 附件路径是否可解析 |
+| `journal_rank` | object | 期刊等级信息（仅期刊文章有，依赖 `zoterostyle.json` 数据） |
 | `meta.read_source` | string | 数据来源（local / web / hybrid） |
+
+### journal_rank 字段说明
+
+> **数据来源**：`journal_rank` 数据来自 [EasyScholar](https://www.easyscholar.cc/console/user/open)，需要在 Zotero 中安装 [绿青蛙插件](https://www.easyscholar.cc/blogs/10009) 并同步数据。确保 `ZOT_DATA_DIR` 指向包含 `zoterostyle.json` 的目录即可自动加载。
+
+当文献类型为 `journalArticle` 且匹配到期刊排名数据时，会自动附加 `journal_rank` 字段：
+
+```json
+"journal_rank": {
+  "matched_name": "Nature Ecology & Evolution",
+  "ranks": {
+    "sciif": "15.7",      // SCI 影响因子
+    "sci": "Q1",          // SCI 分区
+    "jci": "3.34",        // JCI 指数
+    "sciUp": "生物1区",    // 中科院升级版分区
+    "esi": "环境／生态学"  // ESI 学科分类
+  }
+}
+```
+
+支持的排名字段包括：
+
+| 字段 | 说明 | 字段 | 说明 |
+|------|------|------|------|
+| `sciif` | SCI 影响因子 | `jci` | JCI 指数 |
+| `sciif5` | SCI 五年影响因子 | `esi` | ESI 学科分类 |
+| `sci` | SCI 分区 (Q1-Q4) | `ssci` | SSCI 分区 |
+| `sciUp` | 中科院升级版分区 | `sciUpSmall` | 中科院小类分区 |
+| `sciUpTop` | 中科院 TOP 分区 | `sciBase` | 中科院基础版分区 |
+| `ccf` | CCF 计算机分级 | `eii` | EI 检索 |
+| `cscd` | CSCD 核心 | `cssci` | CSSCI 南大核心 |
+| `pku` | 北大核心 | `zhongguokejihexin` | 中国科技核心期刊 |
+| `swjtu/sdufe/sdufe/hhu/nju/fdu/scu/cug/zju/xju/sjtu/xmu/cufe/uibe/ruc/cqu/cju/cpu` | 各高校期刊分级 | | |
 
 ## 带过滤的示例
 

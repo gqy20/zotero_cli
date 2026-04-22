@@ -34,7 +34,7 @@ func (c *CLI) renderFindItemDetailed(item domain.Item, opts backend.FindOptions)
 
 	fields := opts.IncludeFields
 	if opts.Full {
-		fields = []string{"container", "volume", "issue", "pages", "version", "doi", "url", "tags", "matched_on"}
+		fields = []string{"container", "journal_rank", "volume", "issue", "pages", "version", "doi", "url", "tags", "matched_on"}
 	}
 
 	for _, field := range fields {
@@ -110,6 +110,10 @@ func (c *CLI) renderFindItemDetailed(item domain.Item, opts backend.FindOptions)
 		case "full_text_preview":
 			if item.FullTextPreview != "" {
 				fmt.Fprintf(c.stdout, "Full Text Preview: %s\n", item.FullTextPreview)
+			}
+		case "journal_rank":
+			if item.JournalRank != nil && len(item.JournalRank.Ranks) > 0 {
+				c.renderJournalRank(item.JournalRank)
 			}
 		}
 	}
