@@ -78,9 +78,12 @@ type Annotation struct {
 }
 
 type ItemRef struct {
-	Key      string `json:"key"`
-	ItemType string `json:"item_type,omitempty"`
-	Title    string `json:"title,omitempty"`
+	Key      string   `json:"key"`
+	ItemType string   `json:"item_type,omitempty"`
+	Title    string   `json:"title,omitempty"`
+	Date     string   `json:"date,omitempty"`
+	Creators []string `json:"creators,omitempty"`
+	Tags     []string `json:"tags,omitempty"`
 }
 
 type Relation struct {

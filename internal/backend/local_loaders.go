@@ -20,7 +20,18 @@ func (r *LocalReader) loadItemRefByKey(ctx context.Context, db *sql.DB, key stri
 			i.itemID,
 			i.key,
 			it.typeName,
-			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), '')
+			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'date' THEN v.value END), ''),
+			COALESCE((SELECT GROUP_CONCAT(CASE WHEN ic2.orderIndex >= 0
+				THEN printf('%s|||', COALESCE(c2.lastName, ''), COALESCE(c2.firstName, ''))
+				ELSE NULL END, ';;')
+			FROM itemCreators ic2
+			JOIN creators c2 ON c2.creatorID = ic2.creatorID
+			WHERE ic2.itemID = i.itemID), ''),
+			COALESCE((SELECT GROUP_CONCAT(t2.name, ';;')
+			FROM itemTags it3
+			JOIN tags t2 ON t2.tagID = it3.tagID
+			WHERE it3.itemID = i.itemID), '')
 		FROM items i
 		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
 		LEFT JOIN itemData d ON d.itemID = i.itemID
@@ -32,38 +43,25 @@ func (r *LocalReader) loadItemRefByKey(ctx context.Context, db *sql.DB, key stri
 
 	var itemID int64
 	var ref domain.ItemRef
-	if err := row.Scan(&itemID, &ref.Key, &ref.ItemType, &ref.Title); err != nil {
+	var rawCreators, rawTags string
+	if err := row.Scan(&itemID, &ref.Key, &ref.ItemType, &ref.Title, &ref.Date, &rawCreators, &rawTags); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.ItemRef{}, 0, newItemNotFoundError("item", key)
 		}
 		return domain.ItemRef{}, 0, err
 	}
-	return ref, itemID, nil
-}
-
-func (r *LocalReader) loadItemRefByID(ctx context.Context, db *sql.DB, itemID int64) (domain.ItemRef, error) {
-	row := db.QueryRowContext(ctx, `
-		SELECT
-			i.key,
-			it.typeName,
-			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), '')
-		FROM items i
-		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
-		LEFT JOIN itemData d ON d.itemID = i.itemID
-		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
-		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
-		WHERE i.itemID = ?
-		GROUP BY i.key, it.typeName
-	`, itemID)
-
-	var ref domain.ItemRef
-	if err := row.Scan(&ref.Key, &ref.ItemType, &ref.Title); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return domain.ItemRef{}, fmt.Errorf("item id not found: %d", itemID)
+	if rawCreators != "" {
+		for _, c := range strings.Split(rawCreators, ";;") {
+			c = strings.TrimSpace(c)
+			if c != "" {
+				ref.Creators = append(ref.Creators, strings.ReplaceAll(c, "|||", " "))
+			}
 		}
-		return domain.ItemRef{}, err
 	}
-	return ref, nil
+	if rawTags != "" {
+		ref.Tags = strings.Split(rawTags, ";;")
+	}
+	return ref, itemID, nil
 }
 func (r *LocalReader) batchLoadItemRefsByIDs(ctx context.Context, db *sql.DB, itemIDs []int64) (map[int64]domain.ItemRef, error) {
 	result := make(map[int64]domain.ItemRef, len(itemIDs))
@@ -80,7 +78,18 @@ func (r *LocalReader) batchLoadItemRefsByIDs(ctx context.Context, db *sql.DB, it
 			i.itemID,
 			i.key,
 			it.typeName,
-			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), '')
+			COALESCE(MAX(CASE WHEN f.fieldName = 'title' THEN v.value END), ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'date' THEN v.value END), ''),
+			COALESCE((SELECT GROUP_CONCAT(CASE WHEN ic2.orderIndex >= 0
+				THEN printf('%s|||', COALESCE(c2.lastName, ''), COALESCE(c2.firstName, ''))
+				ELSE NULL END, ';;')
+			FROM itemCreators ic2
+			JOIN creators c2 ON c2.creatorID = ic2.creatorID
+			WHERE ic2.itemID = i.itemID), ''),
+			COALESCE((SELECT GROUP_CONCAT(t2.name, ';;')
+			FROM itemTags it3
+			JOIN tags t2 ON t2.tagID = it3.tagID
+			WHERE it3.itemID = i.itemID), '')
 		FROM items i
 		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
 		LEFT JOIN itemData d ON d.itemID = i.itemID
@@ -97,8 +106,20 @@ func (r *LocalReader) batchLoadItemRefsByIDs(ctx context.Context, db *sql.DB, it
 	for rows.Next() {
 		var id int64
 		var ref domain.ItemRef
-		if err := rows.Scan(&id, &ref.Key, &ref.ItemType, &ref.Title); err != nil {
+		var rawCreators, rawTags string
+		if err := rows.Scan(&id, &ref.Key, &ref.ItemType, &ref.Title, &ref.Date, &rawCreators, &rawTags); err != nil {
 			return nil, err
+		}
+		if rawCreators != "" {
+			for _, c := range strings.Split(rawCreators, ";;") {
+				c = strings.TrimSpace(c)
+				if c != "" {
+					ref.Creators = append(ref.Creators, strings.ReplaceAll(c, "|||", " "))
+				}
+			}
+		}
+		if rawTags != "" {
+			ref.Tags = strings.Split(rawTags, ";;")
 		}
 		result[id] = ref
 	}
