@@ -3,6 +3,9 @@ package cli
 import (
 	"context"
 	"fmt"
+
+	"zotero_cli/internal/backend"
+	"zotero_cli/internal/config"
 )
 
 func (c *CLI) runCreateItem(args []string) int {
@@ -22,6 +25,27 @@ func (c *CLI) runCreateItem(args []string) int {
 	}
 	if exitCode := c.ensureWriteAllowed(cfg); exitCode != 0 {
 		return exitCode
+	}
+
+	// Hybrid write: if Zotero is not running, create note via local SQLite
+	if (cfg.Mode == "local" || cfg.Mode == "hybrid") && !isZoteroRunning() {
+		itemType, _ := data["itemType"].(string)
+		if itemType == "note" {
+			localResult, localErr := createNoteLocally(cfg, data)
+			if localErr != nil {
+				fmt.Fprintf(c.stderr, "local write failed, falling back to web API: %v\n", localErr)
+			} else {
+				if jsonOutput {
+					return c.writeJSON(jsonResponse{OK: true, Command: "create-item", Data: map[string]any{
+						"key":                   localResult.Key,
+						"last_modified_version": localResult.ItemID,
+						"write_source":          "local",
+					}})
+				}
+				fmt.Fprintf(c.stdout, "created item %s locally (SQLite)\n", localResult.Key)
+				return 0
+			}
+		}
 	}
 
 	result, err := client.CreateItem(context.Background(), data, version)
@@ -71,7 +95,7 @@ func (c *CLI) runDeleteItem(args []string) int {
 	if isHelpOnly(args) {
 		return c.printCommandUsage(usageDeleteItem)
 	}
-	key, version, jsonOutput, err := parseWriteDeleteArgs(args)
+	key, version, jsonOutput, yesFlag, err := parseWriteDeleteArgs(args)
 	if err != nil {
 		fmt.Fprintln(c.stderr, "error:", err)
 		fmt.Fprintln(c.stderr, usageDeleteItem)
@@ -84,6 +108,14 @@ func (c *CLI) runDeleteItem(args []string) int {
 	}
 	if exitCode := c.ensureDeleteAllowed(cfg); exitCode != 0 {
 		return exitCode
+	}
+
+	if !jsonOutput && !yesFlag {
+		fmt.Fprintf(c.stderr, "⚠  You are about to DELETE item %s. This action cannot be undone.\n", key)
+		if !c.confirm("Proceed with deletion") {
+			fmt.Fprintln(c.stderr, "deletion cancelled")
+			return 130
+		}
 	}
 
 	result, err := client.DeleteItem(context.Background(), key, version)
@@ -222,7 +254,7 @@ func (c *CLI) runDeleteCollection(args []string) int {
 	if isHelpOnly(args) {
 		return c.printCommandUsage(usageDeleteCollection)
 	}
-	key, version, jsonOutput, err := parseWriteDeleteArgs(args)
+	key, version, jsonOutput, yesFlag, err := parseWriteDeleteArgs(args)
 	if err != nil {
 		fmt.Fprintln(c.stderr, "error:", err)
 		fmt.Fprintln(c.stderr, usageDeleteCollection)
@@ -235,6 +267,14 @@ func (c *CLI) runDeleteCollection(args []string) int {
 	}
 	if exitCode := c.ensureDeleteAllowed(cfg); exitCode != 0 {
 		return exitCode
+	}
+
+	if !jsonOutput && !yesFlag {
+		fmt.Fprintf(c.stderr, "⚠  You are about to DELETE collection %s. This action cannot be undone.\n", key)
+		if !c.confirm("Proceed with deletion") {
+			fmt.Fprintln(c.stderr, "deletion cancelled")
+			return 130
+		}
 	}
 
 	result, err := client.DeleteCollection(context.Background(), key, version)
@@ -315,7 +355,7 @@ func (c *CLI) runDeleteSearch(args []string) int {
 	if isHelpOnly(args) {
 		return c.printCommandUsage(usageDeleteSearch)
 	}
-	key, version, jsonOutput, err := parseWriteDeleteArgs(args)
+	key, version, jsonOutput, yesFlag, err := parseWriteDeleteArgs(args)
 	if err != nil {
 		fmt.Fprintln(c.stderr, "error:", err)
 		fmt.Fprintln(c.stderr, usageDeleteSearch)
@@ -330,6 +370,14 @@ func (c *CLI) runDeleteSearch(args []string) int {
 		return exitCode
 	}
 
+	if !jsonOutput && !yesFlag {
+		fmt.Fprintf(c.stderr, "⚠  You are about to DELETE search %s. This action cannot be undone.\n", key)
+		if !c.confirm("Proceed with deletion") {
+			fmt.Fprintln(c.stderr, "deletion cancelled")
+			return 130
+		}
+	}
+
 	result, err := client.DeleteSearch(context.Background(), key, version)
 	if err != nil {
 		return c.printErr(err)
@@ -340,4 +388,19 @@ func (c *CLI) runDeleteSearch(args []string) int {
 	}
 	fmt.Fprintf(c.stdout, "deleted search %s at library version %d\n", result.Key, result.LastModifiedVersion)
 	return 0
+}
+
+func createNoteLocally(cfg config.Config, data map[string]any) (backend.LocalCreateNoteResult, error) {
+	parentKey, _ := data["parentItem"].(string)
+	noteHTML, _ := data["note"].(string)
+	if parentKey == "" || noteHTML == "" {
+		return backend.LocalCreateNoteResult{}, fmt.Errorf("parentItem and note fields are required for local note creation")
+	}
+
+	localReader, err := backend.NewLocalReader(cfg)
+	if err != nil {
+		return backend.LocalCreateNoteResult{}, err
+	}
+
+	return localReader.CreateLocalNote(context.Background(), parentKey, noteHTML)
 }

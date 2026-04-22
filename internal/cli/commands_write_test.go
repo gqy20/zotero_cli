@@ -61,7 +61,7 @@ func TestRunDeleteItemText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"delete-item", "ABCD2345", "--if-unmodified-since-version", "8"})
+	exitCode := Run([]string{"delete-item", "ABCD2345", "--if-unmodified-since-version", "8", "--yes"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -231,7 +231,7 @@ func TestRunDeleteCollectionText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"delete-collection", "COLL1234", "--if-unmodified-since-version", "12"})
+	exitCode := Run([]string{"delete-collection", "COLL1234", "--if-unmodified-since-version", "12", "--yes"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -299,7 +299,7 @@ func TestRunDeleteSearchText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"delete-search", "SCH12345", "--if-unmodified-since-version", "22"})
+	exitCode := Run([]string{"delete-search", "SCH12345", "--if-unmodified-since-version", "22", "--yes"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

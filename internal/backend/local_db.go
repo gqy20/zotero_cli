@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	cryptoRand "crypto/rand"
 	"database/sql"
 	"fmt"
 	"net/url"
@@ -167,4 +168,25 @@ func countRows(ctx context.Context, db *sql.DB, query string) (int, error) {
 		return 0, err
 	}
 	return count, nil
+}
+
+var base32Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+
+func generateItemKey() (string, error) {
+	b := make([]byte, 5)
+	if _, err := cryptoRand.Read(b); err != nil {
+		return "", err
+	}
+	result := make([]byte, 8)
+	for i := range result {
+		if i < 5 {
+			result[i] = base32Alphabet[b[i]&31]
+		} else {
+			// Combine remaining bytes for the last 3 chars (Zotero uses 5 bytes → 8 chars)
+			combined := uint(b[3])<<10 | uint(b[4])<<2
+			shift := uint((i - 5) * 5)
+			result[i] = base32Alphabet[(combined>>shift)&31]
+		}
+	}
+	return string(result), nil
 }

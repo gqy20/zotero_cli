@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"zotero_cli/internal/backend"
@@ -226,6 +228,16 @@ func (c *CLI) printErr(err error) int {
 
 func (c *CLI) jsonErrorsEnabled() bool {
 	return os.Getenv("ZOT_JSON_ERRORS") == "1"
+}
+
+// confirm prompts the user on stdin and returns true only if they reply y/Y.
+func (c *CLI) confirm(prompt string) bool {
+	fmt.Fprintf(c.stderr, "%s [y/N]: ", prompt)
+	scanner := bufio.NewScanner(c.stdin)
+	if !scanner.Scan() {
+		return false
+	}
+	return strings.ToLower(strings.TrimSpace(scanner.Text())) == "y"
 }
 
 func isHelpOnly(args []string) bool {

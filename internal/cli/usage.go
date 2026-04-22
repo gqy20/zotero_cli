@@ -46,15 +46,15 @@ Examples:
 	usagePublications         = "usage: zot publications [--limit N] [--json]"
 	usageCreateItem           = "usage: zot create-item (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
 	usageUpdateItem           = "usage: zot update-item <item-key> (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
-	usageDeleteItem           = "usage: zot delete-item <item-key> --if-unmodified-since-version N [--json]"
+	usageDeleteItem           = "usage: zot delete-item <item-key> --if-unmodified-since-version N [--json] [-y|--yes]"
 	usageAddTag               = "usage: zot add-tag --items KEY1,KEY2 --tag TAG [--if-unmodified-since-version N] [--json]"
 	usageRemoveTag            = "usage: zot remove-tag --items KEY1,KEY2 --tag TAG [--if-unmodified-since-version N] [--json]"
 	usageCreateCollection     = "usage: zot create-collection (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
 	usageUpdateCollection     = "usage: zot update-collection <collection-key> (--data JSON | --from-file PATH) [--if-unmodified-since-version N] [--json]"
-	usageDeleteCollection     = "usage: zot delete-collection <collection-key> --if-unmodified-since-version N [--json]"
+	usageDeleteCollection     = "usage: zot delete-collection <collection-key> --if-unmodified-since-version N [--json] [-y|--yes]"
 	usageCreateSearch         = "usage: zot create-search (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]"
 	usageUpdateSearch         = "usage: zot update-search <search-key> (--data JSON | --from-file PATH) [--if-unmodified-since-version N] [--json]"
-	usageDeleteSearch         = "usage: zot delete-search <search-key> --if-unmodified-since-version N [--json]"
+	usageDeleteSearch         = "usage: zot delete-search <search-key> --if-unmodified-since-version N [--json] [-y|--yes]"
 	usageIndex                = "usage: zot index build [--force] [--workers N] [--json]"
 	usageOverview             = `usage: zot overview [--json]
 

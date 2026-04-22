@@ -88,40 +88,43 @@ func parseWriteUpdateArgs(args []string, requireVersion bool) (string, map[strin
 	return key, data, version, jsonOutput, nil
 }
 
-func parseWriteDeleteArgs(args []string) (string, int, bool, error) {
+func parseWriteDeleteArgs(args []string) (string, int, bool, bool, error) {
 	if len(args) == 0 {
-		return "", 0, false, errMissingItemKey()
+		return "", 0, false, false, errMissingItemKey()
 	}
 	key := args[0]
 	var version int
 	var jsonOutput bool
+	var yesFlag bool
 	var versionSet bool
 
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--json":
 			jsonOutput = true
+		case "-y", "--yes":
+			yesFlag = true
 		case "--if-unmodified-since-version":
 			if i+1 >= len(args) {
-				return "", 0, false, errMissingFlagValue("--if-unmodified-since-version")
+				return "", 0, false, false, errMissingFlagValue("--if-unmodified-since-version")
 			}
 			i++
 			parsed, err := strconv.Atoi(args[i])
 			if err != nil || parsed <= 0 {
-				return "", 0, false, errInvalidFlagValue("--if-unmodified-since-version")
+				return "", 0, false, false, errInvalidFlagValue("--if-unmodified-since-version")
 			}
 			version = parsed
 			versionSet = true
 		default:
-			return "", 0, false, errUnexpectedArgument(args[i])
+			return "", 0, false, false, errUnexpectedArgument(args[i])
 		}
 	}
 
 	if !versionSet {
-		return "", 0, false, errMissingFlagValue("--if-unmodified-since-version")
+		return "", 0, false, false, errMissingFlagValue("--if-unmodified-since-version")
 	}
 
-	return key, version, jsonOutput, nil
+	return key, version, jsonOutput, yesFlag, nil
 }
 
 func parseWriteCreateLikeArgs(args []string, requireVersion bool) (map[string]any, int, bool, error) {
