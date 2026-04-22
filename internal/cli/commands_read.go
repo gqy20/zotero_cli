@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -354,6 +355,8 @@ func (c *CLI) runRelate(args []string) int {
 	addTarget := ""
 	removeTarget := ""
 	dryRun := false
+	dotOutput := false
+	fromFile := ""
 	key := ""
 	nextFlag := ""
 	for _, arg := range args {
@@ -365,6 +368,8 @@ func (c *CLI) runRelate(args []string) int {
 				addTarget = arg
 			case "remove":
 				removeTarget = arg
+			case "from-file":
+				fromFile = arg
 			}
 			nextFlag = ""
 			continue
@@ -382,6 +387,10 @@ func (c *CLI) runRelate(args []string) int {
 			nextFlag = "remove"
 		case "--dry-run", "-n":
 			dryRun = true
+		case "--dot":
+			dotOutput = true
+		case "--from-file":
+			nextFlag = "from-file"
 		default:
 			if key == "" {
 				key = arg
@@ -392,6 +401,9 @@ func (c *CLI) runRelate(args []string) int {
 		}
 	}
 
+	if fromFile != "" {
+		return c.runRelateBatch(fromFile, dryRun, jsonOutput)
+	}
 	if addTarget != "" || removeTarget != "" {
 		return c.runRelateWrite(key, addTarget, removeTarget, predicate, dryRun, jsonOutput)
 	}
@@ -411,6 +423,9 @@ func (c *CLI) runRelate(args []string) int {
 	}
 
 	if aggregate {
+		if dotOutput {
+			return c.runRelateDotAggregate(reader, key, predicate)
+		}
 		return c.runRelateAggregate(reader, key, predicate, jsonOutput)
 	}
 
@@ -421,6 +436,10 @@ func (c *CLI) runRelate(args []string) int {
 
 	if predicate != "" {
 		relations = filterRelationsByPredicate(relations, predicate)
+	}
+
+	if dotOutput {
+		return c.writeRelateDot(key, relations, nil)
 	}
 
 	if jsonOutput {
@@ -581,6 +600,218 @@ func (c *CLI) runRelateWrite(key, addTarget, removeTarget, predicate string, dry
 		target = removeTarget
 	}
 	fmt.Fprintf(c.stdout, "%s relation: %s --[%s]--> %s\n", action, key, predicate, target)
+	return 0
+}
+
+func (c *CLI) runRelateDotAggregate(reader backend.Reader, key, predicate string) int {
+	localReader, ok := reader.(*backend.LocalReader)
+	if !ok {
+		fmt.Fprintln(c.stderr, "--dot with --aggregate requires local or hybrid mode")
+		return 1
+	}
+	agg, err := localReader.GetRelatedAggregate(context.Background(), key)
+	if err != nil {
+		return c.printErr(err)
+	}
+	if predicate != "" {
+		agg.Self = filterRelationsByPredicate(agg.Self, predicate)
+		for i := range agg.Notes {
+			agg.Notes[i].Relations = filterRelationsByPredicate(agg.Notes[i].Relations, predicate)
+		}
+	}
+	return c.writeRelateDot(key, agg.Self, agg)
+}
+
+func (c *CLI) writeRelateDot(key string, relations []domain.Relation, agg *domain.AggregatedRelations) int {
+	w := c.stdout
+	fmt.Fprintln(w, "digraph {")
+	fmt.Fprintln(w, "\trankdir=LR;")
+	fmt.Fprintln(w, "\tnode [fontname=\"Helvetica\"];")
+	fmt.Fprintln(w, "\tedge [fontname=\"Helvetica\", fontsize=10];")
+
+	dotLabel := func(ref domain.ItemRef) string {
+		title := ref.Title
+		if len(title) > 40 {
+			title = title[:37] + "..."
+		}
+		title = strings.ReplaceAll(title, `"`, `\"`)
+		if title == "" {
+			title = ref.Key
+		}
+		return fmt.Sprintf("%s\\n[%s]", title, ref.Key)
+	}
+
+	emitNode := func(nodeKey string, label string, shape, fillcolor string) {
+		fmt.Fprintf(w, "\t\"%s\" [label=%q, shape=%s, style=filled, fillcolor=%q];\n",
+			nodeKey, label, shape, fillcolor)
+	}
+
+	emitEdge := func(from, to, label, color, style, dir string) {
+		fmt.Fprintf(w, "\t\"%s\" -> \"%s\" [label=%q, color=%q, style=%s, dir=%s];\n",
+			from, to, label, color, style, dir)
+	}
+
+	emitNode(key, dotLabel(domain.ItemRef{Key: key}), "box", "#4a90d9")
+
+	if agg == nil {
+		for _, r := range relations {
+			dir := "both"
+			if r.Direction == "outgoing" {
+				dir = "forward"
+			} else if r.Direction == "incoming" {
+				dir = "back"
+			}
+			color := "#333333"
+			switch r.Predicate {
+			case "dc:relation":
+				color = "#4a90d9"
+			case "owl:sameAs":
+				color = "#7bc96f"
+			default:
+				color = "#e8913a"
+			}
+			emitEdge(key, r.Target.Key, r.Predicate, color, "solid", dir)
+			shape, fill := "box", "#f0f0f0"
+			if r.Target.ItemType == "note" {
+				shape, fill = "note", "#fff3e0"
+			}
+			emitNode(r.Target.Key, dotLabel(r.Target), shape, fill)
+		}
+	} else {
+		for _, r := range agg.Self {
+			dir := "both"
+			if r.Direction == "outgoing" {
+				dir = "forward"
+			} else if r.Direction == "incoming" {
+				dir = "back"
+			}
+			emitEdge(key, r.Target.Key, r.Predicate, "#4a90d9", "solid", dir)
+			shape, fill := "box", "#f0f0f0"
+			if r.Target.ItemType == "note" {
+				shape, fill = "note", "#fff3e0"
+			}
+			emitNode(r.Target.Key, dotLabel(r.Target), shape, fill)
+		}
+		for _, n := range agg.Notes {
+			emitNode(n.Source.Key, dotLabel(n.Source), "note", "#e8913a")
+			emitEdge(key, n.Source.Key, "parent", "#999999", "dotted", "forward")
+			for _, r := range n.Relations {
+				dir := "both"
+				if r.Direction == "outgoing" {
+					dir = "forward"
+				} else if r.Direction == "incoming" {
+					dir = "back"
+				}
+				emitEdge(n.Source.Key, r.Target.Key, r.Predicate, "#e8913a", "solid", dir)
+				shape, fill := "box", "#f0f0f0"
+				if r.Target.ItemType == "note" {
+					shape, fill = "note", "#fff3e0"
+				}
+				emitNode(r.Target.Key, dotLabel(r.Target), shape, fill)
+			}
+		}
+		for _, cit := range agg.Citations {
+			for _, t := range cit.Targets {
+				emitEdge(cit.SourceKey, t.Key, "citation", "#7bc96f", "dashed", "forward")
+				shape, fill := "box", "#f0f0f0"
+				if t.ItemType == "note" {
+					shape, fill = "note", "#fff3e0"
+				}
+				emitNode(t.Key, dotLabel(t), shape, fill)
+			}
+		}
+	}
+
+	fmt.Fprintln(w, "}")
+	return 0
+}
+
+func (c *CLI) runRelateBatch(fromFile string, dryRun bool, jsonOutput bool) int {
+	data, err := os.ReadFile(fromFile)
+	if err != nil {
+		return c.printErr(fmt.Errorf("read %s: %w", fromFile, err))
+	}
+	var ops []struct {
+		Action    string `json:"action"`
+		Source    string `json:"source"`
+		Target    string `json:"target"`
+		Predicate string `json:"predicate"`
+	}
+	if err := json.Unmarshal(data, &ops); err != nil {
+		return c.printErr(fmt.Errorf("parse %s: %w (expected [{action,source,target,predicate}])", fromFile, err))
+	}
+	if len(ops) == 0 {
+		fmt.Fprintln(c.stderr, "no operations in batch file")
+		return 1
+	}
+
+	cfg, _, exitCode := c.loadReader()
+	if exitCode != 0 {
+		return exitCode
+	}
+	if !dryRun {
+		if exitCode := c.ensureWriteAllowed(cfg); exitCode != 0 {
+			return exitCode
+		}
+	}
+
+	localReader, err := backend.NewLocalReader(cfg)
+	if err != nil {
+		return c.printErr(fmt.Errorf("local reader: %w", err))
+	}
+
+	ctx := context.Background()
+	results := make([]map[string]any, 0, len(ops))
+	for _, op := range ops {
+		if op.Predicate == "" {
+			op.Predicate = "dc:relation"
+		}
+		if op.Action == "" {
+			op.Action = "add"
+		}
+		result := map[string]any{"source": op.Source, "target": op.Target, "predicate": op.Predicate, "action": op.Action}
+		if dryRun || jsonOutput {
+			result["dry_run"] = true
+			results = append(results, result)
+			continue
+		}
+		var opErr error
+		switch op.Action {
+		case "add":
+			opErr = localReader.AddRelation(ctx, op.Source, op.Target, op.Predicate)
+		case "remove":
+			opErr = localReader.RemoveRelation(ctx, op.Source, op.Target, op.Predicate)
+		default:
+			opErr = fmt.Errorf("unknown action %q (use add or remove)", op.Action)
+		}
+		if opErr != nil {
+			result["error"] = opErr.Error()
+			results = append(results, result)
+			continue
+		}
+		result["ok"] = true
+		results = append(results, result)
+	}
+
+	if jsonOutput {
+		return c.writeJSON(jsonResponse{OK: true, Command: "relate", Data: results})
+	}
+	for _, r := range results {
+		if errMsg, ok := r["error"]; ok {
+			fmt.Fprintf(c.stdout, "FAIL [%s] %s --[%s]--> %s: %v\n", r["action"], r["source"], r["predicate"], r["target"], errMsg)
+		} else if dr, ok := r["dry_run"]; ok && dr.(bool) {
+			fmt.Fprintf(c.stdout, "[dry-run] would %s: %s --[%s]--> %s\n", r["action"], r["source"], r["predicate"], r["target"])
+		} else {
+			fmt.Fprintf(c.stdout, "%s: %s --[%s]--> %s\n", r["action"], r["source"], r["predicate"], r["target"])
+		}
+	}
+	errCount := 0
+	for _, r := range results {
+		if _, ok := r["error"]; ok {
+			errCount++
+		}
+	}
+	fmt.Fprintf(c.stdout, "\n%d operations completed (%d ok, %d failed)\n", len(results), len(results)-errCount, errCount)
 	return 0
 }
 
