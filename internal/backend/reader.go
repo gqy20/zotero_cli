@@ -259,6 +259,13 @@ func (r *HybridReader) ConsumeReadMetadata() ReadMetadata {
 	return meta
 }
 
+func (r *HybridReader) LocalReader() *LocalReader {
+	if r.local == nil {
+		return nil
+	}
+	return r.local.(*LocalReader)
+}
+
 func consumeReadMetadata(reader Reader) ReadMetadata {
 	reporter, ok := reader.(readMetadataReporter)
 	if !ok {

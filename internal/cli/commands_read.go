@@ -463,8 +463,20 @@ func (c *CLI) runRelate(args []string) int {
 	return 0
 }
 
+func extractLocalReader(reader backend.Reader) (*backend.LocalReader, bool) {
+	if lr, ok := reader.(*backend.LocalReader); ok {
+		return lr, true
+	}
+	if hr, ok := reader.(*backend.HybridReader); ok {
+		if lr := hr.LocalReader(); lr != nil {
+			return lr, true
+		}
+	}
+	return nil, false
+}
+
 func (c *CLI) runRelateAggregate(reader backend.Reader, key, predicate string, jsonOutput bool) int {
-	localReader, ok := reader.(*backend.LocalReader)
+	localReader, ok := extractLocalReader(reader)
 	if !ok {
 		if jsonOutput {
 			return c.writeJSON(jsonResponse{
@@ -604,7 +616,7 @@ func (c *CLI) runRelateWrite(key, addTarget, removeTarget, predicate string, dry
 }
 
 func (c *CLI) runRelateDotAggregate(reader backend.Reader, key, predicate string) int {
-	localReader, ok := reader.(*backend.LocalReader)
+	localReader, ok := extractLocalReader(reader)
 	if !ok {
 		fmt.Fprintln(c.stderr, "--dot with --aggregate requires local or hybrid mode")
 		return 1
