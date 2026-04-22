@@ -3,8 +3,10 @@ package backend
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -516,6 +518,37 @@ func stripHTMLTags(s string) string {
 	return htmlTagRe.ReplaceAllString(s, "")
 }
 
+var citationItemsRe = regexp.MustCompile(`data-citation-items\s*=\s*["']([^"']*)["']`)
+
+type citationItem struct {
+	URIs []string `json:"uris"`
+}
+
+func parseCitationsFromNoteHTML(html string) []string {
+	matches := citationItemsRe.FindStringSubmatch(html)
+	if len(matches) < 2 {
+		return nil
+	}
+	raw := matches[1]
+	decoded, err := url.QueryUnescape(raw)
+	if err != nil {
+		decoded = raw
+	}
+	var items []citationItem
+	if err := json.Unmarshal([]byte(decoded), &items); err != nil {
+		return nil
+	}
+	var keys []string
+	for _, item := range items {
+		for _, uri := range item.URIs {
+			if key := relationObjectKey(uri); key != "" {
+				keys = append(keys, key)
+			}
+		}
+	}
+	return keys
+}
+
 func snapshotReadMetadata(sqlitePath, cacheDir string) ReadMetadata {
 	stale := false
 	if cacheDir != "" && sqlitePath != "" {
@@ -637,7 +670,7 @@ func (r *LocalReader) GetRelatedAggregate(ctx context.Context, key string) (*dom
 		}()
 
 		rows, err := db.QueryContext(ctx, `
-			SELECT i.key, COALESCE(SUBSTR(n.note, 1, 300), '')
+			SELECT i.key, COALESCE(n.note, '')
 			FROM itemNotes n
 			JOIN items i ON i.itemID = n.itemID
 			WHERE n.parentItemID = ?
@@ -649,13 +682,13 @@ func (r *LocalReader) GetRelatedAggregate(ctx context.Context, key string) (*dom
 		defer rows.Close()
 
 		type noteInfo struct {
-			key     string
-			preview string
+			key  string
+			note string
 		}
 		var notes []noteInfo
 		for rows.Next() {
 			var ni noteInfo
-			if err := rows.Scan(&ni.key, &ni.preview); err != nil {
+			if err := rows.Scan(&ni.key, &ni.note); err != nil {
 				return err
 			}
 			notes = append(notes, ni)
@@ -686,20 +719,35 @@ func (r *LocalReader) GetRelatedAggregate(ctx context.Context, key string) (*dom
 				wg3.Wait()
 
 				allRels := append(outgoing, incoming...)
-				if len(allRels) == 0 {
-					continue
+				if len(allRels) > 0 {
+					sort.SliceStable(allRels, func(i, j int) bool {
+						if allRels[i].Predicate != allRels[j].Predicate {
+							return allRels[i].Predicate < allRels[j].Predicate
+						}
+						return allRels[i].Target.Key < allRels[j].Target.Key
+					})
+					noteRelationsList = append(noteRelationsList, domain.NoteRelations{
+						Source:    noteRef,
+						Preview:   stripHTMLTags(ni.note),
+						Relations: allRels,
+					})
 				}
-				sort.SliceStable(allRels, func(i, j int) bool {
-					if allRels[i].Predicate != allRels[j].Predicate {
-						return allRels[i].Predicate < allRels[j].Predicate
+
+				citationKeys := parseCitationsFromNoteHTML(ni.note)
+				if len(citationKeys) > 0 {
+					var targets []domain.ItemRef
+					for _, ck := range citationKeys {
+						if ref, _, loadErr := r.loadItemRefByKey(ctx, db, ck); loadErr == nil {
+							targets = append(targets, ref)
+						}
 					}
-					return allRels[i].Target.Key < allRels[j].Target.Key
-				})
-				noteRelationsList = append(noteRelationsList, domain.NoteRelations{
-					Source:    noteRef,
-					Preview:   stripHTMLTags(ni.preview),
-					Relations: allRels,
-				})
+					if len(targets) > 0 {
+						result.Citations = append(result.Citations, domain.CitationSource{
+							SourceKey: ni.key,
+							Targets:   targets,
+						})
+					}
+				}
 			}
 		}()
 
