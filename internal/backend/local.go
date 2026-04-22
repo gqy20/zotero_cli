@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 
 	_ "modernc.org/sqlite"
@@ -352,6 +354,157 @@ func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, err
 		return domain.Item{}, err
 	}
 	return item, nil
+}
+
+func (r *LocalReader) CiteItem(ctx context.Context, key string, opts domain.CitationOptions) (domain.CitationResult, error) {
+	var result domain.CitationResult
+	err := r.withReadableDB(ctx, func(db *sql.DB) error {
+		item, itemID, err := r.loadItem(ctx, db, key)
+		if err != nil {
+			return err
+		}
+		creators, err := r.loadCreators(ctx, db, itemID)
+		if err != nil {
+			return err
+		}
+
+		result.Key = key
+		result.Format = opts.Format
+		result.Style = opts.Style
+		result.Text = formatCitation(item, creators, opts.Format)
+		return nil
+	})
+	if err != nil {
+		return domain.CitationResult{}, err
+	}
+	return result, nil
+}
+
+func formatCitation(item domain.Item, creators []domain.Creator, format string) string {
+	year := extractYear(item.Date)
+	authorStr := formatAuthors(creators)
+
+	switch format {
+	case "bib":
+		parts := make([]string, 0, 6)
+		if authorStr != "" {
+			parts = append(parts, authorStr+".")
+		}
+		if item.Title != "" {
+			parts = append(parts, item.Title+".")
+		}
+		if item.Container != "" {
+			parts = append(parts, item.Container+".")
+		}
+		volIssue := ""
+		if item.Volume != "" {
+			volIssue = item.Volume
+		}
+		if item.Issue != "" {
+			if volIssue != "" {
+				volIssue += "(" + item.Issue + ")"
+			} else {
+				volIssue = item.Issue
+			}
+		}
+		if volIssue != "" {
+			parts = append(parts, volIssue)
+		}
+		if item.Pages != "" {
+			parts = append(parts, ":"+item.Pages)
+		}
+		if year != "" {
+			parts = append(parts, year)
+		}
+		return joinNonEmpty(" ", parts...)
+	default: // "citation"
+		if authorStr != "" && year != "" {
+			if strings.HasSuffix(authorStr, " et al") {
+				return authorStr + "., " + year
+			}
+			return authorStr + ", " + year
+		} else if authorStr != "" {
+			if strings.HasSuffix(authorStr, " et al") {
+				return authorStr + "."
+			}
+			return authorStr
+		} else if item.Title != "" {
+			return truncateTitle(item.Title) + ", " + year
+		}
+		return keyOrTitle(item.Key, item.Title) + ", " + year
+	}
+}
+
+func formatAuthors(creators []domain.Creator) string {
+	n := len(creators)
+	if n == 0 {
+		return ""
+	}
+	if n == 1 {
+		return lastNameOnly(creators[0].Name)
+	}
+	if n == 2 {
+		return lastNameOnly(creators[0].Name) + " & " + lastNameOnly(creators[1].Name)
+	}
+	names := make([]string, 0, n)
+	for _, c := range creators {
+		names = append(names, lastNameOnly(c.Name))
+	}
+	return names[0] + " et al"
+}
+
+func yearFromCreators(creators []domain.Creator) string {
+	for _, c := range creators {
+		if y := extractYearFromName(c.Name); y != "" {
+			return y
+		}
+	}
+	return ""
+}
+
+func extractYear(date string) string {
+	if date == "" {
+		return ""
+	}
+	parts := strings.Fields(date)
+	if len(parts) > 0 {
+		y := parts[0]
+		if len(y) >= 4 && y[0] >= '0' && y[0] <= '9' {
+			return y[:4]
+		}
+	}
+	return ""
+}
+
+func extractYearFromName(name string) string {
+	re := regexp.MustCompile(`\b(19|20)\d{2}\b`)
+	matches := re.FindStringSubmatch(name)
+	if matches != nil && len(matches) > 1 {
+		return matches[1]
+	}
+	return ""
+}
+
+func lastNameOnly(fullName string) string {
+	parts := strings.Fields(fullName)
+	if len(parts) == 0 {
+		return fullName
+	}
+	return parts[len(parts)-1]
+}
+
+func truncateTitle(title string) string {
+	if len(title) <= 60 {
+		return title
+	}
+	return title[:57] + "..."
+}
+
+func keyOrTitle(key, title string) string {
+	if title != "" {
+		return truncateTitle(title)
+	}
+	return "[" + key + "]"
 }
 
 func (r *LocalReader) GetAttachmentFile(ctx context.Context, key string) (string, string, error) {

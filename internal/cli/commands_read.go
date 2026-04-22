@@ -464,7 +464,7 @@ func (c *CLI) runCite(args []string) int {
 		return 2
 	}
 
-	cfg, client, exitCode := c.loadClient()
+	cfg, reader, exitCode := c.loadReader()
 	if exitCode != 0 {
 		return exitCode
 	}
@@ -485,12 +485,16 @@ func (c *CLI) runCite(args []string) int {
 	cached, hit := c.citeCache[cacheKey]
 	c.citeCacheMu.RUnlock()
 
-	var result zoteroapi.CitationResult
+	var result domain.CitationResult
 	if hit {
 		result = cached
 	} else {
 		var citeErr error
-		result, citeErr = client.GetCitation(context.Background(), key, opts)
+		result, citeErr = reader.CiteItem(context.Background(), key, domain.CitationOptions{
+			Format: opts.Format,
+			Style:  opts.Style,
+			Locale: opts.Locale,
+		})
 		if citeErr != nil {
 			return c.printErr(citeErr)
 		}
@@ -500,16 +504,13 @@ func (c *CLI) runCite(args []string) int {
 	}
 
 	if jsonOutput {
-		return c.writeJSON(jsonResponse{
-			OK:      true,
-			Command: "cite",
-			Data:    result,
-			Meta: map[string]any{
-				"total": 1,
-			},
-		})
+		meta := map[string]any{
+			"total": 1,
+		}
+		c.appendReadMetadata(meta, reader)
+		return c.writeJSON(jsonResponse{OK: true, Command: "cite", Data: result, Meta: meta})
 	}
-
+	c.warnIfSnapshotRead(c.consumeReaderReadMetadata(reader))
 	fmt.Fprintln(c.stdout, result.Text)
 	return 0
 }

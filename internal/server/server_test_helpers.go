@@ -49,6 +49,10 @@ func (m *mockReader) GetAttachmentFile(ctx context.Context, key string) (string,
 	return "", "", nil
 }
 
+func (m *mockReader) CiteItem(ctx context.Context, key string, opts domain.CitationOptions) (domain.CitationResult, error) {
+	return domain.CitationResult{}, nil
+}
+
 // NewMockServer creates a basic test server without logging middleware.
 func NewMockServer() http.Handler {
 	mux := http.NewServeMux()

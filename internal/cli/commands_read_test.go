@@ -60,6 +60,10 @@ func (r stubMetadataReader) GetAttachmentFile(context.Context, string) (string, 
 	return "", "", nil
 }
 
+func (r stubMetadataReader) CiteItem(context.Context, string, domain.CitationOptions) (domain.CitationResult, error) {
+	return domain.CitationResult{}, nil
+}
+
 type stubLocalExportReader struct {
 	keys      []string
 	payload   []map[string]any
@@ -133,6 +137,10 @@ func (r stubLocalExportReader) GetAttachmentFile(context.Context, string) (strin
 	return "", "", nil
 }
 
+func (r stubLocalExportReader) CiteItem(context.Context, string, domain.CitationOptions) (domain.CitationResult, error) {
+	return domain.CitationResult{}, nil
+}
+
 func (r stubLocalTextReader) GetItem(context.Context, string) (domain.Item, error) {
 	return r.item, nil
 }
@@ -179,6 +187,10 @@ func (r stubLocalTextReader) ListCollections(context.Context) ([]backend.Collect
 
 func (r stubLocalTextReader) GetAttachmentFile(context.Context, string) (string, string, error) {
 	return "", "", nil
+}
+
+func (r stubLocalTextReader) CiteItem(context.Context, string, domain.CitationOptions) (domain.CitationResult, error) {
+	return domain.CitationResult{}, nil
 }
 
 func TestHoldSQLiteExclusiveLockHelper(t *testing.T) {

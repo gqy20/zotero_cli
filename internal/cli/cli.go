@@ -10,7 +10,7 @@ import (
 
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/config"
-	"zotero_cli/internal/zoteroapi"
+	"zotero_cli/internal/domain"
 )
 
 type CLI struct {
@@ -19,7 +19,7 @@ type CLI struct {
 	stdin            io.Reader
 	backendNewReader func(config.Config, *http.Client) (backend.Reader, error)
 	newLocalReader   func(config.Config) (backend.Reader, error)
-	citeCache        map[string]zoteroapi.CitationResult
+	citeCache        map[string]domain.CitationResult
 	citeCacheMu      sync.RWMutex
 }
 
@@ -38,7 +38,7 @@ func New() *CLI {
 		newLocalReader: func(cfg config.Config) (backend.Reader, error) {
 			return backend.NewLocalReader(cfg)
 		},
-		citeCache: make(map[string]zoteroapi.CitationResult),
+		citeCache: make(map[string]domain.CitationResult),
 	}
 }
 

@@ -31,6 +31,16 @@ func firstNonEmptyString(values ...string) string {
 	return ""
 }
 
+func joinNonEmpty(sep string, parts ...string) string {
+	var nonEmpty []string
+	for _, p := range parts {
+		if p != "" {
+			nonEmpty = append(nonEmpty, p)
+		}
+	}
+	return strings.Join(nonEmpty, sep)
+}
+
 func normalizeWhitespace(value string) string {
 	return stringsJoinFields(value)
 }

@@ -1,140 +1,171 @@
 ---
 name: zotero-cli
-description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查看、导出、配置校验和安全写操作。当需要通过 `zot.exe` 或 `go run .\\cmd\\zot` 操作 Zotero 数据时使用，适用于 `find`、`show`、`export`、stats、元数据查询、批量标签、PDF 操作和受保护的写/删工作流。
+description: 使用本仓库的 Zotero CLI 工具进行文献检索、管理、导出、PDF 操作、标注分析、引文生成和配置管理。支持 web/local/hybrid 三种模式，内置 HTTP API Server 和 React Web UI。当需要操作 Zotero 数据或进行文献分析时使用。
 ---
 
-# Zotero CLI
+# Zotero CLI (`zot`)
 
 优先使用本地 CLI，不要自行实现 Zotero API 调用。
+
+## 快速开始
+
+```shell
+zot init                          # 一键初始化（推荐入口）
+zot config validate               # 校验配置有效性
+zot overview --json               # Agent 首选：一站式库概览
+```
 
 ## 工作流程
 
 1. 在项目根目录下工作。
-2. 优先使用 `.\zot.exe`（如果二进制文件存在且版本足够）。
-3. 验证源码变更或二进制缺失时回退到 `go run .\cmd\zot ...`。
-4. Agent 工作流优先使用 `--json`。
-5. 假设凭据可用前先运行 `config validate`。
+2. 优先使用 `zot`（二进制存在且版本足够）。
+3. Agent 工作流**始终加 `--json`**，设置 `ZOT_JSON_ERRORS=1` 获得结构化错误输出。
+4. 操作前先运行 `config validate` 确认凭据可用。
 
-## 读优先默认命令
+### 模式选择
 
-```powershell
-.\zot.exe overview --json                   # 一站式库概览（Agent 入口推荐）
-.\zot.exe stats --json
-.\zot.exe find --all --json
-.\zot.exe find "query" --json
-.\zot.exe show ITEMKEY --json
-.\zot.exe export --collection COLLKEY --format csljson --json
-.\zot.exe annotations ITEMKEY --json          # 读取 PDF 标注（双源）
-.\zot.exe select ITEMKEY                     # 跳转到 Zotero UI 选中条目
+| 模式 | 说明 | 适用场景 |
+|------|------|----------|
+| `web` (默认) | 纯云端 Zotero Web API | 无本地 Zotero 安装 |
+| `local` | 读本地 SQLite 数据库 | 大量读操作、PDF 标注/提取 |
+| `hybrid` | 本地优先 + Web 回退 | 兼顾速度与完整性 |
+
+> 写操作仅支持 `web` 和 `hybrid`（回退路径）。local 模式的写能力受限。
+
+---
+
+## 核心命令速查
+
+### 库概览（Agent 入口）
+
+```shell
+zot overview --json        # 统计 + Top 收藏夹/标签 + 最近条目 + FTS 状态
+zot stats --json           # 条目/收藏夹/搜索计数
 ```
 
-利用 `find` 的过滤能力减少额外请求：
+### 文献检索
+
+```shell
+zot find --all --json                    # 全部条目
+zot find "CRISPR gene editing" --json    # 关键词搜索
+zot show ITEMKEY --json                  # 条目详情（含子笔记+标注）
+zot relate ITEMKEY --json                # 关联条目
+```
 
 **基础过滤：**
-- `--date-after YYYY[-MM[-DD]]`
-- `--date-before YYYY[-MM[-DD]]`
-- 多次使用 `--tag`（AND） / `--tag-any`（OR）
-- `--include-trashed`（web only）
-- `--qmode everything`（web only）
+- `--date-after YYYY[-MM[-DD]]` / `--date-before YYYY[-MM[-DD]]`
+- 多次 `--tag`（AND） / `--tag-any`（OR）
+- `--include-trashed` / `--qmode everything`（web only）
 
-**高级过滤（local / hybrid）：**
-- `--no-type TYPE` — 排除某文献类型
-- `--tag-contains WORD` — 标签模糊匹配
-- `--exclude-tag TAG` — 排除含某标签
-- `--collection KEY` — 按收藏夹过滤
-- `--no-collection KEY` — 排除收藏夹
-- `--modified-within DURATION` — 最近修改（如 `7d`、`2w`）
-- `--added-since DURATION` — 最近添加
-- `--has-pdf` — 仅有 PDF 附件的条目
-- `--attachment-name TEXT` — 附件文件名匹配
-- `--attachment-path TEXT` — 附件路径匹配
+**高级过滤（local/hybrid）：**
+- `--collection KEY` / `--no-collection KEY`
+- `--tag-contains WORD` / `--exclude-tag TAG`
+- `--no-type TYPE` / `--has-pdf`
+- `--modified-within 7d` / `--added-since 2w`
+- `--attachment-name TEXT` / `--attachment-path TEXT`
 
 **输出控制：**
-- `--include-fields url,doi,version` — 指定返回字段
-- `--full` — 完整字段 + 附件详情
-- `--sort FIELD` + `--direction asc|desc` — 排序
-- `--start N` + `--limit N` — 分页
+- `--include-fields url,doi,version` / `--full`
+- `--sort FIELD` + `--direction asc|desc`
+- `--start N` + `--limit N`（分页）
 
-**全文检索：**
-- `--fulltext` — FTS5 全文搜索（FTS 有数据时自动启用）
-- `--fulltext-any` — 任一词匹配
-- `--snippet` — 匹配片段预览（默认限制 **50** 条，需更多时加 `--limit N`）
+**全文检索（FTS5）：**
+- local/hybrid 下 FTS 有数据时**自动启用**，无需手动 `--fulltext`
+- `--snippet` 匹配片段预览（默认限制 **50** 条）
+- `--fulltext-any` 任一词匹配
 
-文本模式辅助选项：
+### 导出与引用
 
-- `--include-fields url,doi,version`
-- `--full`
+```shell
+zot export --all --format csljson --json   # 全库导出
+zot export --collection COLLKEY --format bibtex --json
+zot cite ITEMKEY --format apa              # 单条引文
+zot cite ITEMKEY --format bibliography     # 参考文献条目
+```
 
-## PDF 操作（需 local 模式 + PyMuPDF）
+### PDF 操作（需 local/hybrid + PyMuPDF）
 
-```powershell
-# 提取 PDF 正文（PyMuPDF → ft-cache → pdfium WASM）
-.\zot.exe extract-text ITEMKEY --json
+```shell
+# 正文提取（三级优先级：PyMuPDF → ft-cache → pdfium WASM）
+zot extract-text ITEMKEY --json
 
-# 双源读取标注
-.\zot.exe annotations ITEMKEY --json
-.\zot.exe annotations ITEMKEY --type highlight --page 3 --json
-# 删除 PDF 文件内标注
-.\zot.exe annotations ITEMKEY --clear --type highlight
+# 双源标注读取（DB 标注 + PDF 文件内标注）
+zot annotations ITEMKEY --json
+zot annotations ITEMKEY --type highlight --page 3 --json
+zot annotations ITEMKEY --clear --type highlight    # 删除 PDF 内标注
 
 # 写入标注到 PDF
-.\zot.exe annotate ITEMKEY --text "关键概念" --color red --comment "重要"
-.\zot.exe annotate ITEMKEY --text "speciation" --type underline --color blue
+zot annotate ITEMKEY --text "关键概念" --color red --comment "重要"
+zot annotate ITEMKEY --text "speciation" --type underline --color blue
 
 # 与 Zotero 桌面端联动
-.\zot.exe open ITEMKEY --page 5        # 阅读器中打开 PDF
-.\zot.exe select ITEMKEY               # 主界面选中条目
+zot open ITEMKEY --page 5         # 阅读器中打开 PDF
+zot select ITEMKEY                # 主界面选中条目
 ```
 
-## 笔记查询
+### 元数据 Schema
 
-```powershell
-.\zot.exe notes --json
-.\zot.exe notes --query "CRISPR" --limit 20 --json
+```shell
+zot schema types --json                    # 所有文献类型
+zot schema fields-for journalArticle       # 某类型的有效字段
+zot schema template book --json            # 创建模板（含必填字段）
+zot schema creator-types-for artwork       # 作者角色
 ```
+
+### 其他只读命令
+
+| 命令 | 说明 |
+|------|------|
+| `collections` | 收藏夹列表 |
+| `tags` | 标签列表 |
+| `notes [--query "..."]` | 笔记搜索 |
+| `searches` | 已保存搜索 |
+| `groups` | 可访问群组 |
+| `trash` | 回收站 |
+| `collections-top` | 顶层收藏夹 |
+| `publications` | 我的发表 |
+| `deleted` | 已删除对象 key |
+| `versions --since N` | 版本变更检测 |
+| `key-info` | API Key 权限信息 |
+| `index [build\|status]` | FTS5 全文索引管理 |
+
+---
 
 ## 写操作安全
 
-以下命令属于**写操作**：
+以下命令会修改数据：
 
-- `create-item` / `update-item`
-- `create-items` / `update-items`
+- `create-item` / `update-item` / `delete-item`
 - `add-tag` / `remove-tag`
-- `create-collection` / `update-collection`
-- `create-search` / `update-search`
-- `annotate`（向 PDF 文件写入高亮/笔记）
+- `create-collection` / `update-collection` / `delete-collection`
+- `create-search` / `update-search` / `delete-search`
+- `annotate`（向 PDF 写入高亮/笔记/下划线）
 
-以下命令属于**破坏性操作**：
+执行前：
+1. 确认用户意图。
+2. 检查 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 环境变量。
+3. 尽可能使用版本前置条件（`--version N`）。
 
-- `delete-item` / `delete-items`
-- `delete-collection` / `delete-search`
+**删除操作额外要求：**
+1. 复述目标 key。
+2. 无歧义确认。
+3. 有任何不确定就先询问用户。
 
-执行任何写操作前：
-
-1. 确认用户确实要修改数据。
-2. 检查 `ZOT_ALLOW_WRITE` 和 `ZOT_ALLOW_DELETE` 是否允许该操作。
-3. 尽可能使用版本前置条件。
-
-执行任何删除操作前：
-
-1. 复述目标 key 或 keys。
-2. 确认无歧义。
-3. 请求有任何不确定就先询问用户。
+---
 
 ## 配置
 
-CLI 配置存储在 `~/.zot/.env`。
+存储位置：`~/.zot/.env`
 
-常用命令：
-
-```powershell
-.\zot.exe init                    # 一键初始化（推荐，含模式选择和可选 PyMuPDF 安装）
-.\zot.exe init --mode hybrid --api-key ...  # 非交互模式
-.\zot.exe config show       # 查看当前配置
-.\zot.exe config validate   # 校验配置有效性
+```shell
+zot init                                    # 交互式初始化
+zot init --mode hybrid --api-key KEY ...    # 非交互模式
+zot init --check-pdf                        # 诊断 PyMuPDF 状态
+zot config show                              # 查看当前配置
+zot config validate --json                   # 校验 + 结构化诊断
 ```
 
-配置缺失时，主动初始化而不是绕过错误。
+配置缺失时主动初始化，不要绕过错误。
 
 ### 环境变量速查
 
@@ -150,19 +181,39 @@ CLI 配置存储在 `~/.zot/.env`。
 | `ZOT_ALLOW_DELETE` | 允许删除操作 | `0` |
 | `ZOT_RETRY_MAX_ATTEMPTS` | 最大重试次数 | `5` |
 | `ZOT_RETRY_BASE_DELAY_MS` | 重试基础延迟 ms | `1000` |
-| `ZOT_JSON_ERRORS` | 错误以 JSON 输出到 stdout（agent 解析用） | `0` |
+| `ZOT_JSON_ERRORS` | 错误以 JSON 输出到 stdout | `0` |
+
+---
+
+## Web 前端 & API Server（规划中）
+
+> **尚未集成到 CLI**。当前代码库包含前端源码（`web/`）和 Go server 框架，但 `zot web` 命令尚未实现。
+
+规划能力：
+- 10 个 REST 端点（GET only）：`health` / `stats` / `overview` / `items` / `collections` / `tags` / `notes` / `files` / `schema` / `export`
+- 6 个前端页面：Dashboard / Library / ItemDetail（含 PDF 预览） / Search / Tags / Export
+- 技术栈：React 19 + Vite 6 + Tailwind CSS 4 + TanStack Query 5
+
+详见 [roadmap](https://github.com/gqy20/zotero_cli/blob/master/docs/plans/roadmap.md) Phase 1-4 进度。
+
+---
 
 ## 性能注意
 
-- `--snippet` 默认 limit 50，需要更多结果显式加 `--limit`
-- local/hybrid 下 FTS 有数据时自动启用全文检索，无需手动加 `--fulltext`
+- `overview` 并行调用 4 个 API（~6s），优于逐个请求
+- `collections` 在 local/hybrid 下走 SQLite（~6ms），不走 Web API
 - `extract-text` 结果有缓存，重复提取同一 PDF 直接命中
+- `--snippet` 默认 limit 50，需更多结果显式加 `--limit`
 - 高频脚本遇 `429` 会自动退避+抖动，但仍应主动降速
+
+---
 
 ## 参考文档
 
-按需查阅：
-
-- `docs/AI_AGENT.md` — Agent 使用模式与安全规范（完整版）
-- `docs/commands.md` — 完整命令参考与所有选项说明
-- `README.md` — 用户快速开始与功能概览
+| 文档 | 链接 |
+|------|------|
+| 完整命令参考与所有选项 | https://github.com/gqy20/zotero_cli/blob/master/docs/user/commands.md |
+| 快速入门指南 | https://github.com/gqy20/zotero_cli/blob/master/docs/user/quickstart.md |
+| 功能概览与安装方式 | https://github.com/gqy20/zotero_cli/blob/master/README.md |
+| 版本规划与当前进度 | https://github.com/gqy20/zotero_cli/blob/master/docs/plans/roadmap.md |
+| 各命令耗时基线 | https://github.com/gqy20/zotero_cli/blob/master/docs/reference/performance-baseline.md |

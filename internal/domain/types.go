@@ -87,3 +87,16 @@ type Relation struct {
 	Direction string  `json:"direction"`
 	Target    ItemRef `json:"target"`
 }
+
+type CitationOptions struct {
+	Format string // "citation" | "bib"
+	Style  string
+	Locale string
+}
+
+type CitationResult struct {
+	Key    string `json:"key"`
+	Format string `json:"format"`
+	Style  string `json:"style,omitempty"`
+	Text   string `json:"text"`
+}

@@ -42,7 +42,7 @@ func TestRemoteReadCommandsRejectLocalMode(t *testing.T) {
 		args []string
 		want string
 	}{
-		{name: "cite", args: []string{"cite", "X42A7DEE"}, want: "web API commands are not available in local mode; use web or hybrid mode"},
+		{name: "cite", args: []string{"cite", "X42A7DEE"}, want: "local mode requires data_dir"},
 		{name: "export", args: []string{"export", "--item-key", "X42A7DEE"}, want: "web API commands are not available in local mode; use web or hybrid mode"},
 	}
 

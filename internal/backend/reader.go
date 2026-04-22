@@ -83,6 +83,7 @@ type Reader interface {
 	ListTags(ctx context.Context) ([]Tag, error)
 	ListCollections(ctx context.Context) ([]Collection, error)
 	GetAttachmentFile(ctx context.Context, key string) (filePath string, contentType string, err error)
+	CiteItem(ctx context.Context, key string, opts domain.CitationOptions) (domain.CitationResult, error)
 }
 
 type readMetadataReporter interface {
@@ -105,6 +106,7 @@ const (
 	readOperationListNotes       readOperation = "list_notes"
 	readOperationListTags        readOperation = "list_tags"
 	readOperationListCollections readOperation = "list_collections"
+	readOperationCiteItem        readOperation = "cite_item"
 )
 
 func NewReader(cfg config.Config, httpClient *http.Client) (Reader, error) {
@@ -220,6 +222,17 @@ func (r *HybridReader) GetAttachmentFile(ctx context.Context, key string) (strin
 	return "", "", fmt.Errorf("no local reader available")
 }
 
+func (r *HybridReader) CiteItem(ctx context.Context, key string, opts domain.CitationOptions) (domain.CitationResult, error) {
+	return readWithFallbackUsingPolicy(r,
+		func(err error) bool {
+			return shouldFallbackToWeb(readOperationCiteItem, err)
+		},
+		func(reader Reader) (domain.CitationResult, error) {
+			return reader.CiteItem(ctx, key, opts)
+		},
+	)
+}
+
 func readWithFallbackUsingPolicy[T any](r *HybridReader, shouldFallback func(error) bool, read func(Reader) (T, error)) (T, error) {
 	var zero T
 	if r.local != nil {
@@ -292,6 +305,8 @@ func shouldFallbackToWeb(op readOperation, err error) bool {
 		return errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
 	case readOperationListCollections:
 		return errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
+	case readOperationCiteItem:
+		return errors.Is(err, ErrItemNotFound) || errors.Is(err, ErrLocalTemporarilyUnavailable)
 	case readOperationGetRelated:
 		return false
 	default:
