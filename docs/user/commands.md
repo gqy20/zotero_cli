@@ -105,3 +105,49 @@ zot annotate <item-key> (--text TEXT | --page N (--rect x0,y0,x1,y2 | --point x,
 详细案例见 [annotations 示例](./examples/annotations.md)。
 
 ---
+
+## 创建条目 (`create-item`)
+
+通过 JSON 数据创建新条目（笔记、文献等）。支持 **hybrid 写入**：Zotero 未运行时自动走本地 SQLite 直写。
+
+### 用法
+
+```
+zot create-item (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]
+```
+
+### Hybrid 写入行为
+
+| 条件 | 路径 | 输出标识 |
+|------|------|----------|
+| mode = `local`/`hybrid` + Zotero **未运行** + itemType = `note` | local SQLite 直写（~50ms） | `"write_source": "local"` |
+| 其他情况 | Web API POST（~2s） | 正常 API 响应 |
+
+> 自动检测通过 `isZoteroRunning()` 检查进程状态，无需手动指定路径。
+
+### 创建笔记示例
+
+```bash
+# 准备笔记 JSON
+cat > note.json << 'EOF'
+{
+  "itemType": "note",
+  "parentItem": "SXJ9FYTK",
+  "note": "<h1>阅读总结</h1><p>这是我的笔记内容</p>"
+}
+EOF
+
+# 创建（自动选择 local 或 web 路径）
+zot create-item --from-file note.json --if-unmodified-since-version 59156 --json
+```
+
+JSON 字段说明：
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `itemType` | 是 | `"note"` （当前仅笔记支持 local 写入） |
+| `parentItem` | 是 (local) | 父条目 key，local 模式下用于关联 |
+| `note` | 是 (local) | HTML 格式笔记内容 |
+| `--if-unmodified-since-version N` | 是 | 库版本号（乐观锁，防止并发冲突） |
+
+---

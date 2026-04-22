@@ -1,6 +1,6 @@
 # Zotero CLI 性能基线报告
 
-> 测试时间: 2026-04-21 | 模式: hybrid (local SQLite + Web fallback) | 二进制: v0.0.5-10-g6a27af5
+> 测试时间: 2026-04-22 | 模式: hybrid (local SQLite + Web fallback) | 二进制: v0.0.7+ (含 local note write)
 
 ## 基线数据
 
@@ -24,16 +24,19 @@
 | 14 | `deleted` | **1.7s** | Web API |
 | 15 | `schema types` | **1.6s** | Web API |
 
-### 写命令（未测，通常 <2s）
+### 写命令
 
-| 命令 | 预估 | 链路 |
+| 命令 | 耗时 | 链路 |
 |------|------|------|
-| `create-item` | ~2s | Web API POST |
+| `create-item` (note, **local**) | **~50ms** 纯 SQL | local SQLite INSERT（Zotero 未运行时） |
+| `create-item` (note, web fallback) | **~1.9s** | Web API POST（Zotero 运行时自动切换） |
 | `update-item` | ~2s | Web API PATCH |
 | `delete-item` | ~1s | Web API DELETE |
 | `add-tag` / `remove-tag` | ~2s | Web API PATCH |
 | `create-collection` | ~2s | Web API POST |
 | `annotate` | ~1s | local PyMuPDF |
+
+> **hybrid 写入策略**（v0.0.8+）：`create-item` 创建笔记时，若模式为 `local`/`hybrid` 且 Zotero 未运行，自动走本地 SQLite 直写（~50ms，无网络开销）；Zotero 运行时 fallback 到 Web API。通过 `isZoteroRunning()` 检测进程状态自动切换。
 
 ## 分析与优化方向
 

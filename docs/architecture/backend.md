@@ -43,13 +43,19 @@ local backend 不再是单个 `local.go`，而是按职责拆分：
 
 ### Remote API 命令（始终走 Web API）
 
-`cite` / `export` / `collections` / `collections-top` / `notes` / `tags` / `searches` / `deleted` / `stats` / `versions` / `schema *` / `key-info` / `groups` / `trash` / `publications` / 全部 create/update/delete
+`cite` / `export` / `collections` / `collections-top` / `notes` / `tags` / `searches` / `deleted` / `stats` / `versions` / `schema *` / `key-info` / `groups` / `trash` / `publications`
 
-| 模式 | backend-aware 命令 | remote-only 命令 |
-|------|-----------------|---------------|
-| `web` | 支持 | 支持 |
-| `hybrid` | 支持（本地优先） | 支持（通过 remote client 路径） |
-| `local` | 支持 | **显式拒绝**，返回 mode-boundary error |
+### Hybrid 写入命令（自动选择路径）
+
+`create-item`（仅 itemType = `note` 时支持 local 写入）
+
+| 模式 | backend-aware 读命令 | hybrid 写入命令 | remote-only 写命令 |
+|------|---------------------|-------------------|---------------------|
+| `web` | 支持 | → Web API | 支持 |
+| `hybrid` | 支持（本地优先） | **Zotero 未运行 → local SQLite；运行中 → Web API** | 支持 |
+| `local` | 支持 | **Zotero 未运行 → local SQLite；运行中 → Web API fallback** | 显式拒绝 |
+
+> 写操作安全规则不变：删除默认禁止、版本号乐观锁。local 写入仅在 Zotero 未运行时启用，避免与桌面端冲突。
 
 ---
 

@@ -23,7 +23,7 @@
 | 阶段 3 | `find` → `export` 管道连接（`--from-find`） | 待开始 |
 | 阶段 4 | 图片解析与分析（`extract-images`） | 待开始 |
 
-> **本版不做**：local full-text search 增强 / MCP server / 大规模命令扩张 / 本地数据库写入（基础能力已就绪）
+> **本版不做**：local full-text search 增强 / MCP server / 大规模命令扩张 / 非笔记类型的本地数据库写入（note 写入已就绪）
 
 #### 标注系统后续优化（从实战中识别）
 
@@ -49,6 +49,7 @@ v0.0.4 的 annotate/annotations 命令已完成核心功能，实际使用中暴
 | Find Enhancement (v0.0.5) | find 高级过滤 11 项 + auto fulltext + snippet 缓存 ~20x + agent 模式 P1 优化 | completed |
 | Unified Init (v0.0.6) | `zot init` 一站式入口 + `overview` 命令 + JSON 结构化错误 + schema 统一 + 测试拆分 + 并行加速 ~3x + Web 前端 MVP | completed |
 | Agent Enhancement (v0.0.7) | 标注双层删除/Mode 1.5/--author/ANNO_TYPES完整映射/本地引文格式化/快照持久化缓存/前端骨架屏+Toast+懒加载/97测试全绿 | completed |
+| Local Write (v0.0.8) | **hybrid 笔记创建**：Zotero 未运行时 `create-item` 自动走 SQLite 直写（~50ms），运行时 fallback Web API；`generateItemKey()` / `CreateLocalNote()` / `isZoteroRunning()` 检测自动切换 | completed |
 
 ---
 
@@ -121,18 +122,16 @@ v0.0.4 的 annotate/annotations 命令已完成核心功能，实际使用中暴
 | **PdfViewer 懒加载** | 静态 `import` → 动态 `await import('pdfjs-dist')` | ✅ 完成 |
 | **列表虚拟化** | Library 页面 >100 条时启用 `@tanstack/react-virtual` | ⏸ 延后（当前数据量无需） |
 
-#### Phase 3 — 写操作与交互深化 ⏸ (阻塞：后端无写基础设施)
+#### Phase 3 — 写操作与交互深化 ⏸ (部分就绪)
 
-> **前置依赖未满足**。当前后端 `handlers.go` 仅注册 GET 路由（10 个只读端点），`backend.Reader` 接口不含任何写方法，不存在 `Writer` 接口或 `write_handlers.go`。
+> **部分前置已满足**。v0.0.8 实现了笔记的 hybrid 写入（`CreateLocalNote()`），但以下基建仍需完成：
 >
-> Phase 3 全部功能（条目 CRUD、标签管理、收藏夹操作、标注写回）均依赖后端写层，需先完成以下基建才能启动：
+> 1. ~~定义 `backend.Writer` 接口~~ → note 写入已通过 LocalReader 扩展实现
+> 2. 实现 Zotero Web API 的写调用封装 → 已有（`zoteroapi.Client.CreateItem` 等）
+> 3. 在 `handlers.go` 中注册 POST/PUT/DELETE 路由 → 待实现
+> 4. 前端 API client 扩展写方法 + Dialog 表单组件 → 待实现
 >
-> 1. 定义 `backend.Writer` 接口（CreateItem / UpdateItem / DeleteItem / AddTag / RemoveTag 等）
-> 2. 实现 Zotero Web API 的写调用封装
-> 3. 在 `handlers.go` 中注册 POST/PUT/DELETE 路由
-> 4. 前端 API client 扩展写方法 + Dialog 表单组件
->
-> **结论：Phase 3 整体延后，等后端写层就绪后再排期。**
+> **当前状态**：CLI 层笔记创建已支持 hybrid 写入；Web 前端的写操作 UI 仍需 handlers + 路由注册。
 
 | 功能 | 说明 | 复杂度 | 阻塞原因 |
 |------|------|--------|---------|

@@ -858,3 +858,62 @@ func (r *LocalReader) DeleteDBAnnotations(ctx context.Context, itemKey string, r
 	deleted, _ := result.RowsAffected()
 	return DeleteDBAnnotationsResult{Deleted: int(deleted)}, nil
 }
+
+type LocalCreateNoteResult struct {
+	Key    string `json:"key"`
+	ItemID int64  `json:"item_id"`
+}
+
+func (r *LocalReader) CreateLocalNote(ctx context.Context, parentKey string, noteHTML string) (LocalCreateNoteResult, error) {
+	db, err := r.sqliteOpenFunc()(localSQLiteDSNReadWrite(r.SQLitePath))
+	if err != nil {
+		return LocalCreateNoteResult{}, err
+	}
+	defer db.Close()
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return LocalCreateNoteResult{}, err
+	}
+	defer tx.Rollback()
+
+	var parentItemID int64
+	var parentLibraryID int64
+	err = tx.QueryRowContext(ctx, "SELECT itemID, libraryID FROM items WHERE key = ?", parentKey).Scan(&parentItemID, &parentLibraryID)
+	if err != nil {
+		return LocalCreateNoteResult{}, fmt.Errorf("parent item %q not found: %w", parentKey, err)
+	}
+
+	newKey, err := generateItemKey()
+	if err != nil {
+		return LocalCreateNoteResult{}, err
+	}
+
+	now := "datetime('now')"
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO items (key, itemTypeID, libraryID, dateAdded, dateModified, clientDateModified)
+		 VALUES (?, (SELECT itemTypeID FROM itemTypes WHERE typeName='note'), ?, `+now+`, `+now+`, `+now+`)`,
+		newKey, parentLibraryID,
+	)
+	if err != nil {
+		return LocalCreateNoteResult{}, fmt.Errorf("insert items: %w", err)
+	}
+	itemID, err := res.LastInsertId()
+	if err != nil {
+		return LocalCreateNoteResult{}, fmt.Errorf("get last insert id: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO itemNotes (itemID, parentItemID, note, title) VALUES (?, ?, ?, '')`,
+		itemID, parentItemID, noteHTML,
+	)
+	if err != nil {
+		return LocalCreateNoteResult{}, fmt.Errorf("insert itemNotes: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return LocalCreateNoteResult{}, fmt.Errorf("commit: %w", err)
+	}
+
+	return LocalCreateNoteResult{Key: newKey, ItemID: itemID}, nil
+}
