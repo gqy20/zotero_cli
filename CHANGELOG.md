@@ -18,6 +18,17 @@
   - **批量操作（`--from-file`）**：JSON 文件驱动批量 add/remove 操作，格式为 `{action, source, target, predicate}` 数组。支持 `--dry-run` 预览。
   - **Graphviz DOT 可视化（`--dot`）**：输出 Graphviz DOT 格式关系网络图。节点颜色编码：根条目蓝色、笔记橙色、目标灰色；边样式编码：实线=显式关系、点线=父子归属、虚线=内嵌 citation。可与 `--aggregate` 组合使用。
   - **Predicate 过滤（`--predicate`）**：按谓词类型筛选关系输出（如 `dc:relation`、`owl:sameAs`），适用于所有模式（查询/聚合/DOT）。
+- **PDF Figure 提取（`extract-figures`）**：新增 `zot extract-figures` 命令，基于 PyMuPDF `cluster_drawings()` v5b 算法从 PDF 中提取科学插图。双路径策略：矢量聚类（Path A）+ 位图锚点回退（Path B）。过滤链包含面积/尺寸/锚点检测/文字密度/caption 模式/全页扫描跳过/去重七步，支持 caption 自动吸附。多篇自动并行（WaitGroup + semaphore），JSON/文本双输出，含 page/source/size/anchors/has_caption 等元信息字段。
+- **Hybrid 本地笔记创建**：`create-item` 命令在 Zotero 未运行且 mode 为 local/hybrid 时，笔记类型自动走 SQLite 直写路径（~50ms），无需 Web API（~2s）。通过 `isZoteroRunning()` 自动检测进程状态，`generateItemKey()` 生成符合 Zotero 格式的 item key，`CreateLocalNote()` 在事务中写入 items + itemNotes 两张表并继承父条目 libraryID。Web API 作为 fallback 路径保留。JSON 输出含 `"write_source": "local"` 标识来源。
+- **删除操作交互确认**：`delete-item` / `delete-collection` / `delete-search` 命令新增交互式确认提示，执行前显示警告信息并要求 `[y/N]` 确认。取消操作退出码 130。新增 `--yes` / `-y` 标志跳过确认（供脚本/自动化使用）；`--json` 模式自动跳过确认。同时修复 `generateItemKey()` 中的 byte shift overflow 问题（go vet 检出）。
+- **Find 自动推断 `--all`**：`zot find` 在仅使用实质性过滤标志（`--tag` / `--date-after` / `--collection` / `--has-pdf` 等 14 种）而无查询词时，自动推断为全量搜索，不再强制要求显式 `--all` 或查询字符串。仅在无查询词、无过滤、无 `--all` 三者同时缺失时报错。
+
+### 变更
+- **默认模式改为 hybrid**：`config.Default()` 的默认 Mode 从 `web` 改为 `hybrid`；`zot init` 交互式提示的默认值同步更新为 `[hybrid]`。新用户开箱即用即可享受本地优先 + Web 回退的完整能力。
+- **Init 安装后提示索引构建**：PyMuPDF 安装完成后额外提示运行 `zot index build` 以提取全文索引。
+
+### 工具链
+- **CI UPX 升级**：Release workflow 从 `apt install upx-ucl`（版本过旧）切换为 `crazy-max/ghaction-upx@v3`（自动拉取最新 UPX release）。Makefile 移除本地 `tools/` 下载逻辑，UPX 现由 GitHub Action 系统级安装提供。
 
 ## [0.0.7] - 2026-04-22
 
