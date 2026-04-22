@@ -48,6 +48,7 @@ v0.0.4 的 annotate/annotations 命令已完成核心功能，实际使用中暴
 | Write & Integrate (v0.0.4) | annotate/open/select/annotations 命令 + Makefile + pre-commit + Exit Code + 文档体系 + --clear双层删除/Mode 1.5/--author/DeleteDBAnnotations/ANNO_TYPES完整映射/三份文档更新 | completed |
 | Find Enhancement (v0.0.5) | find 高级过滤 11 项 + auto fulltext + snippet 缓存 ~20x + agent 模式 P1 优化 | completed |
 | Unified Init (v0.0.6) | `zot init` 一站式入口 + `overview` 命令 + JSON 结构化错误 + schema 统一 + 测试拆分 + 并行加速 ~3x + Web 前端 MVP | completed |
+| Agent Enhancement (v0.0.7) | 标注双层删除/Mode 1.5/--author/ANNO_TYPES完整映射/本地引文格式化/快照持久化缓存/前端骨架屏+Toast+懒加载/97测试全绿 | completed |
 
 ---
 

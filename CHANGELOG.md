@@ -6,7 +6,16 @@
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-04-22
+
 ### 新增
+- **标注系统双层删除**：`annotate --clear` 和 `annotations --clear` 现在同时清理 PDF 文件层和 Zotero DB 层（`itemAnnotations` 表）标注。DB 删除在 Zotero 运行时以 warning 形式非阻断处理，关闭 Zotero 后可重试成功。
+- **DB 标注删除接口**：`LocalReader` 新增 `DeleteDBAnnotations` 方法，通过正确的三层 SQL JOIN（`items → itemAttachments → itemAnnotations`）定位并删除 DB 标注，支持按页码/类型/作者组合过滤。
+- **SQLite 读写 DSN 分离**：新增 `localSQLiteDSNReadWrite()` 函数（`mode=rwc&_pragma=journal_mode=WAL`），与只读 DSN（`mode=ro&_pragma=query_only=1`）分离，解决写操作 `attempt to write a readonly database` 错误。
+- **ANNO_TYPES 完整映射**：PyMuPDF 标注类型从 5 种扩展到 20 种完整映射（highlight/underline/strikeout/squiggly/circle/line/polyline/freetext/stamp 等），覆盖 Zotero 支持的全部标注类型。
+- **`--author` 过滤**：`annotations` 命令新增 `--author` 参数，支持按标注作者过滤 DB 层标注输出。
+- **本地引文格式化**：`cite` 命令在 local/hybrid 模式下通过 Reader 接口直接从 SQLite 读取作者/日期/标题等元数据生成 APA/BibTeX/Chicago 等引文格式，不再依赖 Web API 回退。
+- **SQLite 快照持久化缓存**：Zotero 运行时 local 读命令从每次复制 ~242MB 快照（~2.2s）改为复用持久化缓存（`{dataDir}/.zotero_cli/snapshot/`，基于 mtime 自动失效重建）。busy_timeout 从 5s 缩短至 200ms。collections/tags/notes 等命令从 ~2.2s 降至 ~0.3s（7x 提升）。
 - **Web 前端（React SPA）**：全新 Web UI，基于 React 19 + Vite 6 + Tailwind CSS 4 + TanStack Query 5 + React Router 7 技术栈。包含 6 个完整页面：Dashboard（统计总览）、Library（文献列表）、ItemDetail（条目详情 + PDF 预览弹窗）、Search（全文搜索）、Tags（标签管理）、Export（格式导出）。使用 SOTD 风格现代设计语言（圆角卡片、渐变按钮、微交互动效）。
 - **HTTP API Server**：新增内置 HTTP 服务端（`zot web` 命令），提供 10 个 REST 端点（health / stats / overview / items / collections / tags / notes / files）。支持结构化 JSON 日志（slog）、请求 ID 追踪、CORS 中间件、panic recovery 和静态文件服务（开发模式热更新）。
 - **可复用组件库（TDD）**：从页面内联代码中提取 9 个通用组件和 3 个自定义 Hook：
@@ -23,6 +32,11 @@
 ### 变更
 - **文档目录重组**：将扁平的 `docs/` 重构为分类目录结构——`docs/user/`（用户指南）、`docs/plans/`（规划）、`docs/reference/`（参考）、`docs/architecture/`（架构）、`docs/dev/`（开发）。净减 ~2000 行冗余内容，新增 quickstart 快速入门页。
 - **`zot init` 提示增强**：初始化交互中增加 AI 辅助设置提示，引导用户配置 web 模式相关选项。
+- **标注文档完善**：新增 `docs/user/examples/annotations.md` 标注操作完整指南，包含双源架构图、三种标注模式对比表、`--clear` 双层删除流程图、实战案例和 FAQ。commands.md 补充 `annotations`/`annotate` 命令完整参考。
+
+### 修复
+- **`findDefaultDataDir()` 语法错误**：函数体缺少闭合 `}` 导致编译失败，已修复。
+- **`--clear` 仅删 highlight**：清除模式下 `req.Type` 默认为 `"highlight"` 导致其他类型标注不被删除，已改为 clear 模式下清空 Type 过滤条件。
 
 ### 测试
 - **前端测试体系**：Vitest + @testing-library/react + jsdom，共 20 个测试文件 / 97 个测试用例，覆盖全部组件、Hook 和 API client。
