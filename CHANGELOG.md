@@ -8,6 +8,16 @@
 
 ### 新增
 - **期刊等级查询**：所有读命令（`show`/`find`）自动展示期刊等级信息（SCI-IF、中科院分区、JCI、ESI、各高校认定等级等），数据来自 [EasyScholar](https://www.easyscholar.cc/console/user/open)（需安装[绿青蛙插件](https://www.easyscholar.cc/blogs/10009)），从 `zotero_file/zoterostyle.json` 自动加载。`show` 和 `find --full` 命令在文本输出中显示等级，`find --json` 在 JSON 中包含 `journal_rank` 字段。支持期刊名模糊匹配（缩写、大小写、中英文）。
+- **Relate 命令全面增强**：`zot relate` 从仅支持 local/hybrid 查询自身显式关系，升级为覆盖三种模式、三层聚合、读写一体的完整关系管理工具：
+  - **Web API 支持**：web 和 hybrid 模式下通过 Zotero Web API v3 的 `data.relations` 字段解析显式关系，替换原有的 `ErrUnsupportedFeature` stub。hybrid fallback 路径修正为允许 `get_related` 回退到 Web。
+  - **三层聚合（`--aggregate`）**：返回条目自身关系 + 子笔记的 itemRelations + 笔记内嵌 citation（`data-citation-items`）的完整关系网络。JSON 输出按 self / notes / citations 分层结构化；文本模式分段展示。
+  - **Snapshot 一致性保障**：检测快照新鲜度，JSON 输出 meta 中含 `snapshot_stale` 字段，文本模式在过期时输出警告提示。
+  - **ItemRef 信息增强**：目标条目从 key/type/title 三字段扩展至包含 date / creators（`;;`分隔的 lastName|||firstName 格式）/ tags 数组。SQL 使用标量子查询避免 creators × tags 笛卡尔积。
+  - **笔记内嵌 Citation 解析**：正则提取笔记 HTML 中 URL 编码的 `data-citation-items` 属性，解析 JSON 后从 URI 列表提取 item keys，批量补全 ItemRef 元信息。
+  - **关系写入（`--add` / `--remove`）**：local/hybrid 模式下支持添加和删除显式关系（需 `ZOT_ALLOW_WRITE=1`）。Local 模式直接写入 SQLite `itemRelations` 表；自定义谓词支持（默认 `dc:relation`）。`--dry-run` 预览模式无需写权限。
+  - **批量操作（`--from-file`）**：JSON 文件驱动批量 add/remove 操作，格式为 `{action, source, target, predicate}` 数组。支持 `--dry-run` 预览。
+  - **Graphviz DOT 可视化（`--dot`）**：输出 Graphviz DOT 格式关系网络图。节点颜色编码：根条目蓝色、笔记橙色、目标灰色；边样式编码：实线=显式关系、点线=父子归属、虚线=内嵌 citation。可与 `--aggregate` 组合使用。
+  - **Predicate 过滤（`--predicate`）**：按谓词类型筛选关系输出（如 `dc:relation`、`owl:sameAs`），适用于所有模式（查询/聚合/DOT）。
 
 ## [0.0.7] - 2026-04-22
 
