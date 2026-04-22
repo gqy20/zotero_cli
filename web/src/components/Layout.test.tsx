@@ -2,9 +2,14 @@ import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import Layout from './Layout'
+import { ToastProvider } from '@/hooks/useToast'
 
 function renderWithRouter(ui: React.ReactElement) {
-  return render(<BrowserRouter>{ui}</BrowserRouter>)
+  return render(
+    <ToastProvider>
+      <BrowserRouter>{ui}</BrowserRouter>
+    </ToastProvider>,
+  )
 }
 
 describe('Layout', () => {

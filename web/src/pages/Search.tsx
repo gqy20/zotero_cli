@@ -7,7 +7,7 @@ import { formatAuthors, formatDate } from '@/lib/utils'
 import { FileText, ArrowRight } from 'lucide-react'
 import SearchInput from '@/components/SearchInput'
 import EmptyState from '@/components/EmptyState'
-import LoadingSpinner from '@/components/LoadingSpinner'
+import { SearchSkeleton } from '@/components/PageSkeletons'
 
 export default function Search() {
   const [query, setQuery] = useState('')
@@ -33,7 +33,7 @@ export default function Search() {
 
       {/* Results */}
       {isLoading ? (
-        <LoadingSpinner message="搜索中..." />
+        <SearchSkeleton />
       ) : query && items.length === 0 ? (
         <EmptyState icon={FileText} message="未找到匹配的文献" description="尝试使用不同的关键词" />
       ) : items.length > 0 ? (

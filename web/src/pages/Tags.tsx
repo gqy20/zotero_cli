@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import type { Tag } from '@/types/item'
 import { Tag as TagIcon, TrendingUp, Hash } from 'lucide-react'
-import LoadingSpinner from '@/components/LoadingSpinner'
+import { TagsSkeleton } from '@/components/PageSkeletons'
 import EmptyState from '@/components/EmptyState'
 
 export default function Tags() {
@@ -32,7 +32,7 @@ export default function Tags() {
       </div>
 
       {isLoading ? (
-        <LoadingSpinner />
+        <TagsSkeleton />
       ) : tags.length === 0 ? (
         <EmptyState icon={TagIcon} message="暂无标签" description="文献库中还没有任何标签" />
       ) : (

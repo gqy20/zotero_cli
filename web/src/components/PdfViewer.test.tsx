@@ -43,4 +43,16 @@ describe('PdfViewer', () => {
     await new Promise(r => setTimeout(r, 10))
     expect(mockGetDocument).toHaveBeenCalledWith('/api/v1/files/ABC123')
   })
+
+  it('shows loading state initially', () => {
+    render(<PdfViewer url="/api/v1/files/test" />)
+    expect(screen.getByText('Loading PDF...')).toBeInTheDocument()
+  })
+
+  it('shows error when pdfjs fails to load', async () => {
+    mockGetDocument.mockRejectedValueOnce(new Error('Network error'))
+    render(<PdfViewer url="/api/v1/files/bad" />)
+    await new Promise(r => setTimeout(r, 50))
+    expect(screen.getByText(/Cannot read|error|failed/i)).toBeInTheDocument()
+  })
 })

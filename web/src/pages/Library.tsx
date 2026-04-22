@@ -7,7 +7,7 @@ import { formatAuthors, formatDate } from '@/lib/utils'
 import { Search, ChevronLeft, ChevronRight, FolderOpen, BookOpen } from 'lucide-react'
 import SearchInput from '@/components/SearchInput'
 import EmptyState from '@/components/EmptyState'
-import LoadingSpinner from '@/components/LoadingSpinner'
+import { LibrarySkeleton } from '@/components/PageSkeletons'
 
 export default function Library() {
   const [page, setPage] = useState(0)
@@ -67,7 +67,7 @@ export default function Library() {
         {/* Table */}
         <div className="flex-1 overflow-auto">
           {isLoading ? (
-            <LoadingSpinner className="p-8" />
+            <LibrarySkeleton />
           ) : items.length === 0 ? (
             <EmptyState icon={BookOpen} message="暂无文献" className="p-12" />
           ) : (

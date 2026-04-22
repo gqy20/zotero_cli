@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
+import { ToastProvider } from './hooks/useToast'
 import Dashboard from './pages/Dashboard'
 import Library from './pages/Library'
 import ItemDetail from './pages/ItemDetail'
@@ -11,6 +12,7 @@ import Export from './pages/Export'
 export default function App() {
   return (
     <ErrorBoundary>
+      <ToastProvider>
       <BrowserRouter>
         <Routes>
           <Route element={<Layout />}>
@@ -24,6 +26,7 @@ export default function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </ToastProvider>
     </ErrorBoundary>
   )
 }

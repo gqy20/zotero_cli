@@ -1,5 +1,6 @@
 import { Outlet, NavLink } from 'react-router-dom'
 import { BookOpen, LayoutDashboard, Search, Tags, Upload, Library, Sparkles } from 'lucide-react'
+import { Toaster } from '@/components/Toaster'
 
 const navItems = [
   { to: '/dashboard', label: '总览', icon: LayoutDashboard },
@@ -64,8 +65,9 @@ export default function Layout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto relative">
         <Outlet />
+        <Toaster />
       </main>
     </div>
   )

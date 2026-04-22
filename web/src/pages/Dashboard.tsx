@@ -4,7 +4,7 @@ import { BookOpen, FolderOpen, Search, BarChart3, ArrowUpRight, Clock } from 'lu
 import type { LibraryStats, Item } from '@/types/item'
 import StatCard from '@/components/StatCard'
 import EmptyState from '@/components/EmptyState'
-import LoadingSpinner from '@/components/LoadingSpinner'
+import { DashboardSkeleton } from '@/components/PageSkeletons'
 
 const statStyles = [
   { bg: 'from-blue-500 to-indigo-600', shadow: 'shadow-blue-500/20', iconBg: 'bg-blue-500/10', iconColor: 'text-blue-600' },
@@ -16,7 +16,7 @@ const statStyles = [
 export default function Dashboard() {
   const { data, isLoading } = useQuery({ queryKey: ['overview'], queryFn: () => api.overview() })
 
-  if (isLoading) return <LoadingSpinner className="p-6" />
+  if (isLoading) return <DashboardSkeleton />
   if (!data?.ok) return <div className="p-6 text-red-500">{data?.error || 'Failed to load'}</div>
 
   const stats = data.data.stats

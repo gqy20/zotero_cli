@@ -7,7 +7,7 @@ import { formatAuthors } from '@/lib/utils'
 import PdfViewer from '@/components/PdfViewer'
 import MetaRow from '@/components/MetaRow'
 import Section from '@/components/Section'
-import LoadingSpinner from '@/components/LoadingSpinner'
+import { ItemDetailSkeleton } from '@/components/PageSkeletons'
 import TagBadge from '@/components/TagBadge'
 import {
   ArrowLeft, FileText, ExternalLink, Paperclip, StickyNote,
@@ -24,7 +24,7 @@ export default function ItemDetail() {
     enabled: !!key,
   })
 
-  if (isLoading) return <LoadingSpinner className="p-8" />
+  if (isLoading) return <ItemDetailSkeleton />
   if (!data?.ok) return <div className="p-8 text-red-500">{data?.error || 'Not found'}</div>
 
   const item = data.data as Item
