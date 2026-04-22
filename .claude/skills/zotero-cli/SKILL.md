@@ -45,11 +45,26 @@ zot stats --json           # 条目/收藏夹/搜索计数
 
 ### 文献检索
 
+> **当使用任何实质性过滤标志（`--tag`、`--date-after`、`--collection` 等）时，无需 `--all` 也无需查询词，自动按纯过滤条件搜索。** 仅在无查询词且无任何过滤时才报错。
+>
+> ```shell
+> # 均可正常工作 ✅
+> zot find "hybrid speciation" --tag 杂交 --date-after 2024-01 --json   # 查询词 + 过滤
+> zot find --tag 杂交 --tag 物种形成 --date-after 2024-04-22 --json     # 纯过滤（自动推断）
+> zot find --all --json                                                   # 显式全量
+>
+> # 报错 ❌ — 无查询词、无过滤、无 --all（防止意外返回全库结果）
+> zot find --json
+> ```
+
 ```shell
-zot find --all --json                    # 全部条目
-zot find "CRISPR gene editing" --json    # 关键词搜索
-zot show ITEMKEY --json                  # 条目详情（含子笔记+标注）
-zot relate ITEMKEY --json                # 关联条目
+zot find --all --json                              # 全部条目
+zot find "CRISPR gene editing" --json              # 关键词搜索
+zot find --tag TAG1 --tag TAG2                     # 纯标签过滤（无需 --all）
+zot find --collection KEY --date-after 2024-01      # 收藏夹 + 日期过滤
+zot find "关键词" --tag TAG --date-after 2024-01    # 查询词 + 过滤组合
+zot show ITEMKEY --json                            # 条目详情（含子笔记+标注）
+zot relate ITEMKEY --json                          # 关联条目
 ```
 
 **基础过滤：**

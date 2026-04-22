@@ -14,6 +14,24 @@ import (
 	"zotero_cli/internal/zoteroapi"
 )
 
+func hasSubstantiveFilters(opts backend.FindOptions) bool {
+	return len(opts.Tags) > 0 ||
+		len(opts.TagContains) > 0 ||
+		len(opts.ExcludeTags) > 0 ||
+		len(opts.Collection) > 0 ||
+		len(opts.NoCollection) > 0 ||
+		opts.DateAfter != "" ||
+		opts.DateBefore != "" ||
+		opts.ItemType != "" ||
+		opts.ExcludeItemType != "" ||
+		opts.HasPDF ||
+		opts.AttachmentName != "" ||
+		opts.AttachmentPath != "" ||
+		opts.AttachmentType != "" ||
+		opts.DateModifiedAfter != "" ||
+		opts.DateAddedAfter != ""
+}
+
 func (c *CLI) runFind(args []string) int {
 	if isHelpOnly(args) {
 		return c.printCommandUsage(usageFind)
@@ -41,9 +59,12 @@ func (c *CLI) runFind(args []string) int {
 		return 2
 	}
 
-	if strings.TrimSpace(opts.Query) == "" && !opts.All && !queryProvided {
+	if strings.TrimSpace(opts.Query) == "" && !opts.All && !queryProvided && !hasSubstantiveFilters(opts) {
 		fmt.Fprintln(c.stderr, usageFind)
 		return 2
+	}
+	if hasSubstantiveFilters(opts) && strings.TrimSpace(opts.Query) == "" {
+		opts.All = true
 	}
 
 	cfg, reader, exitCode := c.loadReader()
