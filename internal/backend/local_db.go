@@ -37,6 +37,24 @@ func localSQLiteDSN(path string) string {
 	}).String()
 }
 
+func localSQLiteDSNReadWrite(path string) string {
+	uriPath := filepath.ToSlash(path)
+	if !strings.HasPrefix(uriPath, "/") {
+		uriPath = "/" + uriPath
+	}
+	busyTimeout := 5000
+	if value := strings.TrimSpace(os.Getenv("ZOT_LOCAL_BUSY_TIMEOUT_MS")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed >= 0 {
+			busyTimeout = parsed
+		}
+	}
+	return (&url.URL{
+		Scheme:   "file",
+		Path:     uriPath,
+		RawQuery: fmt.Sprintf("mode=rwc&_pragma=busy_timeout=%d&_pragma=journal_mode=WAL", busyTimeout),
+	}).String()
+}
+
 func openSQLiteDB(dsn string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {

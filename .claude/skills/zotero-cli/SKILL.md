@@ -92,16 +92,34 @@ zot extract-text ITEMKEY --json
 # 双源标注读取（DB 标注 + PDF 文件内标注）
 zot annotations ITEMKEY --json
 zot annotations ITEMKEY --type highlight --page 3 --json
-zot annotations ITEMKEY --clear --type highlight    # 删除 PDF 内标注
+zot annotations ITEMKEY --author "User" --json          # 按作者过滤
 
-# 写入标注到 PDF
-zot annotate ITEMKEY --text "关键概念" --color red --comment "重要"
-zot annotate ITEMKEY --text "speciation" --type underline --color blue
+# 写入标注到 PDF（三种模式）
+zot annotate ITEMKEY --text "关键词" --color red          # Mode 1: 全文搜索
+zot annotate ITEMKEY --page 4 --text "GATK" --comment "..." # Mode 1.5: 单页搜索 (推荐)
+zot annotate ITEMKEY --page 3 --rect 100,200,350,220      # Mode 2: 精确坐标
+zot annotate ITEMKEY --text "speciation" --type underline   # 下划线
+
+# 清除标注（双层删除：PDF + DB）
+zot annotations ITEMKEY --clear                           # 删除全部
+zot annotate ITEMKEY --clear --type highlight             # 按类型删
+zot annotations ITEMKEY --clear --page 5 --author "User"  # 组合条件删
 
 # 与 Zotero 桌面端联动
 zot open ITEMKEY --page 5         # 阅读器中打开 PDF
 zot select ITEMKEY                # 主界面选中条目
 ```
+
+**标注操作要点：**
+
+| 要点 | 说明 |
+|------|------|
+| **推荐模式** | `--page N --text "keyword"` (Mode 1.5) — 精准定位，避免全文误匹配 |
+| **`--point` 注意** | 创建浮动便签(circle)，不附着文本。需文本位置标注用 Mode 1.5 |
+| **`--clear` 行为** | 双层删除：PDF 层随时可用，DB 层需要 **Zotero 关闭** |
+| **DB 删除失败时** | 输出 warning 不阻断，PDF 层照常删除。关闭 Zotero 后重试即可 |
+| **先 extract-text** | 用 `extract-text` 确认页面实际文本，选唯一短关键词做 `--text` |
+| **详细文档** | 见 [annotations 示例](docs/user/examples/annotations.md) |
 
 ### 元数据 Schema
 

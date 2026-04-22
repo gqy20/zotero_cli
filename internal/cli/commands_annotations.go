@@ -16,7 +16,7 @@ func (c *CLI) runAnnotations(args []string) int {
 		return c.printCommandUsage(usageAnnotations)
 	}
 
-	itemKey, pageFilter, typeFilter, jsonOutput, clearMode, ok := c.parseAnnotationsArgs(args)
+	itemKey, pageFilter, typeFilter, authorFilter, jsonOutput, clearMode, ok := c.parseAnnotationsArgs(args)
 	if !ok {
 		return 2
 	}
@@ -43,22 +43,43 @@ func (c *CLI) runAnnotations(args []string) int {
 	att := pdfs[0]
 
 	if clearMode {
+		totalDeleted := 0
+
 		lr, ok := localReader.(interface {
 			DeletePDFAnnotations(context.Context, domain.Attachment, backend.DeleteAnnotationsRequest) (backend.DeleteAnnotationsResult, error)
 		})
-		if !ok {
-			return c.printErr(fmt.Errorf("delete annotations requires local reader support"))
+		if ok {
+			req := backend.DeleteAnnotationsRequest{
+				Page:   pageFilter,
+				Type:   typeFilter,
+				Author: authorFilter,
+			}
+			result, err := lr.DeletePDFAnnotations(context.Background(), att, req)
+			if err != nil {
+				return c.printErr(err)
+			}
+			totalDeleted += result.Deleted
 		}
-		req := backend.DeleteAnnotationsRequest{
-			Page: pageFilter,
-			Type: typeFilter,
+
+		dbLR, ok := localReader.(interface {
+			DeleteDBAnnotations(context.Context, string, backend.DeleteAnnotationsRequest) (backend.DeleteDBAnnotationsResult, error)
+		})
+		if ok {
+			req := backend.DeleteAnnotationsRequest{
+				Page:   pageFilter,
+				Type:   typeFilter,
+				Author: authorFilter,
+			}
+			result, err := dbLR.DeleteDBAnnotations(context.Background(), itemKey, req)
+			if err != nil {
+				fmt.Fprintf(c.stderr, "warning: could not delete DB annotations (Zotero may be running): %v\n", err)
+			} else {
+				totalDeleted += result.Deleted
+			}
 		}
-		result, err := lr.DeletePDFAnnotations(context.Background(), att, req)
-		if err != nil {
-			return c.printErr(err)
-		}
-		fmt.Fprintf(c.stdout, "Deleted %d annotation(s) from %s\n", result.Deleted, itemKey)
-		fmt.Fprintf(c.stdout, "PDF: %s\n", result.PDFPath)
+
+		fmt.Fprintf(c.stdout, "Deleted %d annotation(s) from %s\n", totalDeleted, itemKey)
+		fmt.Fprintf(c.stdout, "PDF: %s\n", att.ResolvedPath)
 		return 0
 	}
 
@@ -199,10 +220,11 @@ func filterDBAnns(anns []domain.Annotation, page int, typ string) []domain.Annot
 	return out
 }
 
-func (c *CLI) parseAnnotationsArgs(args []string) (string, int, string, bool, bool, bool) {
+func (c *CLI) parseAnnotationsArgs(args []string) (string, int, string, string, bool, bool, bool) {
 	var itemKey string
 	pageFilter := 0
 	typeFilter := ""
+	authorFilter := ""
 	jsonOutput := false
 	clearMode := false
 	nextFlag := ""
@@ -214,11 +236,13 @@ func (c *CLI) parseAnnotationsArgs(args []string) (string, int, string, bool, bo
 				n, err := strconv.Atoi(arg)
 				if err != nil || n < 1 {
 					fmt.Fprintln(c.stderr, usageAnnotations)
-					return "", 0, "", false, false, false
+					return "", 0, "", "", false, false, false
 				}
 				pageFilter = n
 			case "type":
 				typeFilter = arg
+			case "author":
+				authorFilter = arg
 			}
 			nextFlag = ""
 			continue
@@ -232,23 +256,27 @@ func (c *CLI) parseAnnotationsArgs(args []string) (string, int, string, bool, bo
 			nextFlag = "page"
 		case "--type":
 			nextFlag = "type"
+		case "--author":
+			nextFlag = "author"
 		default:
 			if strings.HasPrefix(arg, "--") && !strings.Contains(arg, "=") {
 				fmt.Fprintln(c.stderr, usageAnnotations)
-				return "", 0, "", false, false, false
+				return "", 0, "", "", false, false, false
 			}
 			if strings.HasPrefix(arg, "--page=") {
 				n, err := strconv.Atoi(strings.TrimPrefix(arg, "--page="))
 				if err != nil || n < 1 {
 					fmt.Fprintln(c.stderr, usageAnnotations)
-					return "", 0, "", false, false, false
+					return "", 0, "", "", false, false, false
 				}
 				pageFilter = n
 			} else if strings.HasPrefix(arg, "--type=") {
 				typeFilter = strings.TrimPrefix(arg, "--type=")
+			} else if strings.HasPrefix(arg, "--author=") {
+				authorFilter = strings.TrimPrefix(arg, "--author=")
 			} else if itemKey != "" {
 				fmt.Fprintln(c.stderr, usageAnnotations)
-				return "", 0, "", false, false, false
+				return "", 0, "", "", false, false, false
 			} else {
 				itemKey = arg
 			}
@@ -257,7 +285,7 @@ func (c *CLI) parseAnnotationsArgs(args []string) (string, int, string, bool, bo
 
 	if itemKey == "" {
 		fmt.Fprintln(c.stderr, usageAnnotations)
-		return "", 0, "", false, false, false
+		return "", 0, "", "", false, false, false
 	}
-	return itemKey, pageFilter, typeFilter, jsonOutput, clearMode, true
+	return itemKey, pageFilter, typeFilter, authorFilter, jsonOutput, clearMode, true
 }

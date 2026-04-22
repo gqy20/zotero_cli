@@ -113,6 +113,30 @@ if search_text and not req.get("page"):
                 "text": text[:200],
             })
 
+# Mode 1.5: text search on a specific page only
+elif search_text and req.get("page"):
+    pi = req["page"] - 1
+    if 0 <= pi < len(doc):
+        page = doc[pi]
+        quads = page.search_for(search_text, quads=True)
+        for q in quads:
+            if atype == "highlight":
+                annot = page.add_highlight_annot(q)
+            elif atype == "underline":
+                annot = page.add_underline_annot(q)
+            else:
+                annot = page.add_highlight_annot(q)
+            annot.set_colors(stroke=color)
+            annot.set_info(**info)
+            annot.update()
+            text = page.get_text("text", clip=q.rect).strip().replace("\n", " ")
+            results.append({
+                "page": pi + 1,
+                "rect": [round(q.rect.x0, 1), round(q.rect.y0, 1),
+                        round(q.rect.x1, 1), round(q.rect.y1, 1)],
+                "text": text[:200],
+            })
+
 # Mode 2: specific page + rect (direct position annotation)
 elif req.get("page") and req.get("rect") is not None:
     pi = req["page"] - 1

@@ -818,3 +818,44 @@ func findDefaultDataDir() string {
 	}
 	return ""
 }
+
+type DeleteDBAnnotationsResult struct {
+	Deleted int `json:"deleted"`
+}
+
+func (r *LocalReader) DeleteDBAnnotations(ctx context.Context, itemKey string, req DeleteAnnotationsRequest) (DeleteDBAnnotationsResult, error) {
+	db, err := r.sqliteOpenFunc()(localSQLiteDSNReadWrite(r.SQLitePath))
+	if err != nil {
+		return DeleteDBAnnotationsResult{}, err
+	}
+	defer db.Close()
+
+	args := []any{itemKey}
+	query := "DELETE FROM itemAnnotations WHERE parentItemID IN (SELECT ia.itemID FROM itemAttachments ia WHERE ia.parentItemID = (SELECT itemID FROM items WHERE key = ?))"
+
+	if req.Page > 0 {
+		pageFilter := fmt.Sprintf("%%\"pageIndex\":%d%%", req.Page)
+		query += " AND position LIKE ?"
+		args = append(args, pageFilter)
+	}
+
+	if req.Type != "" {
+		typeMap := map[string]int{"highlight": 0, "note": 7, "image": 8}
+		if typeVal, ok := typeMap[req.Type]; ok {
+			query += " AND type = ?"
+			args = append(args, typeVal)
+		}
+	}
+
+	if req.Author != "" {
+		query += " AND authorName = ?"
+		args = append(args, req.Author)
+	}
+
+	result, err := db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return DeleteDBAnnotationsResult{}, err
+	}
+	deleted, _ := result.RowsAffected()
+	return DeleteDBAnnotationsResult{Deleted: int(deleted)}, nil
+}

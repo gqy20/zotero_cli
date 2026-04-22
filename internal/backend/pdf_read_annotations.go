@@ -164,7 +164,11 @@ for pi in range(len(doc)):
             t = annot.type
             if isinstance(t, (tuple, list)):
                 t = t[0]
-            ANNO_TYPES = {0: "highlight", 1: "note", 15: "underline", 16: "strikeout", 17: "squiggly"}
+            ANNO_TYPES = {0: "highlight", 1: "note", 2: "image", 3: "ink",
+                4: "link", 5: "freetext", 6: "line", 7: "square",
+                8: "circle", 9: "polygon", 10: "polyline", 11: "stamp",
+                12: "caret", 13: "attachment", 14: "screen", 15: "underline",
+                16: "strikeout", 17: "squiggly", 18: "redact", 19: "trapezoid"}
             atype = ANNO_TYPES.get(int(t), str(t)) if isinstance(t, int) else str(t)
             if atype.lower() != req["type"].lower():
                 continue
