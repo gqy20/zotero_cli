@@ -22,7 +22,7 @@ func (c *CLI) promptInitSetup(cfg config.Config, provided map[string]bool, reade
 	fmt.Fprintln(c.stdout, "  it can navigate to the pages above and fill these values for you.")
 
 	if !provided["mode"] {
-		mode, err := c.promptWithDefault(reader, "Mode [web]: ")
+		mode, err := c.promptWithDefault(reader, "Mode [hybrid]: ")
 		if err != nil {
 			return config.Config{}, err
 		}

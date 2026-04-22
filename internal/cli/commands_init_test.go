@@ -13,7 +13,7 @@ func TestRunInitInteractiveWebMode(t *testing.T) {
 
 	stdout, stderr := captureOutput(t)
 	oldStdin := testCLI.stdin
-	testCLI.stdin = strings.NewReader("\nuser\n123456\nsecret\n")
+	testCLI.stdin = strings.NewReader("web\nuser\n123456\nsecret\n")
 	t.Cleanup(func() { testCLI.stdin = oldStdin })
 
 	exitCode := Run([]string{"init"})

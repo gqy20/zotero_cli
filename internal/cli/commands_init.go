@@ -134,6 +134,7 @@ func (c *CLI) runInit(args []string) int {
 		return c.printErr(fmt.Errorf("setup completed but PyMuPDF verification failed"))
 	}
 	fmt.Fprintf(c.stdout, "PyMuPDF setup complete. Python: %s\n", status.PythonPath)
+	fmt.Fprintln(c.stdout, "\nTip: run 'zot index build' to extract full-text from all PDFs.")
 	return 0
 }
 

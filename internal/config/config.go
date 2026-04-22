@@ -30,7 +30,7 @@ type Config struct {
 
 func Default() Config {
 	return Config{
-		Mode:                       "web",
+		Mode:                       "hybrid",
 		LibraryType:                "",
 		LibraryID:                  "",
 		APIKey:                     "",
