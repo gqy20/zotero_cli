@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -711,6 +712,95 @@ func (r *LocalReader) GetRelatedAggregate(ctx context.Context, key string) (*dom
 		return nil, err
 	}
 	return result, nil
+}
+
+func (r *LocalReader) AddRelation(ctx context.Context, sourceKey, targetKey, predicate string) error {
+	db, err := r.sqliteOpenFunc()(localSQLiteDSNReadWrite(r.SQLitePath))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var sourceItemID, libraryID int64
+	err = tx.QueryRowContext(ctx, "SELECT itemID, libraryID FROM items WHERE key = ?", sourceKey).Scan(&sourceItemID, &libraryID)
+	if err != nil {
+		return fmt.Errorf("source item %q not found: %w", sourceKey, err)
+	}
+
+	var predicateID int64
+	err = tx.QueryRowContext(ctx, "SELECT predicateID FROM relationPredicates WHERE predicate = ?", predicate).Scan(&predicateID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			res, err := tx.ExecContext(ctx, "INSERT INTO relationPredicates (predicate) VALUES (?)", predicate)
+			if err != nil {
+				return fmt.Errorf("insert predicate: %w", err)
+			}
+			predicateID, err = res.LastInsertId()
+			if err != nil {
+				return fmt.Errorf("get predicate id: %w", err)
+			}
+		} else {
+			return fmt.Errorf("query predicate: %w", err)
+		}
+	}
+
+	objectURI := fmt.Sprintf("http://zotero.org/users/%d/items/%s", libraryID, targetKey)
+	_, err = tx.ExecContext(ctx,
+		"INSERT OR IGNORE INTO itemRelations (itemID, predicateID, object) VALUES (?, ?, ?)",
+		sourceItemID, predicateID, objectURI,
+	)
+	if err != nil {
+		return fmt.Errorf("insert relation: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, "UPDATE items SET version = version + 1, clientDateModified = datetime('now') WHERE itemID = ?", sourceItemID)
+	if err != nil {
+		return fmt.Errorf("update version: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+func (r *LocalReader) RemoveRelation(ctx context.Context, sourceKey, targetKey, predicate string) error {
+	db, err := r.sqliteOpenFunc()(localSQLiteDSNReadWrite(r.SQLitePath))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var sourceItemID int64
+	err = tx.QueryRowContext(ctx, "SELECT itemID FROM items WHERE key = ?", sourceKey).Scan(&sourceItemID)
+	if err != nil {
+		return fmt.Errorf("source item %q not found: %w", sourceKey, err)
+	}
+
+	objectURI := fmt.Sprintf("http://zotero.org/users/%%/items/%s", targetKey)
+	_, err = tx.ExecContext(ctx,
+		`DELETE FROM itemRelations WHERE itemID = ? AND predicateID = (SELECT predicateID FROM relationPredicates WHERE predicate = ?) AND object LIKE ?`,
+		sourceItemID, predicate, objectURI,
+	)
+	if err != nil {
+		return fmt.Errorf("delete relation: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, "UPDATE items SET version = version + 1, clientDateModified = datetime('now') WHERE itemID = ?", sourceItemID)
+	if err != nil {
+		return fmt.Errorf("update version: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 func (r *LocalReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {

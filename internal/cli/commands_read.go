@@ -351,6 +351,9 @@ func (c *CLI) runRelate(args []string) int {
 	jsonOutput := false
 	aggregate := false
 	predicate := ""
+	addTarget := ""
+	removeTarget := ""
+	dryRun := false
 	key := ""
 	nextFlag := ""
 	for _, arg := range args {
@@ -358,6 +361,10 @@ func (c *CLI) runRelate(args []string) int {
 			switch nextFlag {
 			case "predicate":
 				predicate = arg
+			case "add":
+				addTarget = arg
+			case "remove":
+				removeTarget = arg
 			}
 			nextFlag = ""
 			continue
@@ -369,6 +376,12 @@ func (c *CLI) runRelate(args []string) int {
 			aggregate = true
 		case "--predicate":
 			nextFlag = "predicate"
+		case "--add":
+			nextFlag = "add"
+		case "--remove":
+			nextFlag = "remove"
+		case "--dry-run", "-n":
+			dryRun = true
 		default:
 			if key == "" {
 				key = arg
@@ -377,6 +390,10 @@ func (c *CLI) runRelate(args []string) int {
 				return 2
 			}
 		}
+	}
+
+	if addTarget != "" || removeTarget != "" {
+		return c.runRelateWrite(key, addTarget, removeTarget, predicate, dryRun, jsonOutput)
 	}
 	if nextFlag != "" {
 		fmt.Fprintf(c.stderr, "missing value for --%s\n", nextFlag)
@@ -493,6 +510,77 @@ func (c *CLI) runRelateAggregate(reader backend.Reader, key, predicate string, j
 			}
 		}
 	}
+	return 0
+}
+
+func (c *CLI) runRelateWrite(key, addTarget, removeTarget, predicate string, dryRun, jsonOutput bool) int {
+	if strings.TrimSpace(key) == "" {
+		fmt.Fprintln(c.stderr, usageRelate)
+		return 2
+	}
+	if addTarget != "" && removeTarget != "" {
+		fmt.Fprintln(c.stderr, "cannot use --add and --remove together")
+		return 2
+	}
+	if predicate == "" {
+		predicate = "dc:relation"
+	}
+
+	cfg, _, exitCode := c.loadReader()
+	if exitCode != 0 {
+		return exitCode
+	}
+	if exitCode := c.ensureWriteAllowed(cfg); exitCode != 0 {
+		return exitCode
+	}
+
+	localReader, err := backend.NewLocalReader(cfg)
+	if err != nil {
+		return c.printErr(fmt.Errorf("local reader: %w", err))
+	}
+
+	ctx := context.Background()
+
+	if dryRun || jsonOutput {
+		action := "add"
+		target := addTarget
+		if removeTarget != "" {
+			action = "remove"
+			target = removeTarget
+		}
+		if jsonOutput {
+			return c.writeJSON(jsonResponse{
+				OK:      true,
+				Command: "relate",
+				Data: map[string]any{
+					"dry_run":   dryRun,
+					"action":    action,
+					"source":    key,
+					"target":    target,
+					"predicate": predicate,
+				},
+			})
+		}
+		fmt.Fprintf(c.stdout, "[dry-run] would %s relation: %s --[%s]--> %s\n", action, key, predicate, target)
+		return 0
+	}
+
+	if addTarget != "" {
+		err = localReader.AddRelation(ctx, key, addTarget, predicate)
+	} else {
+		err = localReader.RemoveRelation(ctx, key, removeTarget, predicate)
+	}
+	if err != nil {
+		return c.printErr(err)
+	}
+
+	action := "added"
+	target := addTarget
+	if removeTarget != "" {
+		action = "removed"
+		target = removeTarget
+	}
+	fmt.Fprintf(c.stdout, "%s relation: %s --[%s]--> %s\n", action, key, predicate, target)
 	return 0
 }
 
