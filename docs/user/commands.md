@@ -11,6 +11,7 @@
 
 - [检索 (`find`)](#检索-find)
 - [查看 (`show`)](#查看-show)
+- [关系 (`relate`)](#关系-relate)
 - [标注读取 (`annotations`)](#标注读取-annotations)
 - [标注写入 (`annotate`)](#标注写入-annotate)
 - [文本提取 (`extract-text`)](#文本提取-extract-text)
@@ -25,6 +26,33 @@
 ## 检索 (`find`)
 
 用法和示例见 [find 示例](./examples/find.md)。
+
+---
+
+## 关系 (`relate`)
+
+查询和管理条目之间的显式关联、笔记内嵌引用，支持关系网络可视化。
+
+详细用法和示例见 [relate 示例](./examples/relate.md)。
+
+### 用法
+
+```
+zot relate <item-key> [--json] [--aggregate] [--dot] [--predicate PRED]
+         [--add TARGET] [--remove TARGET] [--dry-run] [--from-file PATH]
+```
+
+### 核心能力
+
+| 功能 | 选项 | 说明 |
+|------|------|------|
+| 查询显式关系 | （默认） | 从 `itemRelations` 表读取 outgoing + incoming |
+| 三层聚合 | `--aggregate` | 自身关系 + 子笔记关系 + 内嵌 citation |
+| 可视化 | `--dot` | 输出 Graphviz DOT 格式关系网络图 |
+| 写入 | `--add` / `--remove` | 添加/删除显式关系（需 `ZOT_ALLOW_WRITE=1`） |
+| 批量操作 | `--from-file PATH` | JSON 文件驱动批量 add/remove |
+| 预览 | `--dry-run` / `-n` | 不执行写入，仅展示将做的变更 |
+| 过滤 | `--predicate PRED` | 按谓词类型筛选（如 `dc:relation`） |
 
 ---
 

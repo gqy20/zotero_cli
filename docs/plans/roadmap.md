@@ -51,6 +51,7 @@ v0.0.4 的 annotate/annotations 命令已完成核心功能，实际使用中暴
 | Agent Enhancement (v0.0.7) | 标注双层删除/Mode 1.5/--author/ANNO_TYPES完整映射/本地引文格式化/快照持久化缓存/前端骨架屏+Toast+懒加载/97测试全绿 | completed |
 | Local Write (v0.0.8) | **hybrid 笔记创建**：Zotero 未运行时 `create-item` 自动走 SQLite 直写（~50ms），运行时 fallback Web API；`generateItemKey()` / `CreateLocalNote()` / `isZoteroRunning()` 检测自动切换 | completed |
 | Figure Extract | **PDF Figure 提取**：`extract-figures` 命令，PyMuPDF `cluster_drawings()` + 位图锚点回退（v5b），多篇自动并行，caption 吸附，JSON/文本双输出 | completed |
+| Relate Enhancement | **关系命令全面增强**：Web API 支持 + 三层聚合（self/notes/citations）+ Snapshot 一致性 + 写入（--add/--remove/--dry-run/--from-file）+ ItemRef 增强（date/creators/tags）+ DOT 可视化（--dot）+ Predicate 过滤 + Hybrid fallback 修正 | completed |
 
 ---
 
