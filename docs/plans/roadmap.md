@@ -23,7 +23,7 @@
 | 阶段 3 | `find` → `export` 管道连接（`--from-find`） | 待开始 |
 | 阶段 4 | 图片解析与分析（`extract-images`） | 待开始 |
 
-> **本版不做**：local full-text search 增强 / MCP server / 大规模命令扩张 / 非笔记类型的本地数据库写入（note 写入已就绪）
+> **本版不做**：local full-text search 增强 / MCP server / 大规模命令扩张 / 非笔记非关联类型的本地数据库写入（note + relation 写入已就绪）
 
 #### 标注系统后续优化（从实战中识别）
 

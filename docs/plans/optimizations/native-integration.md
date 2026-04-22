@@ -37,7 +37,7 @@
 | `itemAttachments` | 附件元数据 | ✅ 过滤+解析路径 |
 | `itemAnnotations` | PDF 标注 (DB 层) | ✅ 读取 |
 | `itemNotes` | 子笔记 | ✅ 排除过滤 |
-| `itemRelations` | 条目关系 | ✅ 查询 |
+| `itemRelations` | 条目关系 | ✅ 查询 + 写入（规划中） |
 | `deletedItems` | 软删除追踪 | ❌ 未使用 |
 
 ---
@@ -632,6 +632,7 @@ Zotero 启动后在 `127.0.0.1:23119` 提供 HTTP 服务，主要用于文字处
 | Citation Key 过滤/显示 | `local_find.go`, `commands_find.go` | 0.5d | EAV 复用现有模式 |
 | `--has-pdf` SQL 下推 | `local_find.go` | 0.25d | 利用 contentType 索引预筛 |
 | `deletedItems` 回收站命令 | 新增 `commands_trash.go` | 0.5d | 简单单表查询 |
+| **`itemRelations` 关联写入** | `local.go` 新增 `AddRelation/RemoveRelation`，CLI `relate add/remove` 子命令 | 0.5d | INSERT/DELETE itemRelations + relationPredicates，复用 isZoteroRunning 检测 |
 
 ### Phase 2 — 功能增强（预计 5-7 天）
 
@@ -667,7 +668,7 @@ Zotero 启动后在 `127.0.0.1:23119` 提供 HTTP 服务，主要用于文字处
 
 - 直读 `zotero.sqlite` 要求 Zotero 空闲或关闭
 - 当前项目的 **持久化快照缓存** 已处理此场景（实测已验证：Zotero 运行中自动走缓存，后续调用 ~0.3s）
-- 写入操作切勿直接操作 SQLite，必须走 Web API
+- **写入操作策略（v0.0.8+）**：note 和 relation 类型支持 local SQLite 直写，通过 `isZoteroRunning()` 检测自动切换——Zotero 未运行时直写 SQLite（~50ms），运行时 fallback 到 Web API。其他类型写入仍需走 Web API
 - **Journal 模式注意**: Zotero 使用 journal 模式（非 WAL），snapshot 复制时需复制 `-journal` 文件；快照缓存在 `{dataDir}/.zotero_cli/snapshot/` 下，基于 mtime 自动失效重建
 
 ### 5.3 版本兼容性
