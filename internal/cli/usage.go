@@ -67,8 +67,9 @@ Examples:
 
 This command is designed for AI agents that need a quick library
 snapshot without making multiple API calls.`
-	usageAnnotate    = "usage: zot annotate <item-key> (--text TEXT | --page N (--rect x0,y0,x1,y2 | --point x,y)) [--color COLOR] [--comment TEXT] [--type TYPE] [--clear] [--author AUTHOR] [--json]"
-	usageOpen        = "usage: zot open <item-key> [--page N]"
-	usageSelect      = "usage: zot select <item-key>"
-	usageAnnotations = "usage: zot annotations <item-key> [--json] [--clear] [--page N] [--type TYPE] [--author AUTHOR]"
+	usageAnnotate       = "usage: zot annotate <item-key> (--text TEXT | --page N (--rect x0,y0,x1,y2 | --point x,y)) [--color COLOR] [--comment TEXT] [--type TYPE] [--clear] [--author AUTHOR] [--json]"
+	usageOpen           = "usage: zot open <item-key> [--page N]"
+	usageSelect         = "usage: zot select <item-key>"
+	usageAnnotations    = "usage: zot annotations <item-key> [--json] [--clear] [--page N] [--type TYPE] [--author AUTHOR]"
+	usageExtractFigures = "usage: zot extract-figures <item-key> [...] [--output-dir DIR] [--json] [--workers N]"
 )

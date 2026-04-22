@@ -127,6 +127,8 @@ func (c *CLI) Run(args []string) int {
 		return c.runCreateSearch(args[1:])
 	case "update-search":
 		return c.runUpdateSearch(args[1:])
+	case "extract-figures":
+		return c.runExtractFigures(args[1:])
 	case "delete-search":
 		return c.runDeleteSearch(args[1:])
 	case "init":

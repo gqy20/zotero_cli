@@ -21,7 +21,7 @@
 | 阶段 1 | 标注 `--dry-run` 预览模式 + comment 截断修复 | 待开始 |
 | 阶段 2 | 批量标注（`--from-file` JSON 驱动） | 待开始 |
 | 阶段 3 | `find` → `export` 管道连接（`--from-find`） | 待开始 |
-| 阶段 4 | 图片解析与分析（`extract-images`） | 待开始 |
+| 阶段 4 | 图片提取（`extract-figures`） | ✅ 完成 |
 
 > **本版不做**：local full-text search 增强 / MCP server / 大规模命令扩张 / 非笔记非关联类型的本地数据库写入（note + relation 写入已就绪）
 
@@ -50,6 +50,7 @@ v0.0.4 的 annotate/annotations 命令已完成核心功能，实际使用中暴
 | Unified Init (v0.0.6) | `zot init` 一站式入口 + `overview` 命令 + JSON 结构化错误 + schema 统一 + 测试拆分 + 并行加速 ~3x + Web 前端 MVP | completed |
 | Agent Enhancement (v0.0.7) | 标注双层删除/Mode 1.5/--author/ANNO_TYPES完整映射/本地引文格式化/快照持久化缓存/前端骨架屏+Toast+懒加载/97测试全绿 | completed |
 | Local Write (v0.0.8) | **hybrid 笔记创建**：Zotero 未运行时 `create-item` 自动走 SQLite 直写（~50ms），运行时 fallback Web API；`generateItemKey()` / `CreateLocalNote()` / `isZoteroRunning()` 检测自动切换 | completed |
+| Figure Extract | **PDF Figure 提取**：`extract-figures` 命令，PyMuPDF `cluster_drawings()` + 位图锚点回退（v5b），多篇自动并行，caption 吸附，JSON/文本双输出 | completed |
 
 ---
 
@@ -227,6 +228,7 @@ Literature Review Chapter（文献综述章节草稿）
 | 现有命令 | 在智能体笔记中的角色 |
 |----------|---------------------|
 | `extract-text` | 提供 PDF 正文上下文，供 Atom 补充周边内容 |
+| `extract-figures` | 提取论文 Figure（含 caption），供笔记可视化引用 |
 | `annotations` | Atom 的主要数据来源（DB + PDF 双源标注） |
 | `annotate` | Agent 可通过此命令写入新的结构化标注 |
 | `show` | 展示条目及其子笔记和标注的完整视图 |

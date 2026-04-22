@@ -14,6 +14,7 @@
 - [标注读取 (`annotations`)](#标注读取-annotations)
 - [标注写入 (`annotate`)](#标注写入-annotate)
 - [文本提取 (`extract-text`)](#文本提取-extract-text)
+- [图片提取 (`extract-figures`)](#图片提取-extract-figures)
 - [打开/选中 (`open` / `select`)](#打开选中-open--select)
 - [导出 (`export`)](#导出-export)
 - [引用 (`cite`)](#引用-cite)
@@ -149,5 +150,107 @@ JSON 字段说明：
 | `parentItem` | 是 (local) | 父条目 key，local 模式下用于关联 |
 | `note` | 是 (local) | HTML 格式笔记内容 |
 | `--if-unmodified-since-version N` | 是 | 库版本号（乐观锁，防止并发冲突） |
+
+---
+
+## 文本提取 (`extract-text`)
+
+从 PDF 附件中提取全文内容。
+
+### 用法
+
+```
+zot extract-text <item-key> [--json]
+```
+
+### 输出
+
+| 模式 | 说明 |
+|------|------|
+| 文本模式 | 直接输出纯文本到 stdout |
+| JSON 模式 | 返回结构化数据：`text`、`attachments[]`（含 `attachment_key`、`text`、`resolved_path` 等） |
+
+### 依赖
+
+需要 Python + PyMuPDF（通过 `findPythonCommandFunc` 自动检测）。
+
+---
+
+## 图片提取 (`extract-figures`)
+
+从 PDF 附件中提取科学插图（Figure），基于 PyMuPDF `cluster_drawings()` 矢量聚类 + 位图锚点回退。
+
+### 用法
+
+```
+zot extract-figures <item-key> [...] [--output-dir DIR] [--json] [--workers N]
+```
+
+### 选项
+
+| 选项 | 说明 | 默认值 |
+|------|------|--------|
+| `<item-key>` [...] | 一个或多个条目 key（多篇自动并行） | — |
+| `--output-dir`, `-o` | 输出目录 | `./figures` |
+| `--json`, `-j` | JSON 格式输出 | 文本模式 |
+| `--workers`, `-w` | 并行 worker 数 | CPU 核数（min 2, max 8） |
+
+### 提取算法（v5b）
+
+**双路径策略**：
+
+| 路径 | 方法 | 适用场景 |
+|------|------|----------|
+| Path A（矢量） | `cluster_drawings()` 聚类矢量图形 | 矢量 PDF（LaTeX/Word 生成） |
+| Path B（位图回退） | 大尺寸图片锚点，未被 Path A 覆盖的独立大图 | 扫描件 / 含嵌入图片的 PDF |
+
+**过滤链**：
+
+1. 面积/尺寸过滤（< 5000pt² 或 < 120×100px）
+2. 锚点检测（大面积无锚点 = Abstract 等非 Figure 区域）
+3. 文字密度检测（文字占比 > 35% = 纯文本区）
+4. Caption 模式检测（"FIGURE N" 无锚点的 caption 块）
+5. 全页扫描跳过（> 90% 页面面积）
+6. 去重（重叠 > 50px）
+7. **Caption 吸附**：自动搜索周围 "FIGURE N" 文本并扩展包含
+
+### 文本输出示例
+
+```
+[AB123CD] 2 figure(s) in 1.6s
+  p1_fig1.png  p.1 V1292x238  23.0kB anchors=0
+  p1_fig2.png  p.1 V1292x1287  540.6kB anchors=1 +caption
+```
+
+列含义：`文件名 页码 来源(V=矢量/R=位图) 尺寸 大小 锚点数 [+caption]`
+
+### JSON 输出字段
+
+```json
+{
+  "item_key": "AB123CD",
+  "pdf": "paper.pdf",
+  "total_pages": -1,
+  "figures": [
+    {
+      "id": 1, "file": "p1_fig1.png", "page": 1,
+      "source": "cluster", "size_px": "1292x238",
+      "size_pt": "465x85", "kb": 23.0, "anchors": 0,
+      "has_caption": false, "text_ratio": 0.0, "pct_page": 8.5
+    }
+  ],
+  "elapsed_sec": 1.6, "method": "cluster_drawings_v5b"
+}
+```
+
+### 多篇并行
+
+传入多个 item-key 时自动并行处理（WaitGroup + semaphore），单篇时直接执行避免 goroutine 开销。
+
+### 依赖
+
+- mode 必须为 `local` 或 `hybrid`
+- 需要 Python + PyMuPDF
+- 仅处理第一个 PDF 附件
 
 ---

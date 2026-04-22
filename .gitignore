@@ -35,6 +35,11 @@ PROFILE
 # MCP tool artifacts
 .playwright-mcp/
 
+# Development test scripts and outputs
+_test_*.py
+_test_*/
+figures/
+
 # Frontend (web/)
 web/node_modules/
 web/dist/
