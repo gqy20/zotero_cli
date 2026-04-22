@@ -229,7 +229,7 @@ zot versions items --since 0 --json  # 版本变更记录
 | **配置** | `init / config show / validate` | 配置管理 |
 | **其他** | `stats` / `tags` / `notes` / `searches` / `trash` | 库信息查看 |
 
-完整选项说明见 [命令参考](docs/commands.md)，AI Agent 使用规范见 [AI Agent 指南](docs/AI_AGENT.md)，技术架构见 [架构文档](docs/architecture.md)。
+完整选项说明见 [命令参考](docs/user/commands.md)，AI Agent 使用规范见 [快速入门](docs/user/quickstart.md)，技术架构见 [架构概览](docs/architecture/overview.md)。完整文档导航见 [文档中心](docs/README.md)。
 
 ---
 
