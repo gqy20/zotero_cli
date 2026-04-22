@@ -5,8 +5,12 @@ import { api } from '@/api/client'
 import type { Item } from '@/types/item'
 import { formatAuthors } from '@/lib/utils'
 import PdfViewer from '@/components/PdfViewer'
+import MetaRow from '@/components/MetaRow'
+import Section from '@/components/Section'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import TagBadge from '@/components/TagBadge'
 import {
-  ArrowLeft, FileText, ExternalLink, Tag, Paperclip, StickyNote,
+  ArrowLeft, FileText, ExternalLink, Paperclip, StickyNote,
   Highlighter, X, Calendar, BookMarked, User, Hash, Link2
 } from 'lucide-react'
 
@@ -20,7 +24,7 @@ export default function ItemDetail() {
     enabled: !!key,
   })
 
-  if (isLoading) return <div className="p-8">Loading...</div>
+  if (isLoading) return <LoadingSpinner className="p-8" />
   if (!data?.ok) return <div className="p-8 text-red-500">{data?.error || 'Not found'}</div>
 
   const item = data.data as Item
@@ -36,16 +40,7 @@ export default function ItemDetail() {
       {/* Title */}
       <div className="space-y-3">
         <h1 className="text-2xl font-bold text-gray-900 leading-relaxed tracking-tight">{item.title}</h1>
-        {(item.tags ?? []).length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <Tag className="w-3.5 h-3.5 text-gray-300" />
-            {(item.tags ?? []).map(tag => (
-              <span key={tag} className="px-2.5 py-1 text-xs bg-gradient-to-r from-red-50 to-rose-50 text-red-600 rounded-lg border border-red-100 font-medium">
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
+        <TagBadge tags={item.tags ?? []} variant="styled" />
       </div>
 
       {/* Metadata */}
@@ -123,8 +118,8 @@ export default function ItemDetail() {
                   className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ring-2 ring-offset-1"
                   style={{
                     backgroundColor: ann.color || '#fbbf24',
-                    ringColor: `${(ann.color || '#fbbf24')}30`,
-                  }}
+                    '--tw-ring-color': `${(ann.color || '#fbbf24')}30`,
+                  } as React.CSSProperties}
                 />
                 <div className="min-w-0 flex-1 space-y-1">
                   {ann.text && <p className="text-gray-700 leading-relaxed">{ann.text}</p>}
@@ -156,33 +151,6 @@ export default function ItemDetail() {
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-function MetaRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-start gap-3">
-      <span className="text-gray-300 mt-0.5">{icon}</span>
-      <div className="min-w-0">
-        <dt className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">{label}</dt>
-        <dd className="text-sm text-gray-800 mt-0.5">{value}</dd>
-      </div>
-    </div>
-  )
-}
-
-function Section({ title, icon, count, children }: { title: string; icon?: React.ReactNode; count?: number; children: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-      <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2.5">
-        {icon}
-        <h2 className="font-semibold text-sm text-gray-900">{title}</h2>
-        {count != null && (
-          <span className="ml-auto text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full tabular-nums">{count}</span>
-        )}
-      </div>
-      <div className="p-6">{children}</div>
     </div>
   )
 }

@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import type { Item } from '@/types/item'
-import { Download, FileCode, FileText, Braces, Check, ChevronDown } from 'lucide-react'
+import { Download, FileCode, FileText, Braces, Check } from 'lucide-react'
+import EmptyState from '@/components/EmptyState'
 
 const formats = [
   { name: 'BibTeX', icon: FileCode, desc: 'LaTeX 引用格式', color: 'from-red-500 to-rose-600' },
@@ -99,10 +100,7 @@ export default function Export() {
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
           <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-50">
             {items.length === 0 ? (
-              <div className="p-8 text-center">
-                <Download className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                <p className="text-sm text-gray-400">暂无文献可导出</p>
-              </div>
+              <EmptyState icon={Download} message="暂无文献可导出" className="p-8" />
             ) : (
               items.map(item => (
                 <label

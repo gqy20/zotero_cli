@@ -5,6 +5,9 @@ import { api } from '@/api/client'
 import type { Item, Collection } from '@/types/item'
 import { formatAuthors, formatDate } from '@/lib/utils'
 import { Search, ChevronLeft, ChevronRight, FolderOpen, BookOpen } from 'lucide-react'
+import SearchInput from '@/components/SearchInput'
+import EmptyState from '@/components/EmptyState'
+import LoadingSpinner from '@/components/LoadingSpinner'
 
 export default function Library() {
   const [page, setPage] = useState(0)
@@ -54,14 +57,7 @@ export default function Library() {
         {/* Toolbar */}
         <div className="px-8 py-5 border-b border-gray-200/80 bg-white/60 backdrop-blur-sm sticky top-0 z-10">
           <div className="flex items-center justify-between">
-            <div className="relative max-w-md flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
-              <input
-                type="search"
-                placeholder="搜索文献..."
-                className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:bg-white transition-all placeholder:text-gray-300"
-              />
-            </div>
+            <SearchInput placeholder="搜索文献..." />
             <span className="text-xs text-gray-400 ml-6 tabular-nums">
               共 <strong className="text-gray-600">{data?.meta?.total ?? items.length}</strong> 条
             </span>
@@ -71,12 +67,9 @@ export default function Library() {
         {/* Table */}
         <div className="flex-1 overflow-auto">
           {isLoading ? (
-            <div className="p-8 text-sm text-gray-400">Loading...</div>
+            <LoadingSpinner className="p-8" />
           ) : items.length === 0 ? (
-            <div className="p-12 text-center">
-              <BookOpen className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-              <p className="text-sm text-gray-400">暂无文献</p>
-            </div>
+            <EmptyState icon={BookOpen} message="暂无文献" className="p-12" />
           ) : (
             <table className="w-full text-sm">
               <thead className="bg-gray-50/80 sticky top-0">

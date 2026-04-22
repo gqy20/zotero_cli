@@ -2,6 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { BookOpen, FolderOpen, Search, BarChart3, ArrowUpRight, Clock } from 'lucide-react'
 import type { LibraryStats, Item } from '@/types/item'
+import StatCard from '@/components/StatCard'
+import EmptyState from '@/components/EmptyState'
+import LoadingSpinner from '@/components/LoadingSpinner'
 
 const statStyles = [
   { bg: 'from-blue-500 to-indigo-600', shadow: 'shadow-blue-500/20', iconBg: 'bg-blue-500/10', iconColor: 'text-blue-600' },
@@ -10,27 +13,10 @@ const statStyles = [
   { bg: 'from-amber-500 to-orange-600', shadow: 'shadow-amber-500/20', iconBg: 'bg-amber-500/10', iconColor: 'text-amber-600' },
 ]
 
-function StatCard({ title, value, Icon, style }: { title: string; value: number | string; Icon: React.ComponentType<{ className?: string }>; style: typeof statStyles[0] }) {
-  return (
-    <div className="group relative bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-lg hover:shadow-gray-200/50 hover:-translate-y-0.5 transition-all duration-300">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">{title}</p>
-          <p className="text-3xl font-bold mt-1.5 text-gray-900 tracking-tight">{value.toLocaleString()}</p>
-        </div>
-        <div className={`w-12 h-12 rounded-xl ${style.iconBg} flex items-center justify-center`}>
-          <Icon className={`w-6 h-6 ${style.iconColor}`} />
-        </div>
-      </div>
-      <div className={`absolute inset-x-0 top-0 h-1 rounded-t-2xl bg-gradient-to-r ${style.bg} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
-    </div>
-  )
-}
-
 export default function Dashboard() {
   const { data, isLoading } = useQuery({ queryKey: ['overview'], queryFn: () => api.overview() })
 
-  if (isLoading) return <div className="p-6">Loading...</div>
+  if (isLoading) return <LoadingSpinner className="p-6" />
   if (!data?.ok) return <div className="p-6 text-red-500">{data?.error || 'Failed to load'}</div>
 
   const stats = data.data.stats
@@ -66,10 +52,7 @@ export default function Dashboard() {
         </div>
         <div className="divide-y divide-gray-50">
           {recentItems.length === 0 ? (
-            <div className="px-6 py-12 text-center">
-              <BookOpen className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-              <p className="text-sm text-gray-400">暂无文献</p>
-            </div>
+            <EmptyState icon={BookOpen} message="暂无文献" className="px-6 py-12" />
           ) : (
             recentItems.map((item: Item) => (
               <a

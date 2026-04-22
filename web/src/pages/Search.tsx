@@ -4,7 +4,10 @@ import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import type { Item } from '@/types/item'
 import { formatAuthors, formatDate } from '@/lib/utils'
-import { Search as SearchIcon, FileText, ArrowRight, Sparkles } from 'lucide-react'
+import { FileText, ArrowRight } from 'lucide-react'
+import SearchInput from '@/components/SearchInput'
+import EmptyState from '@/components/EmptyState'
+import LoadingSpinner from '@/components/LoadingSpinner'
 
 export default function Search() {
   const [query, setQuery] = useState('')
@@ -26,39 +29,13 @@ export default function Search() {
       </div>
 
       {/* Search bar */}
-      <div className="relative">
-        <div className="absolute left-5 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
-          {query && items.length > 0 && (
-            <Sparkles className="w-3.5 h-3.5 text-red-400" />
-          )}
-          <SearchIcon className={`w-5 h-5 ${query ? 'text-red-400' : 'text-gray-300'} transition-colors`} />
-        </div>
-        <input
-          type="search"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="输入关键词搜索文献..."
-          className={`w-full pl-13 pr-5 py-4 text-sm bg-white border rounded-2xl focus:outline-none transition-all duration-200 shadow-sm ${
-            query
-              ? 'border-red-200 ring-4 ring-red-500/5 focus:border-red-400 focus:ring-4 focus:ring-red-500/10'
-              : 'border-gray-200 focus:ring-2 focus:ring-red-500/20 focus:border-red-300'
-          }`}
-          autoFocus
-        />
-      </div>
+      <SearchInput placeholder="输入关键词搜索文献..." variant="prominent" value={query} onChange={setQuery} autoFocus />
 
       {/* Results */}
       {isLoading ? (
-        <div className="flex items-center gap-3 py-12 justify-center text-sm text-gray-400">
-          <div className="w-4 h-4 border-2 border-red-200 border-t-red-500 rounded-full animate-spin" />
-          搜索中...
-        </div>
+        <LoadingSpinner message="搜索中..." />
       ) : query && items.length === 0 ? (
-        <div className="text-center py-16">
-          <FileText className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-          <p className="text-gray-500 font-medium">未找到匹配的文献</p>
-          <p className="text-sm text-gray-400 mt-1">尝试使用不同的关键词</p>
-        </div>
+        <EmptyState icon={FileText} message="未找到匹配的文献" description="尝试使用不同的关键词" />
       ) : items.length > 0 ? (
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-xs text-gray-400">
@@ -94,11 +71,7 @@ export default function Search() {
           ))}
         </div>
       ) : (
-        <div className="text-center py-16">
-          <SearchIcon className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-          <p className="text-gray-500 font-medium">开始搜索</p>
-          <p className="text-sm text-gray-400 mt-1">输入关键词以搜索文献库中的内容</p>
-        </div>
+        <EmptyState icon={FileText} message="开始搜索" description="输入关键词以搜索文献库中的内容" />
       )}
     </div>
   )

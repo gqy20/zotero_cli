@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import type { Tag } from '@/types/item'
 import { Tag as TagIcon, TrendingUp, Hash } from 'lucide-react'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import EmptyState from '@/components/EmptyState'
 
 export default function Tags() {
   const { data, isLoading } = useQuery({
@@ -30,16 +32,9 @@ export default function Tags() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center gap-3 py-12 justify-center text-sm text-gray-400">
-          <div className="w-4 h-4 border-2 border-gray-200 border-t-red-500 rounded-full animate-spin" />
-          加载中...
-        </div>
+        <LoadingSpinner />
       ) : tags.length === 0 ? (
-        <div className="text-center py-16">
-          <TagIcon className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-          <p className="text-gray-500 font-medium">暂无标签</p>
-          <p className="text-sm text-gray-400 mt-1">文献库中还没有任何标签</p>
-        </div>
+        <EmptyState icon={TagIcon} message="暂无标签" description="文献库中还没有任何标签" />
       ) : (
         <>
           {/* Top tags highlight */}
