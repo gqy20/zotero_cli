@@ -18,11 +18,25 @@
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|
-| 阶段 1 | 写操作 `--dry-run` 模式 | 待开始 |
-| 阶段 2 | `find` → `export` 管道连接（`--from-find`） | 待开始 |
-| 阶段 3 | 图片解析与分析（`extract-images`） | 待开始 |
+| 阶段 1 | 标注 `--dry-run` 预览模式 + comment 截断修复 | 待开始 |
+| 阶段 2 | 批量标注（`--from-file` JSON 驱动） | 待开始 |
+| 阶段 3 | `find` → `export` 管道连接（`--from-find`） | 待开始 |
+| 阶段 4 | 图片解析与分析（`extract-images`） | 待开始 |
 
-> **本版不做**：local full-text search 增强 / MCP server / 大规模命令扩张 / 本地数据库写入
+> **本版不做**：local full-text search 增强 / MCP server / 大规模命令扩张 / 本地数据库写入（基础能力已就绪）
+
+#### 标注系统后续优化（从实战中识别）
+
+v0.0.4 的 annotate/annotations 命令已完成核心功能，实际使用中暴露以下改进点：
+
+| 优先级 | 改进项 | 说明 | 阻塞阶段 |
+|--------|--------|------|----------|
+| **P0** | `--dry-run` 预览模式 | annotate 不执行写入，仅返回匹配结果（文本+位置+上下文），解决盲目写入痛点 | 阶段 1 |
+| **P0** | comment 截断去除 | Python 脚本 `comment[:200]` 硬截断，方法论笔记被截断影响核心用途 | 阶段 1 |
+| **P1** | 批量标注 `--from-file` | JSON 数组描述多条标注点（page/text/color/comment），一次 CLI 调用完成整篇论文标注 | 阶段 2 |
+| **P1** | DB type 完整映射 | 当前仅 highlight/note/image 3 种，补全 underline/strikeout/squiggly 等 | 阶段 2 |
+| **P2** | 标注前 PDF 快照 | `--clear` 前自动备份 PDF，支持回滚 | 阶段 3+ |
+| **P2** | 匹配结果上下文展示 | 返回匹配文本前后 N 字符辅助判断正确性 | 阶段 2 |
 
 ### 已完成迭代
 
@@ -31,7 +45,7 @@
 | MVP (v0.0.1) | 基础读路径 | shipped |
 | Stability Pass (v0.0.2) | hybrid fallback 稳定 + find 语义收敛 + 写错误改善 | completed |
 | PDF & Annotation (v0.0.3) | extract-text / show 标注 / local find 附件感知 / FTS5 全文检索扩展 | completed |
-| Write & Integrate (v0.0.4) | annotate/open/select/annotations 命令 + Makefile + pre-commit + Exit Code + 文档体系 | completed |
+| Write & Integrate (v0.0.4) | annotate/open/select/annotations 命令 + Makefile + pre-commit + Exit Code + 文档体系 + --clear双层删除/Mode 1.5/--author/DeleteDBAnnotations/ANNO_TYPES完整映射/三份文档更新 | completed |
 | Find Enhancement (v0.0.5) | find 高级过滤 11 项 + auto fulltext + snippet 缓存 ~20x + agent 模式 P1 优化 | completed |
 | Unified Init (v0.0.6) | `zot init` 一站式入口 + `overview` 命令 + JSON 结构化错误 + schema 统一 + 测试拆分 + 并行加速 ~3x + Web 前端 MVP | completed |
 
@@ -145,7 +159,7 @@
 |--------|------|----------|----------|
 | 最慢 | export | ~19s | < 5s（条件缓存 + 批量） |
 | 慢 | show | ~8s | < 3s（并行加载） |
-| 中等 | find / collections | 3-6s | < 1s（FTS5 + 本地优先） |
+| 中等 | find / collections | 0.3-0.5s | 保持（快照缓存已生效） |
 | 快 | stats / schema / delete | 1-2s | 保持 |
 
 限流分层方案见 [optimizations/rate-limiting.md](./optimizations/rate-limiting.md)（Retry-After → Jitter → Token Bucket → ETag 缓存 → 熔断器）。
@@ -201,7 +215,7 @@ Literature Review Chapter（文献综述章节草稿）
 
 | 能力 | 说明 | 依赖 |
 |------|------|------|
-| **标注归一化** | 统一 DB 标注与 PDF 标注的数据模型，消除双源差异 | 当前 annotate 命令已覆盖 |
+| **标注归一化** | 统一 DB 标注与 PDF 标注的数据模型，消除双源差异 | v0.0.4.1 已实现：双层读取/写入/删除，`--clear` 双层清理 |
 | **Atom 提取引擎** | 从 highlight/note/image 标注自动提取文本片段、位置、页码 | Knowledge Graph P1 |
 | **智能分类** | LLM 辅助标注角色分类（方法/结果/背景/讨论/定义） | Agent Runtime P0 |
 | **笔记模板** | 结构化笔记卡片（问题-方法-结果-启示 四象限等） | Atom 引擎 |

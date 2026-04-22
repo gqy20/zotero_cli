@@ -25,6 +25,7 @@ type LocalReader struct {
 	SQLitePath        string
 	StorageDir        string
 	FullTextCacheDir  string
+	SnapshotCacheDir  string
 	AttachmentBaseDir string
 	lastReadMetadata  ReadMetadata
 	openSQLiteDB      func(string) (*sql.DB, error)
@@ -81,6 +82,7 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 		SQLitePath:        sqlitePath,
 		StorageDir:        storageDir,
 		FullTextCacheDir:  filepath.Join(dataDir, ".zotero_cli", "fulltext"),
+		SnapshotCacheDir:  filepath.Join(dataDir, ".zotero_cli", "snapshot"),
 		AttachmentBaseDir: attachmentBaseDir,
 		openSQLiteDB:      openSQLiteDB,
 		createSnapshot:    createSQLiteSnapshot,
@@ -762,18 +764,15 @@ func (r *LocalReader) openDB() (*sql.DB, func(), error) {
 }
 
 func (r *LocalReader) openSnapshotDB() (*sql.DB, func(), error) {
-	snapshotDir, snapshotPath, err := r.snapshotFunc()(r.SQLitePath)
+	_, snapshotPath, err := createOrReuseCachedSnapshot(r.SQLitePath, r.SnapshotCacheDir)
 	if err != nil {
 		return nil, nil, err
 	}
 	db, err := r.sqliteOpenFunc()(localSQLiteDSN(snapshotPath))
 	if err != nil {
-		_ = os.RemoveAll(snapshotDir)
 		return nil, nil, err
 	}
-	return db, func() {
-		_ = os.RemoveAll(snapshotDir)
-	}, nil
+	return db, func() {}, nil
 }
 
 func (r *LocalReader) sqliteOpenFunc() func(string) (*sql.DB, error) {

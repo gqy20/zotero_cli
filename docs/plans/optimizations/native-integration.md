@@ -65,7 +65,7 @@ WebReader.FindItems()
 
 **涉及文件**: `internal/backend/web.go`, `internal/backend/reader.go`
 
-**预期收益**: Agent 场景下连续调用时，重复查询从 ~2s 降至 <100ms。
+**预期收益**: Agent 场景下连续调用时，重复查询从 ~0.4s（缓存命中）降至 <100ms（Zotero 关闭时直连）。
 
 ---
 
@@ -666,9 +666,9 @@ Zotero 启动后在 `127.0.0.1:23119` 提供 HTTP 服务，主要用于文字处
 ### 5.2 SQLite 锁竞争 (Local)
 
 - 直读 `zotero.sqlite` 要求 Zotero 空闲或关闭
-- 当前项目的 snapshot fallback 已处理此场景（实测已验证：Zotero 9 运行中自动走 snapshot）
+- 当前项目的 **持久化快照缓存** 已处理此场景（实测已验证：Zotero 运行中自动走缓存，后续调用 ~0.3s）
 - 写入操作切勿直接操作 SQLite，必须走 Web API
-- **WAL 模式注意**: Zotero 使用 WAL (Write-Ahead Logging) 模式，snapshot 复制时需同时复制 `-wal` 和 `-shm` 文件以确保数据一致性
+- **Journal 模式注意**: Zotero 使用 journal 模式（非 WAL），snapshot 复制时需复制 `-journal` 文件；快照缓存在 `{dataDir}/.zotero_cli/snapshot/` 下，基于 mtime 自动失效重建
 
 ### 5.3 版本兼容性
 

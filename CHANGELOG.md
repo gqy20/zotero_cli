@@ -51,7 +51,8 @@
 
 ### 性能
 - **overview 并行化加速 ~3x**：4 路 API 调用（stats / collections / tags / recent items）由串行改为 `sync.WaitGroup` 并行执行，overview 从 ~20s 降至 ~6s。
-- **collections 全本地化**：Reader 接口新增 `ListCollections()` 方法，local 模式直接查 SQLite（JOIN collections + collectionItems），hybrid 模式不再强制走 Web API。collections 命令从 3.3s 降至 ~6s 级别与其他本地调用对齐。
+- **collections 全本地化**：Reader 接口新增 `ListCollections()` 方法，local 模式直接查 SQLite（JOIN collections + collectionItems），hybrid 模式不再强制走 Web API。
+- **SQLite 快照持久化缓存**：Zotero 运行时 local 读命令从每次复制 ~242MB 快照（~2.2s）改为复用持久化缓存（`{dataDir}/.zotero_cli/snapshot/`，基于 mtime 自动失效重建）。busy_timeout 从 5s 缩短至 200ms。Zotero 运行下 collections/tags/notes 等命令从 ~2.2s 降至 ~0.3s（7x 提升）。
 - **性能基线文档**：新增 `docs/PERF.md`，记录全部 16 个命令的耗时基线和 P0/P1/P2 优化方向，为后续性能优化提供量化依据。
 
 ### 修复

@@ -24,7 +24,7 @@ func localSQLiteDSN(path string) string {
 	if !strings.HasPrefix(uriPath, "/") {
 		uriPath = "/" + uriPath
 	}
-	busyTimeout := 5000
+	busyTimeout := 200
 	if value := strings.TrimSpace(os.Getenv("ZOT_LOCAL_BUSY_TIMEOUT_MS")); value != "" {
 		if parsed, err := strconv.Atoi(value); err == nil && parsed >= 0 {
 			busyTimeout = parsed
@@ -42,7 +42,7 @@ func localSQLiteDSNReadWrite(path string) string {
 	if !strings.HasPrefix(uriPath, "/") {
 		uriPath = "/" + uriPath
 	}
-	busyTimeout := 5000
+	busyTimeout := 200
 	if value := strings.TrimSpace(os.Getenv("ZOT_LOCAL_BUSY_TIMEOUT_MS")); value != "" {
 		if parsed, err := strconv.Atoi(value); err == nil && parsed >= 0 {
 			busyTimeout = parsed
@@ -119,6 +119,46 @@ func copySQLiteFileIfExists(sourcePath string, targetPath string) error {
 		return err
 	}
 	return target.Close()
+}
+
+func isSnapshotValid(sqlitePath string, cacheDir string) bool {
+	cachedPath := filepath.Join(cacheDir, filepath.Base(sqlitePath))
+	cachedInfo, err := os.Stat(cachedPath)
+	if err != nil {
+		return false
+	}
+	srcInfo, err := os.Stat(sqlitePath)
+	if err != nil {
+		return false
+	}
+	return !srcInfo.ModTime().After(cachedInfo.ModTime())
+}
+
+func createOrReuseCachedSnapshot(sqlitePath string, cacheDir string) (string, string, error) {
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return "", "", err
+	}
+	if isSnapshotValid(sqlitePath, cacheDir) {
+		return cacheDir, filepath.Join(cacheDir, filepath.Base(sqlitePath)), nil
+	}
+	if err := os.RemoveAll(cacheDir); err != nil {
+		return "", "", err
+	}
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return "", "", err
+	}
+	for _, sourcePath := range []string{
+		sqlitePath,
+		sqlitePath + "-journal",
+		sqlitePath + "-wal",
+		sqlitePath + "-shm",
+	} {
+		if err := copySQLiteFileIfExists(sourcePath, filepath.Join(cacheDir, filepath.Base(sourcePath))); err != nil {
+			os.RemoveAll(cacheDir)
+			return "", "", err
+		}
+	}
+	return cacheDir, filepath.Join(cacheDir, filepath.Base(sqlitePath)), nil
 }
 
 func countRows(ctx context.Context, db *sql.DB, query string) (int, error) {

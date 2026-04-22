@@ -571,7 +571,7 @@ func TestLocalSQLiteDSNUsesReadOnlyPragmas(t *testing.T) {
 	if len(pragmas) != 2 {
 		t.Fatalf("unexpected pragmas: %#v", pragmas)
 	}
-	if pragmas[0] != "busy_timeout=5000" && pragmas[1] != "busy_timeout=5000" {
+	if pragmas[0] != "busy_timeout=200" && pragmas[1] != "busy_timeout=200" {
 		t.Fatalf("expected busy_timeout pragma, got %#v", pragmas)
 	}
 	if pragmas[0] != "query_only=1" && pragmas[1] != "query_only=1" {
@@ -649,21 +649,28 @@ func TestWithReadableDBFallsBackToSnapshotWhenQueryHitsBusy(t *testing.T) {
 	}
 	defer snapshotDB.Close()
 
+	dataDir := t.TempDir()
+	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
+	cacheDir := filepath.Join(dataDir, ".zotero_cli", "snapshot")
+
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sqlitePath, []byte("stub"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
 	openDB := func(dsn string) (*sql.DB, error) {
-		if strings.Contains(dsn, "snapshot.sqlite") {
+		if strings.Contains(dsn, filepath.ToSlash(cacheDir)) {
 			return snapshotDB, nil
 		}
 		return liveDB, nil
 	}
-	createSnapshot := func(string) (string, string, error) {
-		snapshotDir := t.TempDir()
-		return snapshotDir, filepath.Join(snapshotDir, "snapshot.sqlite"), nil
-	}
 
 	reader := &LocalReader{
-		SQLitePath:     filepath.Join(t.TempDir(), "zotero.sqlite"),
-		openSQLiteDB:   openDB,
-		createSnapshot: createSnapshot,
+		SQLitePath:       sqlitePath,
+		SnapshotCacheDir: cacheDir,
+		openSQLiteDB:     openDB,
 	}
 	attempts := 0
 	err = reader.withReadableDB(context.Background(), func(db *sql.DB) error {

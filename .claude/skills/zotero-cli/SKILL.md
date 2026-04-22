@@ -219,7 +219,7 @@ zot config validate --json                   # 校验 + 结构化诊断
 ## 性能注意
 
 - `overview` 并行调用 4 个 API（~6s），优于逐个请求
-- `collections` 在 local/hybrid 下走 SQLite（~6ms），不走 Web API
+- **local/hybrid 快照缓存**：Zotero 运行时自动走持久化快照缓存（`{dataDir}/.zotero_cli/snapshot/`），首次需复制（~2s），后续调用直接复用（~0.3s）。Zotero 关闭时直连 SQLite（~0ms）
 - `extract-text` 结果有缓存，重复提取同一 PDF 直接命中
 - `--snippet` 默认 limit 50，需更多结果显式加 `--limit`
 - 高频脚本遇 `429` 会自动退避+抖动，但仍应主动降速
