@@ -1,7 +1,0 @@
-interface:
-  display_name: "Zotero CLI"
-  short_description: "Use the local zot CLI to search, inspect, export, and safely mutate Zotero libraries."
-  default_prompt: "Use $zotero-cli to work with the local Zotero CLI in this repository."
-
-policy:
-  allow_implicit_invocation: true

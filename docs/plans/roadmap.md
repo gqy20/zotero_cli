@@ -94,25 +94,38 @@
 | **抽取可复用组件** | 从各页面内联代码中提取 ItemCard / ItemTable / CollectionTree / TagFilter / SearchBar / Pagination / StatCard / EmptyState / DateFilter | P0 — 消除重复、统一交互 |
 | **自定义 Hooks** | 实现 `useItems`（含筛选/排序/分页）、`useCollections`（树形展开）、`useDebounce`（搜索防抖） | P1 — 封装 TanStack Query 调用模式 |
 
-#### Phase 2 — 体验打磨
+#### Phase 2 — 体验打磨 ✅ (v0.0.7)
 
-| 方向 | 具体措施 | 预期效果 |
-|------|----------|----------|
-| **Skeleton 加载** | 用 shadcn Skeleton 组件替换现有 spinner/loading 文本 | 感知性能提升，避免布局抖动 |
-| **Toast 通知系统** | 操作成功/失败/警告的统一反馈通道（sonner 或 shadcn toast） | 用户操作闭环确认 |
-| **空状态设计** | EmptyState 组件支持插图 + 引导文案 + 操作按钮（如"导入第一篇文献"） | 冷启动引导 |
-| **PdfViewer 懒加载** | `React.lazy()` + Suspense 延迟加载 pdfjs-dist（~1MB） | 首屏加载速度提升 |
-| **列表虚拟化** | Library 页面 >100 条时启用 `@tanstack/react-virtual` | 大库场景保持流畅滚动 |
+> 已完成：Skeleton 骨架屏（6 页面布局匹配）、Toast 通知系统（Context+Reducer，4 变体）、PdfViewer 动态 import() 懒加载。97 测试全绿。
 
-#### Phase 3 — 写操作与交互深化
+| 方向 | 具体措施 | 状态 |
+|------|----------|------|
+| **Skeleton 加载** | `ui/skeleton.tsx` + `PageSkeletons.tsx`（6 个页面骨架布局） | ✅ 完成 |
+| **Toast 通知系统** | `hooks/useToast.tsx` + `components/Toaster.tsx`（success/error/warning/info） | ✅ 完成 |
+| **空状态设计** | EmptyState 组件（Phase 1 已交付） | ✅ 完成 |
+| **PdfViewer 懒加载** | 静态 `import` → 动态 `await import('pdfjs-dist')` | ✅ 完成 |
+| **列表虚拟化** | Library 页面 >100 条时启用 `@tanstack/react-virtual` | ⏸ 延后（当前数据量无需） |
 
-| 功能 | 说明 | 复杂度 |
-|------|------|--------|
-| **条目创建/编辑弹窗** | Dialog 表单覆盖核心字段（title/authors/date/DOI/itemType），后端对接已有 `write_handlers.go` 占位 | 中 |
-| **标签快速管理** | 条目详情页标签区域支持添加/删除 tag，带 autocomplete | 低 |
-| **收藏夹树交互** | CollectionTree 支持拖拽排序、右键菜单（新建子收藏夹/重命名/删除） | 中 |
-| **标注面板增强** | AnnotationPanel 支持点击跳转 PDF 对应位置、颜色筛选、按类型分组 | 中 |
-| **导出实时预览** | Export 页面选择格式后即时渲染 BibTeX/RIS/CSL-JSON 预览 | 低 |
+#### Phase 3 — 写操作与交互深化 ⏸ (阻塞：后端无写基础设施)
+
+> **前置依赖未满足**。当前后端 `handlers.go` 仅注册 GET 路由（10 个只读端点），`backend.Reader` 接口不含任何写方法，不存在 `Writer` 接口或 `write_handlers.go`。
+>
+> Phase 3 全部功能（条目 CRUD、标签管理、收藏夹操作、标注写回）均依赖后端写层，需先完成以下基建才能启动：
+>
+> 1. 定义 `backend.Writer` 接口（CreateItem / UpdateItem / DeleteItem / AddTag / RemoveTag 等）
+> 2. 实现 Zotero Web API 的写调用封装
+> 3. 在 `handlers.go` 中注册 POST/PUT/DELETE 路由
+> 4. 前端 API client 扩展写方法 + Dialog 表单组件
+>
+> **结论：Phase 3 整体延后，等后端写层就绪后再排期。**
+
+| 功能 | 说明 | 复杂度 | 阻塞原因 |
+|------|------|--------|---------|
+| **条目创建/编辑弹窗** | Dialog 表单覆盖核心字段（title/authors/date/DOI/itemType） | 中 | 后端无 POST 路由 |
+| **标签快速管理** | 条目详情页标签区域支持添加/删除 tag，带 autocomplete | 低 | 后端无 PUT 路由 |
+| **收藏夹树交互** | CollectionTree 支持拖拽排序、右键菜单（新建子收藏夹/重命名/删除） | 中 | 后端无 Collection 写接口 |
+| **标注面板增强** | AnnotationPanel 支持点击跳转 PDF 对应位置、颜色筛选、按类型分组 | 中 | 后端无 Annotation 写接口 |
+| **导出实时预览** | Export 页面选择格式后即时渲染 BibTeX/RIS/CSL-JSON 预览 | 低 | 纯前端可实现，不依赖后端写 |
 
 #### Phase 4 — 性能与工程化
 

@@ -29,9 +29,8 @@ PROFILE
 .claude/projects/
 .claude/memory/
 
-# Local agent and analysis artifacts
-.codex_*.json
-.codex_*.sqlite
+# Codex CLI (symlinked to .claude/, no need to track separately)
+.codex/
 
 # MCP tool artifacts
 .playwright-mcp/

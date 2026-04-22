@@ -6,11 +6,30 @@
 
 ## [Unreleased]
 
-### 后续改进计划（Agent 可用性增强）
-以下为规划中的改进方向，按优先级排序：
-1. **写操作 `--dry-run` 模式**：所有写命令支持预览将要执行的操作而不实际修改数据，提升安全性。
-2. **`find` → `export` 管道连接**：`export` 新增 `--from-find` 参数，内部执行搜索后直接导出，无需手动传递 key 列表。
-3. **图片解析与分析（`extract-images`）**：从 PDF 中提取图片资源（图表、示意图、照片等），支持按页码/尺寸过滤，输出图片文件路径或 base64 内嵌 JSON。为 agent 提供视觉内容理解能力，配合多模态模型实现「读图→分析→总结」的科研工作流（如自动解读论文中的实验数据图、流程图、分子结构图）。
+### 新增
+- **Web 前端（React SPA）**：全新 Web UI，基于 React 19 + Vite 6 + Tailwind CSS 4 + TanStack Query 5 + React Router 7 技术栈。包含 6 个完整页面：Dashboard（统计总览）、Library（文献列表）、ItemDetail（条目详情 + PDF 预览弹窗）、Search（全文搜索）、Tags（标签管理）、Export（格式导出）。使用 SOTD 风格现代设计语言（圆角卡片、渐变按钮、微交互动效）。
+- **HTTP API Server**：新增内置 HTTP 服务端（`zot web` 命令），提供 10 个 REST 端点（health / stats / overview / items / collections / tags / notes / files）。支持结构化 JSON 日志（slog）、请求 ID 追踪、CORS 中间件、panic recovery 和静态文件服务（开发模式热更新）。
+- **可复用组件库（TDD）**：从页面内联代码中提取 9 个通用组件和 3 个自定义 Hook：
+  - 展示组件：LoadingSpinner / EmptyState / StatCard / MetaRow / Section / TagBadge / SearchInput
+  - UI 基础组件：Button（CVA 变体系统）/ Input / Skeleton（shadcn/ui 模式）
+  - 自定义 Hooks：useDebounce / useItems / useCollections
+- **骨架屏加载系统**：6 个页面级 Skeleton 组件（DashboardSkeleton / LibrarySkeleton 等），匹配各页面真实 DOM 结构，替换原有通用 spinner，消除布局抖动。
+- **Toast 通知系统**：基于 Context + useReducer 的轻量通知（useToast hook + Toaster 组件），支持 success / error / warning / info 四种变体，自动消失（4s）+ 手动关闭 + 堆叠展示。
+- **PdfViewer 懒加载**：pdfjs-dist 从静态 import 改为动态 `await import()`，按需加载减少首屏 bundle ~1MB。
+- **PDF 预览弹窗**：ItemDetail 页面支持 PDF 附件内联预览（基于 pdf.js 渲染到 canvas），模态框支持 backdrop-blur 关闭动画。
+- **ErrorBoundary**：全局错误边界组件，防止单个页面崩溃导致整个应用白屏。
+- **设计文档**：新增知识图谱设计方案（`docs/knowledge-graph.md`）和智能体运行时架构文档（`docs/agent-design.md`）。
+
+### 变更
+- **文档目录重组**：将扁平的 `docs/` 重构为分类目录结构——`docs/user/`（用户指南）、`docs/plans/`（规划）、`docs/reference/`（参考）、`docs/architecture/`（架构）、`docs/dev/`（开发）。净减 ~2000 行冗余内容，新增 quickstart 快速入门页。
+- **`zot init` 提示增强**：初始化交互中增加 AI 辅助设置提示，引导用户配置 web 模式相关选项。
+
+### 测试
+- **前端测试体系**：Vitest + @testing-library/react + jsdom，共 20 个测试文件 / 97 个测试用例，覆盖全部组件、Hook 和 API client。
+- **后端服务端测试**：server 包新增 logger_test.go，覆盖结构化日志输出；server_test.go 扩展覆盖 middleware 和 handler 集成场景。
+
+### 工具链
+- **pre-commit hook 增强**：检测暂存区无 `.go` 文件时跳过 gofmt/vet/test；无 YAML 时跳过 yamllint；纯前端/文档提交秒过。
 
 ## [0.0.6] - 2026-04-22
 
