@@ -14,18 +14,19 @@ import (
 
 // FigureInfo describes a single extracted figure.
 type FigureInfo struct {
-	ID         int     `json:"id"`
-	File       string  `json:"file"`
-	Page       int     `json:"page"`
-	Source     string  `json:"source"` // "vector" | "raster"
-	SizePx     string  `json:"size_px"`
-	SizePt     string  `json:"size_pt"`
-	KB         float64 `json:"kb"`
-	Anchors    int     `json:"anchors"`
-	Caption    string  `json:"caption,omitempty"`
-	HasCaption bool    `json:"has_caption"`
-	TextRatio  float64 `json:"text_ratio"`
-	PctPage    float64 `json:"pct_page"`
+	ID            int     `json:"id"`
+	File          string  `json:"file"`
+	Page          int     `json:"page"`
+	Source        string  `json:"source"` // "vector" | "raster"
+	SizePx        string  `json:"size_px"`
+	SizePt        string  `json:"size_pt"`
+	KB            float64 `json:"kb"`
+	Anchors       int     `json:"anchors"`
+	Caption       string  `json:"caption,omitempty"`
+	HasCaption    bool    `json:"has_caption"`
+	TextRatio     float64 `json:"text_ratio"`
+	PctPage       float64 `json:"pct_page"`
+	AttachmentKey string  `json:"attachment_key"` // which PDF this figure came from
 }
 
 // ExtractFiguresResult is the result of extracting figures from a PDF item.
@@ -196,14 +197,14 @@ def main():
 if __name__ == "__main__": main()
 `
 
-// ExtractFigures extracts figures from a PDF attachment of the given item.
+// ExtractFigures extracts figures from all PDF attachments of the given item.
+// Output is organized as {outputDir}/{attachmentKey}/, matching fulltext cache layout.
 func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outputDir string) (ExtractFiguresResult, error) {
 	result := ExtractFiguresResult{
 		ItemKey: item.Key,
 		Method:  "cluster_drawings_v5b",
 	}
 
-	// Find PDF attachment
 	var pdfs []domain.Attachment
 	for _, att := range item.Attachments {
 		if strings.EqualFold(strings.TrimSpace(att.ContentType), "application/pdf") {
@@ -213,87 +214,100 @@ func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outp
 	if len(pdfs) == 0 {
 		return result, fmt.Errorf("no PDF attachment found for item %s", item.Key)
 	}
-	att := pdfs[0] // use first PDF
-	if !att.Resolved || att.ResolvedPath == "" {
-		return result, fmt.Errorf("PDF path not resolved for %s", att.Key)
-	}
-	result.PDFPath = att.ResolvedPath
 
-	// Ensure output directory exists
 	absOutDir, err := filepath.Abs(outputDir)
 	if err != nil {
 		return result, err
 	}
 
-	// Find Python command
 	pythonCmd, ok := findPythonCommandFunc(r.DataDir)
 	if !ok {
 		return result, fmt.Errorf("Python not available (data_dir: %s)", r.DataDir)
 	}
 
-	// Execute Python script via stdin
-	cmd := exec.CommandContext(ctx, pythonCmd, "-", att.ResolvedPath, absOutDir)
-	cmd.Stdin = strings.NewReader(pythonExtractFiguresScript)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	type pyFigure struct {
+		ID         int     `json:"id"`
+		File       string  `json:"file"`
+		Page       int     `json:"page"`
+		Source     string  `json:"source"`
+		SizePx     string  `json:"size_px"`
+		SizePt     string  `json:"size_pt"`
+		KB         float64 `json:"kb"`
+		Anchors    int     `json:"anchors"`
+		Caption    string  `json:"caption,omitempty"`
+		HasCaption bool    `json:"has_caption"`
+		TextRatio  float64 `json:"text_ratio"`
+		PctPage    float64 `json:"pct_page"`
+	}
 
-	if err := cmd.Run(); err != nil {
-		errMsg := strings.TrimSpace(stderr.String())
-		if errMsg == "" {
-			errMsg = err.Error()
+	var totalElapsed float64
+	var errs []string
+
+	for _, att := range pdfs {
+		attKey := strings.TrimSpace(att.Key)
+		attDir := filepath.Join(absOutDir, attKey)
+
+		if !att.Resolved || att.ResolvedPath == "" {
+			errs = append(errs, fmt.Sprintf("%s: PDF path not resolved", attKey))
+			continue
 		}
-		result.Error = errMsg
-		return result, nil // return partial result with error info
+
+		cmd := exec.CommandContext(ctx, pythonCmd, "-", att.ResolvedPath, attDir)
+		cmd.Stdin = strings.NewReader(pythonExtractFiguresScript)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		if runErr := cmd.Run(); runErr != nil {
+			errMsg := strings.TrimSpace(stderr.String())
+			if errMsg == "" {
+				errMsg = runErr.Error()
+			}
+			errs = append(errs, fmt.Sprintf("%s: %s", attKey, errMsg))
+			continue
+		}
+
+		var pyResult struct {
+			Figures []pyFigure `json:"figures"`
+			Stats   struct {
+				ElapsedSec float64 `json:"elapsed_sec"`
+			} `json:"stats"`
+			Error *string `json:"error,omitempty"`
+		}
+		if jsonErr := json.Unmarshal(stdout.Bytes(), &pyResult); jsonErr != nil {
+			errs = append(errs, fmt.Sprintf("%s: parse error: %v", attKey, jsonErr))
+			continue
+		}
+		if pyResult.Error != nil && *pyResult.Error != "" {
+			errs = append(errs, fmt.Sprintf("%s: %s", attKey, *pyResult.Error))
+		}
+
+		totalElapsed += pyResult.Stats.ElapsedSec
+		result.PDFPath = att.ResolvedPath // last processed PDF
+
+		for _, f := range pyResult.Figures {
+			f := f
+			result.Figures = append(result.Figures, FigureInfo{
+				ID:            f.ID,
+				File:          f.File,
+				Page:          f.Page,
+				Source:        f.Source,
+				SizePx:        f.SizePx,
+				SizePt:        f.SizePt,
+				KB:            f.KB,
+				Anchors:       f.Anchors,
+				Caption:       f.Caption,
+				HasCaption:    f.HasCaption,
+				TextRatio:     f.TextRatio,
+				PctPage:       f.PctPage,
+				AttachmentKey: attKey,
+			})
+		}
 	}
 
-	// Parse JSON output
-	var pyResult struct {
-		Figures []struct {
-			ID         int     `json:"id"`
-			File       string  `json:"file"`
-			Page       int     `json:"page"`
-			Source     string  `json:"source"`
-			SizePx     string  `json:"size_px"`
-			SizePt     string  `json:"size_pt"`
-			KB         float64 `json:"kb"`
-			Anchors    int     `json:"anchors"`
-			Caption    string  `json:"caption,omitempty"`
-			HasCaption bool    `json:"has_caption"`
-			TextRatio  float64 `json:"text_ratio"`
-			PctPage    float64 `json:"pct_page"`
-		} `json:"figures"`
-		Stats struct {
-			ElapsedSec float64 `json:"elapsed_sec"`
-		} `json:"stats"`
-		Error *string `json:"error,omitempty"`
+	result.ElapsedSec = totalElapsed
+	if len(errs) > 0 {
+		result.Error = strings.Join(errs, "; ")
 	}
-	if err := json.Unmarshal(stdout.Bytes(), &pyResult); err != nil {
-		return result, fmt.Errorf("failed to parse python output: %w", err)
-	}
-	if pyResult.Error != nil && *pyResult.Error != "" {
-		result.Error = *pyResult.Error
-	}
-
-	// Convert to public types
-	for _, f := range pyResult.Figures {
-		result.Figures = append(result.Figures, FigureInfo{
-			ID:         f.ID,
-			File:       f.File,
-			Page:       f.Page,
-			Source:     f.Source,
-			SizePx:     f.SizePx,
-			SizePt:     f.SizePt,
-			KB:         f.KB,
-			Anchors:    f.Anchors,
-			Caption:    f.Caption,
-			HasCaption: f.HasCaption,
-			TextRatio:  f.TextRatio,
-			PctPage:    f.PctPage,
-		})
-	}
-	result.TotalPages = -1 // not reported by script per-item
-	result.ElapsedSec = pyResult.Stats.ElapsedSec
-
 	return result, nil
 }

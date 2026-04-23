@@ -187,7 +187,7 @@ func (c *CLI) runExtractFigures(args []string) int {
 
 	// Resolve output directory
 	if outputDir == "" {
-		outputDir = "figures"
+		outputDir = filepath.Join(cfg.DataDir, ".zotero_cli", "figures")
 	}
 	absOutDir, err := filepath.Abs(outputDir)
 	if err != nil {
@@ -316,8 +316,8 @@ func (c *CLI) outputFiguresResults(results []figureTaskResult, jsonOutput bool) 
 				if fig.HasCaption {
 					capTag = " +caption"
 				}
-				fmt.Fprintf(c.stdout, "  %s  p.%d %s%s %s %.1fkB anchors=%d\n",
-					fig.File, fig.Page, srcTag,
+				fmt.Fprintf(c.stdout, "  [%s] %s  p.%d %s%s %s %.1fkB anchors=%d\n",
+					fig.AttachmentKey, fig.File, fig.Page, srcTag,
 					fig.SizePx, capTag, fig.KB, fig.Anchors)
 			}
 		} else if r.result.Error != "" {
