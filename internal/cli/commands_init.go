@@ -97,6 +97,11 @@ func (c *CLI) runInit(args []string) int {
 		fmt.Fprintln(c.stdout, "    && curl -fsSL https://raw.githubusercontent.com/gqy20/zotero_cli/master/.claude/skills/zotero-cli/reference.md -o ~/.claude/skills/zotero-cli/reference.md \\")
 		fmt.Fprintln(c.stdout, "    && curl -fsSL https://raw.githubusercontent.com/gqy20/zotero_cli/master/.claude/skills/zotero-cli/examples/find-output.md -o ~/.claude/skills/zotero-cli/examples/find-output.md \\")
 		fmt.Fprintln(c.stdout, "    && curl -fsSL https://raw.githubusercontent.com/gqy20/zotero_cli/master/.claude/skills/zotero-cli/examples/show-output.md -o ~/.claude/skills/zotero-cli/examples/show-output.md")
+
+		if cfg.Mode == "local" || cfg.Mode == "hybrid" {
+			fmt.Fprintln(c.stdout, "\nTip: configure Zotero's automatic file renaming for consistent PDF names.")
+			fmt.Fprintln(c.stdout, "  See: https://github.com/gqy20/zotero_cli/blob/master/docs/user/zotero-setup-guide.md#15-配置文件自动重命名zotero-内置功能")
+		}
 	}
 
 	if flags.NoPDF {
