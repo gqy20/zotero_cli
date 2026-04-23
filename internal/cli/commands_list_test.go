@@ -415,7 +415,7 @@ func TestRunVersionsJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"versions", "items-top", "--since", "42", "--include-trashed", "--json"})
+	exitCode := Run([]string{"changes", "items-top", "--since", "42", "--include-trashed", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -425,7 +425,7 @@ func TestRunVersionsJSON(t *testing.T) {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
 
-	if got["command"] != "versions" {
+	if got["command"] != "changes" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 
@@ -448,7 +448,7 @@ func TestRunVersionsText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"versions", "collections", "--since", "7"})
+	exitCode := Run([]string{"changes", "collections", "--since", "7"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -474,7 +474,7 @@ func TestRunVersionsJSONIncludesLastModifiedVersionMeta(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"versions", "items-top", "--since", "42", "--json"})
+	exitCode := Run([]string{"changes", "items-top", "--since", "42", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -503,7 +503,7 @@ func TestRunVersionsTextShowsNotModifiedMessageOn304(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"versions", "items", "--since", "0", "--if-modified-since-version", "88"})
+	exitCode := Run([]string{"changes", "items", "--since", "0", "--if-modified-since-version", "88"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

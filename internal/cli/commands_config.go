@@ -12,6 +12,10 @@ import (
 )
 
 func (c *CLI) runConfig(args []string) int {
+	if isHelpOnly(args) {
+		c.printConfigUsage()
+		return 0
+	}
 	if len(args) == 0 {
 		c.printConfigUsage()
 		return 0

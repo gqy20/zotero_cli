@@ -13,7 +13,7 @@ const (
 	usageSearches    = "usage: zot searches [--limit N] [--json]"
 	usageDeleted     = "usage: zot deleted [--json]"
 	usageStats       = "usage: zot stats [--json]"
-	usageVersions    = "usage: zot versions <collections|searches|items|items-top> --since N [--include-trashed] [--if-modified-since-version N] [--json]"
+	usageChanges     = "usage: zot changes <collections|searches|items|items-top> --since N [--include-trashed] [--if-modified-since-version N] [--json]"
 	usageSchema      = `usage: zot schema <subcommand> [args] [--json]
 
 Introspect Zotero metadata schema.

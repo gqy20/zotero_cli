@@ -38,6 +38,10 @@ func (c *CLI) runIndex(args []string) int {
 		return 2
 	}
 
+	if isHelpOnly(args[1:]) {
+		return c.printCommandUsage(usageIndex)
+	}
+
 	opts, ok := c.parseIndexBuildArgs(args[1:])
 	if !ok {
 		return 2

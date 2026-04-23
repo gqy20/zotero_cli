@@ -94,7 +94,7 @@ func (c *CLI) Run(args []string) int {
 		return c.runDeleted(args[1:])
 	case "stats":
 		return c.runStats(args[1:])
-	case "versions":
+	case "changes":
 		return c.runVersions(args[1:])
 	case "schema":
 		return c.runSchema(args[1:])
@@ -175,7 +175,7 @@ Commands:
   searches       List saved searches
   deleted        Show deleted object keys
   stats          Show library item, collection, and search counts
-  versions       Show changed object versions since a library version
+  changes        Show changed objects since a library version
   schema         Introspect Zotero metadata schema (types, fields, templates)
   overview       One-shot library overview (stats, collections, tags, recent items)
   key-info       Show the owner and privileges for an API key
@@ -220,6 +220,9 @@ func (c *CLI) printVersion() {
 }
 
 func (c *CLI) runVersion(args []string) int {
+	if isHelpOnly(args) {
+		return c.printCommandUsage("usage: zot version [--check] [--json]")
+	}
 	check := false
 	jsonOutput := false
 	for _, a := range args {
