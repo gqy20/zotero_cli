@@ -22,6 +22,7 @@
 | 阶段 2 | 批量标注（`--from-file` JSON 驱动） | 待开始 |
 | 阶段 3 | `find` → `export` 管道连接（`--from-find`） | 待开始 |
 | 阶段 4 | 图片提取（`extract-figures`） | ✅ 完成 |
+| 阶段 5 | PDF 健康检查（`pdf-health`） | 待开始 |
 
 > **本版不做**：local full-text search 增强 / MCP server / 大规模命令扩张 / 非笔记非关联类型的本地数据库写入（note + relation 写入已就绪）
 
@@ -37,6 +38,64 @@ v0.0.4 的 annotate/annotations 命令已完成核心功能，实际使用中暴
 | **P1** | DB type 完整映射 | 当前仅 highlight/note/image 3 种，补全 underline/strikeout/squiggly 等 | 阶段 2 |
 | **P2** | 标注前 PDF 快照 | `--clear` 前自动备份 PDF，支持回滚 | 阶段 3+ |
 | **P2** | 匹配结果上下文展示 | 返回匹配文本前后 N 字符辅助判断正确性 | 阶段 2 |
+
+#### PDF 健康检查（`pdf-health`）— 阶段 5
+
+> **动机**：`zot init` 已在 local/hybrid 模式下提示用户配置文件重命名（见 [setup-guide §1.5](../user/zotero-setup-guide.md#15-配置文件自动重命名zotero-内置功能)），但无法判断用户是否已执行。需要一个诊断命令扫描 storage/ 目录下的 PDF 文件名，检测常见问题并给出修复建议。
+
+**命令接口：**
+
+```shell
+zot pdf-health                    # 全库扫描，输出摘要 + 问题列表
+zot pdf-health --json             # 结构化 JSON 输出（供 AI 消费）
+zot pdf-health --fix              # 交互式修复（需 ZOT_ALLOW_WRITE）
+zot pdf-health --item-key KEY     # 单条目检查
+```
+
+**检查项（按严重度排序）：**
+
+| 检查项 | 规则 | 严重度 | 影响 |
+|--------|------|--------|------|
+| 文件名过长 | basename > 200 字符 | **Critical** | Windows 路径超限 (MAX_PATH)、PyMuPDF 打开失败 |
+| 非法字符 | 包含 `\ / : * ? " < > \|` | **Critical** | 文件系统拒绝、路径截断 |
+| 连续空格 | 2+ 个连续空格或首尾空格 | **Warning** | 路径匹配失败、缓存键不一致 |
+| 无扩展名 | 缺少 `.pdf` 后缀 | **Warning** | MIME 检测失败，被 `filterPDFAttachments()` 过滤 |
+| 命名不规范 | 含 `download(`、`Copy of`、纯数字等无意义模式 | **Info** | 不影响功能，但影响检索和管理 |
+| 重复文件名 | 同一 key 目录下同名文件 | **Error** | 路径解析歧义 |
+| 文件不存在 | DB 记录指向的文件缺失 | **Error** | extract-text/annotations 等操作直接失败 |
+
+**输出格式（`--json`）：**
+
+```json
+{
+  "ok": true,
+  "command": "pdf-health",
+  "data": {
+    "total": 847,
+    "scanned": 842,
+    "missing": 5,
+    "issues": {
+      "critical": [
+        {"itemKey": "ABC123", "filename": "very_long_name_....pdf", "issue": "filename_too_long", "length": 243}
+      ],
+      "warning": [
+        {"itemKey": "DEF456", "filename": "paper  name.pdf", "issue": "consecutive_spaces"}
+      ],
+      "info": [
+        {"itemKey": "GHI789", "filename": "download(1).pdf", "issue": "naming_pattern", "suggestion": "2024_Smith-title.pdf"}
+      ]
+    },
+    "summary": {"healthy": 830, "warnings": 7, "errors": 5, "score": 0.98}
+  }
+}
+```
+
+**实现要点：**
+
+- 扫描范围：遍历 `{DataDir}/storage/` 下所有子目录，与 SQLite `attachments` 表交叉比对
+- 性能：大库（1000+ PDF）应 < 3s，用 goroutine 并行扫描
+- `--fix` 模式：仅支持安全操作（去除首尾空格、重命名连续空格）；Critical/Error 类问题给出手动修复指引，不自动处理
+- 与 `zot init` 联动：init 完成后若 data_dir 可用，可选性地运行一次静默检查并在发现 Critical 问题时额外提示
 
 ### 已完成迭代
 
