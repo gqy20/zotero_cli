@@ -368,3 +368,67 @@ jobs:
 
           git commit -m "Update zotcli formula to ${VERSION}"
           git push origin HEAD:main
+
+  upload-qiniu:
+    name: Upload to Qiniu CDN
+    runs-on: ubuntu-latest
+    needs:
+      - verify
+      - build
+      - publish
+    if: startsWith(github.ref, 'refs/tags/')
+    env:
+      QINIU_BUCKET: gqy25
+      QINIU_PREFIX: github/zotero_cli/${{ env.RELEASE_VERSION }}
+      CDN_DOMAIN: https://qny.gqy20.top
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Install qshell
+        run: |
+          wget -q https://devtools.qiniu.com/qshell-v2.11.0-linux-amd64.tar.gz \
+            -O /tmp/qshell.tar.gz && tar xzf /tmp/qshell.tar.gz -C /usr/local/bin qshell && chmod +x /usr/local/bin/qshell
+
+      - name: Configure qshell account
+        env:
+          QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
+          QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+        run: |
+          qshell account "${QINIU_ACCESS_KEY}" "${QINIU_SECRET_KEY}" default
+
+      - name: Upload release files to Qiniu
+        env:
+          QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
+          QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+
+          cd dist
+          echo "=== Files to upload ==="
+          ls -lh
+
+          for f in *; do
+            key="${QINIU_PREFIX}/${f}"
+            echo "↑ ${f} → ${QINIU_BUCKET}:${key}"
+            qshell fput "${QINIU_BUCKET}" "${key}" "${f}" 2>&1 || {
+              echo "✗ Failed to upload ${f}, retrying..."
+              sleep 3
+              qshell fput "${QINIU_BUCKET}" "${key}" "${f}" 2>&1
+            }
+          done
+
+          echo ""
+          echo "=== Upload complete ==="
+          echo ""
+          echo "CDN URLs:"
+          for f in *; do
+            echo "  ${CDN_DOMAIN}/${QINIU_PREFIX}/${f}"
+          done
