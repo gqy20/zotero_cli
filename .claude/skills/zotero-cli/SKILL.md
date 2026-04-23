@@ -23,6 +23,7 @@ argument-hint: "[command] [ITEMKEY] [options]"
 zot init                          # 一键初始化（推荐入口）
 zot config validate               # 校验配置有效性
 zot overview --json               # Agent 首选：一站式库概览
+zot version --check               # 检查是否有新版可更新
 ```
 
 ## 工作流程
@@ -159,6 +160,7 @@ zot schema template book --json            # 创建模板
 zot init                                    # 交互式初始化（默认 mode=hybrid）
 zot config show                              # 查看当前配置
 zot config validate --json                   # 校验 + 结构化诊断
+zot version --check [--json]                # 检查新版 + 更新指引
 ```
 
 配置缺失时主动初始化，不要绕过错误。环境变量完整速查见 [reference.md](reference.md)。
