@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"zotero_cli/internal/backend"
+	"zotero_cli/internal/zoteroapi"
 )
 
 func TestExitCodeConstants(t *testing.T) {
@@ -129,5 +132,58 @@ func TestJSONErrorsDisabledOutputsPlainText(t *testing.T) {
 
 	if stdout.Len() > 0 {
 		t.Fatalf("expected no stdout for plain text mode, got: %q", stdout.String())
+	}
+}
+
+func TestStructuredErrorDataFormat(t *testing.T) {
+	t.Setenv("ZOT_JSON_ERRORS", "1")
+
+	stdout, _ := captureOutput(t)
+	cli := New()
+	cli.stdout = stdout
+
+	err := fmt.Errorf("item not found: ABCD1234: %w", backend.ErrItemNotFound)
+	cli.jsonError(err, "show")
+
+	var got map[string]any
+	_ = json.Unmarshal(stdout.Bytes(), &got)
+
+	data, ok := got["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected data to be an object, got: %T (%#v)", got["data"], got["data"])
+	}
+	if data["error"] == nil {
+		t.Fatal("expected 'error' field in error data")
+	}
+	if data["type"] != "not_found" {
+		t.Errorf("expected type=not_found, got: %#v", data["type"])
+	}
+	if data["code"] == nil {
+		t.Fatal("expected 'code' field in error data")
+	}
+}
+
+func TestClassifyErrorType(t *testing.T) {
+	tests := []struct {
+		err      error
+		expected string
+	}{
+		{fmt.Errorf("item X not found: k: %w", backend.ErrItemNotFound), "not_found"},
+		{fmt.Errorf("local does not support find --qmode: %w", backend.ErrUnsupportedFeature), "unsupported_feature"},
+		{fmt.Errorf("db locked: %w", backend.ErrLocalTemporarilyUnavailable), "temporarily_unavailable"},
+		{&zoteroapi.APIError{StatusCode: 404}, "not_found"},
+		{&zoteroapi.APIError{StatusCode: 403}, "forbidden"},
+		{&zoteroapi.APIError{StatusCode: 429}, "rate_limited"},
+		{&zoteroapi.APIError{StatusCode: 412}, "precondition_failed"},
+		{&zoteroapi.APIError{StatusCode: 500}, "server_error_500"},
+		{fmt.Errorf("wrapped: %w", backend.ErrItemNotFound), "not_found"},
+		{fmt.Errorf("plain"), "unknown"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			if got := classifyErrorType(tt.err); got != tt.expected {
+				t.Errorf("classifyErrorType(%v) = %q, want %q", tt.err, got, tt.expected)
+			}
+		})
 	}
 }

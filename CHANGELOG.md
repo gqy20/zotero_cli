@@ -6,6 +6,36 @@
 
 ## [Unreleased]
 
+## [0.0.9] - 2026-04-23
+
+### 修复
+- **`--help` 全面支持**：所有 17 个子命令统一支持 `--help`/`-h`，包括混合 flag 场景（如 `find --json --help`）；新增 `containsHelp()` 扫描全部参数；共享解析器（`parseJSONOnlyArgs`/`parseJSONAndLimitArgs`/`parseSingleValueCommand`）内置 help 识别
+- **主帮助二进制名修正**：Windows 下不再显示 `zot.exe`，统一显示 `zot`
+- **`setup` 路由恢复**：`zot setup` 返回弃用提示而非 "unknown command"
+- **`zot help <command>` 路由修正**：递归调用目标子命令的 `--help` 输出，而非始终显示主帮助页
+- **`deleted` 命令 400 错误**：Zotero API 要求 `since` 参数，已补全默认值 `since=0`
+- **`key-info` 命令 404 错误**：无参数时自动使用配置中的 API Key，无需手动传入
+- **`add-tag`/`remove-tag` 405 错误**：Zotero Web API 不支持 PATCH 方法，批量更新改用 POST、单项更新改用 PUT
+- **`export` 默认格式修正**：默认导出格式从 `bib`（CSL 引用 HTML）改为 `bibtex`，与数据导出定位一致；移除 `bib` 作为有效选项值
+- **CI Release 环境变量作用域修复**：job-level env 无法引用 `${{ env.* }}`，改用 step output 传递版本前缀
+- **统一 JSON 输出信封**：所有 `--json` 输出强制使用 `{ok, command, data, meta}` 信封结构，消除 6 处 raw data 直接输出（config show / setup pdf-extract / item-template / key-info access / local export / web export）；智能体解析逻辑统一为 `resp["ok"] && resp["data"]`
+- **标准化错误 JSON 格式**：错误响应 Data 从纯字符串升级为结构化 `{error, type, code}` 对象；新增错误分类（`not_found`/`unsupported_feature`/`temporarily_unavailable`/API 状态码映射如 403→forbidden、429→rate_limited、412→precondition_failed），智能体可按 `type` 字段程序化处理不同错误类别
+
+### 变更
+- **`versions` 命令重命名为 `changes`**：消除与 `version`（CLI 版本号）命令的命名混淆，usage/help/路由/测试/文档全面同步
+
+### 移除
+- **删除 `cite` 命令**：引用格式化功能对智能体无价值（返回 HTML 噪噪或纯文本），且与 `export --format bibtex` 功能重叠；需要引用格式的场景统一使用 `export`（csljson/bibtex/ris），需要人类可读引用的场景极少且可用 `export` + 后处理替代
+
+### 新增
+- **`version.json` 发布清单**：Release workflow 自动上传 version.json（含全平台下载 URL、skill_version、base_url）至七牛 CDN；SKILL.md frontmatter 增加 version 字段支持增量检测；README AI 安装提示改为单次 curl 获取 version.json 即可完成非交互安装
+- **Gitee 镜像源支持**：`zot init` 安装提示同时提供 GitHub 和 Gitee raw URL（`_RAW` 变量），国内用户可切换至 Gitee 加速下载；README/SKILL 文档补充 Gitee 镜像链接（仅源文件/skill 文件，不含 Release 二进制）
+- **七牛 CDN 自动上传**：Release 发布后自动将所有 artifacts 上传至 `qny.gqy20.top/gqy25/github/zotero_cli/{version}/`，需配置 `QINIU_ACCESS_KEY` / `QINIU_SECRET_KEY` secrets
+
+### 文档
+- **Gitee 链接修正**：移除错误的 Gitee Releases URL（镜像仅同步 git 仓库），保留 Gitee raw 链接用于 skill/文档下载，添加镜像范围说明
+- **CDN 下载链接**：README AI 配置提示和手动安装章节增加七牛 CDN 备选下载源，含 Windows/Linux 平台说明
+
 ## [0.0.8] - 2026-04-23
 
 ### 新增
