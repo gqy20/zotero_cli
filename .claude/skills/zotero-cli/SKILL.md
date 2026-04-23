@@ -31,6 +31,7 @@ zot overview --json               # Agent 首选：一站式库概览
 2. 优先使用 `zot`（二进制存在且版本足够）。
 3. Agent 工作流**始终加 `--json`**，设置 `ZOT_JSON_ERRORS=1` 获得结构化错误输出。
 4. 操作前先运行 `config validate` 确认凭据可用。
+5. **不确定时用 `zot <command> --help` 核对** — skill 文件可能与当前二进制版本不同步，以 `--help` 输出的选项和用法为准。
 
 ### 模式选择
 
