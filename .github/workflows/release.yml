@@ -379,9 +379,12 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     env:
       QINIU_BUCKET: gqy25
-      QINIU_PREFIX: github/zotero_cli/${{ env.RELEASE_VERSION }}
       CDN_DOMAIN: https://qny.gqy20.top
     steps:
+      - name: Set version prefix
+        id: prefix
+        run: echo "value=github/zotero_cli/${{ github.ref_name }}" >> "${GITHUB_OUTPUT}"
+
       - name: Check out code
         uses: actions/checkout@v4
 
@@ -408,6 +411,9 @@ jobs:
         env:
           QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
           QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+          QINIU_PREFIX: ${{ steps.prefix.outputs.value }}
+          QINIU_BUCKET: gqy25
+          CDN_DOMAIN: https://qny.gqy20.top
         run: |
           set -euo pipefail
 
