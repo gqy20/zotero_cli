@@ -21,8 +21,7 @@
 | 阶段 1 | 标注 `--dry-run` 预览模式 + comment 截断修复 | 待开始 |
 | 阶段 2 | 批量标注（`--from-file` JSON 驱动） | 待开始 |
 | 阶段 3 | `find` → `export` 管道连接（`--from-find`） | 待开始 |
-| 阶段 4 | 图片提取（`extract-figures`） | ✅ 完成 |
-| 阶段 5 | PDF 健康检查（`pdf-health`） | 待开始 |
+| 阶段 4 | PDF 健康检查（`pdf-health`） | 待开始 |
 
 > **本版不做**：local full-text search 增强 / MCP server / 大规模命令扩张 / 非笔记非关联类型的本地数据库写入（note + relation 写入已就绪）
 
@@ -35,7 +34,6 @@ v0.0.4 的 annotate/annotations 命令已完成核心功能，实际使用中暴
 | **P0** | `--dry-run` 预览模式 | annotate 不执行写入，仅返回匹配结果（文本+位置+上下文），解决盲目写入痛点 | 阶段 1 |
 | **P0** | comment 截断去除 | Python 脚本 `comment[:200]` 硬截断，方法论笔记被截断影响核心用途 | 阶段 1 |
 | **P1** | 批量标注 `--from-file` | JSON 数组描述多条标注点（page/text/color/comment），一次 CLI 调用完成整篇论文标注 | 阶段 2 |
-| **P1** | DB type 完整映射 | ~~当前仅 3 种~~ → v0.0.7 已完成 20 种完整映射 | ✅ 已完成 |
 | **P2** | 标注前 PDF 快照 | `--clear` 前自动备份 PDF，支持回滚 | 阶段 3+ |
 | **P2** | 匹配结果上下文展示 | 返回匹配文本前后 N 字符辅助判断正确性 | 阶段 2 |
 
@@ -148,17 +146,7 @@ zot pdf-health --item-key KEY     # 单条目检查
 | **抽取可复用组件** | 从各页面内联代码中提取 ItemCard / ItemTable / CollectionTree / TagFilter / SearchBar / Pagination / StatCard / EmptyState / DateFilter | P0 — 消除重复、统一交互 |
 | **自定义 Hooks** | 实现 `useItems`（含筛选/排序/分页）、`useCollections`（树形展开）、`useDebounce`（搜索防抖） | P1 — 封装 TanStack Query 调用模式 |
 
-#### Phase 2 — 体验打磨 ✅ (v0.0.7)
-
-> 已完成：Skeleton 骨架屏（6 页面布局匹配）、Toast 通知系统（Context+Reducer，4 变体）、PdfViewer 动态 import() 懒加载。97 测试全绿。
-
-| 方向 | 具体措施 | 状态 |
-|------|----------|------|
-| **Skeleton 加载** | `ui/skeleton.tsx` + `PageSkeletons.tsx`（6 个页面骨架布局） | ✅ 完成 |
-| **Toast 通知系统** | `hooks/useToast.tsx` + `components/Toaster.tsx`（success/error/warning/info） | ✅ 完成 |
-| **空状态设计** | EmptyState 组件（Phase 1 已交付） | ✅ 完成 |
-| **PdfViewer 懒加载** | 静态 `import` → 动态 `await import('pdfjs-dist')` | ✅ 完成 |
-| **列表虚拟化** | Library 页面 >100 条时启用 `@tanstack/react-virtual` | ⏸ 延后（当前数据量无需） |
+> **Phase 2 体验打磨已全部完成 (v0.0.7)**：Skeleton / Toast / EmptyState / PdfViewer 懒加载。列表虚拟化延后。
 
 #### Phase 3 — 写操作与交互深化 ⏸ (部分就绪)
 
