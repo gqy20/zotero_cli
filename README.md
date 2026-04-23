@@ -45,9 +45,13 @@
 ```
 帮我安装并配置 zot CLI 工具，按顺序执行：
 
-1. 检测当前平台（Windows/macOS/Linux），下载最新 zot 二进制（任选一个源）：
-   - GitHub Release: https://github.com/gqy20/zotero_cli/releases
-   - 七牛 CDN（国内推荐）: https://qny.gqy20.top/github/zotero_cli/
+1. 检测当前平台（Windows/macOS/Linux），下载最新 zot 二进制：
+   - 方式一（推荐）：从 GitHub Release 下载
+     https://github.com/gqy20/zotero_cli/releases
+   - 方式二（国内更快）：先查版本号，再从七牛 CDN 下载
+     _VER=$(curl -sL https://qny.gqy20.top/github/zotero_cli/latest)
+     然后根据平台下载对应文件，例如 Windows:
+     curl -fsSL "https://qny.gqy20.top/github/zotero_cli/${_VER}/zot_${_VER}_windows_amd64.exe" -o zot.exe
    放到 PATH 目录（Windows: ~/.local/bin/ 或已存在的 PATH 目录；macOS/Linux: /usr/local/bin/ 或 ~/.local/bin/）
 
 2. 运行 zot init 引导式配置，mode 选 hybrid。它会自动提示安装 Skill 文件，按提示执行即可。
@@ -80,10 +84,8 @@ brew install gqy20/tap/zotcli
 curl -fsSL https://github.com/gqy20/zotero_cli/releases/latest/download/zot-linux-amd64 -o ~/.local/bin/zot && chmod +x ~/.local/bin/zot
 
 # 方式二：七牛 CDN 下载（国内更快）
-# 先查看最新版本: curl -s https://qny.gqy20.top/github/zotero_cli/
-# 然后替换下方的 VERSION 为实际版本号
-_VERSION="v0.0.8"
-curl -fsSL "https://qny.gqy20.top/github/zotero_cli/${_VERSION}/zot_${_VERSION}_linux_amd64.tar.gz" \
+_VER=$(curl -sL https://qny.gqy20.top/github/zotero_cli/latest)
+curl -fsSL "https://qny.gqy20.top/github/zotero_cli/${_VER}/zot_${_VER}_linux_amd64.tar.gz" \
   | tar xz -C ~/.local/bin zot && chmod +x ~/.local/bin/zot
 
 # 方式三：Homebrew

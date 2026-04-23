@@ -438,3 +438,13 @@ jobs:
           for f in *; do
             echo "  ${CDN_DOMAIN}/${QINIU_PREFIX}/${f}"
           done
+
+      - name: Update latest version marker
+        env:
+          QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
+          QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+        run: |
+          echo "${{ github.ref_name }}" > /tmp/latest
+          qshell fput gqy25 github/zotero_cli/latest /tmp/latest
+          echo "✓ latest → ${{ github.ref_name }}"
+          echo "  ${CDN_DOMAIN}/github/zotero_cli/latest"
