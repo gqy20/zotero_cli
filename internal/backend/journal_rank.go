@@ -271,21 +271,9 @@ func buildDotAbbrev(words []string) string {
 }
 
 func DetectJournalRankPath(dataDir string) string {
-	candidates := []string{
-		filepath.Join(dataDir, "zoterostyle.json"),
-		filepath.Join(filepath.Dir(dataDir), "zotero_file", "zoterostyle.json"),
-	}
-	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
-			return c
-		}
-	}
-	home, _ := os.UserHomeDir()
-	if home != "" {
-		fallback := filepath.Join(home, "Zotero", "zoterostyle.json")
-		if _, err := os.Stat(fallback); err == nil {
-			return fallback
-		}
+	path := filepath.Join(dataDir, "zoterostyle.json")
+	if _, err := os.Stat(path); err == nil {
+		return path
 	}
 	return ""
 }
