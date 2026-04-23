@@ -35,7 +35,7 @@ v0.0.4 的 annotate/annotations 命令已完成核心功能，实际使用中暴
 | **P0** | `--dry-run` 预览模式 | annotate 不执行写入，仅返回匹配结果（文本+位置+上下文），解决盲目写入痛点 | 阶段 1 |
 | **P0** | comment 截断去除 | Python 脚本 `comment[:200]` 硬截断，方法论笔记被截断影响核心用途 | 阶段 1 |
 | **P1** | 批量标注 `--from-file` | JSON 数组描述多条标注点（page/text/color/comment），一次 CLI 调用完成整篇论文标注 | 阶段 2 |
-| **P1** | DB type 完整映射 | 当前仅 highlight/note/image 3 种，补全 underline/strikeout/squiggly 等 | 阶段 2 |
+| **P1** | DB type 完整映射 | ~~当前仅 3 种~~ → v0.0.7 已完成 20 种完整映射 | ✅ 已完成 |
 | **P2** | 标注前 PDF 快照 | `--clear` 前自动备份 PDF，支持回滚 | 阶段 3+ |
 | **P2** | 匹配结果上下文展示 | 返回匹配文本前后 N 字符辅助判断正确性 | 阶段 2 |
 
@@ -99,18 +99,7 @@ zot pdf-health --item-key KEY     # 单条目检查
 
 ### 已完成迭代
 
-| 版本 | 目标 | 结果 |
-|------|------|------|
-| MVP (v0.0.1) | 基础读路径 | shipped |
-| Stability Pass (v0.0.2) | hybrid fallback 稳定 + find 语义收敛 + 写错误改善 | completed |
-| PDF & Annotation (v0.0.3) | extract-text / show 标注 / local find 附件感知 / FTS5 全文检索扩展 | completed |
-| Write & Integrate (v0.0.4) | annotate/open/select/annotations 命令 + Makefile + pre-commit + Exit Code + 文档体系 + --clear双层删除/Mode 1.5/--author/DeleteDBAnnotations/ANNO_TYPES完整映射/三份文档更新 | completed |
-| Find Enhancement (v0.0.5) | find 高级过滤 11 项 + auto fulltext + snippet 缓存 ~20x + agent 模式 P1 优化 | completed |
-| Unified Init (v0.0.6) | `zot init` 一站式入口 + `overview` 命令 + JSON 结构化错误 + schema 统一 + 测试拆分 + 并行加速 ~3x + Web 前端 MVP | completed |
-| Agent Enhancement (v0.0.7) | 标注双层删除/Mode 1.5/--author/ANNO_TYPES完整映射/本地引文格式化/快照持久化缓存/前端骨架屏+Toast+懒加载/97测试全绿 | completed |
-| Local Write (v0.0.8) | **hybrid 笔记创建**：Zotero 未运行时 `create-item` 自动走 SQLite 直写（~50ms），运行时 fallback Web API；`generateItemKey()` / `CreateLocalNote()` / `isZoteroRunning()` 检测自动切换 | completed |
-| Figure Extract | **PDF Figure 提取**：`extract-figures` 命令，PyMuPDF `cluster_drawings()` + 位图锚点回退（v5b），多篇自动并行，caption 吸附，JSON/文本双输出 | completed |
-| Relate Enhancement | **关系命令全面增强**：Web API 支持 + 三层聚合（self/notes/citations）+ Snapshot 一致性 + 写入（--add/--remove/--dry-run/--from-file）+ ItemRef 增强（date/creators/tags）+ DOT 可视化（--dot）+ Predicate 过滤 + Hybrid fallback 修正 | completed |
+历史版本记录见 [CHANGELOG.md](../CHANGELOG.md)。
 
 ---
 
@@ -149,19 +138,7 @@ zot pdf-health --item-key KEY     # 单条目检查
 
 ### B. Web 前端完善（规划中）
 
-前端在 v0.0.6 已交付 MVP（6 页面 + Go server + pdf.js 预览），但设计文档 [frontend.md](../dev/frontend.md) 中规划的组件和功能仅部分实现。以下为从"可用"到"好用"的演进路线。
-
-#### 当前状态评估
-
-| 层面 | 设计文档规划 | v0.0.6 实际状态 | 差距 |
-|------|-------------|-----------------|------|
-| **页面** | Dashboard / Library / ItemDetail / Search / Tags / Export（6 个） | 6 个全部实现 | 无 |
-| **基础组件** | Layout / Sidebar / ErrorBoundary / PdfViewer / StatCard / EmptyState | Layout + ErrorBoundary + PdfViewer（3 个） | 缺 Sidebar/StatCard/EmptyState |
-| **数据组件** | ItemCard / ItemTable / CollectionTree / TagFilter / SearchBar / AnnotationPanel / Pagination / DateFilter | 均未独立抽取，内联在各页面中 | 缺 8 个可复用组件 |
-| **shadcn/ui** | button / input / card / badge / tabs / dialog / select / tooltip（8+ 个） | 未安装 `components/ui/` 目录不存在 | 缺全部基础 UI 组件 |
-| **自定义 Hooks** | useItems / useCollections / useDebounce | `hooks/` 目录为空 | 缺全部 |
-| **写操作 UI** | 创建/编辑/删除文献表单、标签管理、收藏夹管理 | 后端 `write_handlers.go` 不存在 | 缺前后端 |
-| **测试** | 组件测试 + Handler 测试 | 4 个组件测试 + 6 个 handler 测试 | 覆盖率偏低 |
+前端在 v0.0.6 已交付 MVP，v0.0.7 完成了体验打磨（Skeleton/Toast/PdfViewer 懒加载）。当前从"可用"到"好用"的演进路线：
 
 #### Phase 1 — 组件基建（补齐设计文档缺口）
 
