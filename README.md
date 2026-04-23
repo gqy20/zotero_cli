@@ -43,22 +43,42 @@
 在 **Claude Code** 或 **Codex** 中发送以下内容，AI 会自动完成全部安装和配置：
 
 ```
-帮我安装并配置 zot CLI 工具，按顺序执行：
+帮我安装并配置 zot CLI 工具，按顺序执行（我会在第 3 步提供 API Key）：
 
-1. 检测当前平台（Windows/macOS/Linux），下载最新 zot 二进制：
-   - 方式一（推荐）：从 GitHub Release 下载
-     https://github.com/gqy20/zotero_cli/releases
-   - 方式二（国内更快）：先查版本号，再从七牛 CDN 下载
-     _VER=$(curl -sL https://qny.gqy20.top/github/zotero_cli/latest)
-     然后根据平台下载对应文件，例如 Windows:
-     curl -fsSL "https://qny.gqy20.top/github/zotero_cli/${_VER}/zot_${_VER}_windows_amd64.exe" -o zot.exe
-   放到 PATH 目录（Windows: ~/.local/bin/ 或已存在的 PATH 目录；macOS/Linux: /usr/local/bin/ 或 ~/.local/bin/）
+1. 从七牛 CDN 获取版本信息和下载链接（一步拿到所有平台的 URL）：
+   _INFO=$(curl -sL https://qny.gqy20.top/github/zotero_cli/version.json)
+   然后从 JSON 中提取 version、base_url、files 字段。
 
-2. 运行 zot init 引导式配置，mode 选 hybrid。它会自动提示安装 Skill 文件，按提示执行即可。
-   需要提供 API Key 和库 ID 时会提示我。
+2. 检测当前平台（Windows/macOS/Linux），创建 ~/.local/bin 目录（如不存在）并加入 PATH。
+   根据平台从七牛 CDN 下载对应文件到 ~/.local/bin/：
+   Windows -> ${files.windows_amd64}，重命名为 zot.exe
+   macOS/Linux -> 解压对应 tar.gz 中的 zot 二进制
+   chmod +x ~/.local/bin/zot（非 Windows）
+   （如果七牛不可用，回退到 GitHub Release: https://github.com/gqy20/zotero_cli/releases）
+
+3. 运行 zot version 验证安装成功后，向我索取 Zotero API Key 和 Library ID，
+   然后用非交互模式初始化（mode=hybrid）：
+   zot init --mode hybrid --library-type user --library-id <ID> --api-key <KEY>
+   如果 PyMuPDF 未安装，执行 zot init --pdf 安装。
+
+4. 安装或更新 Skill 文件（让 AI 后续能直接调用 zot 命令）：
+   先检查是否已有旧版 Skill：如果 ~/.claude/skills/zotero-cli/SKILL.md 存在，
+   读取其 frontmatter 中的 version 字段，与 _INFO 中的 skill_version 对比。
+   如版本不同则覆盖更新，相同则跳过。
+   _RAW=https://raw.githubusercontent.com/gqy20/zotero_cli/master
+   mkdir -p ~/.claude/skills/zotero-cli/examples
+   curl -fsSL ${_RAW}/.claude/skills/zotero-cli/SKILL.md -o ~/.claude/skills/zotero-cli/SKILL.md
+   curl -fsSL ${_RAW}/.claude/skills/zotero-cli/reference.md -o ~/.claude/skills/zotero-cli/reference.md
+   curl -fsSL ${_RAW}/.claude/skills/zotero-cli/examples/find-output.md -o ~/.claude/skills/zotero-cli/examples/find-output.md
+   curl -fsSL ${_RAW}/.claude/skills/zotero-cli/examples/show-output.md -o ~/.claude/skills/zotero-cli/examples/show-output.md
+   （如果 GitHub 慢，把 _RAW 换成 gitee.com/gqy20/zotero_cli/raw/master）
+
+5. 运行 zot config validate 和 zot overview --json 验证全部就绪。
 ```
 
-AI 会依次完成：检测平台 → 下载二进制 → 安装 PATH → `zot init` 配置 + 自动装 skill → `config validate` 校验。你只需在提示时输入 API Key 和库 ID。
+**你只需要做一件事**：在第 3 步时提供你的 Zotero API Key 和 Library ID。其余全部由 AI 自动完成。
+
+
 
 ### 手动安装
 
@@ -84,8 +104,9 @@ brew install gqy20/tap/zotcli
 curl -fsSL https://github.com/gqy20/zotero_cli/releases/latest/download/zot-linux-amd64 -o ~/.local/bin/zot && chmod +x ~/.local/bin/zot
 
 # 方式二：七牛 CDN 下载（国内更快）
-_VER=$(curl -sL https://qny.gqy20.top/github/zotero_cli/latest)
-curl -fsSL "https://qny.gqy20.top/github/zotero_cli/${_VER}/zot_${_VER}_linux_amd64.tar.gz" \
+_INFO=$(curl -sL https://qny.gqy20.top/github/zotero_cli/version.json)
+# 从 JSON 提取 base_url 和对应平台的文件名，然后下载解压
+curl -fsSL "$(echo $_INFO | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["base_url"]+d["files"]["linux_amd64"])')" \
   | tar xz -C ~/.local/bin zot && chmod +x ~/.local/bin/zot
 
 # 方式三：Homebrew

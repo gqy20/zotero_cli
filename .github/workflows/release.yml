@@ -439,12 +439,33 @@ jobs:
             echo "  ${CDN_DOMAIN}/${QINIU_PREFIX}/${f}"
           done
 
-      - name: Update latest version marker
+      - name: Upload version manifest (version.json)
         env:
           QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
           QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
         run: |
-          echo "${{ github.ref_name }}" > /tmp/latest
+          python3 -c "
+          import json
+          v = '${{ github.ref_name }}'
+          d = {
+            'version': v,
+            'skill_version': v,
+            'base_url': f'https://qny.gqy20.top/github/zotero_cli/{v}/',
+            'files': {
+              'windows_amd64': f'zot_{v}_windows_amd64.exe',
+              'darwin_arm64': f'zot_{v}_darwin_arm64.tar.gz',
+              'darwin_amd64': f'zot_{v}_darwin_amd64.tar.gz',
+              'linux_amd64': f'zot_{v}_linux_amd64.tar.gz',
+              'linux_arm64': f'zot_{v}_linux_arm64.tar.gz'
+            }
+          }
+          open('/tmp/version.json','w').write(json.dumps(d, indent=2))
+          open('/tmp/latest','w').write(v)
+          "
+
+          qshell account "${QINIU_ACCESS_KEY}" "${QINIU_SECRET_KEY}" default
+          qshell fput gqy25 github/zotero_cli/version.json /tmp/version.json
           qshell fput gqy25 github/zotero_cli/latest /tmp/latest
-          echo "✓ latest → ${{ github.ref_name }}"
-          echo "  ${CDN_DOMAIN}/github/zotero_cli/latest"
+          cat /tmp/version.json
+          echo "---"
+          echo "CDN: ${CDN_DOMAIN}/github/zotero_cli/version.json"
