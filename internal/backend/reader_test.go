@@ -20,7 +20,6 @@ type stubReader struct {
 	listTags            func(context.Context) ([]Tag, error)
 	listCollections     func(context.Context) ([]Collection, error)
 	consumeReadMetadata func() ReadMetadata
-	citeItem            func(context.Context, string, domain.CitationOptions) (domain.CitationResult, error)
 }
 
 type stubPreviewReader struct {
@@ -74,13 +73,6 @@ func (r stubReader) ListCollections(ctx context.Context) ([]Collection, error) {
 
 func (r stubReader) GetAttachmentFile(ctx context.Context, key string) (string, string, error) {
 	return "", "", nil
-}
-
-func (r stubReader) CiteItem(ctx context.Context, key string, opts domain.CitationOptions) (domain.CitationResult, error) {
-	if r.citeItem == nil {
-		return domain.CitationResult{}, nil
-	}
-	return r.citeItem(ctx, key, opts)
 }
 
 func (r stubPreviewReader) FullTextPreview(ctx context.Context, item domain.Item) (string, error) {

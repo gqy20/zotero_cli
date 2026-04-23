@@ -43,7 +43,7 @@
 在 **Claude Code** 或 **Codex** 中发送以下内容，AI 会自动完成全部安装和配置：
 
 ```
-帮我安装并配置 zot CLI 工具，按顺序执行（我会在第 3 步提供 API Key）：
+帮我安装并配置 zot CLI 工具，按顺序执行：
 
 1. 从七牛 CDN 获取版本信息和下载链接（一步拿到所有平台的 URL）：
    _INFO=$(curl -sL https://qny.gqy20.top/github/zotero_cli/version.json)
@@ -61,19 +61,7 @@
    zot init --mode hybrid --library-type user --library-id <ID> --api-key <KEY>
    如果 PyMuPDF 未安装，执行 zot init --pdf 安装。
 
-4. 安装或更新 Skill 文件（让 AI 后续能直接调用 zot 命令）：
-   先检查是否已有旧版 Skill：如果 ~/.claude/skills/zotero-cli/SKILL.md 存在，
-   读取其 frontmatter 中的 version 字段，与 _INFO 中的 skill_version 对比。
-   如版本不同则覆盖更新，相同则跳过。
-   _RAW=https://raw.githubusercontent.com/gqy20/zotero_cli/master
-   mkdir -p ~/.claude/skills/zotero-cli/examples
-   curl -fsSL ${_RAW}/.claude/skills/zotero-cli/SKILL.md -o ~/.claude/skills/zotero-cli/SKILL.md
-   curl -fsSL ${_RAW}/.claude/skills/zotero-cli/reference.md -o ~/.claude/skills/zotero-cli/reference.md
-   curl -fsSL ${_RAW}/.claude/skills/zotero-cli/examples/find-output.md -o ~/.claude/skills/zotero-cli/examples/find-output.md
-   curl -fsSL ${_RAW}/.claude/skills/zotero-cli/examples/show-output.md -o ~/.claude/skills/zotero-cli/examples/show-output.md
-   （如果 GitHub 慢，把 _RAW 换成 gitee.com/gqy20/zotero_cli/raw/master）
-
-5. 运行 zot config validate 和 zot overview --json 验证全部就绪。
+4. 运行 zot config validate 和 zot overview --json 验证全部就绪。
 ```
 
 **你只需要做一件事**：在第 3 步时提供你的 Zotero API Key 和 Library ID。其余全部由 AI 自动完成。
@@ -318,7 +306,7 @@ zot export --collection COLLKEY --format csljson --json
 
 # 生成引文
 zot cite KEY                        # citation 格式（默认 apa）
-zot cite KEY --format bib           # BibTeX 格式
+zot cite KEY --format bib           # 参考文献格式（CSL）
 zot cite KEY --style chicago        # Chicago 样式
 ```
 
@@ -328,7 +316,7 @@ zot cite KEY --style chicago        # Chicago 样式
 zot collections --json         # 收藏夹列表
 zot tags --json                # 所有标签
 zot stats --json               # 库统计
-zot versions items --since 0 --json  # 版本变更记录
+zot changes items --since 0 --json  # 版本变更记录
 ```
 
 ## 安装方式

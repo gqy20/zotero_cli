@@ -17,7 +17,7 @@ func (c *Client) CreateItem(ctx context.Context, data map[string]any, ifUnmodifi
 }
 
 func (c *Client) UpdateItem(ctx context.Context, key string, data map[string]any, ifUnmodifiedSinceVersion int) (WriteResult, error) {
-	resp, err := c.doWriteRequest(ctx, http.MethodPatch, path.Join("items", key), data, ifUnmodifiedSinceVersion)
+	resp, err := c.doWriteRequest(ctx, http.MethodPut, path.Join("items", key), data, ifUnmodifiedSinceVersion)
 	if err != nil {
 		return WriteResult{}, err
 	}
@@ -92,7 +92,7 @@ func (c *Client) CreateItems(ctx context.Context, data []map[string]any, ifUnmod
 }
 
 func (c *Client) UpdateItems(ctx context.Context, data []map[string]any, ifUnmodifiedSinceVersion int) (BatchWriteResult, error) {
-	resp, err := c.doWriteRequest(ctx, http.MethodPatch, "items", data, ifUnmodifiedSinceVersion)
+	resp, err := c.doWriteRequest(ctx, http.MethodPost, "items", data, ifUnmodifiedSinceVersion)
 	if err != nil {
 		return BatchWriteResult{}, err
 	}

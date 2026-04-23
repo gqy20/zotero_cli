@@ -139,7 +139,7 @@ func (c *Client) GetCitation(ctx context.Context, key string, opts CitationOptio
 func (c *Client) ExportItems(ctx context.Context, keys []string, opts ExportOptions) (ExportResult, error) {
 	format := opts.Format
 	if format == "" {
-		format = "bib"
+		format = "bibtex"
 	}
 
 	extra := map[string]string{
@@ -280,7 +280,7 @@ func (c *Client) ListSearches(ctx context.Context) ([]Search, error) {
 }
 
 func (c *Client) GetDeleted(ctx context.Context) (Deleted, error) {
-	resp, err := c.doRequest(ctx, "deleted", FindOptions{}, nil)
+	resp, err := c.doRequest(ctx, "deleted", FindOptions{}, map[string]string{"since": "0"})
 	if err != nil {
 		return Deleted{}, err
 	}

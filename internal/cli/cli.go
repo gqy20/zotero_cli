@@ -11,12 +11,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/config"
-	"zotero_cli/internal/domain"
 )
 
 type CLI struct {
@@ -25,12 +23,10 @@ type CLI struct {
 	stdin            io.Reader
 	backendNewReader func(config.Config, *http.Client) (backend.Reader, error)
 	newLocalReader   func(config.Config) (backend.Reader, error)
-	citeCache        map[string]domain.CitationResult
-	citeCacheMu      sync.RWMutex
 }
 
 var (
-	version   = "0.0.8"
+	version   = "0.0.9"
 	commit    = "unknown"
 	buildDate = "unknown"
 )
@@ -44,7 +40,6 @@ func New() *CLI {
 		newLocalReader: func(cfg config.Config) (backend.Reader, error) {
 			return backend.NewLocalReader(cfg)
 		},
-		citeCache: make(map[string]domain.CitationResult),
 	}
 }
 
@@ -81,8 +76,6 @@ func (c *CLI) Run(args []string) int {
 		return c.runAnnotations(args[1:])
 	case "relate":
 		return c.runRelate(args[1:])
-	case "cite":
-		return c.runCite(args[1:])
 	case "export":
 		return c.runExport(args[1:])
 	case "collections":
@@ -173,7 +166,6 @@ Commands:
   annotations    List PDF annotations (highlights, notes, underlines)
   index          Build or manage full-text search index
 	relate         Show explicit item relations
-	cite           Generate a citation or bibliography entry
   export         Export bibliography entries
   collections    List collections
   notes          List notes

@@ -43,7 +43,7 @@ local backend 不再是单个 `local.go`，而是按职责拆分：
 
 ### Remote API 命令（始终走 Web API）
 
-`cite` / `export` / `collections` / `collections-top` / `notes` / `tags` / `searches` / `deleted` / `stats` / `versions` / `schema *` / `key-info` / `groups` / `trash` / `publications`
+`cite` / `export` / `collections` / `collections-top` / `notes` / `tags` / `searches` / `deleted` / `stats` / `changes` / `schema *` / `key-info` / `groups` / `trash` / `publications`
 
 ### Hybrid 写入命令（自动选择路径）
 

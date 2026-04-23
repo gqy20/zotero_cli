@@ -34,63 +34,34 @@ func newTestAPI(t *testing.T) (string, func()) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/users/123456/items" {
-			var body any
-			if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
-				if items, ok := body.([]any); ok && len(items) > 1 {
-					writeVersionedBatchResult(w, "52", map[string]any{
-						"0": map[string]any{
-							"key":     "ITEMA001",
-							"version": 51,
-						},
-						"1": map[string]any{
-							"key":     "ITEMA002",
-							"version": 52,
-						},
-					}, nil)
-					return
-				}
-			}
-			writeVersionedBatchResult(w, "42", map[string]any{
-				"0": map[string]any{
-					"key":     "NEWA1234",
-					"version": 42,
-				},
-			}, nil)
-			return
-		}
-		if r.Method == http.MethodPatch && r.URL.Path == "/users/123456/items" {
 			var body []map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			if len(body) > 0 {
 				if tags, ok := body[0]["tags"]; ok && tags != nil {
 					writeVersionedBatchResult(w, "53", map[string]any{
-						"0": map[string]any{
-							"key":     "ITEMA001",
-							"version": 53,
-						},
-						"1": map[string]any{
-							"key":     "ITEMA002",
-							"version": 53,
-						},
+						"0": map[string]any{"key": "ITEMA001", "version": 53},
+						"1": map[string]any{"key": "ITEMA002", "version": 53},
+					}, nil)
+					return
+				}
+				if len(body) > 1 {
+					writeVersionedBatchResult(w, "52", map[string]any{
+						"0": map[string]any{"key": "ITEMA001", "version": 51},
+						"1": map[string]any{"key": "ITEMA002", "version": 52},
 					}, nil)
 					return
 				}
 			}
-			writeVersionedBatchResult(w, "53", map[string]any{
-				"0": map[string]any{
-					"key":     "ITEMA001",
-					"version": 53,
-				},
-			}, map[string]any{
-				"1": 52,
-			})
+			writeVersionedBatchResult(w, "42", map[string]any{
+				"0": map[string]any{"key": "NEWA1234", "version": 42},
+			}, nil)
 			return
 		}
 		if r.Method == http.MethodDelete && r.URL.Path == "/users/123456/items" {
 			writeVersionedNoContent(w, "54")
 			return
 		}
-		if r.Method == http.MethodPatch && r.URL.Path == "/users/123456/items/ABCD2345" {
+		if r.Method == http.MethodPut && r.URL.Path == "/users/123456/items/ABCD2345" {
 			writeVersionedNoContent(w, "8")
 			return
 		}

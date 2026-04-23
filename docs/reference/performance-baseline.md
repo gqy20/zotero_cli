@@ -18,7 +18,7 @@
 | 8 | `tags` | **6.0s** | Reader → local SQLite |
 | 9 | `notes` | **6.0s** | Reader → local SQLite |
 | 10 | `stats` | **6.0s** | Reader → hybrid (versions×3) |
-| 11 | `versions items-top --since 0` | **5.8s** | Web API (versions + collections + searches) |
+| 11 | `changes items-top --since 0` | **5.8s** | Web API (versions + collections + searches) |
 | 12 | `collections` | **3.3s** | **Web API** (Reader 无此方法前) |
 | 13 | `cite ITEMKEY` | **4.9s** | Web API |
 | 14 | `deleted` | **1.7s** | Web API |

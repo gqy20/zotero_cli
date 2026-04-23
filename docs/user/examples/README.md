@@ -25,7 +25,6 @@
 | [find.md](find.md) | `zot find "query" --json` | 文献检索结果 |
 | [show.md](show.md) | `zot show KEY --json` | 单条目详情（含标注/附件） |
 | [stats.md](stats.md) | `zot stats --json` | 库统计 |
-| [cite.md](cite.md) | `zot cite KEY --format bibtex --json` | 引文生成 |
 | [export.md](export.md) | `zot export --item-key KEY --format csljson --json` | CSL-JSON 导出 |
 | [relate.md](relate.md) | `zot relate KEY --json` | 条目关系 |
 | [annotations.md](annotations.md) | `zot annotations KEY --json` | PDF 标注（双源） |

@@ -1006,73 +1006,6 @@ func relateSummary(ref domain.ItemRef) string {
 	return ref.Key + "  " + ref.ItemType + "  " + ref.Title
 }
 
-func (c *CLI) runCite(args []string) int {
-	if isHelpOnly(args) || containsHelp(args) {
-		return c.printCommandUsage(usageCite)
-	}
-	if len(args) == 0 {
-		fmt.Fprintln(c.stderr, usageCite)
-		return 2
-	}
-
-	key, opts, jsonOutput, err := parseCiteArgs(args)
-	if err != nil {
-		fmt.Fprintln(c.stderr, "error:", err)
-		fmt.Fprintln(c.stderr, usageCite)
-		return 2
-	}
-
-	cfg, reader, exitCode := c.loadReader()
-	if exitCode != 0 {
-		return exitCode
-	}
-
-	if opts.Format == "" {
-		opts.Format = "citation"
-	}
-	if opts.Style == "" {
-		opts.Style = cfg.Style
-	}
-	if opts.Locale == "" {
-		opts.Locale = cfg.Locale
-	}
-
-	cacheKey := key + "\x00" + opts.Format + "\x00" + opts.Style + "\x00" + opts.Locale
-
-	c.citeCacheMu.RLock()
-	cached, hit := c.citeCache[cacheKey]
-	c.citeCacheMu.RUnlock()
-
-	var result domain.CitationResult
-	if hit {
-		result = cached
-	} else {
-		var citeErr error
-		result, citeErr = reader.CiteItem(context.Background(), key, domain.CitationOptions{
-			Format: opts.Format,
-			Style:  opts.Style,
-			Locale: opts.Locale,
-		})
-		if citeErr != nil {
-			return c.printErr(citeErr)
-		}
-		c.citeCacheMu.Lock()
-		c.citeCache[cacheKey] = result
-		c.citeCacheMu.Unlock()
-	}
-
-	if jsonOutput {
-		meta := map[string]any{
-			"total": 1,
-		}
-		c.appendReadMetadata(meta, reader)
-		return c.writeJSON(jsonResponse{OK: true, Command: "cite", Data: result, Meta: meta})
-	}
-	c.warnIfSnapshotRead(c.consumeReaderReadMetadata(reader))
-	fmt.Fprintln(c.stdout, result.Text)
-	return 0
-}
-
 func (c *CLI) runExport(args []string) int {
 	if isHelpOnly(args) || containsHelp(args) {
 		return c.printCommandUsage(usageExport)
@@ -1119,7 +1052,7 @@ func (c *CLI) runExport(args []string) int {
 				})
 			}
 			c.warnIfSnapshotRead(readMeta)
-			return c.writeJSON(result.Data)
+			return c.writeJSON(jsonResponse{OK: true, Command: "export", Data: result.Data})
 		}
 	}
 
@@ -1176,7 +1109,7 @@ func (c *CLI) runExport(args []string) int {
 		fmt.Fprintln(c.stdout, result.Text)
 		return 0
 	}
-	return c.writeJSON(result.Data)
+	return c.writeJSON(jsonResponse{OK: true, Command: "export", Data: result.Data})
 }
 
 func (c *CLI) tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, itemKey string, collectionKey string, findOpts zoteroapi.FindOptions) (zoteroapi.ExportResult, backend.ReadMetadata, bool, error) {

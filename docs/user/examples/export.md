@@ -66,7 +66,7 @@ ER  -
 
 | format | 说明 | JSON 支持 |
 |--------|------|-----------|
-| `bibtex` / `bib` / `biblatex` | BibTeX 系列 | 是 |
+| `bibtex` / `biblatex` | BibTeX 系列 | 是 |
 | `ris` | RIS 格式 | 是 |
 | `csljson` | CSL JSON（local/hybrid 优先本地） | 是 |
 

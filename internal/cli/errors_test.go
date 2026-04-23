@@ -77,7 +77,6 @@ func TestRunCommandsReturnConfigErrorWhenConfigMissing(t *testing.T) {
 		{name: "show", args: []string{"show", "X42A7DEE"}},
 		{name: "extract-text", args: []string{"extract-text", "X42A7DEE"}},
 		{name: "relate", args: []string{"relate", "X42A7DEE"}},
-		{name: "cite", args: []string{"cite", "X42A7DEE"}},
 		{name: "export query", args: []string{"export", "attention"}},
 		{name: "export item key", args: []string{"export", "--item-key", "X42A7DEE"}},
 		{name: "collections", args: []string{"collections"}},
@@ -180,12 +179,7 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			args:      []string{"find"},
 			wantUsage: usageFind,
 		},
-		{
-			name:       "cite invalid format",
-			args:       []string{"cite", "X42A7DEE", "--format", "bad"},
-			wantUsage:  usageCite,
-			wantStderr: "error: unsupported format",
-		},
+
 		{
 			name:       "export conflicting args",
 			args:       []string{"export", "mixed", "--item-key", "X42A7DEE"},
@@ -266,11 +260,6 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			name:       "item template is now unknown command",
 			args:       []string{"item-template"},
 			wantStderr: "unknown command: item-template",
-		},
-		{
-			name:      "key info missing key",
-			args:      []string{"key-info"},
-			wantUsage: usageKeyInfo,
 		},
 		{
 			name:      "groups extra arg",

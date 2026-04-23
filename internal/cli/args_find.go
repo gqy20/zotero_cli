@@ -312,57 +312,11 @@ func parseExportArgs(args []string) (exportParsedArgs, error) {
 		}
 	}
 
-	if format != "" && format != "bib" && format != "bibtex" && format != "biblatex" && format != "csljson" && format != "ris" {
+	if format != "" && format != "bibtex" && format != "biblatex" && format != "csljson" && format != "ris" {
 		return exportParsedArgs{}, fmt.Errorf("unsupported format")
 	}
 
 	return exportParsedArgs{ItemKey: itemKey, CollectionKey: collectionKey, FindOpts: findOpts, Format: format, JSONOutput: jsonOutput}, nil
-}
-
-func parseCiteArgs(args []string) (string, zoteroapi.CitationOptions, bool, error) {
-	var key string
-	opts := zoteroapi.CitationOptions{}
-	jsonOutput := false
-
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--json":
-			jsonOutput = true
-		case "--format":
-			if i+1 >= len(args) {
-				return "", zoteroapi.CitationOptions{}, false, errors.New("missing value for --format")
-			}
-			i++
-			opts.Format = args[i]
-		case "--style":
-			if i+1 >= len(args) {
-				return "", zoteroapi.CitationOptions{}, false, errors.New("missing value for --style")
-			}
-			i++
-			opts.Style = args[i]
-		case "--locale":
-			if i+1 >= len(args) {
-				return "", zoteroapi.CitationOptions{}, false, errors.New("missing value for --locale")
-			}
-			i++
-			opts.Locale = args[i]
-		default:
-			if key == "" {
-				key = args[i]
-				continue
-			}
-			return "", zoteroapi.CitationOptions{}, false, errors.New("too many positional arguments")
-		}
-	}
-
-	if strings.TrimSpace(key) == "" {
-		return "", zoteroapi.CitationOptions{}, false, errors.New("missing item key")
-	}
-	if opts.Format != "" && opts.Format != "citation" && opts.Format != "bib" {
-		return "", zoteroapi.CitationOptions{}, false, errors.New("unsupported format")
-	}
-
-	return key, opts, jsonOutput, nil
 }
 
 func (c *CLI) parseJSONOnlyArgs(args []string, usage string) (bool, bool, bool) {
@@ -487,11 +441,6 @@ func (c *CLI) parseSingleValueCommand(args []string, usage string) (string, bool
 			value = arg
 			continue
 		}
-		fmt.Fprintln(c.stderr, usage)
-		return "", false, false, false
-	}
-
-	if strings.TrimSpace(value) == "" {
 		fmt.Fprintln(c.stderr, usage)
 		return "", false, false, false
 	}

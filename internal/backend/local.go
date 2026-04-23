@@ -361,30 +361,6 @@ func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, err
 	return item, nil
 }
 
-func (r *LocalReader) CiteItem(ctx context.Context, key string, opts domain.CitationOptions) (domain.CitationResult, error) {
-	var result domain.CitationResult
-	err := r.withReadableDB(ctx, func(db *sql.DB) error {
-		item, itemID, err := r.loadItem(ctx, db, key)
-		if err != nil {
-			return err
-		}
-		creators, err := r.loadCreators(ctx, db, itemID)
-		if err != nil {
-			return err
-		}
-
-		result.Key = key
-		result.Format = opts.Format
-		result.Style = opts.Style
-		result.Text = formatCitation(item, creators, opts.Format)
-		return nil
-	})
-	if err != nil {
-		return domain.CitationResult{}, err
-	}
-	return result, nil
-}
-
 func formatCitation(item domain.Item, creators []domain.Creator, format string) string {
 	year := extractYear(item.Date)
 	authorStr := formatAuthors(creators)

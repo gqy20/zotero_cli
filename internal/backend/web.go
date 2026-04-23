@@ -50,23 +50,6 @@ func (r *WebReader) GetRelated(ctx context.Context, key string) ([]domain.Relati
 	return extractRelationsFromAPIItem(rawItem), nil
 }
 
-func (r *WebReader) CiteItem(ctx context.Context, key string, opts domain.CitationOptions) (domain.CitationResult, error) {
-	raw, err := r.client.GetCitation(ctx, key, zoteroapi.CitationOptions{
-		Format: opts.Format,
-		Style:  opts.Style,
-		Locale: opts.Locale,
-	})
-	if err != nil {
-		return domain.CitationResult{}, err
-	}
-	return domain.CitationResult{
-		Key:    raw.Key,
-		Format: raw.Format,
-		Style:  raw.Style,
-		Text:   raw.Text,
-	}, nil
-}
-
 func (r *WebReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
 	stats, err := r.client.GetLibraryStats(ctx)
 	if err != nil {
