@@ -112,7 +112,7 @@ zot annotate ITEMKEY --page 4 --text "GATK" --color red # 写入标注（推荐 
 zot open ITEMKEY --page 5                              # Zotero 阅读器中打开
 ```
 
-**标注要点：** 推荐 `--page N --text "keyword"` (Mode 1.5)；`--clear` 双层删除需 Zotero 关闭才能删 DB 层；详细文档见 [annotations 示例](https://github.com/gqy20/zotero_cli/blob/master/docs/user/examples/annotations.md)。
+**标注要点：** 推荐 `--page N --text "keyword"` (Mode 1.5)；`--clear` 双层删除需 Zotero 关闭才能删 DB 层；详细文档见 [annotations 示例](https://github.com/gqy20/zotero_cli/blob/master/docs/user/examples/annotations.md)（[Gitee 镜像](https://gitee.com/gqy20/zotero_cli/blob/master/docs/user/examples/annotations.md)）。
 
 ### 元数据 Schema 与其他只读命令
 
@@ -178,11 +178,13 @@ zot version --check [--json]                # 检查新版 + 更新指引
 
 ## Additional resources
 
+> **国内用户**：以下链接如访问缓慢，可在浏览器中将 `github.com/gqy20/zotero_cli/blob` 替换为 `gitee.com/gqy20/zotero_cli/blob` 访问镜像。
+
 - 详细参考（决策树/陷阱/默认值/JSON 格式/模式差异表）：[reference.md](reference.md)
 - 命令输出示例：[examples/](examples/)
-- 完整命令参考：[commands.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/commands.md)
-- 快速入门：[quickstart.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/quickstart.md)
-- Relate 实战案例：[relate.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/examples/relate.md)
-- 标注操作详解：[annotations.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/examples/annotations.md)
-- 版本规划：[roadmap.md](https://github.com/gqy20/zotero_cli/blob/master/docs/plans/roadmap.md)
-- Zotero 安装配置：[zotero-setup-guide.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/zotero-setup-guide.md)
+- 完整命令参考：[commands.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/commands.md) / [Gitee](https://gitee.com/gqy20/zotero_cli/blob/master/docs/user/commands.md)
+- 快速入门：[quickstart.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/quickstart.md) / [Gitee](https://gitee.com/gqy20/zotero_cli/blob/master/docs/user/quickstart.md)
+- Relate 实战案例：[relate.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/examples/relate.md) / [Gitee](https://gitee.com/gqy20/zotero_cli/blob/master/docs/user/examples/relate.md)
+- 标注操作详解：[annotations.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/examples/annotations.md) / [Gitee](https://gitee.com/gqy20/zotero_cli/blob/master/docs/user/examples/annotations.md)
+- 版本规划：[roadmap.md](https://github.com/gqy20/zotero_cli/blob/master/docs/plans/roadmap.md) / [Gitee](https://gitee.com/gqy20/zotero_cli/blob/master/docs/plans/roadmap.md)
+- Zotero 安装配置：[zotero-setup-guide.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/zotero-setup-guide.md) / [Gitee](https://gitee.com/gqy20/zotero_cli/blob/master/docs/user/zotero-setup-guide.md)
