@@ -82,15 +82,17 @@ func (c *CLI) reportPdfExtractStatus(dataDir string) int {
 		fmt.Fprintln(c.stdout, "\nPyMuPDF extraction is ready.")
 	}
 
-	return c.writeJSON(map[string]any{
-		"ok":           !status.SetupNeeded,
-		"command":      "setup-pdf-extract-check",
-		"data_dir":     dataDir,
-		"venv_path":    status.VenvPath,
-		"python_path":  status.PythonPath,
-		"has_uv":       status.HasUV,
-		"has_pymupdf":  status.HasPyMuPDF,
-		"setup_needed": status.SetupNeeded,
-		"error":        status.Error,
+	return c.writeJSON(jsonResponse{
+		OK:      !status.SetupNeeded,
+		Command: "setup-pdf-extract-check",
+		Data: map[string]any{
+			"data_dir":     dataDir,
+			"venv_path":    status.VenvPath,
+			"python_path":  status.PythonPath,
+			"has_uv":       status.HasUV,
+			"has_pymupdf":  status.HasPyMuPDF,
+			"setup_needed": status.SetupNeeded,
+			"error":        status.Error,
+		},
 	})
 }

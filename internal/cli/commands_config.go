@@ -39,9 +39,13 @@ func (c *CLI) runConfig(args []string) int {
 			return c.printErr(err)
 		}
 
-		return c.writeJSON(map[string]any{
-			"path":   path,
-			"config": maskConfig(cfg),
+		return c.writeJSON(jsonResponse{
+			OK:      true,
+			Command: "config-show",
+			Data: map[string]any{
+				"path":   path,
+				"config": maskConfig(cfg),
+			},
 		})
 	case "validate":
 		return c.runConfigValidate()

@@ -658,7 +658,7 @@ func (c *CLI) runItemTemplate(args []string) int {
 		})
 	}
 
-	return c.writeJSON(template)
+	return c.writeJSON(jsonResponse{OK: true, Command: "item-template", Data: template})
 }
 
 func (c *CLI) runKeyInfo(args []string) int {
@@ -670,9 +670,13 @@ func (c *CLI) runKeyInfo(args []string) int {
 		return 2
 	}
 
-	_, client, exitCode := c.loadClient()
+	cfg, client, exitCode := c.loadClient()
 	if exitCode != 0 {
 		return exitCode
+	}
+
+	if strings.TrimSpace(key) == "" {
+		key = cfg.APIKey
 	}
 
 	info, err := client.GetKeyInfo(context.Background(), key)
@@ -690,7 +694,7 @@ func (c *CLI) runKeyInfo(args []string) int {
 
 	fmt.Fprintf(c.stdout, "user_id=%d\n", info.UserID)
 	if len(info.Access) > 0 {
-		return c.writeJSON(info.Access)
+		return c.writeJSON(jsonResponse{OK: true, Command: "key-info", Data: info.Access})
 	}
 	return 0
 }
