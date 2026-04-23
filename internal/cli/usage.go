@@ -70,5 +70,5 @@ snapshot without making multiple API calls.`
 	usageOpen           = "usage: zot open <item-key> [--page N]"
 	usageSelect         = "usage: zot select <item-key>"
 	usageAnnotations    = "usage: zot annotations <item-key> [--json] [--clear] [--page N] [--type TYPE] [--author AUTHOR]"
-	usageExtractFigures = "usage: zot extract-figures <item-key> [...] [--output-dir DIR] [--json] [--workers N]"
+	usageExtractFigures = "usage: zot extract-figures <item-key> [...] [--output-dir DIR] [--json] [--workers N] [--max-per-page N]"
 )

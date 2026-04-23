@@ -3,8 +3,11 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -158,12 +161,68 @@ type figureTaskResult struct {
 	err     error
 }
 
+// capFiguresPerPage removes excess figures when a page exceeds maxPerPage.
+// It keeps the largest figures by pixel area and deletes truncated files from disk.
+func capFiguresPerPage(result *backend.ExtractFiguresResult, outputDir string, maxPerPage int) {
+	if maxPerPage <= 0 || len(result.Figures) == 0 {
+		return
+	}
+	type pageGroup struct {
+		figs []*backend.FigureInfo
+	}
+	pages := make(map[int]pageGroup)
+	for i := range result.Figures {
+		f := &result.Figures[i]
+		pg := pages[f.Page]
+		pg.figs = append(pg.figs, f)
+		pages[f.Page] = pg
+	}
+
+	var kept []backend.FigureInfo
+	var trimmed int
+	for _, pg := range pages {
+		if len(pg.figs) <= maxPerPage {
+			for _, f := range pg.figs {
+				kept = append(kept, *f)
+			}
+			continue
+		}
+		trimmed += len(pg.figs) - maxPerPage
+		sort.Slice(pg.figs, func(i, j int) bool {
+			a := parseArea(pg.figs[i].SizePx)
+			b := parseArea(pg.figs[j].SizePx)
+			return a > b
+		})
+		for i := 0; i < maxPerPage; i++ {
+			kept = append(kept, *pg.figs[i])
+		}
+		for i := maxPerPage; i < len(pg.figs); i++ {
+			f := pg.figs[i]
+			fp := filepath.Join(outputDir, f.AttachmentKey, f.File)
+			os.Remove(fp)
+		}
+	}
+	result.Figures = kept
+	if trimmed > 0 && result.Error != "" {
+		result.Error += fmt.Sprintf("; capped %d excess figures (max %d/page)", trimmed, maxPerPage)
+	} else if trimmed > 0 {
+		result.Error = fmt.Sprintf("capped %d excess figures (max %d/page)", trimmed, maxPerPage)
+	}
+}
+
+func parseArea(sizePx string) int64 {
+	w, h, _ := strings.Cut(sizePx, "x")
+	wi, _ := strconv.ParseInt(strings.TrimSpace(w), 10, 64)
+	hi, _ := strconv.ParseInt(strings.TrimSpace(h), 10, 64)
+	return wi * hi
+}
+
 func (c *CLI) runExtractFigures(args []string) int {
 	if isHelpOnly(args) {
 		return c.printCommandUsage(usageExtractFigures)
 	}
 
-	itemKeys, outputDir, jsonOutput, workers, ok := c.parseExtractFiguresArgs(args)
+	itemKeys, outputDir, jsonOutput, workers, maxPerPage, ok := c.parseExtractFiguresArgs(args)
 	if !ok {
 		return 2
 	}
@@ -217,6 +276,7 @@ func (c *CLI) runExtractFigures(args []string) int {
 		if err != nil {
 			res.Error = err.Error()
 		}
+		capFiguresPerPage(&res, absOutDir, maxPerPage)
 		return c.outputFiguresResults([]figureTaskResult{{itemKey: itemKeys[0], result: res, err: err}}, jsonOutput)
 	}
 
@@ -256,6 +316,9 @@ func (c *CLI) runExtractFigures(args []string) int {
 	}
 
 	wg.Wait()
+	for i := range results {
+		capFiguresPerPage(&results[i].result, absOutDir, maxPerPage)
+	}
 
 	return c.outputFiguresResults(results, jsonOutput)
 }
@@ -338,13 +401,15 @@ func (c *CLI) outputFiguresResults(results []figureTaskResult, jsonOutput bool) 
 	return 0
 }
 
-func (c *CLI) parseExtractFiguresArgs(args []string) ([]string, string, bool, int, bool) {
+func (c *CLI) parseExtractFiguresArgs(args []string) ([]string, string, bool, int, int, bool) {
 	var itemKeys []string
 	outputDir := ""
 	jsonOutput := false
 	workers := 0
+	maxPerPage := 25
 	expectOutputDir := false
 	expectWorkers := false
+	expectMaxPerPage := false
 
 	for _, arg := range args {
 		if expectOutputDir {
@@ -356,9 +421,18 @@ func (c *CLI) parseExtractFiguresArgs(args []string) ([]string, string, bool, in
 			_, err := fmt.Sscanf(arg, "%d", &workers)
 			if err != nil || workers <= 0 {
 				fmt.Fprintf(c.stderr, "%s\ninvalid --workers value: %s\n", usageExtractFigures, arg)
-				return nil, "", false, 0, false
+				return nil, "", false, 0, 0, false
 			}
 			expectWorkers = false
+			continue
+		}
+		if expectMaxPerPage {
+			_, err := fmt.Sscanf(arg, "%d", &maxPerPage)
+			if err != nil || maxPerPage < 1 {
+				fmt.Fprintf(c.stderr, "%s\ninvalid --max-per-page value: %s\n", usageExtractFigures, arg)
+				return nil, "", false, 0, 0, false
+			}
+			expectMaxPerPage = false
 			continue
 		}
 		switch arg {
@@ -368,10 +442,12 @@ func (c *CLI) parseExtractFiguresArgs(args []string) ([]string, string, bool, in
 			expectOutputDir = true
 		case "--workers", "-w":
 			expectWorkers = true
+		case "--max-per-page", "-m":
+			expectMaxPerPage = true
 		default:
 			if strings.HasPrefix(arg, "-") {
 				fmt.Fprintln(c.stderr, usageExtractFigures)
-				return nil, "", false, 0, false
+				return nil, "", false, 0, 0, false
 			}
 			itemKeys = append(itemKeys, arg)
 		}
@@ -379,7 +455,7 @@ func (c *CLI) parseExtractFiguresArgs(args []string) ([]string, string, bool, in
 
 	if len(itemKeys) == 0 {
 		fmt.Fprintln(c.stderr, usageExtractFigures)
-		return nil, "", false, 0, false
+		return nil, "", false, 0, 0, false
 	}
-	return itemKeys, outputDir, jsonOutput, workers, true
+	return itemKeys, outputDir, jsonOutput, workers, maxPerPage, true
 }
