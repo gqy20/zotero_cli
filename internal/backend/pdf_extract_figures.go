@@ -52,8 +52,8 @@ if sys.platform == "win32":
 
 DEFAULTS = {
     "render_dpi": 200, "x_tolerance": 5, "y_tolerance": 5,
-    "min_cluster_area_pt": 5000, "min_output_w_px": 120, "min_output_h_px": 100,
-    "min_output_kb": 15, "min_pct_page": 8, "large_area_pct": 15,
+    "min_cluster_area_pt": 5000, "min_output_w_px": 150, "min_output_h_px": 120,
+    "min_output_kb": 35, "min_pct_page": 8, "large_area_pct": 15,
     "max_text_ratio": 0.35,
     "anchor_detect_w": 20, "anchor_detect_h": 20,
     "anchor_fallback_w": 80, "anchor_fallback_h": 80,
@@ -98,32 +98,37 @@ def calc_text_density(page, rect):
                 cc += len(t); parts.append(t)
     tr = ta / max(rect.width * rect.height, 1)
     ft = "".join(parts).strip()
-    norm = re.sub(r"\\s+", " ", ft)
-    cp = re.compile(r"^F\\s*I\\s*G\\s*U\\s*R\\s*E\\s+\\.?\\s*\\d", re.I)
+    norm = re.sub(r"\s+", " ", ft)
+    cp = re.compile(r"^(?:F\s*I\s*G\s*U\s*R\s*E|图)\s+\.?\s*\d", re.I)
     return {"text_ratio": round(tr,3), "char_count": cc,
             "is_text_heavy": tr > DEFAULTS["max_text_ratio"],
             "is_caption": bool(cp.match(norm))}
 
 def attach_caption(page, rect):
-    cr = re.compile(r"^F\\s*I\\s*G\\s*U\\s*R\\s*E\\s+\\.?\\s*\\d", re.I)
+    cr = re.compile(r"^(?:F\s*I\s*G\s*U\s*R\s*E|图)\s+\.?\s*\d", re.I)
     margin, ext = 200, 120
     sr = fitz.Rect(rect.x0-margin, rect.y0, rect.x1+margin, rect.y1+ext) & page.rect
     best, bd = None, float("inf")
+    found_inside = False
     for blk in page.get_text("dict", clip=sr)["blocks"]:
         if blk["type"] != 0: continue
         b = fitz.Rect(blk["bbox"])
-        if rect.contains(b): continue
+        tp = "".join(sp.get("text","") for l in blk.get("lines",[]) for sp in l.get("spans",[]))
+        nm = re.sub(r"\s+", " ", tp.strip())
+        if not cr.match(nm): continue
+        if rect.contains(b):
+            found_inside = True
+            continue
         below = b.y0 >= rect.y1-5 and b.y0 <= rect.y1+ext
         left = b.x1 <= rect.x0+5 and b.x1 >= rect.x0-ext
         right = b.x0 >= rect.x1-5 and b.x0 <= rect.x1+ext
         if not (below or left or right): continue
-        tp = "".join(sp.get("text","") for l in blk.get("lines",[]) for sp in l.get("spans",[]))
-        nm = re.sub(r"\\s+", " ", tp.strip())
-        if not cr.match(nm): continue
         d = (((b.x0+b.x1)/2-(rect.x0+rect.x1)/2)**2 + ((b.y0+b.y1)/2-(rect.y0+rect.y1)/2)**2)**0.5
         if d < bd: best, bd = b, d
     if best:
         nr = fitz.Rect(rect); nr |= best; return nr, True
+    if found_inside:
+        return rect, True
     return rect, False
 
 def is_covered(anchor, clusters, gap=20):
@@ -188,7 +193,7 @@ def main():
             with open(os.path.join(out_dir,fn),"wb") as f: f.write(ib)
             figures.append({"id":fi,"file":fn,"page":pg+1,"source":src,
                 "size_px":f"{pix.width}x{pix.height}","size_pt":f"{rc2.width:.0f}x{rc2.height:.0f}",
-                "kb":round(kb,1),"anchors":na,"has_caption":hc,
+                "kb":round(kb,1),"anchors":na,"has_caption":hc or td["is_caption"],
                 "text_ratio":td["text_ratio"],"pct_page":round(pp,1)})
     doc.close()
     sk["elapsed_sec"]=round(time.perf_counter()-t0,2)

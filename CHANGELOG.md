@@ -6,7 +6,12 @@
 
 ## [Unreleased]
 
-## [0.0.9] - 2026-04-23
+### 新增
+- **`extract-figures` 每页上限（`--max-per-page`）**：当 PyMuPDF `cluster_drawings` 将密集矢量图分割为数百个碎片时，按像素面积保留每页最大的 N 张图片，自动删除磁盘上的多余文件。默认值 25，可通过 `-m N` 调整
+- **`extract-figures` 多 PDF 附件支持**：不再仅处理第一个 PDF，而是遍历条目所有 PDF 附件分别提取
+- **`extract-figures` 输出目录结构优化**：默认输出至 `{DataDir}/.zotero_cli/figures/{attachmentKey}/`，与全文缓存布局一致，避免多附件命名冲突
+- **`extract-figures` Caption 检测修复**：修复 Go 原始字符串中正则双反斜杠转义错误（`\\s` → `\s`），导致 FIGURE/图 编号正则永远不匹配；新增中文 caption 支持（`图\d`）；合并 `calc_text_density` 的 `is_caption` 信号到 `has_caption` 输出字段；`attach_caption` 新增区域内 caption 检测分支
+- **`extract-figures` 参数优化**：最小文件大小阈值从 15KB 提升至 35KB，过滤页眉/页脚/标尺等小尺寸噪音；最小输出尺寸从 120×100 提升至 150×120
 
 ### 修复
 - **`--help` 全面支持**：所有 17 个子命令统一支持 `--help`/`-h`，包括混合 flag 场景（如 `find --json --help`）；新增 `containsHelp()` 扫描全部参数；共享解析器（`parseJSONOnlyArgs`/`parseJSONAndLimitArgs`/`parseSingleValueCommand`）内置 help 识别
@@ -27,14 +32,14 @@
 ### 移除
 - **删除 `cite` 命令**：引用格式化功能对智能体无价值（返回 HTML 噪噪或纯文本），且与 `export --format bibtex` 功能重叠；需要引用格式的场景统一使用 `export`（csljson/bibtex/ris），需要人类可读引用的场景极少且可用 `export` + 后处理替代
 
-### 新增
-- **`version.json` 发布清单**：Release workflow 自动上传 version.json（含全平台下载 URL、skill_version、base_url）至七牛 CDN；SKILL.md frontmatter 增加 version 字段支持增量检测；README AI 安装提示改为单次 curl 获取 version.json 即可完成非交互安装
-- **Gitee 镜像源支持**：`zot init` 安装提示同时提供 GitHub 和 Gitee raw URL（`_RAW` 变量），国内用户可切换至 Gitee 加速下载；README/SKILL 文档补充 Gitee 镜像链接（仅源文件/skill 文件，不含 Release 二进制）
-- **七牛 CDN 自动上传**：Release 发布后自动将所有 artifacts 上传至 `qny.gqy20.top/gqy25/github/zotero_cli/{version}/`，需配置 `QINIU_ACCESS_KEY` / `QINIU_SECRET_KEY` secrets
+### 工具链
+- **`version.json` 发布清单**：Release workflow 自动上传 version.json（含全平台下载 URL、skill_version、base_url）至七牛 CDN；SKILL.md frontmatter 增加 version 字段支持增量检测
+- **Gitee 镜像源支持**：`zot init` 安装提示同时提供 GitHub 和 Gitee raw URL，国内用户可切换至 Gitee 加速下载
+- **七牛 CDN 自动上传**：Release 发布后自动将所有 artifacts 上传至七牛 CDN，需配置 `QINIU_ACCESS_KEY` / `QINIU_SECRET_KEY` secrets
 
 ### 文档
-- **Gitee 链接修正**：移除错误的 Gitee Releases URL（镜像仅同步 git 仓库），保留 Gitee raw 链接用于 skill/文档下载，添加镜像范围说明
-- **CDN 下载链接**：README AI 配置提示和手动安装章节增加七牛 CDN 备选下载源，含 Windows/Linux 平台说明
+- **Gitee 链接修正**：移除错误的 Gitee Releases URL（镜像仅同步 git 仓库），保留 Gitee raw 链接用于 skill/文档下载
+- **CDN 下载链接**：README AI 配置提示和手动安装章节增加七牛 CDN 备选下载源
 
 ## [0.0.8] - 2026-04-23
 
