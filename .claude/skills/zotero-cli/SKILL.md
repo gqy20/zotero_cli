@@ -1,6 +1,16 @@
 ---
 name: zotero-cli
-description: 使用本仓库的 Zotero CLI 工具进行文献检索、管理、导出、PDF 操作、标注分析、引文生成、关系网络可视化和配置管理。支持 web/local/hybrid 三种模式，内置 HTTP API Server 和 React Web UI。当需要操作 Zotero 数据或进行文献分析时使用。
+description: >
+  Zotero 文献管理 CLI（`zot`）。文献检索(find/show)、导出(export bibtex/csljson)、
+  引文生成(cite)、PDF 标注提取(annotations/extract-text/extract-figures)、
+  关系网络(relate --aggregate --dot)、写操作(create-item/update-item/add-tag)。
+  支持 web/local/hybrid 三种模式。搜索/管理/分析 Zotero 文献库时使用。
+when_to_use: >
+  触发关键词：Zotero、文献管理、参考文献、PDF 标注、引文格式、文献检索、
+  学术数据库、bibtex、文献关系网络。
+  示例："搜 CRISPR 相关文献"、"导出 bibtex"、"查看 PDF 标注"、
+  "生成 APA 引文"、"查找条目关联"、"提取论文图表"
+argument-hint: "[command] [ITEMKEY] [options]"
 ---
 
 # Zotero CLI (`zot`)
@@ -45,207 +55,98 @@ zot stats --json           # 条目/收藏夹/搜索计数
 
 ### 文献检索
 
-> **当使用任何实质性过滤标志（`--tag`、`--date-after`、`--collection` 等）时，无需 `--all` 也无需查询词，自动按纯过滤条件搜索。** 仅在无查询词且无任何过滤时才报错。
->
-> ```shell
-> # 均可正常工作 ✅
-> zot find "hybrid speciation" --tag 杂交 --date-after 2024-01 --json   # 查询词 + 过滤
-> zot find --tag 杂交 --tag 物种形成 --date-after 2024-04-22 --json     # 纯过滤（自动推断）
-> zot find --all --json                                                   # 显式全量
->
-> # 报错 ❌ — 无查询词、无过滤、无 --all（防止意外返回全库结果）
-> zot find --json
-> ```
+> **有过滤标志时无需 `--all` 也无需查询词，自动按纯过滤条件搜索。** 仅无查询词且无任何过滤时才报错。
 
 ```shell
-zot find --all --json                              # 全部条目
 zot find "CRISPR gene editing" --json              # 关键词搜索
-zot find --tag TAG1 --tag TAG2                     # 纯标签过滤（无需 --all）
-zot find --collection KEY --date-after 2024-01      # 收藏夹 + 日期过滤
-zot find "关键词" --tag TAG --date-after 2024-01    # 查询词 + 过滤组合
+zot find --tag TAG1 --tag TAG2 --json              # 纯标签过滤
+zot find --collection KEY --date-after 2024-01 --json  # 组合过滤
+zot find --all --json                              # 全部条目
 zot show ITEMKEY --json                            # 条目详情（含子笔记+标注+期刊等级）
 zot relate ITEMKEY --json                          # 关联条目
 ```
 
-**基础过滤：**
-- `--date-after YYYY[-MM[-DD]]` / `--date-before YYYY[-MM[-DD]]`
-- 多次 `--tag`（AND） / `--tag-any`（OR）
-- `--include-trashed` / `--qmode everything`（web only）
+**基础过滤：** `--date-after` / `--date-before` / 多次 `--tag`(AND) / `--tag-any`(OR)
 
-**高级过滤（local/hybrid）：**
-- `--collection KEY` / `--no-collection KEY`
-- `--tag-contains WORD` / `--exclude-tag TAG`
-- `--no-type TYPE` / `--has-pdf`
-- `--modified-within 7d` / `--added-since 2w`
-- `--attachment-name TEXT` / `--attachment-path TEXT`
+**高级过滤（local/hybrid）：** `--collection` / `--no-collection` / `--tag-contains` / `--exclude-tag` / `--no-type` / `--has-pdf` / `--modified-within` / `--added-since` / `--attachment-name` / `--attachment-path`
 
-**输出控制：**
-- `--include-fields url,doi,version` / `--full`
-- `--sort FIELD` + `--direction asc|desc`
-- `--start N` + `--limit N`（分页）
+**输出控制：** `--include-fields` / `--full` / `--sort` + `--direction` / `--start` + `--limit`
 
-**全文检索（FTS5）：**
-- local/hybrid 下 FTS 有数据时**自动启用**，无需手动 `--fulltext`
-- `--snippet` 匹配片段预览（默认限制 **50** 条）
-- `--fulltext-any` 任一词匹配
-
-**期刊等级查询：**
-- `show` 和 `find --full` 文本输出中自动显示期刊等级（SCI-IF、中科院分区、JCI 等）
-- `find --json` 输出含 `journal_rank` 字段
-- 数据来源：[EasyScholar](https://www.easyscholar.cc) 插件（需安装绿青蛙插件）
-
-### 条目关系 (`relate`)
-
-查询和管理条目间显式关联、笔记内嵌引用，支持关系网络可视化。
-
-```shell
-# 基础查询
-zot relate ITEMKEY --json                           # 显式关系（outgoing + incoming）
-
-# 三层聚合（local/hybrid）
-zot relate ITEMKEY --aggregate --json               # 自身 + 子笔记关系 + 内嵌 citation
-
-# 可视化
-zot relate ITEMKEY --dot > network.dot              # Graphviz DOT 格式
-zot relate ITEMKEY --aggregate --dot > full.dot     # 含三层网络的完整图
-
-# 写入（需 ZOT_ALLOW_WRITE=1）
-zot relate ITEMKEY --add TARGET --dry-run            # 预览添加
-zot relate ITEMKEY --add TARGET                      # 执行添加
-zot relate ITEMKEY --remove TARGET --dry-run         # 预览删除
-
-# 批量操作
-zot relate --from-file batch.json --dry-run          # JSON 文件驱动批量 add/remove
-
-# 过滤
-zot relate ITEMKEY --predicate "dc:relation"        # 按谓词筛选
-```
-
-**三层关系模型：**
-
-| 层 | 来源 | 命令选项 |
-|----|------|----------|
-| ① 显式关系 | `itemRelations` 表 | 默认查询 |
-| ② 子笔记关系 | 子笔记的 `itemRelations` | `--aggregate` 的 Notes 字段 |
-| ③ 内嵌 Citation | 笔记 HTML `data-citation-items` | `--aggregate` 的 Citations 字段 |
-
-**模式支持矩阵：**
-
-| 功能 | local | hybrid | web |
-|------|-------|--------|-----|
-| 查询显式关系 | ✅ | ✅ | ✅ |
-| `--aggregate` 聚合 | ✅ | ✅ | ❌ |
-| `--dot` 可视化 | ✅ | ✅ | ✅ |
-| `--add` / `--remove` | ✅ | ✅ | ❌ |
-| `--from-file` 批量 | ✅ | ✅ | ❌ |
-| `--predicate` 过滤 | ✅ | ✅ | ✅ |
+**FTS5 全文检索：** local/hybrid 下有索引时**自动启用**，搜索范围扩展至 PDF 全文内容。纯元数据搜索可临时设 `ZOT_MODE=web`。`--snippet` 默认限制 **50** 条。
 
 ### 导出与引用
 
 ```shell
-zot export --all --format csljson --json   # 全库导出
+# 导出格式：csljson / bibtex / biblatex / ris
+zot export --all --format csljson --json
 zot export --collection COLLKEY --format bibtex --json
-zot cite ITEMKEY --format apa              # 单条引文
-zot cite ITEMKEY --format bibliography     # 参考文献条目
+zot export --item-key KEY --format biblatex --json
+
+# 引文（--format: citation | bib；样式用 --style）
+zot cite ITEMKEY --format citation        # 正文引用（默认）
+zot cite ITEMKEY --format bib              # 参考文献条目
+zot cite ITEMKEY --style apa               # 指定引文样式（默认 apa）
 ```
+
+### 条目关系 (`relate`)
+
+```shell
+zot relate ITEMKEY --json                           # 显式关系
+zot relate ITEMKEY --aggregate --json               # 三层聚合（local/hybrid）
+zot relate ITEMKEY --dot > network.dot              # DOT 可视化
+zot relate ITEMKEY --add TARGET --dry-run            # 预览添加
+zot relate ITEMKEY --from-file batch.json --dry-run   # 批量操作
+```
+
+三层模型：①显式关系(itemRelations) → ②子笔记关系 → ③内嵌Citation（笔记HTML）。详见 [reference.md](reference.md) 模式支持矩阵。
 
 ### PDF 操作（需 local/hybrid + PyMuPDF）
 
 ```shell
-# 正文提取（三级优先级：PyMuPDF → ft-cache → pdfium WASM）
-zot extract-text ITEMKEY --json
-
-# Figure 提取（PyMuPDF cluster_drawings v5b 算法）
-zot extract-figures ITEMKEY                    # 单篇文本输出
-zot extract-figures ITEMKEY1 ITEMKEY2 --json    # 多篇并行 + JSON
-zot extract-figures ITEMKEY -o ./figures -w 4   # 指定输出目录和 worker 数
-
-# 双源标注读取（DB 标注 + PDF 文件内标注）
-zot annotations ITEMKEY --json
-zot annotations ITEMKEY --type highlight --page 3 --json
-zot annotations ITEMKEY --author "User" --json          # 按作者过滤
-
-# 写入标注到 PDF（三种模式）
-zot annotate ITEMKEY --text "关键词" --color red          # Mode 1: 全文搜索
-zot annotate ITEMKEY --page 4 --text "GATK" --comment "..." # Mode 1.5: 单页搜索 (推荐)
-zot annotate ITEMKEY --page 3 --rect 100,200,350,220      # Mode 2: 精确坐标
-zot annotate ITEMKEY --text "speciation" --type underline   # 下划线
-
-# 清除标注（双层删除：PDF + DB）
-zot annotations ITEMKEY --clear                           # 删除全部
-zot annotate ITEMKEY --clear --type highlight             # 按类型删
-zot annotations ITEMKEY --clear --page 5 --author "User"  # 组合条件删
-
-# 与 Zotero 桌面端联动
-zot open ITEMKEY --page 5         # 阅读器中打开 PDF
-zot select ITEMKEY                # 主界面选中条目
+zot extract-text ITEMKEY --json                       # 正文提取
+zot extract-figures ITEMKEY -o ./figures -w 4         # Figure 提取
+zot annotations ITEMKEY --json                         # 读取标注
+zot annotate ITEMKEY --page 4 --text "GATK" --color red # 写入标注（推荐 Mode 1.5）
+zot open ITEMKEY --page 5                              # Zotero 阅读器中打开
 ```
 
-**标注操作要点：**
+**标注要点：** 推荐 `--page N --text "keyword"` (Mode 1.5)；`--clear` 双层删除需 Zotero 关闭才能删 DB 层；详细文档见 [annotations 示例](https://github.com/gqy20/zotero_cli/blob/master/docs/user/examples/annotations.md)。
 
-| 要点 | 说明 |
-|------|------|
-| **推荐模式** | `--page N --text "keyword"` (Mode 1.5) — 精准定位，避免全文误匹配 |
-| **`--point` 注意** | 创建浮动便签(circle)，不附着文本。需文本位置标注用 Mode 1.5 |
-| **`--clear` 行为** | 双层删除：PDF 层随时可用，DB 层需要 **Zotero 关闭** |
-| **DB 删除失败时** | 输出 warning 不阻断，PDF 层照常删除。关闭 Zotero 后重试即可 |
-| **先 extract-text** | 用 `extract-text` 确认页面实际文本，选唯一短关键词做 `--text` |
-| **详细文档** | 见 [annotations 示例](docs/user/examples/annotations.md) |
-
-### 元数据 Schema
+### 元数据 Schema 与其他只读命令
 
 ```shell
 zot schema types --json                    # 所有文献类型
 zot schema fields-for journalArticle       # 某类型的有效字段
-zot schema template book --json            # 创建模板（含必填字段）
-zot schema creator-types-for artwork       # 作者角色
+zot schema template book --json            # 创建模板
 ```
-
-### 其他只读命令
 
 | 命令 | 说明 |
 |------|------|
-| `collections` | 收藏夹列表 |
+| `collections` / `collections-top` | 收藏夹列表 |
 | `tags` | 标签列表 |
 | `notes [--query "..."]` | 笔记搜索 |
 | `searches` | 已保存搜索 |
 | `groups` | 可访问群组 |
-| `trash` | 回收站 |
-| `collections-top` | 顶层收藏夹 |
-| `publications` | 我的发表 |
-| `deleted` | 已删除对象 key |
-| `versions --since N` | 版本变更检测 |
+| `trash` / `publications` / `deleted` | 回收站 / 我的发表 / 已删除 key |
+| `versions <type> --since N` | 版本变更（type: collections\|searches\|items\|items-top） |
 | `key-info` | API Key 权限信息 |
-| `index [build\|status]` | FTS5 全文索引管理 |
+| `index build [--force]` | FTS5 全文索引构建 |
 
 ---
 
 ## 写操作安全
 
-以下命令会修改数据：
-
-- `create-item` / `update-item` / `delete-item`
-- `add-tag` / `remove-tag`
-- `create-collection` / `update-collection` / `delete-collection`
-- `create-search` / `update-search` / `delete-search`
-- `annotate`（向 PDF 写入高亮/笔记/下划线）
-- `relate --add` / `relate --remove`（添加/删除条目关系）
+以下命令会修改数据：`create-item` / `update-item` / `delete-item` / `add-tag` / `remove-tag` / `create-collection` / `update-collection` / `delete-collection` / `create-search` / `update-search` / `delete-search` / `annotate` / `relate --add` / `relate --remove`
 
 执行前：
 1. 确认用户意图。
 2. 检查 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 环境变量。
 3. 尽可能使用版本前置条件（`--if-unmodified-since-version N`）。
-4. 优先用 `--dry-run` / `-n` 预览（relate / annotate 支持）。
+4. 优先用 `--dry-run` 预览（relate 支持；annotate 暂不支持）。
 
-**删除操作额外要求：**
-1. 复述目标 key。
-2. 无歧义确认。
-3. 有任何不确定就先询问用户。
+删除操作额外要求：复述目标 key → 无歧义确认 → 有不确定就先询问。`--json` 模式自动跳过确认提示。
 
-> 删除命令（`delete-item` / `delete-collection` / `delete-search`）会显示交互式 `[y/N]` 确认提示。脚本/自动化使用 `--yes` / `-y` 跳过确认；`--json` 模式自动跳过。
-
-**Hybrid 笔记创建：**
-> `create-item` 创建笔记时，若 Zotero 未运行且 mode 为 local/hybrid，自动走 SQLite 直写（~50ms），JSON 输出含 `"write_source": "local"` 标识。Web API 作为 fallback 保留。
+完整 JSON 输入格式示例见 [reference.md](reference.md)「写操作 JSON 输入格式」章节。
 
 ---
 
@@ -255,63 +156,30 @@ zot schema creator-types-for artwork       # 作者角色
 
 ```shell
 zot init                                    # 交互式初始化（默认 mode=hybrid）
-zot init --mode hybrid --api-key KEY ...    # 非交互模式
-zot init --check-pdf                        # 诊断 PyMuPDF 状态
 zot config show                              # 查看当前配置
 zot config validate --json                   # 校验 + 结构化诊断
 ```
 
-配置缺失时主动初始化，不要绕过错误。
-
-### 环境变量速查
-
-| 变量 | 说明 | 默认 |
-|------|------|------|
-| `ZOT_MODE` | `web` / `local` / `hybrid` | **`hybrid`** |
-| `ZOT_DATA_DIR` | Zotero 数据目录 | — |
-| `ZOT_LIBRARY_ID` | 库 ID | — |
-| `ZOT_API_KEY` | API 密钥 | — |
-| `ZOT_STYLE` | 引文样式 | `apa` |
-| `ZOT_TIMEOUT_SECONDS` | API 超时秒数 | `20` |
-| `ZOT_ALLOW_WRITE` | 允许写操作 | `1` |
-| `ZOT_ALLOW_DELETE` | 允许删除操作 | `0` |
-| `ZOT_RETRY_MAX_ATTEMPTS` | 最大重试次数 | `5` |
-| `ZOT_RETRY_BASE_DELAY_MS` | 重试基础延迟 ms | `1000` |
-| `ZOT_JSON_ERRORS` | 错误以 JSON 输出到 stdout | `0` |
-
----
-
-## Web 前端 & API Server（规划中）
-
-> **尚未集成到 CLI**。当前代码库包含前端源码（`web/`）和 Go server 框架，但 `zot web` 命令尚未实现。
-
-规划能力：
-- 10 个 REST 端点（GET only）：`health` / `stats` / `overview` / `items` / `collections` / `tags` / `notes` / `files` / `schema` / `export`
-- 6 个前端页面：Dashboard / Library / ItemDetail（含 PDF 预览） / Search / Tags / Export
-- 技术栈：React 19 + Vite 6 + Tailwind CSS 4 + TanStack Query 5
-
-详见 [roadmap](https://github.com/gqy20/zotero_cli/blob/master/docs/plans/roadmap.md) Phase 1-4 进度。
+配置缺失时主动初始化，不要绕过错误。环境变量完整速查见 [reference.md](reference.md)。
 
 ---
 
 ## 性能注意
 
 - `overview` 并行调用 4 个 API（~6s），优于逐个请求
-- **local/hybrid 快照缓存**：Zotero 运行时自动走持久化快照缓存（`{dataDir}/.zotero_cli/snapshot/`），首次需复制（~2s），后续调用直接复用（~0.3s）。Zotero 关闭时直连 SQLite（~0ms）
-- `extract-text` 结果有缓存，重复提取同一 PDF 直接命中
-- `--snippet` 默认 limit 50，需更多结果显式加 `--limit`
-- 高频脚本遇 `429` 会自动退避+抖动，但仍应主动降速
-- `extract-figures` 多篇自动并行（WaitGroup + semaphore），单篇 ~0.6s
+- **快照缓存**：hybrid 下 Zotero 运行时自动走持久化快照（~0.3s/次）；关闭时直连 SQLite（~0ms）
+- `extract-text` 结果有缓存；`--snippet` 默认 limit 50；高频脚本遇 `429` 自动退避
+- `extract-figures` 多篇自动并行，单篇 ~0.6s
 
 ---
 
-## 参考文档
+## Additional resources
 
-| 文档 | 链接 |
-|------|------|
-| 完整命令参考与所有选项 | https://github.com/gqy20/zotero_cli/blob/master/docs/user/commands.md |
-| 快速入门指南 | https://github.com/gqy20/zotero_cli/blob/master/docs/user/quickstart.md |
-| 功能概览与安装方式 | https://github.com/gqy20/zotero_cli/blob/master/README.md |
-| 版本规划与当前进度 | https://github.com/gqy20/zotero_cli/blob/master/docs/plans/roadmap.md |
-| 各命令耗时基线 | https://github.com/gqy20/zotero_cli/blob/master/docs/reference/performance-baseline.md |
-| Relate 命令详细示例 | https://github.com/gqy20/zotero_cli/blob/master/docs/user/examples/relate.md |
+- 详细参考（决策树/陷阱/默认值/JSON 格式/模式差异表）：[reference.md](reference.md)
+- 命令输出示例：[examples/](examples/)
+- 完整命令参考：[commands.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/commands.md)
+- 快速入门：[quickstart.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/quickstart.md)
+- Relate 实战案例：[relate.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/examples/relate.md)
+- 标注操作详解：[annotations.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/examples/annotations.md)
+- 版本规划：[roadmap.md](https://github.com/gqy20/zotero_cli/blob/master/docs/plans/roadmap.md)
+- Zotero 安装配置：[zotero-setup-guide.md](https://github.com/gqy20/zotero_cli/blob/master/docs/user/zotero-setup-guide.md)

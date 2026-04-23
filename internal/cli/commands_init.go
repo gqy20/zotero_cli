@@ -91,6 +91,12 @@ func (c *CLI) runInit(args []string) int {
 		}
 		fmt.Fprintf(c.stdout, "created config at %s\n", path)
 		fmt.Fprintln(c.stdout, "you can edit ~/.zot/.env later if you want to change keys or permissions")
+		fmt.Fprintln(c.stdout, "\nTip: for Claude Code / Codex users, install the skill for natural language Zotero control:")
+		fmt.Fprintln(c.stdout, "  mkdir -p ~/.claude/skills/zotero-cli/examples \\")
+		fmt.Fprintln(c.stdout, "    && curl -fsSL https://raw.githubusercontent.com/gqy20/zotero_cli/master/.claude/skills/zotero-cli/SKILL.md -o ~/.claude/skills/zotero-cli/SKILL.md \\")
+		fmt.Fprintln(c.stdout, "    && curl -fsSL https://raw.githubusercontent.com/gqy20/zotero_cli/master/.claude/skills/zotero-cli/reference.md -o ~/.claude/skills/zotero-cli/reference.md \\")
+		fmt.Fprintln(c.stdout, "    && curl -fsSL https://raw.githubusercontent.com/gqy20/zotero_cli/master/.claude/skills/zotero-cli/examples/find-output.md -o ~/.claude/skills/zotero-cli/examples/find-output.md \\")
+		fmt.Fprintln(c.stdout, "    && curl -fsSL https://raw.githubusercontent.com/gqy20/zotero_cli/master/.claude/skills/zotero-cli/examples/show-output.md -o ~/.claude/skills/zotero-cli/examples/show-output.md")
 	}
 
 	if flags.NoPDF {

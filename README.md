@@ -13,12 +13,11 @@
 
 - [为什么用 zot](#为什么用-zot)
 - [快速开始](#快速开始)
+- [AI Agent 集成](#ai-agent-集成-claude-code--codex)
 - [科研工作流](#科研工作流)
 - [安装方式](#安装方式)
 - [运行模式](#运行模式)
 - [命令速查](#命令速查)
-
----
 
 ## 为什么用 zot
 
@@ -37,48 +36,68 @@
 - **安全写操作** — 删除默认禁止、版本号乐观锁，防止 AI 误操作
 - **本地能力优先** — hybrid 模式下本地 SQLite 全文检索、PDF 标注/笔记读写不走网络（Zotero 未运行时自动切换）
 
----
-
 ## 快速开始
 
-### 推荐：让 AI 助手引导配置
+### AI 助手一键配置（推荐）
 
-如果你使用 **Claude Code** 或 **Codex**，直接告诉它：
+在 **Claude Code** 或 **Codex** 中发送以下内容，AI 会自动完成全部安装和配置：
 
-> "帮我初始化 zot 的配置，我的 Zotero 数据目录在 XXX"
+```
+帮我安装并配置 zot CLI 工具，按顺序执行：
 
-AI 会读取内置 skill 文件，自动完成 `zot init`（含模式选择和可选 PyMuPDF 安装）→ `config validate` 全流程。
+1. 检测当前平台（Windows/macOS/Linux），从 GitHub Release 下载最新 zot 二进制：
+   https://github.com/gqy20/zotero_cli/releases
+   放到 PATH 目录（Windows: ~/.local/bin/ 或已存在的 PATH 目录；macOS/Linux: /usr/local/bin/ 或 ~/.local/bin/）
+
+2. 运行 zot init 引导式配置，mode 选 hybrid。它会自动提示安装 Skill 文件，按提示执行即可。
+   需要我提供 API Key 和库 ID 时会提示我。
+```
+
+AI 会依次完成：检测平台 → 下载二进制 → 安装 PATH → `zot init` 配置 + 自动装 skill → `config validate` 校验。你只需在提示时输入 API Key 和库 ID。
 
 ### 手动安装
 
-```powershell
-# 1. 安装（任选一种）
-#    macOS / Linux:   brew install gqy20/tap/zotcli
-#    Windows:         从 Releases 下载 zot.exe 放到 PATH 目录
+**Windows：**
 
-# 2. 验证
-zot version
+从 [Releases](https://github.com/gqy20/zotero_cli/releases) 下载 `zot.exe`，放到 `~/.local/bin/` 或任意已在 PATH 中的目录。
 
-# 3. 初始化配置
-zot init                 # 一键初始化（交互式：模式、API key、库 ID，local/hybrid 可选 PyMuPDF）
+**macOS：**
 
-# 4. 验证配置
-zot config validate
-
-# 5. 一站式库概览（AI Agent 推荐入口）
-zot overview --json
+```bash
+brew install gqy20/tap/zotcli
 ```
 
-`zot init` 的交互提示：
+**Linux：**
 
-| 配置项 | 获取方式 | 说明 |
-|--------|----------|------|
-| `ZOT_API_KEY` | [zotero.org/settings/keys](https://www.zotero.org/settings/keys) | 创建一个 API key |
-| `ZOT_LIBRARY_ID` | Zotero 首页 → 右键库 → Advanced | 数字 ID |
-| `ZOT_DATA_DIR` | Zotero → 编辑 → 首选项 → 高级 | 本地数据目录路径 |
-| `ZOT_MODE` | 选择 | `web` / `local` / `hybrid`（推荐） |
+```bash
+# 方式一：直接下载二进制（通用）
+curl -fsSL https://github.com/gqy20/zotero_cli/releases/latest/download/zot-linux-amd64 -o ~/.local/bin/zot && chmod +x ~/.local/bin/zot
 
-> local/hybrid 模式下 `zot init` 会询问是否安装 PyMuPDF，也可事后执行 `zot init --pdf` 安装，或 `zot init --check-pdf` 诊断状态。
+# 方式二：Homebrew
+brew install gqy20/tap/zotcli
+```
+
+**后续步骤（所有平台相同）：**
+
+```bash
+zot version              # 验证安装
+zot init                 # 交互式配置（mode 选 hybrid）
+zot config validate       # 校验配置
+zot overview --json        # 一站式库概览
+```
+
+`zot init` 配置项说明：
+
+| 配置项 | 获取方式 |
+|--------|----------|
+| `ZOT_API_KEY` | [zotero.org/settings/keys](https://www.zotero.org/settings/keys) 创建 API key |
+| `ZOT_LIBRARY_ID` | Zotero 首页 → 右键库 → Advanced → 数字 ID |
+| `ZOT_DATA_DIR` | Zotero → 编辑 → 首选项 → 高级 → 数据目录路径 |
+| `ZOT_MODE` | 推荐 `hybrid`（本地优先 + Web 回退） |
+
+> local/hybrid 下 `zot init` 会询问是否安装 PyMuPDF，也可事后 `zot init --pdf` 安装或 `zot init --check-pdf` 诊断。
+>
+> 完整配置指南（含 API Key 获取、文件重命名模板、推荐插件）：见 [配置指南](docs/user/zotero-setup-guide.md)。
 
 ### 源码构建
 
@@ -87,7 +106,85 @@ git clone https://github.com/gqy20/zotero_cli.git && cd zotero_cli
 go build -o zot.exe ./cmd/zot     # Go 1.26+，无 CGO 依赖
 ```
 
----
+## AI Agent 集成（Claude Code / Codex）
+
+zot 内置 **Skill 文件**，让 Claude Code、Codex 等 AI 助手开箱即懂 Zotero 操作。当然你也可以直接在终端用 `zot`，Skill 只是用 AI 时的便捷增强层。
+
+### 内置 Skill 包含什么
+
+`.claude/skills/zotero-cli/` 目录：
+
+| 文件 | 作用 |
+|------|------|
+| `SKILL.md` | 主文件：核心命令速查 + 工作流规则 + 写操作安全策略（~185 行） |
+| `reference.md` | 详细参考：决策树 / 常见陷阱 / 默认值 / JSON 格式 / 模式差异表 |
+| `examples/` | `find` 和 `show` 的 JSON 输出示例 |
+
+AI 加载后自动知道：该用什么命令、哪些参数必填、`--json` 何时加、写操作前要检查什么权限。
+
+### 安装 Skill
+
+**推荐：让 AI 助手帮你装**
+
+在 Claude Code / Codex 中运行 `zot init`，初始化完成后会自动提示安装 skill，直接复制执行即可。
+
+**手动安装**
+
+```bash
+mkdir -p ~/.claude/skills/zotero-cli/examples
+curl -fsSL https://raw.githubusercontent.com/gqy20/zotero_cli/master/.claude/skills/zotero-cli/SKILL.md \
+  -o ~/.claude/skills/zotero-cli/SKILL.md
+curl -fsSL https://raw.githubusercontent.com/gqy20/zotero_cli/master/.claude/skills/zotero-cli/reference.md \
+  -o ~/.claude/skills/zotero-cli/reference.md
+curl -fsSL https://raw.githubusercontent.com/gqy20/zotero_cli/master/.claude/skills/zotero-cli/examples/find-output.md \
+  -o ~/.claude/skills/zotero-cli/examples/find-output.md
+curl -fsSL https://raw.githubusercontent.com/gqy20/zotero_cli/master/.claude/skills/zotero-cli/examples/show-output.md \
+  -o ~/.claude/skills/zotero-cli/examples/show-output.md
+```
+
+也可在浏览器打开 [skill 目录](https://github.com/gqy20/zotero_cli/tree/master/.claude/skills/zotero-cli)，逐个文件点 **Raw** 后另存为。4 个文件建议全部下载。
+
+**前提：** 确保已安装 `zot` 并完成 `zot init` 配置（见上方[快速开始](#快速开始)）。Skill 只是指令文件，实际执行依赖 `zot` 二进制。
+
+验证：在 Claude Code 中说"搜一下我的文献"，AI 应自动调用 `zot find ... --json`。
+
+### 用自然语言操作
+
+```text
+你说的                                    → AI 调用的命令
+─────────────────────────────────────────────────────────────
+"搜 CRISPR 基因编辑相关文献"              → zot find "CRISPR gene editing" --tag 基因编辑 --json
+"导出最近半年为 bibtex"                   → zot export --date-after 2025-10 --format bibtex --json
+"看这篇的 PDF 标注"                       → zot annotations KEY --json
+"生成 APA 引文"                           → zot cite KEY --style apa --format citation
+"把这两篇关联起来"                         → zot relate KEY_A --add KEY_B --dry-run
+"提取论文图表"                            → zot extract-figures KEY -o ./figures --json
+```
+
+AI 自动处理：追加 `--json`、省略冗余 `--all`、写前检查权限、删除前确认、标注优先 Mode 1.5。
+
+### 自定义你的 Skill
+
+内置 Skill 是起点，不是限制。你可以基于它定制自己的工作流：
+
+```bash
+# 复制一份作为定制基础（从已安装位置或项目目录）
+cp -r ~/.claude/skills/zotero-cli ~/.claude/skills/zotero-cli-custom
+
+# 编辑 SKILL.md，加入你的习惯：
+#   - 固定常用标签或收藏夹
+#   - 预设导出格式和目标目录
+#   - 加入领域特定的检索模板（如 "帮我找近两年 Nature/Cell 上关于 XX 的综述"）
+#   - 定义多步骤工作流（如 文献调研→筛选→导出→生成报告）
+```
+
+自定义场景举例：
+
+- **课题组共享模板**：预设团队收藏夹 key、统一标签体系、批量导出格式
+- **写作辅助流**：定义"选题调研→文献筛选→标注提取→引文插入"的标准流程
+- **期刊投稿追踪**：结合 `journal_rank` 字段自动筛选目标期刊分区
+
+Skill 文件遵循 [Agent Skills 开放标准](https://github.com/anthropics/skills)，也兼容 Codex、Cursor 等支持 skill 机制的 AI 工具。
 
 ## 科研工作流
 
@@ -190,8 +287,6 @@ zot stats --json               # 库统计
 zot versions items --since 0 --json  # 版本变更记录
 ```
 
----
-
 ## 安装方式
 
 | 平台 | 方式 | 命令 |
@@ -208,8 +303,6 @@ zot versions items --since 0 --json  # 版本变更记录
 
 > 自定义目录加入 PATH：Windows 在系统环境变量中添加；macOS/Linux 在 shell 配置文件中追加 `export PATH="$HOME/.local/bin:$PATH"`。
 
----
-
 ## 运行模式
 
 | 模式 | 数据源 | 需要 | 适用场景 |
@@ -221,8 +314,6 @@ zot versions items --since 0 --json  # 版本变更记录
 通过 `ZOT_MODE` 环境变量或 `zot init` 设置。hybrid 模式下：
 - **读操作**：本地优先（全文检索、PDF 标注读取）不误回退 Web
 - **写操作**（笔记）：Zotero 未运行时走 SQLite 直写（~50ms），运行时自动 fallback Web API
-
----
 
 ## 命令速查
 
@@ -245,7 +336,5 @@ zot versions items --since 0 --json  # 版本变更记录
 | **其他** | `stats` / `tags` / `notes` / `searches` / `trash` | 库信息查看 |
 
 完整选项说明见 [命令参考](docs/user/commands.md)，AI Agent 使用规范见 [快速入门](docs/user/quickstart.md)，技术架构见 [架构概览](docs/architecture/overview.md)。完整文档导航见 [文档中心](docs/README.md)。
-
----
 
 Licensed under the [MIT License](LICENSE).
