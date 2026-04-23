@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.0.8] - 2026-04-23
+
 ### 新增
 - **期刊等级查询**：所有读命令（`show`/`find`）自动展示期刊等级信息（SCI-IF、中科院分区、JCI、ESI、各高校认定等级等），数据来自 [EasyScholar](https://www.easyscholar.cc/console/user/open)（需安装[绿青蛙插件](https://www.easyscholar.cc/blogs/10009)），从 `zotero_file/zoterostyle.json` 自动加载。`show` 和 `find --full` 命令在文本输出中显示等级，`find --json` 在 JSON 中包含 `journal_rank` 字段。支持期刊名模糊匹配（缩写、大小写、中英文）。
 - **Relate 命令全面增强**：`zot relate` 从仅支持 local/hybrid 查询自身显式关系，升级为覆盖三种模式、三层聚合、读写一体的完整关系管理工具：
@@ -22,6 +24,7 @@
 - **Hybrid 本地笔记创建**：`create-item` 命令在 Zotero 未运行且 mode 为 local/hybrid 时，笔记类型自动走 SQLite 直写路径（~50ms），无需 Web API（~2s）。通过 `isZoteroRunning()` 自动检测进程状态，`generateItemKey()` 生成符合 Zotero 格式的 item key，`CreateLocalNote()` 在事务中写入 items + itemNotes 两张表并继承父条目 libraryID。Web API 作为 fallback 路径保留。JSON 输出含 `"write_source": "local"` 标识来源。
 - **删除操作交互确认**：`delete-item` / `delete-collection` / `delete-search` 命令新增交互式确认提示，执行前显示警告信息并要求 `[y/N]` 确认。取消操作退出码 130。新增 `--yes` / `-y` 标志跳过确认（供脚本/自动化使用）；`--json` 模式自动跳过确认。同时修复 `generateItemKey()` 中的 byte shift overflow 问题（go vet 检出）。
 - **Find 自动推断 `--all`**：`zot find` 在仅使用实质性过滤标志（`--tag` / `--date-after` / `--collection` / `--has-pdf` 等 14 种）而无查询词时，自动推断为全量搜索，不再强制要求显式 `--all` 或查询字符串。仅在无查询词、无过滤、无 `--all` 三者同时缺失时报错。
+- **版本检查功能**：`zot version --check` 检测 GitHub Releases 是否有新版本可用。
 
 ### 变更
 - **默认模式改为 hybrid**：`config.Default()` 的默认 Mode 从 `web` 改为 `hybrid`；`zot init` 交互式提示的默认值同步更新为 `[hybrid]`。新用户开箱即用即可享受本地优先 + Web 回退的完整能力。

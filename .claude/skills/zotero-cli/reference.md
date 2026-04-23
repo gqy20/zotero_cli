@@ -64,7 +64,7 @@
 | `zot find --json`（无查询词无过滤） | 加 `--all` 或至少一个过滤条件 | 无查询词+无过滤会报错，防止意外返回全库 |
 | `zot versions --since 100` | `zot versions items --since 100` | `versions` 必须指定类型：`collections\|searches\|items\|items-top` |
 | 搜索结果含不相关条目 | FTS 自动启用后搜索范围含 PDF 全文正文 | 非仅元数据匹配。纯元数据搜索临时设 `ZOT_MODE=web` |
-| 使用旧版二进制测试新功能 | `go build -o zot.exe ./cmd/zot` 后用 `./zot.exe` | PATH 中可能是旧版本（如 v0.0.7），缺少后续新增功能 |
+| 使用旧版二进制测试新功能 | `go build -o zot.exe ./cmd/zot` 后用 `./zot.exe` | PATH 中可能是旧版本（如 v0.0.8），缺少后续新增功能 |
 | 写操作未设置环境变量 | 确保 `ZOT_ALLOW_WRITE=1` / `ZOT_ALLOW_DELETE=1` | 所有写操作和删除操作会检查这些变量 |
 | DB 层标注删除失败 | 关闭 Zotero 后重试 | `--clear` 双层删除中 DB 层需要 Zotero 未运行，PDF 层不受限 |
 
