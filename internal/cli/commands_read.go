@@ -34,7 +34,7 @@ func hasSubstantiveFilters(opts backend.FindOptions) bool {
 }
 
 func (c *CLI) runFind(args []string) int {
-	if isHelpOnly(args) {
+	if isHelpOnly(args) || containsHelp(args) {
 		return c.printCommandUsage(usageFind)
 	}
 	if len(args) == 0 {
@@ -344,7 +344,7 @@ func (c *CLI) runShow(args []string) int {
 }
 
 func (c *CLI) runRelate(args []string) int {
-	if isHelpOnly(args) {
+	if isHelpOnly(args) || containsHelp(args) {
 		return c.printCommandUsage(usageRelate)
 	}
 	if len(args) == 0 {
@@ -1007,7 +1007,7 @@ func relateSummary(ref domain.ItemRef) string {
 }
 
 func (c *CLI) runCite(args []string) int {
-	if isHelpOnly(args) {
+	if isHelpOnly(args) || containsHelp(args) {
 		return c.printCommandUsage(usageCite)
 	}
 	if len(args) == 0 {
@@ -1074,7 +1074,7 @@ func (c *CLI) runCite(args []string) int {
 }
 
 func (c *CLI) runExport(args []string) int {
-	if isHelpOnly(args) {
+	if isHelpOnly(args) || containsHelp(args) {
 		return c.printCommandUsage(usageExport)
 	}
 	if len(args) == 0 {

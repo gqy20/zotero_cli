@@ -56,6 +56,9 @@ func (c *CLI) Run(args []string) int {
 
 	switch args[0] {
 	case "help", "-h", "--help":
+		if len(args) > 1 {
+			return c.Run(append([]string{args[1]}, "--help"))
+		}
 		c.printUsage()
 		return 0
 	case "version":
@@ -138,6 +141,8 @@ func (c *CLI) Run(args []string) int {
 		return c.runInit(args[1:])
 	case "index":
 		return c.runIndex(args[1:])
+	case "setup":
+		return c.runSetup(args[1:])
 	default:
 		fmt.Fprintf(c.stderr, "unknown command: %s\n\n", args[0])
 		c.printUsage()
@@ -147,6 +152,7 @@ func (c *CLI) Run(args []string) int {
 
 func (c *CLI) printUsage() {
 	exe := filepath.Base(os.Args[0])
+	exe = strings.TrimSuffix(exe, ".exe")
 	fmt.Fprintf(c.stdout, `%s is a minimal Zotero CLI.
 
 Usage:
@@ -335,6 +341,15 @@ func isHelpOnly(args []string) bool {
 	default:
 		return false
 	}
+}
+
+func containsHelp(args []string) bool {
+	for _, a := range args {
+		if a == "--help" || a == "-h" {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *CLI) printCommandUsage(usage string) int {

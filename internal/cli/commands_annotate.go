@@ -11,7 +11,7 @@ import (
 )
 
 func (c *CLI) runAnnotate(args []string) int {
-	if isHelpOnly(args) {
+	if isHelpOnly(args) || containsHelp(args) {
 		return c.printCommandUsage(usageAnnotate)
 	}
 
