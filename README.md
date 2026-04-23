@@ -45,12 +45,13 @@
 ```
 帮我安装并配置 zot CLI 工具，按顺序执行：
 
-1. 检测当前平台（Windows/macOS/Linux），从 GitHub Release 下载最新 zot 二进制：
-   https://github.com/gqy20/zotero_cli/releases
+1. 检测当前平台（Windows/macOS/Linux），下载最新 zot 二进制（任选一个源）：
+   - GitHub Release: https://github.com/gqy20/zotero_cli/releases
+   - 七牛 CDN（国内推荐）: https://qny.gqy20.top/github/zotero_cli/
    放到 PATH 目录（Windows: ~/.local/bin/ 或已存在的 PATH 目录；macOS/Linux: /usr/local/bin/ 或 ~/.local/bin/）
 
 2. 运行 zot init 引导式配置，mode 选 hybrid。它会自动提示安装 Skill 文件，按提示执行即可。
-   需要我提供 API Key 和库 ID 时会提示我。
+   需要提供 API Key 和库 ID 时会提示我。
 ```
 
 AI 会依次完成：检测平台 → 下载二进制 → 安装 PATH → `zot init` 配置 + 自动装 skill → `config validate` 校验。你只需在提示时输入 API Key 和库 ID。
@@ -59,7 +60,12 @@ AI 会依次完成：检测平台 → 下载二进制 → 安装 PATH → `zot i
 
 **Windows：**
 
-从 [Releases](https://github.com/gqy20/zotero_cli/releases) 下载 `zot.exe`，放到 `~/.local/bin/` 或任意已在 PATH 中的目录。
+| 来源 | 地址 |
+|------|------|
+| GitHub | 从 [Releases](https://github.com/gqy20/zotero_cli/releases) 下载 `zot.exe` |
+| **七牛 CDN（国内推荐）** | 从 [CDN](https://qny.gqy20.top/github/zotero_cli/) 下载对应版本的 `zot_*_windows_amd64.exe` |
+
+放到 `~/.local/bin/` 或任意已在 PATH 中的目录。
 
 **macOS：**
 
@@ -70,10 +76,17 @@ brew install gqy20/tap/zotcli
 **Linux：**
 
 ```bash
-# 方式一：直接下载二进制（通用）
+# 方式一：GitHub 下载
 curl -fsSL https://github.com/gqy20/zotero_cli/releases/latest/download/zot-linux-amd64 -o ~/.local/bin/zot && chmod +x ~/.local/bin/zot
 
-# 方式二：Homebrew
+# 方式二：七牛 CDN 下载（国内更快）
+# 先查看最新版本: curl -s https://qny.gqy20.top/github/zotero_cli/
+# 然后替换下方的 VERSION 为实际版本号
+_VERSION="v0.0.8"
+curl -fsSL "https://qny.gqy20.top/github/zotero_cli/${_VERSION}/zot_${_VERSION}_linux_amd64.tar.gz" \
+  | tar xz -C ~/.local/bin zot && chmod +x ~/.local/bin/zot
+
+# 方式三：Homebrew
 brew install gqy20/tap/zotcli
 ```
 
@@ -300,8 +313,8 @@ zot versions items --since 0 --json  # 版本变更记录
 | 平台 | 方式 | 命令 |
 |------|------|------|
 | **macOS / Linux** | Homebrew（推荐） | `brew install gqy20/tap/zotcli` |
-| **Windows** | 手动下载 | 从 [Releases](https://github.com/gqy20/zotero_cli/releases) 下载 `zot.exe` → 放入 PATH 目录 |
-| **macOS / Linux** | 手动下载 | 从 [Releases](https://github.com/gqy20/zotero_cli/releases) 下载对应二进制 → `chmod +x zot && mv zot /usr/local/bin/` |
+| **Windows** | 手动下载 | [GitHub Releases](https://github.com/gqy20/zotero_cli/releases) 或 [七牛 CDN](https://qny.gqy20.top/github/zotero_cli/) → `zot.exe` 放入 PATH |
+| **macOS / Linux** | 手动下载 | [GitHub](https://github.com/gqy20/zotero_cli/releases) 或 [七牛 CDN](https://qny.gqy20.top/github/zotero_cli/) → `chmod +x zot && mv zot /usr/local/bin/` |
 | **任意平台** | 源码构建 | `git clone https://github.com/gqy20/zotero_cli.git`（国内可用 `https://gitee.com/gqy20/zotero_cli.git`）→ `go build -o zot ./cmd/zot` |
 
 将可执行文件放入 PATH 目录即可全局使用：
