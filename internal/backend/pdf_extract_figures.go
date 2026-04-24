@@ -26,6 +26,7 @@ type FigureInfo struct {
 	HasCaption    bool    `json:"has_caption"`
 	TextRatio     float64 `json:"text_ratio"`
 	PctPage       float64 `json:"pct_page"`
+	Confidence    int     `json:"confidence"`     // V4: 0-100 quality score
 	AttachmentKey string  `json:"attachment_key"` // which PDF this figure came from
 }
 
@@ -58,6 +59,10 @@ DEFAULTS = {
     "anchor_detect_w": 20, "anchor_detect_h": 20,
     "anchor_fallback_w": 80, "anchor_fallback_h": 80,
     "anchor_expand_pt": 20, "max_anchor_page_pct": 0.90,
+    # V4: aspect ratio bounds (scientific figures rarely exceed these)
+    "min_aspect_ratio": 0.25, "max_aspect_ratio": 4.0,
+    # V4: adaptive threshold trigger
+    "adaptive_cand_limit": 40, "adaptive_pct_mult": 1.5, "adaptive_kb_mult": 1.4,
 }
 
 def get_image_anchors(page, min_w=20, min_h=20):
@@ -137,6 +142,28 @@ def is_covered(anchor, clusters, gap=20):
         if e.contains(fitz.Point((anchor.x0+anchor.x1)/2, (anchor.y0+anchor.y1)/2)): return True
     return False
 
+# V4: confidence scoring 0-100
+def calc_confidence(kb, anchors, has_caption, text_ratio, pct_page, aspect):
+    s = 0
+    if kb > 200: s += 25
+    elif kb > 100: s += 18
+    elif kb > 50: s += 10
+    if anchors >= 3: s += 20
+    elif anchors >= 1: s += 10
+    if has_caption: s += 20
+    if text_ratio < 0.10: s += 15
+    elif text_ratio < 0.20: s += 8
+    if 0.5 <= aspect <= 2.0: s += 12
+    elif 0.3 <= aspect <= 3.0: s += 6
+    if pct_page > 20: s += 8
+    return min(s, 100)
+
+# V4: cross-page size similarity check for header/footer dedup
+def similar_size(a, b, tol=0.15):
+    aw, ah = a.width*200/72, a.height*200/72
+    bw, bh = b.width*200/72, b.height*200/72
+    return abs(aw-bw)/max(aw,bw) < tol and abs(ah-bh)/max(ah,bh) < tol
+
 def main():
     pdf_path, out_dir = sys.argv[1], sys.argv[2]
     os.makedirs(out_dir, exist_ok=True)
@@ -144,8 +171,14 @@ def main():
     n_pages, figures, stats = len(doc), [], {}
     sk = {"clusters_total":0,"anchors_fallback":0,"kept":0,"filt_small":0,
           "filt_tiny":0,"filt_pct":0,"filt_no_anchor":0,"filt_text_heavy":0,
-          "filt_caption":0,"filt_fullpage":0,"filt_covered":0}
+          "filt_caption":0,"filt_fullpage":0,"filt_covered":0,
+          # V4 counters
+          "filt_aspect":0,"filt_crosspage_dup":0}
     t0, fi = time.perf_counter(), 0
+
+    # V3: cross-page dedup — shared across all pages to catch repeating headers/footers
+    global_seen = []
+
     for pg in range(n_pages):
         p = doc[pg]
         pw, ph = p.rect.width*200/72, p.rect.height*200/72
@@ -156,6 +189,8 @@ def main():
         cl = []
         if dw: cl = p.cluster_drawings(drawings=dw, x_tolerance=DEFAULTS["x_tolerance"], y_tolerance=DEFAULTS["y_tolerance"])
         sk["clusters_total"] += len(cl)
+
+        # --- collect candidates ---
         cands = []
         for ci, r in enumerate(cl):
             if r.width*r.height >= DEFAULTS["min_cluster_area_pt"]: cands.append((fitz.Rect(r),"cluster"))
@@ -167,34 +202,61 @@ def main():
             ex = fitz.Rect(max(0,a.x0-DEFAULTS["anchor_expand_pt"]), max(0,a.y0-DEFAULTS["anchor_expand_pt"]),
                        a.x1+DEFAULTS["anchor_expand_pt"], a.y1+DEFAULTS["anchor_expand_pt"]) & p.rect
             cands.append((ex,"raster")); sk["anchors_fallback"]+=1
+
+        # V4: adaptive thresholding — tighten when too many candidates from this PDF
+        adaptive = len(cands) > DEFAULTS["adaptive_cand_limit"]
+        eff_pct = DEFAULTS["min_pct_page"] * (DEFAULTS["adaptive_pct_mult"] if adaptive else 1.0)
+        eff_kb  = DEFAULTS["min_output_kb"] * (DEFAULTS["adaptive_kb_mult"] if adaptive else 1.0)
+
         seen, lfi = [], 0
         for rc, src in cands:
             rw, rh = rc.width*200/72, rc.height*200/72
             if rw<DEFAULTS["min_output_w_px"] or rh<DEFAULTS["min_output_h_px"]:
                 if src=="cluster": sk["filt_small"]+=1; continue
+
+            # V4: aspect ratio filter (P0)
+            ar = rw / max(rh, 1)
+            if ar < DEFAULTS["min_aspect_ratio"] or ar > DEFAULTS["max_aspect_ratio"]:
+                sk["filt_aspect"] += 1
+                continue
+
             pp = (rw*rh)/(pw*ph)*100
-            if pp<DEFAULTS["min_pct_page"]:
+            if pp<eff_pct:
                 if src=="cluster": sk["filt_pct"]+=1; continue
             na = count_anchors_in_rect(rc, an)
             if pp>=DEFAULTS["large_area_pct"] and na==0: sk["filt_no_anchor"]+=1; continue
             td = calc_text_density(p, rc)
             if td["is_text_heavy"]: sk["filt_text_heavy"]+=1; continue
             if td["is_caption"] and na==0: sk["filt_caption"]+=1; continue
+
+            # V3: same-page dedup (unchanged)
             if any((rc&s).width>50 and (rc&s).height>50 for s in seen): continue
             seen.append(rc)
+
+            # V4: cross-page dedup (P3) — skip if similar size already kept on another page
+            if any(similar_size(rc, gs) for gs in global_seen):
+                sk["filt_crosspage_dup"] += 1
+                continue
+
             rc2, hc = attach_caption(p, rc)
             try:
                 pix = p.get_pixmap(clip=fitz.Rect(rc2), dpi=200)
                 ib = pix.tobytes("png"); kb = len(ib)/1024
             except: continue
-            if kb<DEFAULTS["min_output_kb"]: sk["filt_tiny"]+=1; continue
+            if kb<eff_kb: sk["filt_tiny"]+=1; continue
+
+            # V4: confidence score (P1)
+            conf = calc_confidence(kb, na, hc or td["is_caption"], td["text_ratio"], pp, ar)
+
             sk["kept"]+=1; fi+=1
+            global_seen.append(rc)  # register for cross-page dedup
             fn=f"p{pg+1}_fig{fi}.png"
             with open(os.path.join(out_dir,fn),"wb") as f: f.write(ib)
             figures.append({"id":fi,"file":fn,"page":pg+1,"source":src,
                 "size_px":f"{pix.width}x{pix.height}","size_pt":f"{rc2.width:.0f}x{rc2.height:.0f}",
                 "kb":round(kb,1),"anchors":na,"has_caption":hc or td["is_caption"],
-                "text_ratio":td["text_ratio"],"pct_page":round(pp,1)})
+                "text_ratio":td["text_ratio"],"pct_page":round(pp,1),
+                "confidence":conf})
     doc.close()
     sk["elapsed_sec"]=round(time.perf_counter()-t0,2)
     print(json.dumps({"figures":figures,"stats":sk,"error":None}, ensure_ascii=False, indent=2))
@@ -243,6 +305,7 @@ func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outp
 		HasCaption bool    `json:"has_caption"`
 		TextRatio  float64 `json:"text_ratio"`
 		PctPage    float64 `json:"pct_page"`
+		Confidence int     `json:"confidence"`
 	}
 
 	var totalElapsed float64
@@ -305,6 +368,7 @@ func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outp
 				HasCaption:    f.HasCaption,
 				TextRatio:     f.TextRatio,
 				PctPage:       f.PctPage,
+				Confidence:    f.Confidence,
 				AttachmentKey: attKey,
 			})
 		}

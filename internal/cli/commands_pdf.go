@@ -161,6 +161,31 @@ type figureTaskResult struct {
 	err     error
 }
 
+// pdfJob wraps an item with its estimated page count for sorting.
+type pdfJob struct {
+	key     string
+	item    domain.Item
+	pageEst int // estimated page count for LPT (longest-processing-time) sorting
+}
+
+// estimatePages parses Zotero's "pages" field (e.g., "1-15", "12-20") or returns 0.
+func estimatePages(item domain.Item) int {
+	s := strings.TrimSpace(item.Pages)
+	if s == "" {
+		return 0
+	}
+	// Try "start-end" format
+	var start, end int
+	if n, _ := fmt.Sscanf(s, "%d-%d", &start, &end); n == 2 && end >= start {
+		return end - start + 1
+	}
+	// Try single number
+	if n, _ := fmt.Sscanf(s, "%d", &start); n == 1 {
+		return start
+	}
+	return 0
+}
+
 // capFiguresPerPage removes excess figures when a page exceeds maxPerPage.
 // It keeps the largest figures by pixel area and deletes truncated files from disk.
 func capFiguresPerPage(result *backend.ExtractFiguresResult, outputDir string, maxPerPage int) {
@@ -280,37 +305,74 @@ func (c *CLI) runExtractFigures(args []string) int {
 		return c.outputFiguresResults([]figureTaskResult{{itemKey: itemKeys[0], result: res, err: err}}, jsonOutput)
 	}
 
-	// Multiple items: parallel with WaitGroup + semaphore
+	// Multiple items: pre-fetch → filter PDF items → sort by page count (LPT) → parallel
+	// Phase 1: pre-resolve all items and filter out those without PDFs
+	type preloadResult struct {
+		key  string
+		item domain.Item
+		err  error
+	}
+	preloads := make([]preloadResult, len(itemKeys))
+	for i, key := range itemKeys {
+		item, err := localReader.GetItem(ctx, key)
+		preloads[i] = preloadResult{key: key, item: item, err: err}
+	}
+
+	// Phase 2: build job list — only items with resolvable PDF attachments
+	jobs := make([]pdfJob, 0, len(itemKeys))
+	skipResults := make([]figureTaskResult, 0)
+	for _, p := range preloads {
+		if p.err != nil {
+			skipResults = append(skipResults, figureTaskResult{itemKey: p.key, err: p.err})
+			continue
+		}
+		hasPDF := false
+		for _, att := range p.item.Attachments {
+			if strings.EqualFold(strings.TrimSpace(att.ContentType), "application/pdf") && att.Resolved && att.ResolvedPath != "" {
+				hasPDF = true
+				break
+			}
+		}
+		if !hasPDF {
+			skipResults = append(skipResults, figureTaskResult{
+				itemKey: p.key,
+				result:  backend.ExtractFiguresResult{ItemKey: p.key},
+				err:     fmt.Errorf("no PDF attachment found for item %s", p.key),
+			})
+			continue
+		}
+		jobs = append(jobs, pdfJob{key: p.key, item: p.item, pageEst: estimatePages(p.item)})
+	}
+
+	// Phase 3: sort by estimated page count descending (LPT — longest jobs first)
+	sort.Slice(jobs, func(i, j int) bool {
+		return jobs[i].pageEst > jobs[j].pageEst
+	})
+
+	// Phase 4: parallel extraction with semaphore
 	var (
 		mu      sync.Mutex
 		wg      sync.WaitGroup
 		sem     = make(chan struct{}, workers)
 		results []figureTaskResult
 	)
+	results = append(results, skipResults...)
 
-	for _, key := range itemKeys {
+	for _, job := range jobs {
 		wg.Add(1)
-		k := key
+		j := job
 		go func() {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			item, err := localReader.GetItem(ctx, k)
-			if err != nil {
-				mu.Lock()
-				results = append(results, figureTaskResult{itemKey: k, err: err})
-				mu.Unlock()
-				return
-			}
-
-			res, extractErr := figExtractor.ExtractFigures(ctx, item, absOutDir)
+			res, extractErr := figExtractor.ExtractFigures(ctx, j.item, absOutDir)
 			if extractErr != nil {
 				res.Error = extractErr.Error()
 			}
 
 			mu.Lock()
-			results = append(results, figureTaskResult{itemKey: k, result: res, err: extractErr})
+			results = append(results, figureTaskResult{itemKey: j.key, result: res, err: extractErr})
 			mu.Unlock()
 		}()
 	}
