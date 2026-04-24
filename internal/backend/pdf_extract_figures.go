@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"zotero_cli/internal/domain"
 )
@@ -41,7 +43,115 @@ type ExtractFiguresResult struct {
 	Error      string       `json:"error,omitempty"`
 }
 
-// pythonExtractFiguresScript is the inline Python script passed to PyMuPDF.
+// figureScriptVersion is bumped when the Python script changes, invalidating old caches.
+const figureScriptVersion = "v4"
+
+// figureCacheMeta is the persisted manifest for one attachment's extracted figures.
+type figureCacheMeta struct {
+	AttachmentKey   string       `json:"attachment_key"`
+	ResolvedPath    string       `json:"resolved_path"`
+	SourceMtimeUnix int64        `json:"source_mtime_unix"`
+	SourceSize      int64        `json:"source_size"`
+	ScriptVersion   string       `json:"script_version"`
+	ExtractedAt     string       `json:"extracted_at"`
+	ElapsedSec      float64      `json:"elapsed_sec"`
+	Figures         []FigureInfo `json:"figures"`
+}
+
+// figureCache provides disk-based caching for figure extraction results.
+// Layout mirrors fulltext_cache: {rootDir}/{attachmentKey}/manifest.json
+type figureCache struct {
+	rootDir string
+}
+
+func newFigureCache(dataDir string) figureCache {
+	return figureCache{rootDir: filepath.Join(dataDir, ".zotero_cli", "figures_cache")}
+}
+
+func (c figureCache) metaPath(attKey string) string {
+	return filepath.Join(c.rootDir, strings.TrimSpace(attKey), "manifest.json")
+}
+
+// Load reads the cached manifest for an attachment. Returns (meta, true) on hit, (zero, false) on miss/error.
+func (c figureCache) Load(att domain.Attachment) (figureCacheMeta, bool) {
+	key := strings.TrimSpace(att.Key)
+	if key == "" {
+		return figureCacheMeta{}, false
+	}
+	data, err := os.ReadFile(c.metaPath(key))
+	if err != nil {
+		return figureCacheMeta{}, false
+	}
+	var meta figureCacheMeta
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return figureCacheMeta{}, false
+	}
+	return meta, true
+}
+
+// Save persists a successful extraction result to the cache.
+func (c figureCache) Save(att domain.Attachment, result ExtractFiguresResult) error {
+	key := strings.TrimSpace(att.Key)
+	if key == "" || len(result.Figures) == 0 {
+		return nil
+	}
+	dir := filepath.Dir(c.metaPath(key))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	srcInfo, srcOk := attSourceInfo(att)
+	meta := figureCacheMeta{
+		AttachmentKey:   key,
+		ResolvedPath:    att.ResolvedPath,
+		SourceMtimeUnix: srcInfo.ModTime().Unix(),
+		SourceSize:      srcInfo.Size(),
+		ScriptVersion:   figureScriptVersion,
+		ExtractedAt:     time.Now().UTC().Format(time.RFC3339),
+		ElapsedSec:      result.ElapsedSec,
+		Figures:         result.Figures,
+	}
+	if !srcOk {
+		meta.SourceMtimeUnix = 0
+		meta.SourceSize = 0
+	}
+
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(c.metaPath(key), data, 0o644)
+}
+
+// IsFresh checks whether a cached result is still valid for the given attachment.
+func (c figureCache) IsFresh(meta figureCacheMeta, att domain.Attachment) bool {
+	key := strings.TrimSpace(att.Key)
+	if key == "" || meta.AttachmentKey != key {
+		return false
+	}
+	if meta.ScriptVersion != figureScriptVersion {
+		return false
+	}
+	info, ok := attSourceInfo(att)
+	if !ok {
+		return false
+	}
+	if filepath.Clean(meta.ResolvedPath) != filepath.Clean(att.ResolvedPath) {
+		return false
+	}
+	return meta.SourceMtimeUnix == info.ModTime().Unix() && meta.SourceSize == info.Size()
+}
+
+func attSourceInfo(att domain.Attachment) (os.FileInfo, bool) {
+	if att.Resolved && att.ResolvedPath != "" {
+		info, err := os.Stat(att.ResolvedPath)
+		if err == nil {
+			return info, true
+		}
+	}
+	return nil, false
+}
+
 // It reads PDF path and output dir from sys.argv, writes JSON to stdout.
 const pythonExtractFiguresScript = `
 import json, sys, os, time, re
@@ -310,6 +420,8 @@ func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outp
 
 	var totalElapsed float64
 	var errs []string
+	cache := newFigureCache(r.DataDir)
+	cacheHits, cacheMisses := 0, 0
 
 	for _, att := range pdfs {
 		attKey := strings.TrimSpace(att.Key)
@@ -319,6 +431,16 @@ func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outp
 			errs = append(errs, fmt.Sprintf("%s: PDF path not resolved", attKey))
 			continue
 		}
+
+		// --- Cache hit: skip Python entirely ---
+		if meta, ok := cache.Load(att); ok && cache.IsFresh(meta, att) {
+			cacheHits++
+			totalElapsed += meta.ElapsedSec
+			result.PDFPath = att.ResolvedPath
+			result.Figures = append(result.Figures, meta.Figures...)
+			continue
+		}
+		cacheMisses++
 
 		cmd := exec.CommandContext(ctx, pythonCmd, "-", att.ResolvedPath, attDir)
 		cmd.Stdin = strings.NewReader(pythonExtractFiguresScript)
@@ -372,6 +494,19 @@ func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outp
 				AttachmentKey: attKey,
 			})
 		}
+
+		// Save successful result to cache
+		attResult := ExtractFiguresResult{
+			ItemKey:    attKey,
+			PDFPath:    att.ResolvedPath,
+			Method:     result.Method,
+			ElapsedSec: pyResult.Stats.ElapsedSec,
+		}
+		offset := len(result.Figures) - len(pyResult.Figures)
+		if offset >= 0 {
+			attResult.Figures = result.Figures[offset:]
+		}
+		_ = cache.Save(att, attResult)
 	}
 
 	result.ElapsedSec = totalElapsed
