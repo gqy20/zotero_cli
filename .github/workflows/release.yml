@@ -444,21 +444,36 @@ jobs:
           QINIU_PREFIX: ${{ steps.prefix.outputs.value }}
           QINIU_BUCKET: gqy25
           CDN_DOMAIN: https://qny.gqy20.top
+          QINIU_UPLOAD_JOBS: "10"
         run: |
           set -euo pipefail
 
           cd dist
           echo "=== Files to upload ==="
           ls -lh
+          echo "Upload concurrency: ${QINIU_UPLOAD_JOBS}"
 
+          pids=()
           for f in *; do
-            key="${QINIU_PREFIX}/${f}"
-            echo "↑ ${f} → ${QINIU_BUCKET}:${key}"
-            qshell fput "${QINIU_BUCKET}" "${key}" "${f}" 2>&1 || {
-              echo "✗ Failed to upload ${f}, retrying..."
-              sleep 3
-              qshell fput "${QINIU_BUCKET}" "${key}" "${f}" 2>&1
-            }
+            (
+              key="${QINIU_PREFIX}/${f}"
+              echo "↑ ${f} → ${QINIU_BUCKET}:${key}"
+              qshell fput "${QINIU_BUCKET}" "${key}" "${f}" 2>&1 || {
+                echo "✗ Failed to upload ${f}, retrying..."
+                sleep 3
+                qshell fput "${QINIU_BUCKET}" "${key}" "${f}" 2>&1
+              }
+            ) &
+            pids+=("$!")
+
+            if (( ${#pids[@]} >= QINIU_UPLOAD_JOBS )); then
+              wait "${pids[0]}"
+              pids=("${pids[@]:1}")
+            fi
+          done
+
+          for pid in "${pids[@]}"; do
+            wait "${pid}"
           done
 
           echo ""
@@ -494,7 +509,6 @@ jobs:
           open('/tmp/latest','w').write(v)
           "
 
-          qshell account "${QINIU_ACCESS_KEY}" "${QINIU_SECRET_KEY}" default
           qshell fput gqy25 github/zotero_cli/version.json /tmp/version.json
           qshell fput gqy25 github/zotero_cli/latest /tmp/latest
           cat /tmp/version.json
