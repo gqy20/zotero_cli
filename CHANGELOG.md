@@ -7,11 +7,28 @@
 ## [Unreleased]
 
 ### 新增
+
+### 修复
+
+### 变更
+
+### 性能
+
+### 移除
+
+### 工具链
+
+### 文档
+
+## [0.0.9] - 2026-04-25
+
+### 新增
 - **`extract-figures` 每页上限（`--max-per-page`）**：当 PyMuPDF `cluster_drawings` 将密集矢量图分割为数百个碎片时，按像素面积保留每页最大的 N 张图片，自动删除磁盘上的多余文件。默认值 25，可通过 `-m N` 调整
 - **`extract-figures` 多 PDF 附件支持**：不再仅处理第一个 PDF，而是遍历条目所有 PDF 附件分别提取
 - **`extract-figures` 输出目录结构优化**：默认输出至 `{DataDir}/.zotero_cli/figures/{attachmentKey}/`，与全文缓存布局一致，避免多附件命名冲突
 - **`extract-figures` Caption 检测修复**：修复 Go 原始字符串中正则双反斜杠转义错误（`\\s` → `\s`），导致 FIGURE/图 编号正则永远不匹配；新增中文 caption 支持（`图\d`）；合并 `calc_text_density` 的 `is_caption` 信号到 `has_caption` 输出字段；`attach_caption` 新增区域内 caption 检测分支
 - **`extract-figures` 参数优化**：最小文件大小阈值从 15KB 提升至 35KB，过滤页眉/页脚/标尺等小尺寸噪音；最小输出尺寸从 120×100 提升至 150×120
+- **`extract-figures` 磁盘缓存**：为每个 PDF 附件生成 `{DataDir}/.zotero_cli/figures_cache/{attachmentKey}/manifest.json`，按附件 key、文件路径、mtime、size 和脚本版本校验缓存新鲜度；缓存命中时跳过 Python 提取并复用已有 PNG 输出
 
 ### 修复
 - **`--help` 全面支持**：所有 17 个子命令统一支持 `--help`/`-h`，包括混合 flag 场景（如 `find --json --help`）；新增 `containsHelp()` 扫描全部参数；共享解析器（`parseJSONOnlyArgs`/`parseJSONAndLimitArgs`/`parseSingleValueCommand`）内置 help 识别
@@ -25,9 +42,19 @@
 - **CI Release 环境变量作用域修复**：job-level env 无法引用 `${{ env.* }}`，改用 step output 传递版本前缀
 - **统一 JSON 输出信封**：所有 `--json` 输出强制使用 `{ok, command, data, meta}` 信封结构，消除 6 处 raw data 直接输出（config show / setup pdf-extract / item-template / key-info access / local export / web export）；智能体解析逻辑统一为 `resp["ok"] && resp["data"]`
 - **标准化错误 JSON 格式**：错误响应 Data 从纯字符串升级为结构化 `{error, type, code}` 对象；新增错误分类（`not_found`/`unsupported_feature`/`temporarily_unavailable`/API 状态码映射如 403→forbidden、429→rate_limited、412→precondition_failed），智能体可按 `type` 字段程序化处理不同错误类别
+- **`extract-figures` 输出稳定性**：修复 PyMuPDF/native warning 混入 stdout 导致 JSON 解析失败的问题；成功但 0 图的结果也会写入缓存；缓存命中时校验目标输出目录中的 PNG 是否存在，避免跨目录复用 manifest 造成缺图
+- **`extract-figures` 部分失败保留结果**：多 PDF 附件中部分附件失败时仍返回已成功提取的图片；JSON 输出包含 0 图成功条目和 partial success figures，便于批量任务统计
+- **`extract-figures` 低质量误检过滤**：过滤封面/末页 logo、出版社标识、作者头像、扫描书碎片等低质量 raster 假阳性；长文档中低面积 raster 候选提高门槛，减少正文局部截图误提取
+- **`extract-figures` 重复 PDF 去重**：同一 Zotero 条目下多个 PDF 附件按 SHA-256 内容去重，只提取第一份相同内容 PDF，避免重复图片和重复耗时
 
 ### 变更
 - **`versions` 命令重命名为 `changes`**：消除与 `version`（CLI 版本号）命令的命名混淆，usage/help/路由/测试/文档全面同步
+
+### 性能
+- **`extract-figures` 长尾优化**：对图片碎片页和极端矢量页加入阈值保护，跳过病态 `get_image_bbox`/`cluster_drawings` 路径并使用低置信 fallback；200 篇并行 15 的冷运行从约 495 秒降至约 63 秒量级
+- **`extract-figures` 图片锚点加速**：优先使用 PyMuPDF `page.get_image_rects(xref)` 替代慢路径 `get_image_bbox(name)`，复杂页单页锚点定位从秒级降至百毫秒级
+- **`extract-figures` 大 raster 渲染降采样**：大面积 raster 候选改用 150dpi 渲染，cluster 和小图仍保留 200dpi，降低扫描图和页级大图的渲染尾延迟
+- **`extract-figures` 批量调度优化**：按实际 PDF 页数排序后分配并发任务，页数获取失败时回退估算，避免少数长文档拖慢批处理尾部
 
 ### 移除
 - **删除 `cite` 命令**：引用格式化功能对智能体无价值（返回 HTML 噪噪或纯文本），且与 `export --format bibtex` 功能重叠；需要引用格式的场景统一使用 `export`（csljson/bibtex/ris），需要人类可读引用的场景极少且可用 `export` + 后处理替代

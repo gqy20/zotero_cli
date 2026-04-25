@@ -1,6 +1,6 @@
 ---
 name: zotero-cli
-version: "0.0.8"
+version: "0.0.9"
 description: >
   Zotero 文献管理 CLI（`zot`）。文献检索(find/show)、导出(export bibtex/csljson)、
   引文生成(cite)、PDF 标注提取(annotations/extract-text/extract-figures)、
