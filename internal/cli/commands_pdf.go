@@ -174,12 +174,10 @@ func estimatePages(item domain.Item) int {
 	if s == "" {
 		return 0
 	}
-	// Try "start-end" format
 	var start, end int
 	if n, _ := fmt.Sscanf(s, "%d-%d", &start, &end); n == 2 && end >= start {
 		return end - start + 1
 	}
-	// Try single number
 	if n, _ := fmt.Sscanf(s, "%d", &start); n == 1 {
 		return start
 	}
@@ -344,7 +342,31 @@ func (c *CLI) runExtractFigures(args []string) int {
 		jobs = append(jobs, pdfJob{key: p.key, item: p.item, pageEst: estimatePages(p.item)})
 	}
 
-	// Phase 3: sort by estimated page count descending (LPT — longest jobs first)
+	// Phase 2b: get real page counts from PDF files via PyMuPDF (fast metadata-only read)
+	pdfPaths := make([]string, len(jobs))
+	pathToIdxs := make(map[string][]int, len(jobs))
+	for i, job := range jobs {
+		for _, att := range job.item.Attachments {
+			if strings.EqualFold(strings.TrimSpace(att.ContentType), "application/pdf") && att.Resolved && att.ResolvedPath != "" {
+				pdfPaths[i] = att.ResolvedPath
+				pathToIdxs[att.ResolvedPath] = append(pathToIdxs[att.ResolvedPath], i)
+				break
+			}
+		}
+	}
+	pageCounts, pageErr := backend.CountPDFPages(cfg.DataDir, pdfPaths)
+	if pageErr == nil {
+		for path, cnt := range pageCounts {
+			if cnt <= 0 {
+				continue
+			}
+			for _, idx := range pathToIdxs[path] {
+				jobs[idx].pageEst = cnt
+			}
+		}
+	}
+
+	// Phase 3: sort by actual page count descending (LPT — longest jobs first)
 	sort.Slice(jobs, func(i, j int) bool {
 		return jobs[i].pageEst > jobs[j].pageEst
 	})
@@ -396,10 +418,16 @@ func (c *CLI) outputFiguresResults(results []figureTaskResult, jsonOutput bool) 
 				"item_key": r.itemKey,
 				"error":    r.result.Error,
 			}
-			if r.result.Error == "" && len(r.result.Figures) > 0 {
-				entry["pdf"] = filepath.Base(r.result.PDFPath)
+			if r.result.Error == "" || len(r.result.Figures) > 0 {
+				if r.result.PDFPath != "" {
+					entry["pdf"] = filepath.Base(r.result.PDFPath)
+				}
 				entry["total_pages"] = r.result.TotalPages
-				entry["figures"] = r.result.Figures
+				figures := r.result.Figures
+				if figures == nil {
+					figures = []backend.FigureInfo{}
+				}
+				entry["figures"] = figures
 				entry["elapsed_sec"] = r.result.ElapsedSec
 				entry["method"] = r.result.Method
 				allFigs += len(r.result.Figures)

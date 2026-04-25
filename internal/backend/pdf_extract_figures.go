@@ -44,7 +44,7 @@ type ExtractFiguresResult struct {
 }
 
 // figureScriptVersion is bumped when the Python script changes, invalidating old caches.
-const figureScriptVersion = "v4"
+const figureScriptVersion = "v6"
 
 // figureCacheMeta is the persisted manifest for one attachment's extracted figures.
 type figureCacheMeta struct {
@@ -55,6 +55,7 @@ type figureCacheMeta struct {
 	ScriptVersion   string       `json:"script_version"`
 	ExtractedAt     string       `json:"extracted_at"`
 	ElapsedSec      float64      `json:"elapsed_sec"`
+	TotalPages      int          `json:"total_pages"`
 	Figures         []FigureInfo `json:"figures"`
 }
 
@@ -92,7 +93,7 @@ func (c figureCache) Load(att domain.Attachment) (figureCacheMeta, bool) {
 // Save persists a successful extraction result to the cache.
 func (c figureCache) Save(att domain.Attachment, result ExtractFiguresResult) error {
 	key := strings.TrimSpace(att.Key)
-	if key == "" || len(result.Figures) == 0 {
+	if key == "" {
 		return nil
 	}
 	dir := filepath.Dir(c.metaPath(key))
@@ -109,6 +110,7 @@ func (c figureCache) Save(att domain.Attachment, result ExtractFiguresResult) er
 		ScriptVersion:   figureScriptVersion,
 		ExtractedAt:     time.Now().UTC().Format(time.RFC3339),
 		ElapsedSec:      result.ElapsedSec,
+		TotalPages:      result.TotalPages,
 		Figures:         result.Figures,
 	}
 	if !srcOk {
@@ -142,6 +144,71 @@ func (c figureCache) IsFresh(meta figureCacheMeta, att domain.Attachment) bool {
 	return meta.SourceMtimeUnix == info.ModTime().Unix() && meta.SourceSize == info.Size()
 }
 
+func cachedFigureFilesAvailable(meta figureCacheMeta, attDir string) bool {
+	for _, fig := range meta.Figures {
+		if strings.TrimSpace(fig.File) == "" {
+			return false
+		}
+		if _, err := os.Stat(filepath.Join(attDir, fig.File)); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func pythonJSONPayload(stdout []byte) ([]byte, error) {
+	start := bytes.IndexByte(stdout, '{')
+	end := bytes.LastIndexByte(stdout, '}')
+	if start < 0 || end < start {
+		return nil, fmt.Errorf("no JSON object in stdout")
+	}
+	return stdout[start : end+1], nil
+}
+
+// pythonCountPagesScript is a minimal PyMuPDF script that returns page counts for given PDFs.
+const pythonCountPagesScript = `
+import json, sys, fitz
+paths = json.loads(sys.argv[1])
+out = {}
+for p in paths:
+    try:
+        doc = fitz.open(p)
+        out[p] = doc.page_count
+        doc.close()
+    except Exception as e:
+        out[p] = -1
+print(json.dumps(out))
+`
+
+// CountPDFPages returns the actual page count for each PDF path using PyMuPDF.
+// Returns (map[path]pages, error). A value of -1 means the PDF could not be opened.
+func CountPDFPages(dataDir string, paths []string) (map[string]int, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	pythonCmd, ok := findPythonCommandFunc(dataDir)
+	if !ok {
+		return nil, fmt.Errorf("Python not available")
+	}
+	inputJSON, _ := json.Marshal(paths)
+	cmd := exec.Command(pythonCmd, "-c", pythonCountPagesScript, string(inputJSON))
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("count pages failed: %w: %s", err, stderr.String())
+	}
+	var result map[string]int
+	payload, payloadErr := pythonJSONPayload(stdout.Bytes())
+	if payloadErr != nil {
+		return nil, fmt.Errorf("parse count-pages output: %w", payloadErr)
+	}
+	if err := json.Unmarshal(payload, &result); err != nil {
+		return nil, fmt.Errorf("parse count-pages output: %w", err)
+	}
+	return result, nil
+}
+
 func attSourceInfo(att domain.Attachment) (os.FileInfo, bool) {
 	if att.Resolved && att.ResolvedPath != "" {
 		info, err := os.Stat(att.ResolvedPath)
@@ -173,6 +240,9 @@ DEFAULTS = {
     "min_aspect_ratio": 0.25, "max_aspect_ratio": 4.0,
     # V4: adaptive threshold trigger
     "adaptive_cand_limit": 40, "adaptive_pct_mult": 1.5, "adaptive_kb_mult": 1.4,
+    # V6: cap candidate count after clustering, before text extraction/rendering.
+    "max_candidates_per_page": 80, "max_union_page_pct": 0.85,
+    "dense_fallback_min_clusters": 40, "dense_fallback_max_page_pct": 0.98,
 }
 
 def get_image_anchors(page, min_w=20, min_h=20):
@@ -274,6 +344,13 @@ def similar_size(a, b, tol=0.15):
     bw, bh = b.width*200/72, b.height*200/72
     return abs(aw-bw)/max(aw,bw) < tol and abs(ah-bh)/max(ah,bh) < tol
 
+def rank_candidate(c):
+    rect, src = c
+    score = rect.width * rect.height
+    if src == "raster":
+        score *= 1.2
+    return score
+
 def main():
     pdf_path, out_dir = sys.argv[1], sys.argv[2]
     os.makedirs(out_dir, exist_ok=True)
@@ -283,7 +360,9 @@ def main():
           "filt_tiny":0,"filt_pct":0,"filt_no_anchor":0,"filt_text_heavy":0,
           "filt_caption":0,"filt_fullpage":0,"filt_covered":0,
           # V4 counters
-          "filt_aspect":0,"filt_crosspage_dup":0}
+          "filt_aspect":0,"filt_crosspage_dup":0,
+          # V6 counter
+          "candidate_cap":0,"dense_unions":0,"dense_page_fallback":0}
     t0, fi = time.perf_counter(), 0
 
     # V3: cross-page dedup — shared across all pages to catch repeating headers/footers
@@ -302,23 +381,51 @@ def main():
 
         # --- collect candidates ---
         cands = []
+        cluster_rects = []
         for ci, r in enumerate(cl):
-            if r.width*r.height >= DEFAULTS["min_cluster_area_pt"]: cands.append((fitz.Rect(r),"cluster"))
+            if r.width*r.height >= DEFAULTS["min_cluster_area_pt"]:
+                rr = fitz.Rect(r)
+                cands.append((rr,"cluster"))
+                cluster_rects.append(rr)
             else: sk["filt_small"] += 1
+        raster_rects = []
         for a in fa:
             ap = (a.width*a.height)/pa
             if ap > DEFAULTS["max_anchor_page_pct"]: sk["filt_fullpage"]+=1; continue
-            if is_covered(a, cl): sk["filt_covered"]+=1; continue
             ex = fitz.Rect(max(0,a.x0-DEFAULTS["anchor_expand_pt"]), max(0,a.y0-DEFAULTS["anchor_expand_pt"]),
                        a.x1+DEFAULTS["anchor_expand_pt"], a.y1+DEFAULTS["anchor_expand_pt"]) & p.rect
+            raster_rects.append(ex)
+            if is_covered(a, cl): sk["filt_covered"]+=1; continue
             cands.append((ex,"raster")); sk["anchors_fallback"]+=1
+
+        if len(cluster_rects) > DEFAULTS["adaptive_cand_limit"]:
+            ur = fitz.Rect(cluster_rects[0])
+            for rr in cluster_rects[1:]:
+                ur |= rr
+            up = (ur.width * ur.height) / pa
+            if up <= DEFAULTS["max_union_page_pct"] and ur.width * ur.height >= DEFAULTS["min_cluster_area_pt"]:
+                cands.append((ur, "cluster"))
+                sk["dense_unions"] += 1
+        if len(raster_rects) > DEFAULTS["adaptive_cand_limit"]:
+            ur = fitz.Rect(raster_rects[0])
+            for rr in raster_rects[1:]:
+                ur |= rr
+            up = (ur.width * ur.height) / pa
+            if up <= DEFAULTS["dense_fallback_max_page_pct"] and ur.width * ur.height >= DEFAULTS["min_cluster_area_pt"]:
+                cands.append((ur, "raster"))
+                sk["dense_unions"] += 1
+
+        if len(cands) > DEFAULTS["max_candidates_per_page"]:
+            cands.sort(key=rank_candidate, reverse=True)
+            sk["candidate_cap"] += len(cands) - DEFAULTS["max_candidates_per_page"]
+            cands = cands[:DEFAULTS["max_candidates_per_page"]]
 
         # V4: adaptive thresholding — tighten when too many candidates from this PDF
         adaptive = len(cands) > DEFAULTS["adaptive_cand_limit"]
         eff_pct = DEFAULTS["min_pct_page"] * (DEFAULTS["adaptive_pct_mult"] if adaptive else 1.0)
         eff_kb  = DEFAULTS["min_output_kb"] * (DEFAULTS["adaptive_kb_mult"] if adaptive else 1.0)
 
-        seen, lfi = [], 0
+        seen, page_kept = [], 0
         for rc, src in cands:
             rw, rh = rc.width*200/72, rc.height*200/72
             if rw<DEFAULTS["min_output_w_px"] or rh<DEFAULTS["min_output_h_px"]:
@@ -358,7 +465,7 @@ def main():
             # V4: confidence score (P1)
             conf = calc_confidence(kb, na, hc or td["is_caption"], td["text_ratio"], pp, ar)
 
-            sk["kept"]+=1; fi+=1
+            sk["kept"]+=1; page_kept+=1; fi+=1
             global_seen.append(rc)  # register for cross-page dedup
             fn=f"p{pg+1}_fig{fi}.png"
             with open(os.path.join(out_dir,fn),"wb") as f: f.write(ib)
@@ -367,8 +474,37 @@ def main():
                 "kb":round(kb,1),"anchors":na,"has_caption":hc or td["is_caption"],
                 "text_ratio":td["text_ratio"],"pct_page":round(pp,1),
                 "confidence":conf})
+
+        if page_kept == 0 and (len(cl) >= DEFAULTS["dense_fallback_min_clusters"] or len(raster_rects) >= DEFAULTS["dense_fallback_min_clusters"]):
+            fallback_rects = raster_rects
+            if not fallback_rects:
+                fallback_rects = [fitz.Rect(r) for r in cl if r.width * r.height > 0]
+            if fallback_rects:
+                fr = fitz.Rect(fallback_rects[0])
+                for rr in fallback_rects[1:]:
+                    fr |= rr
+                fr = fr & p.rect
+                fpct = (fr.width * fr.height) / pa
+                if fpct <= DEFAULTS["dense_fallback_max_page_pct"] and fr.width > 20 and fr.height > 20:
+                    try:
+                        pix = p.get_pixmap(clip=fr, dpi=150)
+                        ib = pix.tobytes("png"); kb = len(ib)/1024
+                    except:
+                        pix = None; ib = None; kb = 0
+                    if ib and kb >= DEFAULTS["min_output_kb"]:
+                        fi += 1
+                        sk["kept"] += 1
+                        sk["dense_page_fallback"] += 1
+                        fn=f"p{pg+1}_fig{fi}.png"
+                        with open(os.path.join(out_dir,fn),"wb") as f: f.write(ib)
+                        figures.append({"id":fi,"file":fn,"page":pg+1,"source":"cluster",
+                            "size_px":f"{pix.width}x{pix.height}","size_pt":f"{fr.width:.0f}x{fr.height:.0f}",
+                            "kb":round(kb,1),"anchors":count_anchors_in_rect(fr, an),"has_caption":False,
+                            "text_ratio":0,"pct_page":round(fpct*100,1),
+                            "confidence":25})
     doc.close()
     sk["elapsed_sec"]=round(time.perf_counter()-t0,2)
+    sk["page_count"] = n_pages
     print(json.dumps({"figures":figures,"stats":sk,"error":None}, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__": main()
@@ -379,7 +515,7 @@ if __name__ == "__main__": main()
 func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outputDir string) (ExtractFiguresResult, error) {
 	result := ExtractFiguresResult{
 		ItemKey: item.Key,
-		Method:  "cluster_drawings_v5b",
+		Method:  "cluster_drawings_v6",
 	}
 
 	var pdfs []domain.Attachment
@@ -433,15 +569,17 @@ func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outp
 		}
 
 		// --- Cache hit: skip Python entirely ---
-		if meta, ok := cache.Load(att); ok && cache.IsFresh(meta, att) {
+		if meta, ok := cache.Load(att); ok && cache.IsFresh(meta, att) && cachedFigureFilesAvailable(meta, attDir) {
 			cacheHits++
 			totalElapsed += meta.ElapsedSec
 			result.PDFPath = att.ResolvedPath
+			result.TotalPages += meta.TotalPages
 			result.Figures = append(result.Figures, meta.Figures...)
 			continue
 		}
 		cacheMisses++
 
+		_ = os.RemoveAll(attDir)
 		cmd := exec.CommandContext(ctx, pythonCmd, "-", att.ResolvedPath, attDir)
 		cmd.Stdin = strings.NewReader(pythonExtractFiguresScript)
 		var stdout, stderr bytes.Buffer
@@ -453,6 +591,7 @@ func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outp
 			if errMsg == "" {
 				errMsg = runErr.Error()
 			}
+			_ = os.RemoveAll(attDir)
 			errs = append(errs, fmt.Sprintf("%s: %s", attKey, errMsg))
 			continue
 		}
@@ -461,10 +600,18 @@ func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outp
 			Figures []pyFigure `json:"figures"`
 			Stats   struct {
 				ElapsedSec float64 `json:"elapsed_sec"`
+				PageCount  int     `json:"page_count"`
 			} `json:"stats"`
 			Error *string `json:"error,omitempty"`
 		}
-		if jsonErr := json.Unmarshal(stdout.Bytes(), &pyResult); jsonErr != nil {
+		payload, payloadErr := pythonJSONPayload(stdout.Bytes())
+		if payloadErr != nil {
+			_ = os.RemoveAll(attDir)
+			errs = append(errs, fmt.Sprintf("%s: parse error: %v", attKey, payloadErr))
+			continue
+		}
+		if jsonErr := json.Unmarshal(payload, &pyResult); jsonErr != nil {
+			_ = os.RemoveAll(attDir)
 			errs = append(errs, fmt.Sprintf("%s: parse error: %v", attKey, jsonErr))
 			continue
 		}
@@ -473,6 +620,7 @@ func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outp
 		}
 
 		totalElapsed += pyResult.Stats.ElapsedSec
+		result.TotalPages += pyResult.Stats.PageCount
 		result.PDFPath = att.ResolvedPath // last processed PDF
 
 		for _, f := range pyResult.Figures {
@@ -501,6 +649,7 @@ func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outp
 			PDFPath:    att.ResolvedPath,
 			Method:     result.Method,
 			ElapsedSec: pyResult.Stats.ElapsedSec,
+			TotalPages: pyResult.Stats.PageCount,
 		}
 		offset := len(result.Figures) - len(pyResult.Figures)
 		if offset >= 0 {
