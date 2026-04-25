@@ -23,10 +23,6 @@
 │   ├─ 程序化处理       → --format csljson
 │   └─ 其他工具         → --format ris
 │
-├─ 生成引用/参考文献 ──→ zot cite ITEMKEY --format citation|bib [--style STYLE]
-│   ├─ 正文引用         → --format citation（默认）
-│   └─ 参考文献列表     → --format bib
-│
 ├─ 管理条目关系 ───────→ zot relate ITEMKEY [选项] --json
 │   ├─ 基础查询         → 默认（显式关系）
 │   ├─ 含笔记+引用      → --aggregate（local/hybrid）
@@ -35,7 +31,7 @@
 │
 ├─ 操作 PDF ───────────→ （需 local/hybrid + PyMuPDF）
 │   ├─ 提取正文         → zot extract-text ITEMKEY --json
-│   ├─ 提取图表         → zot extract-figures ITEMKEY [-o DIR] [-w N]
+│   ├─ 提取图表         → zot extract-figures ITEMKEY [...] [-o DIR] [-w N] [-m N] --json
 │   ├─ 读取标注         → zot annotations ITEMKEY [--type|--page|--author] --json
 │   └─ 写入标注         → zot annotate ITEMKEY --page N --text "关键词" --color red
 │                          （推荐 Mode 1.5，避免全文误匹配）
@@ -57,8 +53,10 @@
 
 | 陷阱 | 正确做法 | 原因 |
 |------|----------|------|
-| `zot cite KEY --format apa` | `zot cite KEY --style apa` | `--format` 只接受 `citation`\|`bib`；样式用 `--style` |
-| `zot cite KEY --format bibliography` | `zot cite KEY --format bib` | 不存在 `bibliography` 值，正确值为 `bib` |
+| 使用旧 `zot cite ...` 命令 | 改用 `zot export --item-key KEY --format bibtex\|biblatex\|csljson --json` | `cite` 已移除，当前 CLI 以标准导出格式交给写作工具或 AI 后处理 |
+| `zot export --items KEY ...` | `zot export --item-key KEY ...` | `export` 单条目参数是 `--item-key`；`--items` 只用于批量标签命令 |
+| `zot extract-figures KEY` 输出过多碎片 | 加 `--max-per-page N`，必要时降低 N | 防止病态矢量页或图片碎片页产生过多低价值输出 |
+| 批量提图时长尾明显 | 多 key 一次传入并设置 `--workers N`，不要外层脚本逐个串行 | CLI 会预取、按 PDF 页数降序调度，长任务优先能降低尾部等待 |
 | `zot annotate ... --dry-run` | 先 `extract-text` 确认文本位置，再直接执行 | annotate **不支持** `--dry-run`，见 roadmap P0 |
 | `zot index status` | `zot index build [--force]` | 不存在 `status` 子命令，只有 `build` |
 | `zot find --json`（无查询词无过滤） | 加 `--all` 或至少一个过滤条件 | 无查询词+无过滤会报错，防止意外返回全库 |
@@ -74,8 +72,9 @@
 |------|--------|------|
 | **模式** | `hybrid` | 本地优先 + Web 回退，兼顾速度与完整性 |
 | **输出格式** | 文本 | Agent 工作流应**始终加 `--json`** |
-| **引文样式** | `apa` | 通过 `--style` 指定，不影响 `--format` |
-| **引文格式** | `citation` | `--format` 的默认值，生成正文内引用 |
+| **图表输出目录** | `{ZOT_DATA_DIR}/.zotero_cli/figures` | `extract-figures` 未指定 `--output-dir/-o` 时使用 |
+| **图表并发** | CPU 核数，最小 2 最大 8 | `extract-figures --workers/-w` 可覆盖；多篇自动并行 |
+| **每页图表上限** | 25 | `extract-figures --max-per-page/-m` 可覆盖 |
 | **搜索推断** | 自动 | 有过滤标志时自动设 `All=true`，无需手动 `--all` |
 | **FTS 全文检索** | 自动启用 | local/hybrid 下 `{dataDir}/.zotero_cli/fulltext/index.sqlite` > 4KB 时 |
 | **Snippet 条数** | 50 | `--snippet` 默认上限，更多结果需显式 `--limit` |

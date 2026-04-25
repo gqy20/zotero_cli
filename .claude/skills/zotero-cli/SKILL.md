@@ -3,14 +3,14 @@ name: zotero-cli
 version: "0.0.9"
 description: >
   Zotero 文献管理 CLI（`zot`）。文献检索(find/show)、导出(export bibtex/csljson)、
-  引文生成(cite)、PDF 标注提取(annotations/extract-text/extract-figures)、
+  引用数据导出(export)、PDF 标注提取(annotations/extract-text/extract-figures)、
   关系网络(relate --aggregate --dot)、写操作(create-item/update-item/add-tag)。
   支持 web/local/hybrid 三种模式。搜索/管理/分析 Zotero 文献库时使用。
 when_to_use: >
   触发关键词：Zotero、文献管理、参考文献、PDF 标注、引文格式、文献检索、
   学术数据库、bibtex、文献关系网络。
   示例："搜 CRISPR 相关文献"、"导出 bibtex"、"查看 PDF 标注"、
-  "生成 APA 引文"、"查找条目关联"、"提取论文图表"
+  "导出这篇为 BibTeX"、"查找条目关联"、"提取论文图表"
 argument-hint: "[command] [ITEMKEY] [options]"
 ---
 
@@ -77,18 +77,13 @@ zot relate ITEMKEY --json                          # 关联条目
 
 **FTS5 全文检索：** local/hybrid 下有索引时**自动启用**，搜索范围扩展至 PDF 全文内容。纯元数据搜索可临时设 `ZOT_MODE=web`。`--snippet` 默认限制 **50** 条。
 
-### 导出与引用
+### 导出引用数据
 
 ```shell
 # 导出格式：csljson / bibtex / biblatex / ris
 zot export --all --format csljson --json
 zot export --collection COLLKEY --format bibtex --json
 zot export --item-key KEY --format biblatex --json
-
-# 引文（--format: citation | bib；样式用 --style）
-zot cite ITEMKEY --format citation        # 正文引用（默认）
-zot cite ITEMKEY --format bib              # 参考文献条目
-zot cite ITEMKEY --style apa               # 指定引文样式（默认 apa）
 ```
 
 ### 条目关系 (`relate`)
@@ -107,11 +102,14 @@ zot relate ITEMKEY --from-file batch.json --dry-run   # 批量操作
 
 ```shell
 zot extract-text ITEMKEY --json                       # 正文提取
-zot extract-figures ITEMKEY -o ./figures -w 4         # Figure 提取
+zot extract-figures ITEMKEY --json                    # 图表提取，默认输出到 {ZOT_DATA_DIR}/.zotero_cli/figures
+zot extract-figures KEY1 KEY2 -o ./figures -w 8 --max-per-page 25 --json
 zot annotations ITEMKEY --json                         # 读取标注
 zot annotate ITEMKEY --page 4 --text "GATK" --color red # 写入标注（推荐 Mode 1.5）
 zot open ITEMKEY --page 5                              # Zotero 阅读器中打开
 ```
+
+**图表提取要点：** 支持一个或多个 item key；多篇会按 PDF 页数长任务优先并行；`--workers/-w` 控制并发；`--max-per-page/-m` 防止病态页输出过多碎片；结果有磁盘缓存，并会过滤封面、logo、作者头像等低质量 raster 误检。遇到旧版二进制不识别命令时，先重新构建或确认 PATH 中 `zot version`。
 
 **标注要点：** 推荐 `--page N --text "keyword"` (Mode 1.5)；`--clear` 双层删除需 Zotero 关闭才能删 DB 层；详细文档见 [annotations 示例](https://github.com/gqy20/zotero_cli/blob/master/docs/user/examples/annotations.md)（[Gitee 镜像](https://gitee.com/gqy20/zotero_cli/blob/master/docs/user/examples/annotations.md)）。
 
@@ -173,7 +171,7 @@ zot version --check [--json]                # 检查新版 + 更新指引
 - `overview` 并行调用 4 个 API（~6s），优于逐个请求
 - **快照缓存**：hybrid 下 Zotero 运行时自动走持久化快照（~0.3s/次）；关闭时直连 SQLite（~0ms）
 - `extract-text` 结果有缓存；`--snippet` 默认 limit 50；高频脚本遇 `429` 自动退避
-- `extract-figures` 多篇自动并行，单篇 ~0.6s
+- `extract-figures` 多篇按页数排序并行，命中磁盘缓存会直接复用结果；批量任务通常从 `--workers 8` 起测，机器负载高再下调
 
 ---
 

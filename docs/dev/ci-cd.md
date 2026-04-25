@@ -29,6 +29,7 @@ Workflow: `.github/workflows/release.yml`
 - Generates a `checksums.txt` file for all release artifacts
 - Publishes a GitHub Release and uploads packaged binaries automatically
 - If `HOMEBREW_TAP_TOKEN` is configured, updates `gqy20/homebrew-tap` automatically
+- Uploads release artifacts, checksums, `version.json`, and `latest` to Qiniu CDN
 
 ## Homebrew tap automation
 
@@ -50,11 +51,27 @@ Behavior:
 
 If `HOMEBREW_TAP_TOKEN` is not configured, the release workflow still publishes the GitHub Release and simply skips the tap update job.
 
+## Qiniu CDN automation
+
+The release workflow treats Qiniu upload as part of the official release path.
+
+Required secrets in this repository:
+
+- `QINIU_ACCESS_KEY`
+- `QINIU_SECRET_KEY`
+
+Behavior:
+
+- Fails before packaging when a tagged release is missing required Qiniu secrets
+- Uploads the same release artifacts as GitHub Release under `github/zotero_cli/<tag>/`
+- Uploads CDN `checksums.txt`
+- Updates `github/zotero_cli/version.json` and `github/zotero_cli/latest`
+
 ## Suggested release flow
 
 ```bash
-git tag v0.0.1
-git push origin v0.0.1
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 If you want to test packaging manually from GitHub without creating a tag, you can use the `workflow_dispatch` trigger on the Release workflow. That manual run will build artifacts but will not publish a GitHub Release unless the workflow is running on a tag.

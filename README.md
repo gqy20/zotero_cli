@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](https://go.dev/)
 
-**AI 原生的 Zotero 命令行工具。** 为 Claude Code、Codex 等 AI agent 设计，让 AI 能直接操作你的 Zotero 文献库 — 检索、阅读 PDF、管理标注、生成引文，覆盖从文献调研到论文写作的完整科研工作流。
+**AI 原生的 Zotero 命令行工具。** 为 Claude Code、Codex 等 AI agent 设计，让 AI 能直接操作你的 Zotero 文献库 — 检索、阅读 PDF、管理标注、导出引用数据，覆盖从文献调研到论文写作的完整科研工作流。
 
 同时也支持终端手动使用和脚本自动化。
 
@@ -25,14 +25,14 @@
 |----------|-------------|
 | 手动在 Zotero UI 里翻找文献 | `zot find "关键词" --json` → AI 直接消费结构化结果 |
 | 逐篇打开 PDF 找内容 | `zot find "概念" --fulltext --snippet` → 全库全文检索 |
-| 复制粘贴引文格式 | `zot cite KEY --format bibtex` → AI 自动插入正确格式 |
+| 复制粘贴 BibTeX / RIS | `zot export --item-key KEY --format bibtex` → AI 直接消费标准导出 |
 | 标注散落在各处无法汇总 | `zot annotations KEY --json` → 双源（DB+PDF）统一输出，支持按类型/页码/作者过滤，双层清除 |
 | 批量打标签靠手点 | `zot add-tag --items K1,K2,K3 --tag "to-read"` | 一条命令 |
 
 **核心设计原则：**
 
 - **JSON 优先** — 所有命令支持 `--json`，输出结构化数据供 AI 直接解析
-- **Skill 自动发现** — 内置 `.claude/skills/` 和 `.codex/skills/`，AI 助手开箱即懂
+- **Skill 自动发现** — 内置 `.claude/skills/`，Codex/Cursor 等可复用同一套说明文件
 - **安全写操作** — 删除默认禁止、版本号乐观锁，防止 AI 误操作
 - **本地能力优先** — hybrid 模式下本地 SQLite 全文检索、PDF 标注/笔记读写不走网络（Zotero 未运行时自动切换）
 
@@ -188,7 +188,7 @@ curl -fsSL ${_RAW}/.claude/skills/zotero-cli/examples/show-output.md \
 "搜 CRISPR 基因编辑相关文献"              → zot find "CRISPR gene editing" --tag 基因编辑 --json
 "导出最近半年为 bibtex"                   → zot export --date-after 2025-10 --format bibtex --json
 "看这篇的 PDF 标注"                       → zot annotations KEY --json
-"生成 APA 引文"                           → zot cite KEY --style apa --format citation
+"导出这篇为 BibTeX"                       → zot export --item-key KEY --format bibtex --json
 "把这两篇关联起来"                         → zot relate KEY_A --add KEY_B --dry-run
 "提取论文图表"                            → zot extract-figures KEY -o ./figures --json
 ```
@@ -213,7 +213,7 @@ cp -r ~/.claude/skills/zotero-cli ~/.claude/skills/zotero-cli-custom
 自定义场景举例：
 
 - **课题组共享模板**：预设团队收藏夹 key、统一标签体系、批量导出格式
-- **写作辅助流**：定义"选题调研→文献筛选→标注提取→引文插入"的标准流程
+- **写作辅助流**：定义"选题调研→文献筛选→标注提取→引用数据导出"的标准流程
 - **期刊投稿追踪**：结合 `journal_rank` 字段自动筛选目标期刊分区
 
 Skill 文件遵循 [Agent Skills 开放标准](https://github.com/anthropics/skills)，也兼容 Codex、Cursor 等支持 skill 机制的 AI 工具。
@@ -248,6 +248,10 @@ zot find "同源多倍体" --snippet --limit 200 --json
 ```bash
 # 提取 PDF 正文供 AI 分析（PyMuPDF 优先 → ft-cache 回退 → pdfium WASM 兜底）
 zot extract-text KEY --json
+
+# 提取论文图表（支持缓存、多 PDF 附件、低质量误检过滤和每页上限）
+zot extract-figures KEY --json
+zot extract-figures KEY1 KEY2 --workers 8 --max-per-page 25 --output-dir ./figures --json
 
 # 查看 PDF 标注（双源：Zotero 阅读器 DB 标注 + PDF 文件内标注）
 zot annotations KEY --json
@@ -304,10 +308,10 @@ zot relate KEY --json
 # 按收藏夹批量导出
 zot export --collection COLLKEY --format csljson --json
 
-# 生成引文
-zot cite KEY                        # citation 格式（默认 apa）
-zot cite KEY --format bib           # 参考文献格式（CSL）
-zot cite KEY --style chicago        # Chicago 样式
+# 导出标准格式，供论文写作工具或 AI 后处理
+zot export --item-key KEY --format bibtex --json
+zot export --collection COLLKEY --format ris --json
+zot export --item-key KEY --format csljson --json
 ```
 
 ### 库管理
@@ -355,11 +359,11 @@ zot changes items --since 0 --json  # 版本变更记录
 | **查看** | `show` | 条目详情（含标注/附件/笔记） |
 | **关系** | `relate` | 条目间显式关系查询 |
 | **PDF** | `extract-text` | 提取 PDF 正文 |
+| **PDF** | `extract-figures` | 提取论文图表（缓存、多 PDF 附件、低质量误检过滤） |
 | **PDF** | `annotate` | 写入高亮/下划线/笔记标注（3 种定位模式，推荐 Mode 1.5） |
 | **PDF** | `annotations` | 读取/删除 PDF 标注（双源 + 双层清除） |
 | **PDF** | `open` | 在 Zotero 阅读器中打开 |
 | **导航** | `select` | 跳转到 Zotero UI 选中条目 |
-| **引文** | `cite` | APA / BibTeX / Chicago 等格式 |
 | **导出** | `export` | BibTeX / RIS / CSL-JSON |
 | **写操作** | `create-item` / `update-item` / `delete-item` | 条目 CRUD（笔记支持 hybrid 本地写入） |
 | **标签** | `add-tag` / `remove-tag` | 批量标签管理 |
