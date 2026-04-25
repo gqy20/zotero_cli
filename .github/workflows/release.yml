@@ -458,10 +458,10 @@ jobs:
             (
               key="${QINIU_PREFIX}/${f}"
               echo "↑ ${f} → ${QINIU_BUCKET}:${key}"
-              qshell fput "${QINIU_BUCKET}" "${key}" "${f}" 2>&1 || {
+              qshell fput --overwrite "${QINIU_BUCKET}" "${key}" "${f}" 2>&1 || {
                 echo "✗ Failed to upload ${f}, retrying..."
                 sleep 3
-                qshell fput "${QINIU_BUCKET}" "${key}" "${f}" 2>&1
+                qshell fput --overwrite "${QINIU_BUCKET}" "${key}" "${f}" 2>&1
               }
             ) &
             pids+=("$!")
@@ -509,8 +509,8 @@ jobs:
           open('/tmp/latest','w').write(v)
           "
 
-          qshell fput gqy25 github/zotero_cli/version.json /tmp/version.json
-          qshell fput gqy25 github/zotero_cli/latest /tmp/latest
+          qshell fput --overwrite gqy25 github/zotero_cli/version.json /tmp/version.json
+          qshell fput --overwrite gqy25 github/zotero_cli/latest /tmp/latest
           cat /tmp/version.json
           echo "---"
           echo "CDN: ${CDN_DOMAIN}/github/zotero_cli/version.json"
