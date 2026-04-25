@@ -37,7 +37,7 @@ func (c *CLI) runSetupPdfExtract(args []string) int {
 
 	if !checkOnly {
 		fmt.Fprintln(c.stderr, "`zot setup pdf-extract` (install mode) has been replaced by `zot init --pdf`")
-		fmt.Fprintln(c.stderr, "run `zot init --pdf` to install PyMuPDF as part of initialization.")
+		fmt.Fprintln(c.stderr, "run `zot init --pdf` to install PyMuPDF using the current or newly created config.")
 		return 2
 	}
 

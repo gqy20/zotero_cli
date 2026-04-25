@@ -39,6 +39,13 @@ func (c *CLI) runInit(args []string) int {
 	}
 
 	if _, err := os.Stat(path); err == nil {
+		if flags.SetupPDF {
+			cfg, _, loadErr := config.Load()
+			if loadErr != nil {
+				return c.printErr(loadErr)
+			}
+			return c.setupPyMuPDF(cfg)
+		}
 		fmt.Fprintf(c.stderr, "config already exists at %s\n", path)
 		fmt.Fprintf(c.stderr, "edit it manually, or remove it before re-running init\n")
 		return 3
@@ -128,6 +135,19 @@ func (c *CLI) runInit(args []string) int {
 	}
 	if !wantPDF {
 		fmt.Fprintln(c.stdout, "\nYou can install PyMuPDF later with: zot init --pdf")
+		return 0
+	}
+
+	return c.setupPyMuPDF(cfg)
+}
+
+func (c *CLI) setupPyMuPDF(cfg config.Config) int {
+	if cfg.Mode != "local" && cfg.Mode != "hybrid" {
+		fmt.Fprintln(c.stderr, "warning: --pdf flag has no effect in web mode; PyMuPDF is only used for local/hybrid modes")
+		return 0
+	}
+	if cfg.DataDir == "" {
+		fmt.Fprintln(c.stdout, "\nTip: run 'zot init --mode hybrid --data-dir /path --pdf' to set up config and PyMuPDF together.")
 		return 0
 	}
 
@@ -231,7 +251,7 @@ Options:
   --library-id ID       Your Zotero library numeric ID
   --api-key KEY         Zotero Web API key
   --data-dir PATH       Zotero local data directory (required for local/hybrid; auto-detected if omitted)
-  --pdf                 Force PyMuPDF setup after config creation
+  --pdf                 Force PyMuPDF setup after config creation, or use existing config
   --no-pdf              Skip PyMuPDF setup
   --check-pdf           Check PyMuPDF status without installing
 

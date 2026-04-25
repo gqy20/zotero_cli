@@ -157,6 +157,24 @@ func TestRunInitConfigAlreadyExists(t *testing.T) {
 	}
 }
 
+func TestRunInitPdfWithExistingConfigDoesNotFailAlreadyExists(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"init", "--pdf"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "config already exists") {
+		t.Fatalf("expected --pdf to use existing config, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "has no effect in web mode") {
+		t.Fatalf("expected web-mode warning, got %q", stderr.String())
+	}
+}
+
 func TestRunInitHelp(t *testing.T) {
 	stdout, stderr := captureOutput(t)
 	exitCode := Run([]string{"init", "--help"})

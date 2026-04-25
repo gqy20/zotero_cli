@@ -57,9 +57,10 @@
    （如果七牛不可用，回退到 GitHub Release: https://github.com/gqy20/zotero_cli/releases）
 
 3. 运行 zot version 验证安装成功后，向我索取 Zotero API Key 和 Library ID，
-   然后用非交互模式初始化（mode=hybrid）：
-   zot init --mode hybrid --library-type user --library-id <ID> --api-key <KEY>
-   如果 PyMuPDF 未安装，执行 zot init --pdf 安装。
+   然后初始化（mode=hybrid）并安装 PyMuPDF：
+   zot init --mode hybrid --library-type user --library-id <ID> --api-key <KEY> --pdf
+   如果需要完全非交互，请同时传入 Zotero 数据目录：
+   zot init --mode hybrid --library-type user --library-id <ID> --api-key <KEY> --data-dir <ZOTERO_DATA_DIR> --pdf
 
 4. 运行 zot config validate 和 zot overview --json 验证全部就绪。
 ```
