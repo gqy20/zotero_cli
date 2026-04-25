@@ -44,7 +44,7 @@ type ExtractFiguresResult struct {
 }
 
 // figureScriptVersion is bumped when the Python script changes, invalidating old caches.
-const figureScriptVersion = "v6"
+const figureScriptVersion = "v8"
 
 // figureCacheMeta is the persisted manifest for one attachment's extracted figures.
 type figureCacheMeta struct {
@@ -243,11 +243,18 @@ DEFAULTS = {
     # V6: cap candidate count after clustering, before text extraction/rendering.
     "max_candidates_per_page": 80, "max_union_page_pct": 0.85,
     "dense_fallback_min_clusters": 40, "dense_fallback_max_page_pct": 0.98,
+    # V7: avoid pathological get_image_bbox/cluster scans on dense raster/vector pages.
+    "max_image_bbox_scan": 50, "max_drawings_for_image_bbox": 20000,
+    "max_drawings_for_cluster": 100000, "max_extreme_vector_images": 10,
 }
 
-def get_image_anchors(page, min_w=20, min_h=20):
+def get_image_anchor_sets(page, drawing_count=0):
     imgs = page.get_images(full=True)
-    anchors = []
+    if len(imgs) > DEFAULTS["max_image_bbox_scan"]:
+        return [], [], len(imgs), True
+    if drawing_count > DEFAULTS["max_drawings_for_image_bbox"] and len(imgs) > DEFAULTS["max_extreme_vector_images"]:
+        return [], [], len(imgs), True
+    anchors_detect, anchors_fallback = [], []
     ph = page.rect.height
     hl, fs = ph * 0.06, ph * (1 - 0.06)
     for img_info in imgs:
@@ -255,11 +262,14 @@ def get_image_anchors(page, min_w=20, min_h=20):
         try: bbox = page.get_image_bbox(name)
         except: continue
         bw, bh, aspect = bbox.width, bbox.height, bbox.width / max(bbox.height, 1)
-        if bw < min_w and bh < min_h: continue
         cy = (bbox.y0 + bbox.y1) / 2
         if (cy < hl or cy > fs) and aspect > 17: continue
-        anchors.append(fitz.Rect(bbox))
-    return anchors
+        rect = fitz.Rect(bbox)
+        if not (bw < DEFAULTS["anchor_detect_w"] and bh < DEFAULTS["anchor_detect_h"]):
+            anchors_detect.append(rect)
+        if not (bw < DEFAULTS["anchor_fallback_w"] and bh < DEFAULTS["anchor_fallback_h"]):
+            anchors_fallback.append(rect)
+    return anchors_detect, anchors_fallback, len(imgs), False
 
 def count_anchors_in_rect(rect, anchors):
     c = 0
@@ -351,6 +361,11 @@ def rank_candidate(c):
         score *= 1.2
     return score
 
+def page_content_rect(page, margin_pct=0.06):
+    r = page.rect
+    mx, my = r.width * margin_pct, r.height * margin_pct
+    return fitz.Rect(r.x0 + mx, r.y0 + my, r.x1 - mx, r.y1 - my) & r
+
 def main():
     pdf_path, out_dir = sys.argv[1], sys.argv[2]
     os.makedirs(out_dir, exist_ok=True)
@@ -362,7 +377,9 @@ def main():
           # V4 counters
           "filt_aspect":0,"filt_crosspage_dup":0,
           # V6 counter
-          "candidate_cap":0,"dense_unions":0,"dense_page_fallback":0}
+          "candidate_cap":0,"dense_unions":0,"dense_page_fallback":0,
+          "image_bbox_skipped_pages":0,"image_bbox_skipped_images":0,
+          "cluster_skipped_pages":0,"cluster_skipped_drawings":0}
     t0, fi = time.perf_counter(), 0
 
     # V3: cross-page dedup — shared across all pages to catch repeating headers/footers
@@ -373,10 +390,17 @@ def main():
         pw, ph = p.rect.width*200/72, p.rect.height*200/72
         pa = p.rect.width*p.rect.height
         dw = p.get_drawings()
-        an = get_image_anchors(p, DEFAULTS["anchor_detect_w"], DEFAULTS["anchor_detect_h"])
-        fa = get_image_anchors(p, DEFAULTS["anchor_fallback_w"], DEFAULTS["anchor_fallback_h"])
+        extreme_vector_page = len(dw) > DEFAULTS["max_drawings_for_cluster"]
+        an, fa, raw_images, image_bbox_skipped = get_image_anchor_sets(p, len(dw))
+        if image_bbox_skipped:
+            sk["image_bbox_skipped_pages"] += 1
+            sk["image_bbox_skipped_images"] += raw_images
         cl = []
-        if dw: cl = p.cluster_drawings(drawings=dw, x_tolerance=DEFAULTS["x_tolerance"], y_tolerance=DEFAULTS["y_tolerance"])
+        if dw and not extreme_vector_page:
+            cl = p.cluster_drawings(drawings=dw, x_tolerance=DEFAULTS["x_tolerance"], y_tolerance=DEFAULTS["y_tolerance"])
+        elif extreme_vector_page:
+            sk["cluster_skipped_pages"] += 1
+            sk["cluster_skipped_drawings"] += len(dw)
         sk["clusters_total"] += len(cl)
 
         # --- collect candidates ---
@@ -389,6 +413,7 @@ def main():
                 cluster_rects.append(rr)
             else: sk["filt_small"] += 1
         raster_rects = []
+        raster_candidates = []
         for a in fa:
             ap = (a.width*a.height)/pa
             if ap > DEFAULTS["max_anchor_page_pct"]: sk["filt_fullpage"]+=1; continue
@@ -396,7 +421,7 @@ def main():
                        a.x1+DEFAULTS["anchor_expand_pt"], a.y1+DEFAULTS["anchor_expand_pt"]) & p.rect
             raster_rects.append(ex)
             if is_covered(a, cl): sk["filt_covered"]+=1; continue
-            cands.append((ex,"raster")); sk["anchors_fallback"]+=1
+            raster_candidates.append((ex,"raster"))
 
         if len(cluster_rects) > DEFAULTS["adaptive_cand_limit"]:
             ur = fitz.Rect(cluster_rects[0])
@@ -414,6 +439,10 @@ def main():
             if up <= DEFAULTS["dense_fallback_max_page_pct"] and ur.width * ur.height >= DEFAULTS["min_cluster_area_pt"]:
                 cands.append((ur, "raster"))
                 sk["dense_unions"] += 1
+                sk["anchors_fallback"] += 1
+        else:
+            cands.extend(raster_candidates)
+            sk["anchors_fallback"] += len(raster_candidates)
 
         if len(cands) > DEFAULTS["max_candidates_per_page"]:
             cands.sort(key=rank_candidate, reverse=True)
@@ -441,7 +470,9 @@ def main():
             if pp<eff_pct:
                 if src=="cluster": sk["filt_pct"]+=1; continue
             na = count_anchors_in_rect(rc, an)
-            if pp>=DEFAULTS["large_area_pct"] and na==0: sk["filt_no_anchor"]+=1; continue
+            if pp>=DEFAULTS["large_area_pct"] and na==0 and not image_bbox_skipped:
+                sk["filt_no_anchor"]+=1
+                continue
             td = calc_text_density(p, rc)
             if td["is_text_heavy"]: sk["filt_text_heavy"]+=1; continue
             if td["is_caption"] and na==0: sk["filt_caption"]+=1; continue
@@ -475,7 +506,26 @@ def main():
                 "text_ratio":td["text_ratio"],"pct_page":round(pp,1),
                 "confidence":conf})
 
-        if page_kept == 0 and (len(cl) >= DEFAULTS["dense_fallback_min_clusters"] or len(raster_rects) >= DEFAULTS["dense_fallback_min_clusters"]):
+        if page_kept == 0 and image_bbox_skipped:
+            fr = page_content_rect(p)
+            fpct = (fr.width * fr.height) / pa
+            try:
+                pix = p.get_pixmap(clip=fr, dpi=150)
+                ib = pix.tobytes("png"); kb = len(ib)/1024
+            except:
+                pix = None; ib = None; kb = 0
+            if ib and kb >= DEFAULTS["min_output_kb"]:
+                fi += 1
+                sk["kept"] += 1
+                sk["dense_page_fallback"] += 1
+                fn=f"p{pg+1}_fig{fi}.png"
+                with open(os.path.join(out_dir,fn),"wb") as f: f.write(ib)
+                figures.append({"id":fi,"file":fn,"page":pg+1,"source":"raster",
+                    "size_px":f"{pix.width}x{pix.height}","size_pt":f"{fr.width:.0f}x{fr.height:.0f}",
+                    "kb":round(kb,1),"anchors":0,"has_caption":False,
+                    "text_ratio":0,"pct_page":round(fpct*100,1),
+                    "confidence":20})
+        elif page_kept == 0 and (len(cl) >= DEFAULTS["dense_fallback_min_clusters"] or len(raster_rects) >= DEFAULTS["dense_fallback_min_clusters"]):
             fallback_rects = raster_rects
             if not fallback_rects:
                 fallback_rects = [fitz.Rect(r) for r in cl if r.width * r.height > 0]
@@ -515,7 +565,7 @@ if __name__ == "__main__": main()
 func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outputDir string) (ExtractFiguresResult, error) {
 	result := ExtractFiguresResult{
 		ItemKey: item.Key,
-		Method:  "cluster_drawings_v6",
+		Method:  "cluster_drawings_v8",
 	}
 
 	var pdfs []domain.Attachment
