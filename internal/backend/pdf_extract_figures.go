@@ -46,7 +46,7 @@ type ExtractFiguresResult struct {
 }
 
 // figureScriptVersion is bumped when the Python script changes, invalidating old caches.
-const figureScriptVersion = "v11"
+const figureScriptVersion = "v13"
 
 // figureCacheMeta is the persisted manifest for one attachment's extracted figures.
 type figureCacheMeta struct {
@@ -266,6 +266,9 @@ DEFAULTS = {
     "raster_only_page_scan_pages": 50,
     # V11: large raster figures are usually page-sized screenshots; 150dpi is enough and faster.
     "large_raster_low_dpi_pct": 15, "raster_render_dpi": 150,
+    # V12: quality filters for scanned books/theses and publisher/logo pages.
+    "long_doc_pages": 50, "long_doc_min_raster_pct": 8,
+    "edge_page_min_pct": 12, "edge_page_count": 2,
 }
 
 def get_image_anchor_sets(page, drawing_count=0, imgs=None):
@@ -404,6 +407,17 @@ def page_content_rect(page, margin_pct=0.06):
     mx, my = r.width * margin_pct, r.height * margin_pct
     return fitz.Rect(r.x0 + mx, r.y0 + my, r.x1 - mx, r.y1 - my) & r
 
+def is_low_quality_raster_candidate(src, pp, pg, n_pages, aspect):
+    if src != "raster":
+        return False
+    if n_pages >= DEFAULTS["long_doc_pages"] and pp < DEFAULTS["long_doc_min_raster_pct"]:
+        return True
+    if pg == 0 and pp < DEFAULTS["edge_page_min_pct"]:
+        return True
+    if pg >= max(n_pages - DEFAULTS["edge_page_count"], 1) and pp < DEFAULTS["edge_page_min_pct"] and (aspect > 2.5 or pp < 5):
+        return True
+    return False
+
 def main():
     pdf_path, out_dir = sys.argv[1], sys.argv[2]
     os.makedirs(out_dir, exist_ok=True)
@@ -418,7 +432,7 @@ def main():
           "candidate_cap":0,"dense_unions":0,"dense_page_fallback":0,
           "image_bbox_skipped_pages":0,"image_bbox_skipped_images":0,
           "cluster_skipped_pages":0,"cluster_skipped_drawings":0,
-          "raster_only_pages":0}
+          "raster_only_pages":0,"filt_low_quality_raster":0}
     t0, fi = time.perf_counter(), 0
 
     # V3: cross-page dedup — shared across all pages to catch repeating headers/footers
@@ -517,6 +531,9 @@ def main():
                 continue
 
             pp = (rw*rh)/(pw*ph)*100
+            if is_low_quality_raster_candidate(src, pp, pg, n_pages, ar):
+                sk["filt_low_quality_raster"] += 1
+                continue
             if pp<eff_pct:
                 if src=="cluster": sk["filt_pct"]+=1; continue
             na = count_anchors_in_rect(rc, an)
@@ -618,7 +635,7 @@ if __name__ == "__main__": main()
 func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outputDir string) (ExtractFiguresResult, error) {
 	result := ExtractFiguresResult{
 		ItemKey: item.Key,
-		Method:  "cluster_drawings_v11",
+		Method:  "cluster_drawings_v13",
 	}
 
 	var pdfs []domain.Attachment
