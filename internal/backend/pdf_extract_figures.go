@@ -3,8 +3,10 @@ package backend
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,7 +46,7 @@ type ExtractFiguresResult struct {
 }
 
 // figureScriptVersion is bumped when the Python script changes, invalidating old caches.
-const figureScriptVersion = "v8"
+const figureScriptVersion = "v11"
 
 // figureCacheMeta is the persisted manifest for one attachment's extracted figures.
 type figureCacheMeta struct {
@@ -219,6 +221,20 @@ func attSourceInfo(att domain.Attachment) (os.FileInfo, bool) {
 	return nil, false
 }
 
+func fileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
 // It reads PDF path and output dir from sys.argv, writes JSON to stdout.
 const pythonExtractFiguresScript = `
 import json, sys, os, time, re
@@ -246,29 +262,51 @@ DEFAULTS = {
     # V7: avoid pathological get_image_bbox/cluster scans on dense raster/vector pages.
     "max_image_bbox_scan": 50, "max_drawings_for_image_bbox": 20000,
     "max_drawings_for_cluster": 100000, "max_extreme_vector_images": 10,
+    # V10: scanned/raster-only long documents should not pay get_drawings() per page.
+    "raster_only_page_scan_pages": 50,
+    # V11: large raster figures are usually page-sized screenshots; 150dpi is enough and faster.
+    "large_raster_low_dpi_pct": 15, "raster_render_dpi": 150,
 }
 
-def get_image_anchor_sets(page, drawing_count=0):
-    imgs = page.get_images(full=True)
+def get_image_anchor_sets(page, drawing_count=0, imgs=None):
+    if imgs is None:
+        imgs = page.get_images(full=True)
     if len(imgs) > DEFAULTS["max_image_bbox_scan"]:
         return [], [], len(imgs), True
     if drawing_count > DEFAULTS["max_drawings_for_image_bbox"] and len(imgs) > DEFAULTS["max_extreme_vector_images"]:
         return [], [], len(imgs), True
     anchors_detect, anchors_fallback = [], []
+    seen_rects = set()
     ph = page.rect.height
     hl, fs = ph * 0.06, ph * (1 - 0.06)
     for img_info in imgs:
+        xref = img_info[0]
         name = img_info[7]
-        try: bbox = page.get_image_bbox(name)
-        except: continue
-        bw, bh, aspect = bbox.width, bbox.height, bbox.width / max(bbox.height, 1)
-        cy = (bbox.y0 + bbox.y1) / 2
-        if (cy < hl or cy > fs) and aspect > 17: continue
-        rect = fitz.Rect(bbox)
-        if not (bw < DEFAULTS["anchor_detect_w"] and bh < DEFAULTS["anchor_detect_h"]):
-            anchors_detect.append(rect)
-        if not (bw < DEFAULTS["anchor_fallback_w"] and bh < DEFAULTS["anchor_fallback_h"]):
-            anchors_fallback.append(rect)
+        rects = []
+        try:
+            rects = page.get_image_rects(xref)
+        except:
+            rects = []
+        if not rects:
+            try:
+                rects = [page.get_image_bbox(name)]
+            except:
+                rects = []
+        for bbox in rects:
+            if not bbox or bbox.width <= 0 or bbox.height <= 0:
+                continue
+            key = (round(bbox.x0, 1), round(bbox.y0, 1), round(bbox.x1, 1), round(bbox.y1, 1))
+            if key in seen_rects:
+                continue
+            seen_rects.add(key)
+            bw, bh, aspect = bbox.width, bbox.height, bbox.width / max(bbox.height, 1)
+            cy = (bbox.y0 + bbox.y1) / 2
+            if (cy < hl or cy > fs) and aspect > 17: continue
+            rect = fitz.Rect(bbox)
+            if not (bw < DEFAULTS["anchor_detect_w"] and bh < DEFAULTS["anchor_detect_h"]):
+                anchors_detect.append(rect)
+            if not (bw < DEFAULTS["anchor_fallback_w"] and bh < DEFAULTS["anchor_fallback_h"]):
+                anchors_fallback.append(rect)
     return anchors_detect, anchors_fallback, len(imgs), False
 
 def count_anchors_in_rect(rect, anchors):
@@ -379,7 +417,8 @@ def main():
           # V6 counter
           "candidate_cap":0,"dense_unions":0,"dense_page_fallback":0,
           "image_bbox_skipped_pages":0,"image_bbox_skipped_images":0,
-          "cluster_skipped_pages":0,"cluster_skipped_drawings":0}
+          "cluster_skipped_pages":0,"cluster_skipped_drawings":0,
+          "raster_only_pages":0}
     t0, fi = time.perf_counter(), 0
 
     # V3: cross-page dedup — shared across all pages to catch repeating headers/footers
@@ -389,9 +428,20 @@ def main():
         p = doc[pg]
         pw, ph = p.rect.width*200/72, p.rect.height*200/72
         pa = p.rect.width*p.rect.height
-        dw = p.get_drawings()
+        pre_imgs = p.get_images(full=True)
+        raster_only_page = False
+        if n_pages >= DEFAULTS["raster_only_page_scan_pages"] and pre_imgs:
+            try:
+                raster_only_page = len(p.get_text("blocks")) == 0
+            except:
+                raster_only_page = False
+        if raster_only_page:
+            dw = []
+            sk["raster_only_pages"] += 1
+        else:
+            dw = p.get_drawings()
         extreme_vector_page = len(dw) > DEFAULTS["max_drawings_for_cluster"]
-        an, fa, raw_images, image_bbox_skipped = get_image_anchor_sets(p, len(dw))
+        an, fa, raw_images, image_bbox_skipped = get_image_anchor_sets(p, len(dw), pre_imgs)
         if image_bbox_skipped:
             sk["image_bbox_skipped_pages"] += 1
             sk["image_bbox_skipped_images"] += raw_images
@@ -487,8 +537,11 @@ def main():
                 continue
 
             rc2, hc = attach_caption(p, rc)
+            render_dpi = DEFAULTS["render_dpi"]
+            if src == "raster" and pp >= DEFAULTS["large_raster_low_dpi_pct"]:
+                render_dpi = DEFAULTS["raster_render_dpi"]
             try:
-                pix = p.get_pixmap(clip=fitz.Rect(rc2), dpi=200)
+                pix = p.get_pixmap(clip=fitz.Rect(rc2), dpi=render_dpi)
                 ib = pix.tobytes("png"); kb = len(ib)/1024
             except: continue
             if kb<eff_kb: sk["filt_tiny"]+=1; continue
@@ -565,7 +618,7 @@ if __name__ == "__main__": main()
 func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outputDir string) (ExtractFiguresResult, error) {
 	result := ExtractFiguresResult{
 		ItemKey: item.Key,
-		Method:  "cluster_drawings_v8",
+		Method:  "cluster_drawings_v11",
 	}
 
 	var pdfs []domain.Attachment
@@ -608,6 +661,7 @@ func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outp
 	var errs []string
 	cache := newFigureCache(r.DataDir)
 	cacheHits, cacheMisses := 0, 0
+	seenPDFHashes := map[string]string{}
 
 	for _, att := range pdfs {
 		attKey := strings.TrimSpace(att.Key)
@@ -616,6 +670,14 @@ func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outp
 		if !att.Resolved || att.ResolvedPath == "" {
 			errs = append(errs, fmt.Sprintf("%s: PDF path not resolved", attKey))
 			continue
+		}
+		if len(pdfs) > 1 {
+			if hash, hashErr := fileSHA256(att.ResolvedPath); hashErr == nil {
+				if _, duplicate := seenPDFHashes[hash]; duplicate {
+					continue
+				}
+				seenPDFHashes[hash] = attKey
+			}
 		}
 
 		// --- Cache hit: skip Python entirely ---
