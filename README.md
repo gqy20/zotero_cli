@@ -45,16 +45,15 @@
 ```
 帮我安装并配置 zot CLI 工具，按顺序执行：
 
-1. 从七牛 CDN 获取版本信息和下载链接（一步拿到所有平台的 URL）：
-   _INFO=$(curl -sL https://qny.gqy20.top/github/zotero_cli/version.json)
-   然后从 JSON 中提取 version、base_url、files 字段。
+1. 从 GitHub Release 获取版本信息和下载链接：
+   访问 https://github.com/gqy20/zotero_cli/releases/latest 获取最新版本号和各平台下载链接。
+   （如果 GitHub 不可用，回退到七牛 CDN: https://qny.gqy20.top/github/zotero_cli/version.json）
 
 2. 检测当前平台（Windows/macOS/Linux），创建 ~/.local/bin 目录（如不存在）并加入 PATH。
-   根据平台从七牛 CDN 下载对应文件到 ~/.local/bin/：
-   Windows -> ${files.windows_amd64}，重命名为 zot.exe
+   根据平台从 GitHub 下载对应文件到 ~/.local/bin/：
+   Windows -> 下载 windows_amd64 zip，重命名为 zot.exe
    macOS/Linux -> 解压对应 tar.gz 中的 zot 二进制
    chmod +x ~/.local/bin/zot（非 Windows）
-   （如果七牛不可用，回退到 GitHub Release: https://github.com/gqy20/zotero_cli/releases）
 
 3. 运行 zot version 验证安装成功后，向我索取 Zotero API Key 和 Library ID，
    然后初始化（mode=hybrid）并安装 PyMuPDF：
