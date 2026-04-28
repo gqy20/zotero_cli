@@ -74,7 +74,7 @@ func parseFindArgs(args []string) (findParsedArgs, error) {
 			}
 			i++
 			opts.DateBefore = strings.TrimSpace(args[i])
-		case "--limit":
+		case "--limit", "-l":
 			if i+1 >= len(args) {
 				return findParsedArgs{}, fmt.Errorf("missing value for --limit")
 			}
