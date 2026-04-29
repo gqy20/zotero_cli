@@ -26,7 +26,8 @@ func localFindQuery(opts FindOptions) (string, []any) {
 			COALESCE(MAX(CASE WHEN f.fieldName = 'url' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'publicationTitle' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'proceedingsTitle' THEN v.value END), ''),
-			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), '')
+			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), ''),
+				COALESCE(i.dateAdded, '')
 		FROM items i
 		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
 		LEFT JOIN itemData d ON d.itemID = i.itemID
@@ -434,7 +435,8 @@ func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (dom
 			COALESCE(MAX(CASE WHEN f.fieldName = 'url' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'publicationTitle' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'proceedingsTitle' THEN v.value END), ''),
-			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), '')
+			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), ''),
+			COALESCE(i.dateAdded, '')
 		FROM items i
 		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
 		LEFT JOIN itemData d ON d.itemID = i.itemID
@@ -465,6 +467,7 @@ func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (dom
 		&item.URL,
 		&publicationTitle,
 		&proceedingsTitle,
+		&item.DateAdded,
 		&bookTitle,
 	)
 	if err != nil {
@@ -504,7 +507,8 @@ func (r *LocalReader) batchLoadItemsByKeys(ctx context.Context, db *sql.DB, keys
 			COALESCE(MAX(CASE WHEN f.fieldName = 'url' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'publicationTitle' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'proceedingsTitle' THEN v.value END), ''),
-			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), '')
+			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), ''),
+			COALESCE(i.dateAdded, '')
 		FROM items i
 		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
 		LEFT JOIN itemData d ON d.itemID = i.itemID
@@ -537,6 +541,7 @@ func (r *LocalReader) batchLoadItemsByKeys(ctx context.Context, db *sql.DB, keys
 			&publicationTitle,
 			&proceedingsTitle,
 			&bookTitle,
+			&item.DateAdded,
 		); err != nil {
 			return nil, nil, err
 		}

@@ -203,6 +203,7 @@ func parseFindIncludeFields(value string) ([]string, error) {
 		"item_type":         {},
 		"title":             {},
 		"date":              {},
+		"date_added":        {},
 		"creators":          {},
 		"container":         {},
 		"volume":            {},

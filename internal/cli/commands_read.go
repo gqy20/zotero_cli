@@ -147,9 +147,10 @@ func (c *CLI) runFind(args []string) int {
 	}
 
 	for _, item := range items {
-		fmt.Fprintf(c.stdout, "%-10s  %-16s  %-6s  %-18s  %s\n",
+		fmt.Fprintf(c.stdout, "%-10s  %-16s  %-10s  %-10s  %-18s  %s\n",
 			item.Key,
 			item.ItemType,
+			shortDate(item.DateAdded),
 			shortDate(item.Date),
 			shortCreators(item.Creators),
 			item.Title,
@@ -277,6 +278,9 @@ func (c *CLI) runShow(args []string) int {
 	}
 	if item.Date != "" {
 		fmt.Fprintf(c.stdout, "Date: %s\n", item.Date)
+	}
+	if item.DateAdded != "" {
+		fmt.Fprintf(c.stdout, "Date Added: %s\n", item.DateAdded)
 	}
 	if item.Container != "" {
 		fmt.Fprintf(c.stdout, "Container: %s\n", item.Container)

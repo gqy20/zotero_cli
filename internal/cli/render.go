@@ -28,6 +28,9 @@ func (c *CLI) renderFindItemDetailed(item domain.Item, opts backend.FindOptions)
 	if printDate {
 		fmt.Fprintf(c.stdout, "Date: %s\n", item.Date)
 	}
+	if item.DateAdded != "" {
+		fmt.Fprintf(c.stdout, "Date Added: %s\n", item.DateAdded)
+	}
 	if printCreators {
 		fmt.Fprintf(c.stdout, "Creators: %s\n", joinCreatorNames(item.Creators))
 	}
@@ -74,6 +77,10 @@ func (c *CLI) renderFindItemDetailed(item domain.Item, opts backend.FindOptions)
 		case "date":
 			if item.Date != "" {
 				fmt.Fprintf(c.stdout, "Date: %s\n", item.Date)
+			}
+		case "date_added":
+			if item.DateAdded != "" {
+				fmt.Fprintf(c.stdout, "Date Added: %s\n", item.DateAdded)
 			}
 		case "creators":
 			if len(item.Creators) > 0 {

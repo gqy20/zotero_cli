@@ -154,6 +154,7 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 					&publicationTitle,
 					&proceedingsTitle,
 					&bookTitle,
+					&item.DateAdded,
 					&item.SearchScore,
 				); err != nil {
 					return err
@@ -173,6 +174,7 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 				&publicationTitle,
 				&proceedingsTitle,
 				&bookTitle,
+				&item.DateAdded,
 			); err != nil {
 				return err
 			}

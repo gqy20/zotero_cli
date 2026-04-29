@@ -161,6 +161,7 @@ type Item struct {
 	Attachments []Attachment        `json:"attachments,omitempty"`
 	Notes       []Note              `json:"notes,omitempty"`
 	Relations   map[string][]string `json:"relations,omitempty"`
+	DateAdded   string              `json:"date_added,omitempty"`
 }
 
 type Creator struct {
@@ -187,6 +188,7 @@ type apiItemData struct {
 	ItemType         string                     `json:"itemType"`
 	Title            string                     `json:"title"`
 	Date             string                     `json:"date"`
+	DateAdded        string                     `json:"dateAdded"`
 	DOI              string                     `json:"DOI"`
 	URL              string                     `json:"url"`
 	ContentType      string                     `json:"contentType"`

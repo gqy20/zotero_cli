@@ -217,6 +217,7 @@ func mapItem(item apiItem) Item {
 		ItemType:  item.Data.ItemType,
 		Title:     item.Data.Title,
 		Date:      item.Data.Date,
+		DateAdded: item.Data.DateAdded,
 		Creators:  mapCreators(item.Data.Creators),
 		Container: firstNonEmpty(item.Data.PublicationTitle, item.Data.ProceedingsTitle, item.Data.BookTitle),
 		Volume:    item.Data.Volume,
