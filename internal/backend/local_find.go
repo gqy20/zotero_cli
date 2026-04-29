@@ -437,7 +437,8 @@ func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (dom
 			COALESCE(MAX(CASE WHEN f.fieldName = 'publicationTitle' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'proceedingsTitle' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), ''),
-			COALESCE(i.dateAdded, '')
+			COALESCE(i.dateAdded, ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'abstractNote' THEN v.value END), '')
 		FROM items i
 		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
 		LEFT JOIN itemData d ON d.itemID = i.itemID
@@ -468,8 +469,9 @@ func (r *LocalReader) loadItem(ctx context.Context, db *sql.DB, key string) (dom
 		&item.URL,
 		&publicationTitle,
 		&proceedingsTitle,
-		&item.DateAdded,
 		&bookTitle,
+		&item.DateAdded,
+		&item.Abstract,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -509,7 +511,8 @@ func (r *LocalReader) batchLoadItemsByKeys(ctx context.Context, db *sql.DB, keys
 			COALESCE(MAX(CASE WHEN f.fieldName = 'publicationTitle' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'proceedingsTitle' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), ''),
-			COALESCE(i.dateAdded, '')
+			COALESCE(i.dateAdded, ''),
+			COALESCE(MAX(CASE WHEN f.fieldName = 'abstractNote' THEN v.value END), '')
 		FROM items i
 		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
 		LEFT JOIN itemData d ON d.itemID = i.itemID
@@ -543,6 +546,7 @@ func (r *LocalReader) batchLoadItemsByKeys(ctx context.Context, db *sql.DB, keys
 			&proceedingsTitle,
 			&bookTitle,
 			&item.DateAdded,
+			&item.Abstract,
 		); err != nil {
 			return nil, nil, err
 		}
