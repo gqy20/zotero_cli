@@ -204,6 +204,7 @@ func parseFindIncludeFields(value string) ([]string, error) {
 		"title":             {},
 		"date":              {},
 		"date_added":        {},
+		"abstract":          {},
 		"creators":          {},
 		"container":         {},
 		"volume":            {},

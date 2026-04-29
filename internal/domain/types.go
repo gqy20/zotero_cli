@@ -25,6 +25,7 @@ type Item struct {
 	MatchedChunk         *MatchedChunkInfo `json:"matched_chunk,omitempty"`
 	JournalRank          *JournalRank      `json:"journal_rank,omitempty"`
 	DateAdded            string            `json:"date_added,omitempty"`
+	Abstract             string            `json:"abstract,omitempty"`
 }
 
 type MatchedChunkInfo struct {

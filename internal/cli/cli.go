@@ -74,6 +74,8 @@ func (c *CLI) Run(args []string) int {
 		return c.runSelect(args[1:])
 	case "annotations":
 		return c.runAnnotations(args[1:])
+	case "abstract":
+		return c.runAbstract(args[1:])
 	case "relate":
 		return c.runRelate(args[1:])
 	case "export":

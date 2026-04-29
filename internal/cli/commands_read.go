@@ -282,6 +282,9 @@ func (c *CLI) runShow(args []string) int {
 	if item.DateAdded != "" {
 		fmt.Fprintf(c.stdout, "Date Added: %s\n", item.DateAdded)
 	}
+	if item.Abstract != "" {
+		fmt.Fprintf(c.stdout, "Abstract: %s\n", item.Abstract)
+	}
 	if item.Container != "" {
 		fmt.Fprintf(c.stdout, "Container: %s\n", item.Container)
 	}

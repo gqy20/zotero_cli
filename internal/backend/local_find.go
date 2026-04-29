@@ -27,7 +27,8 @@ func localFindQuery(opts FindOptions) (string, []any) {
 			COALESCE(MAX(CASE WHEN f.fieldName = 'publicationTitle' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'proceedingsTitle' THEN v.value END), ''),
 			COALESCE(MAX(CASE WHEN f.fieldName = 'bookTitle' THEN v.value END), ''),
-				COALESCE(i.dateAdded, '')
+				COALESCE(i.dateAdded, ''),
+				COALESCE(MAX(CASE WHEN f.fieldName = 'abstractNote' THEN v.value END), '')
 		FROM items i
 		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
 		LEFT JOIN itemData d ON d.itemID = i.itemID

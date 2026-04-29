@@ -37,7 +37,7 @@ func (c *CLI) renderFindItemDetailed(item domain.Item, opts backend.FindOptions)
 
 	fields := opts.IncludeFields
 	if opts.Full {
-		fields = []string{"container", "journal_rank", "volume", "issue", "pages", "version", "doi", "url", "tags", "matched_on"}
+		fields = []string{"container", "journal_rank", "volume", "issue", "pages", "version", "doi", "url", "tags", "matched_on", "abstract"}
 	}
 
 	for _, field := range fields {

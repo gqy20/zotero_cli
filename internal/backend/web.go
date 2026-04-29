@@ -135,6 +135,7 @@ func mapItem(item zoteroapi.Item) domain.Item {
 		Title:       item.Title,
 		Date:        item.Date,
 		DateAdded:   item.DateAdded,
+		Abstract:    item.Abstract,
 		Creators:    mapCreators(item.Creators),
 		Container:   item.Container,
 		Volume:      item.Volume,
