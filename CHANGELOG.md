@@ -7,8 +7,11 @@
 ## [Unreleased]
 
 ### 新增
+- **`date_added` 字段**：`find` 和 `show` 输出现在包含条目入库时间（`date_added` 字段），支持 web/local/hybrid 三种模式。find 表格输出新增"入库时间"列，show --full 新增 Date Added 区块
+- **`abstract` 摘要字段与命令**：条目数据新增 `abstract`（摘要）字段，在 find/show/abstract 命令中均可获取。新增独立 `zot abstract <key> [keys...] [--json]` 命令用于批量查看条目摘要。支持 `--include abstract` 字段过滤和 `--full` 默认展示
 
 ### 修复
+- **`find -l` 短标志**：`--limit` 选项现在支持 `-l` 短标志（此前仅支持完整 `--limit`）
 
 ### 变更
 

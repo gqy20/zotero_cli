@@ -2,7 +2,7 @@
 name: zotero-cli
 version: "0.0.9"
 description: >
-  Zotero 文献管理 CLI（`zot`）。文献检索(find/show)、导出(export bibtex/csljson)、
+  Zotero 文献管理 CLI（`zot`）。文献检索(find/show/abstract)、导出(export bibtex/csljson)、
   引用数据导出(export)、PDF 标注提取(annotations/extract-text/extract-figures)、
   关系网络(relate --aggregate --dot)、写操作(create-item/update-item/add-tag)。
   支持 web/local/hybrid 三种模式。搜索/管理/分析 Zotero 文献库时使用。
@@ -61,11 +61,12 @@ zot stats --json           # 条目/收藏夹/搜索计数
 > **有过滤标志时无需 `--all` 也无需查询词，自动按纯过滤条件搜索。** 仅无查询词且无任何过滤时才报错。
 
 ```shell
-zot find "CRISPR gene editing" --json              # 关键词搜索
+zot find "CRISPR gene editing" --json              # 关键词搜索（含 date_added / abstract 字段）
 zot find --tag TAG1 --tag TAG2 --json              # 纯标签过滤
 zot find --collection KEY --date-after 2024-01 --json  # 组合过滤
 zot find --all --json                              # 全部条目
-zot show ITEMKEY --json                            # 条目详情（含子笔记+标注+期刊等级）
+zot show ITEMKEY --json                            # 条目详情（含子笔记+标注+期刊等级+摘要）
+zot abstract ITEMKEY --json                        # 查看条目摘要（支持多 key 批量）
 zot relate ITEMKEY --json                          # 关联条目
 ```
 
@@ -124,6 +125,7 @@ zot schema template book --json            # 创建模板
 | 命令 | 说明 |
 |------|------|
 | `collections` / `collections-top` | 收藏夹列表 |
+| `abstract` | 查看条目摘要（支持批量 + --json） |
 | `tags` | 标签列表 |
 | `notes [--query "..."]` | 笔记搜索 |
 | `searches` | 已保存搜索 |
