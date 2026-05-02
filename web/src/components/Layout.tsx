@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { BookOpen, LayoutDashboard, Search, Tags, Upload, Library, Sparkles } from 'lucide-react'
+import { BookOpen, LayoutDashboard, Search, Tags, Upload, Library, Sparkles, Menu, X } from 'lucide-react'
 import { Toaster } from '@/components/Toaster'
 
 const navItems = [
@@ -11,14 +12,40 @@ const navItems = [
 ]
 
 export default function Layout() {
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
   return (
     <div className="flex h-screen bg-[#f8f9fc]">
-      {/* Sidebar */}
-      <aside className="w-60 flex flex-col border-r border-gray-200/80 bg-white/80 backdrop-blur-sm">
+      {/* Mobile menu button */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="md:hidden fixed top-4 left-4 z-50 w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 shadow-sm"
+        aria-label={sidebarOpen ? '关闭菜单' : '打开菜单'}
+        aria-expanded={sidebarOpen}
+      >
+        {sidebarOpen ? <X className="w-5 h-5 text-gray-600" /> : <Menu className="w-5 h-5 text-gray-600" />}
+      </button>
+
+      {/* Sidebar - overlay on mobile */}
+      <aside
+        className={`${
+          sidebarOpen ? 'flex' : 'hidden'
+        } md:flex flex-col w-60 border-r border-gray-200/80 bg-white/80 backdrop-blur-sm fixed md:relative inset-y-0 left-0 z-40 transition-transform duration-200`}
+        aria-label="侧边栏"
+      >
+        {/* Mobile backdrop */}
+        {sidebarOpen && (
+          <div
+            className="md:hidden fixed inset-0 bg-black/20 z-[-1]"
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
         {/* Brand */}
         <div className="flex items-center gap-3 px-5 h-16 border-b border-gray-100">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center shadow-sm shadow-red-500/20">
-            <BookOpen className="w-4 h-4 text-white" />
+            <BookOpen className="w-4 h-4 text-white" aria-hidden="true" />
           </div>
           <div>
             <span className="font-semibold text-sm text-gray-900 tracking-tight">Zotero Web</span>
@@ -27,12 +54,13 @@ export default function Layout() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5">
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto" aria-label="主导航">
           {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
               end={to === '/dashboard'}
+              onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
                 `group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
                   isActive
@@ -41,10 +69,10 @@ export default function Layout() {
                 }`
               }
             >
-              <Icon className={`w-[18px] h-[18px] transition-colors duration-200 group-data-[active=true]:text-red-600 text-gray-400 group-hover:text-gray-600`} />
+              <Icon className={`w-[18px] h-[18px] transition-colors duration-200 group-data-[active=true]:text-red-600 text-gray-400 group-hover:text-gray-600`} aria-hidden="true" />
               <span>{label}</span>
               {to === '/dashboard' && (
-                <Sparkles className="w-3.5 h-3.5 ml-auto text-amber-500" />
+                <Sparkles className="w-3.5 h-3.5 ml-auto text-amber-500" aria-hidden="true" />
               )}
             </NavLink>
           ))}
@@ -65,7 +93,7 @@ export default function Layout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto relative">
+      <main className="flex-1 overflow-auto relative md:ml-0">
         <Outlet />
         <Toaster />
       </main>

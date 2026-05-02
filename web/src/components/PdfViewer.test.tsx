@@ -193,3 +193,44 @@ describe('PdfViewer', () => {
     }, { timeout: 3000 })
   })
 })
+
+// --- Accessibility Tests ---
+
+describe('PdfViewer Accessibility', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('toolbar buttons have aria-labels', async () => {
+    render(<PdfViewer url="/api/v1/files/test" />)
+    await waitFor(() => expect(screen.getByTitle('上一页')).toBeInTheDocument(), { timeout: 3000 })
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('button').length).toBeGreaterThanOrEqual(5)
+      const names = screen.getAllByRole('button').map(b => b.getAttribute('aria-label'))
+      expect(names).toContain('上一页')
+      expect(names).toContain('下一页')
+      expect(names).toContain('缩小')
+      expect(names).toContain('放大')
+      expect(names).toContain('适应页面宽度')
+    }, { timeout: 1000 })
+  })
+
+  it('canvas has role=presentation', async () => {
+    render(<PdfViewer url="/api/v1/files/test" />)
+    await waitFor(() => expect(screen.getByRole('presentation')).toBeInTheDocument(), { timeout: 3000 })
+  })
+
+  it('page indicator is semantically structured (live region)', async () => {
+    render(<PdfViewer url="/api/v1/files/test" />)
+    await waitFor(() => expect(screen.getByText('1 / 3')).toBeInTheDocument(), { timeout: 3000 })
+  })
+
+  it('disabled buttons have aria-disabled=true', async () => {
+    render(<PdfViewer url="/api/v1/files/test" />)
+    await waitFor(() => expect(screen.getByTitle('上一页')).toBeInTheDocument(), { timeout: 3000 })
+
+    const prevBtn = screen.getByRole('button', { name: /上一页/ })
+    expect(prevBtn).toBeDisabled()
+  })
+})

@@ -8,6 +8,7 @@ interface SearchInputProps {
   variant?: 'default' | 'prominent'
   autoFocus?: boolean
   className?: string
+  'aria-label'?: string
 }
 
 export default function SearchInput({
@@ -17,6 +18,7 @@ export default function SearchInput({
   variant = 'default',
   autoFocus = false,
   className = '',
+  'aria-label': ariaLabel,
 }: SearchInputProps) {
   const [internalValue, setInternalValue] = useState('')
   const value = controlledValue !== undefined ? controlledValue : internalValue
@@ -31,7 +33,7 @@ export default function SearchInput({
   if (variant === 'prominent') {
     return (
       <div className="relative">
-        <div className="absolute left-5 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
+        <div className="absolute left-5 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none" aria-hidden="true">
           {hasValue && <Sparkles className="w-3.5 h-3.5 text-red-400" />}
           <Search className={`w-5 h-5 ${hasValue ? 'text-red-400' : 'text-gray-300'} transition-colors`} />
         </div>
@@ -41,6 +43,7 @@ export default function SearchInput({
           onChange={handleChange}
           placeholder={placeholder}
           autoFocus={autoFocus}
+          aria-label={ariaLabel || placeholder}
           className={`w-full pl-13 pr-5 py-4 text-sm bg-white border rounded-2xl focus:outline-none transition-all duration-200 shadow-sm ${
             hasValue
               ? 'border-red-200 ring-4 ring-red-500/5 focus:border-red-400 focus:ring-4 focus:ring-red-500/10'
@@ -53,12 +56,13 @@ export default function SearchInput({
 
   return (
     <div className={`relative max-w-md flex-1 ${className}`}>
-      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" aria-hidden="true" />
       <input
         type="search"
         value={value}
         onChange={handleChange}
         placeholder={placeholder}
+        aria-label={ariaLabel || placeholder}
         className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:bg-white transition-all placeholder:text-gray-300"
       />
     </div>

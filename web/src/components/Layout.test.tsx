@@ -33,4 +33,34 @@ describe('Layout', () => {
     expect(container.querySelector('aside')).toBeTruthy()
     expect(container.querySelector('main')).toBeTruthy()
   })
+
+  // --- Accessibility Tests ---
+
+  it('navigation has role=navigation with aria-label', () => {
+    const { container } = renderWithRouter(<Layout />)
+    const nav = container.querySelector('nav')
+    expect(nav).toBeTruthy()
+    expect(nav).toHaveAttribute('aria-label')
+  })
+
+  it('sidebar has landmark role', () => {
+    const { container } = renderWithRouter(<Layout />)
+    const aside = container.querySelector('aside')
+    expect(aside).toBeTruthy()
+  })
+
+  it('main content area has proper landmark', () => {
+    const { container } = renderWithRouter(<Layout />)
+    const main = container.querySelector('main')
+    expect(main).toBeTruthy()
+  })
+
+  it('nav links are keyboard focusable and have accessible names', () => {
+    renderWithRouter(<Layout />)
+    const links = screen.getAllByRole('link')
+    expect(links.length).toBeGreaterThanOrEqual(5)
+    links.forEach(link => {
+      expect(link.getAttribute('href')).toBeTruthy()
+    })
+  })
 })

@@ -124,20 +124,22 @@ export default function PdfViewer({ url, scale: initialScale = 1.5 }: PdfViewerP
               onClick={goPrev}
               disabled={currentPage <= 1}
               title="上一页"
+              aria-label="上一页"
               className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4" aria-hidden="true" />
             </button>
-            <span className="text-xs text-gray-600 min-w-[48px] text-center tabular-nums font-medium">
+            <span className="text-xs text-gray-600 min-w-[48px] text-center tabular-nums font-medium" aria-live="polite" aria-atomic="true">
               {currentPage} / {totalPages}
             </span>
             <button
               onClick={goNext}
               disabled={currentPage >= totalPages}
               title="下一页"
+              aria-label="下一页"
               className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
 
@@ -145,20 +147,20 @@ export default function PdfViewer({ url, scale: initialScale = 1.5 }: PdfViewerP
 
           {/* Zoom */}
           <div className="flex items-center gap-1.5">
-            <button onClick={zoomOut} disabled={scale <= MIN_SCALE} title="缩小"
+            <button onClick={zoomOut} disabled={scale <= MIN_SCALE} title="缩小" aria-label="缩小"
               className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-              <ZoomOut className="w-4 h-4" />
+              <ZoomOut className="w-4 h-4" aria-hidden="true" />
             </button>
-            <span className="text-xs text-gray-500 min-w-[44px] text-center tabular-nums font-mono">
+            <span className="text-xs text-gray-500 min-w-[44px] text-center tabular-nums font-mono" aria-label={`缩放比例 ${Math.round(scale * 100)}%`}>
               {Math.round(scale * 100)}%
             </span>
-            <button onClick={zoomIn} disabled={scale >= MAX_SCALE} title="放大"
+            <button onClick={zoomIn} disabled={scale >= MAX_SCALE} title="放大" aria-label="放大"
               className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-              <ZoomIn className="w-4 h-4" />
+              <ZoomIn className="w-4 h-4" aria-hidden="true" />
             </button>
-            <button onClick={fitWidth} title="适应宽度"
+            <button onClick={fitWidth} title="适应宽度" aria-label="适应页面宽度"
               className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-all ml-1">
-              <Maximize2 className="w-4 h-4" />
+              <Maximize2 className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
         </div>

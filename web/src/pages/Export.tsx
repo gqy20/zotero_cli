@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 import type { Item } from '@/types/item'
 import { Download, FileCode, FileText, Braces, Check } from 'lucide-react'
 import EmptyState from '@/components/EmptyState'
+import { ExportSkeleton } from '@/components/PageSkeletons'
 
 const formats = [
   { name: 'BibTeX', icon: FileCode, desc: 'LaTeX 引用格式', color: 'from-red-500 to-rose-600' },
@@ -14,10 +15,12 @@ const formats = [
 export default function Export() {
   const [selectedFormat, setSelectedFormat] = useState('BibTeX')
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
-  const { data: itemsData } = useQuery({
+  const { data: itemsData, isLoading } = useQuery({
     queryKey: ['items', 0, 100],
     queryFn: () => api.items({ start: 0, limit: 100 }),
   })
+
+  if (isLoading) return <ExportSkeleton />
 
   const items = itemsData?.ok ? (itemsData.data as Item[]) : []
 

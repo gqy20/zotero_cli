@@ -4,6 +4,7 @@ import { BookOpen, FolderOpen, Search, BarChart3, ArrowUpRight, Clock } from 'lu
 import type { LibraryStats, Item } from '@/types/item'
 import StatCard from '@/components/StatCard'
 import EmptyState from '@/components/EmptyState'
+import ErrorFallback from '@/components/ErrorFallback'
 import { DashboardSkeleton } from '@/components/PageSkeletons'
 
 const statStyles = [
@@ -14,30 +15,45 @@ const statStyles = [
 ]
 
 export default function Dashboard() {
-  const { data, isLoading } = useQuery({ queryKey: ['overview'], queryFn: () => api.overview() })
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
+    queryKey: ['overview'],
+    queryFn: () => api.overview(),
+    retry: 1,
+  })
 
   if (isLoading) return <DashboardSkeleton />
-  if (!data?.ok) return <div className="p-6 text-red-500">{data?.error || 'Failed to load'}</div>
+  if (isError) {
+    return (
+      <ErrorFallback
+        message={error instanceof Error ? error.message : undefined}
+        onRetry={() => refetch()}
+        className="p-8"
+      />
+    )
+  }
+  if (!data?.ok) {
+    return <ErrorFallback message={data?.error || 'Failed to load'} onRetry={() => refetch()} className="p-8" />
+  }
 
   const stats = data.data.stats
   const recentItems = data.data.recent_items
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-4 md:p-8 space-y-6 md:space-y-8">
       {/* Header */}
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col md:flex-row items-start md:items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">总览</h1>
           <p className="text-sm text-gray-400 mt-1">文献库概览与最近动态</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-gray-400">
-          <Clock className="w-3.5 h-3.5" />
+          <Clock className="w-3.5 h-3.5" aria-hidden="true" />
           <span>实时更新</span>
         </div>
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-4 gap-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-5">
         <StatCard title="文献数" value={stats.total_items} Icon={BookOpen} style={statStyles[0]} />
         <StatCard title="分类数" value={stats.total_collections} Icon={FolderOpen} style={statStyles[1]} />
         <StatCard title="标签数" value="-" Icon={BarChart3} style={statStyles[2]} />
@@ -74,7 +90,7 @@ export default function Dashboard() {
                     </span>
                   )}
                   <span className="text-xs text-gray-300 whitespace-nowrap">{item.date?.slice(0, 4) || '-'}</span>
-                  <ArrowUpRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-red-400 transition-colors" />
+                  <ArrowUpRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-red-400 transition-colors" aria-hidden="true" />
                 </div>
               </a>
             ))

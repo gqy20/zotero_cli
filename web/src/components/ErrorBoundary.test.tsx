@@ -34,7 +34,7 @@ describe('ErrorBoundary', () => {
         <ThrowComponent />
       </ErrorBoundary>,
     )
-    expect(screen.getByText(/something went wrong/i)).toBeInTheDocument()
+    expect(screen.getByText(/页面渲染出错/)).toBeInTheDocument()
   })
 
   it('shows error details in development', () => {
@@ -61,7 +61,7 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     )
 
-    expect(screen.getByText(/something went wrong/i)).toBeInTheDocument()
+    expect(screen.getByText(/页面渲染出错/)).toBeInTheDocument()
 
     const resetBtn = screen.getByRole('button')
     await user.click(resetBtn)
