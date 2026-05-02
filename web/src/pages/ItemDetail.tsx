@@ -134,8 +134,8 @@ export default function ItemDetail() {
 
       {/* PDF Preview Modal */}
       {previewUrl && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200" onClick={() => setPreviewUrl(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2 animate-in fade-in duration-200" onClick={() => setPreviewUrl(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[95vw] h-[95vh] flex flex-col animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-red-500" />
@@ -145,7 +145,7 @@ export default function ItemDetail() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex-1 overflow-auto p-6 bg-gray-50/50">
+            <div className="flex-1 overflow-auto p-3 bg-gray-50/50">
               <PdfViewer url={previewUrl} />
             </div>
           </div>

@@ -11,11 +11,12 @@ import { LibrarySkeleton } from '@/components/PageSkeletons'
 
 export default function Library() {
   const [page, setPage] = useState(0)
+  const [selectedCollection, setSelectedCollection] = useState<string | null>(null)
   const limit = 25
 
   const { data, isLoading } = useQuery({
-    queryKey: ['items', page, limit],
-    queryFn: () => api.items({ start: page * limit, limit }),
+    queryKey: ['items', page, limit, selectedCollection],
+    queryFn: () => api.items({ start: page * limit, limit, ...(selectedCollection ? { collection: selectedCollection } : {}) }),
   })
 
   const { data: collectionsData } = useQuery({
@@ -25,6 +26,11 @@ export default function Library() {
 
   const items = data?.ok ? data.data : []
   const collections = collectionsData?.ok ? collectionsData.data : []
+
+  const handleCollectionClick = (key: string | null) => {
+    setSelectedCollection(key)
+    setPage(0)
+  }
 
   return (
     <div className="flex h-full">
@@ -37,16 +43,31 @@ export default function Library() {
           </div>
         </div>
         <div className="py-2">
-          <div className="mx-2 px-3 py-2 text-sm bg-gradient-to-r from-red-50 to-rose-50 text-red-700 rounded-xl cursor-pointer font-medium flex items-center gap-2">
+          <div
+            onClick={() => handleCollectionClick(null)}
+            className={`mx-2 px-3 py-2 text-sm rounded-xl cursor-pointer font-medium flex items-center gap-2 transition-colors ${
+              selectedCollection === null
+                ? 'bg-gradient-to-r from-red-50 to-rose-50 text-red-700'
+                : 'text-gray-500 hover:bg-gray-50'
+            }`}
+          >
             <BookOpen className="w-4 h-4" />
             全部文献
             <span className="ml-auto text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">{data?.meta?.total ?? items.length}</span>
           </div>
           {collections.map((col: Collection) => (
-            <div key={col.key} className="mx-2 px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors flex items-center gap-2 group">
-              <FolderOpen className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-400" />
+            <div
+              key={col.key}
+              onClick={() => handleCollectionClick(col.key)}
+              className={`mx-2 px-3 py-2 text-sm rounded-xl cursor-pointer transition-colors flex items-center gap-2 group ${
+                selectedCollection === col.key
+                  ? 'bg-gradient-to-r from-red-50 to-rose-50 text-red-700 font-medium'
+                  : 'text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <FolderOpen className={`w-3.5 h-3.5 ${selectedCollection === col.key ? 'text-red-500' : 'text-gray-300 group-hover:text-gray-400'}`} />
               <span className="truncate">{col.name}</span>
-              <span className="ml-auto text-[10px] text-gray-300 group-hover:text-gray-400">{col.num_items || ''}</span>
+              <span className={`ml-auto text-[10px] ${selectedCollection === col.key ? 'text-red-400' : 'text-gray-300 group-hover:text-gray-400'}`}>{col.num_items || ''}</span>
             </div>
           ))}
         </div>
