@@ -131,6 +131,11 @@ func NewReader(cfg config.Config, httpClient *http.Client) (Reader, error) {
 			return &HybridReader{web: webReader}, nil
 		}
 		return &HybridReader{local: localReader, web: webReader}, nil
+	case "remote":
+		if cfg.ServerAddr == "" {
+			return nil, fmt.Errorf("remote mode requires server_addr (ZOT_SERVER_ADDR) to be set")
+		}
+		return NewRemoteReader(cfg.ServerAddr, httpClient), nil
 	default:
 		return nil, fmt.Errorf("unsupported mode %q", mode)
 	}

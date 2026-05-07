@@ -87,6 +87,8 @@ func (c *CLI) remoteClientConfig(cfg config.Config) (config.Config, error) {
 	case "hybrid":
 		normalized.Mode = "web"
 		return normalized, nil
+	case "remote":
+		return config.Config{}, fmt.Errorf("web API commands are not available in remote mode; use web or hybrid mode")
 	case "local":
 		return config.Config{}, fmt.Errorf("web API commands are not available in local mode; use web or hybrid mode")
 	default:

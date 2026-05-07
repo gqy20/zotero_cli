@@ -72,7 +72,10 @@ func ServeFromConfig(cfg config.Config) (func(), error) {
 		logLevel = "info"
 	}
 	logger := NewLogger(os.Stdout, logLevel)
-	addr := ":8080"
+	addr := ":8021"
+	if port := os.Getenv("ZOT_SERVER_PORT"); port != "" {
+		addr = ":" + port
+	}
 	s := NewServerWithLogger(reader, addr, logger)
 	go func() {
 		if err := s.Start(); err != nil && err != http.ErrServerClosed {

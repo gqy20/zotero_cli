@@ -69,6 +69,9 @@ func (c *CLI) runInit(args []string) int {
 	if flags.DataDir != "" {
 		cfg.DataDir = flags.DataDir
 	}
+	if flags.ServerAddr != "" {
+		cfg.ServerAddr = flags.ServerAddr
+	}
 
 	provided := map[string]bool{
 		"mode":         flags.Mode != "",
@@ -76,6 +79,7 @@ func (c *CLI) runInit(args []string) int {
 		"library_id":   flags.LibraryID != "",
 		"api_key":      flags.APIKey != "",
 		"data_dir":     flags.DataDir != "",
+		"server_addr":  flags.ServerAddr != "",
 	}
 
 	isNonInteractive := provided["mode"] && provided["library_type"] &&
@@ -83,7 +87,7 @@ func (c *CLI) runInit(args []string) int {
 
 	reader := bufio.NewReader(c.stdin)
 
-	if isNonInteractive && (cfg.Mode == "web" || provided["data_dir"]) {
+	if isNonInteractive && (cfg.Mode == "web" || cfg.Mode == "remote" || provided["data_dir"]) {
 		if err := config.Save(cfg); err != nil {
 			return c.printErr(err)
 		}
@@ -115,7 +119,7 @@ func (c *CLI) runInit(args []string) int {
 	if flags.NoPDF {
 		return 0
 	}
-	if cfg.Mode != "local" && cfg.Mode != "hybrid" {
+	if cfg.Mode != "local" && cfg.Mode != "hybrid" && cfg.Mode != "remote" {
 		if flags.SetupPDF {
 			fmt.Fprintln(c.stderr, "warning: --pdf flag has no effect in web mode; PyMuPDF is only used for local/hybrid modes")
 		}
@@ -142,7 +146,7 @@ func (c *CLI) runInit(args []string) int {
 }
 
 func (c *CLI) setupPyMuPDF(cfg config.Config) int {
-	if cfg.Mode != "local" && cfg.Mode != "hybrid" {
+	if cfg.Mode != "local" && cfg.Mode != "hybrid" && cfg.Mode != "remote" {
 		fmt.Fprintln(c.stderr, "warning: --pdf flag has no effect in web mode; PyMuPDF is only used for local/hybrid modes")
 		return 0
 	}
@@ -188,6 +192,7 @@ type initFlags struct {
 	LibraryID   string
 	APIKey      string
 	DataDir     string
+	ServerAddr  string
 	SetupPDF    bool
 	NoPDF       bool
 	CheckPDF    bool
@@ -228,6 +233,12 @@ func parseInitFlags(args []string) (initFlags, []string) {
 			}
 			f.DataDir = args[i+1]
 			i++
+		case "--server-addr":
+			if i+1 >= len(args) {
+				return f, []string{"--server-addr"}
+			}
+			f.ServerAddr = args[i+1]
+			i++
 		case "--pdf":
 			f.SetupPDF = true
 		case "--no-pdf":
@@ -246,11 +257,12 @@ const usageInit = `usage: zot init [--mode MODE] [--library-type TYPE] [--librar
 Initialize ~/.zot/.env with a streamlined interactive setup.
 
 Options:
-  --mode MODE           Operating mode: web | local | hybrid (default: web)
+  --mode MODE           Operating mode: web | local | hybrid | remote (default: web)
   --library-type TYPE   Library type: user | group
   --library-id ID       Your Zotero library numeric ID
   --api-key KEY         Zotero Web API key
   --data-dir PATH       Zotero local data directory (required for local/hybrid; auto-detected if omitted)
+  --server-addr ADDR    Remote server address for remote mode (e.g. http://192.168.1.100:8021)
   --pdf                 Force PyMuPDF setup after config creation, or use existing config
   --no-pdf              Skip PyMuPDF setup
   --check-pdf           Check PyMuPDF status without installing
@@ -267,6 +279,7 @@ Examples:
   zot init                              # Interactive guided setup
   zot init --mode hybrid --library-id 123 --api-key abc  # Partial flags, prompts for the rest
   zot init --mode web --library-type user --library-id 123 --api-key key  # Fully non-interactive
+  zot init --mode remote --server-addr http://192.168.1.100:8021  # Connect to remote server
   zot init --check-pdf                   # Check PyMuPDF installation status
 `
 

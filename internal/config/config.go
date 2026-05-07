@@ -26,6 +26,7 @@ type Config struct {
 	AllowWrite                 bool   `json:"allow_write"`
 	AllowDelete                bool   `json:"allow_delete"`
 	JournalRankPath            string `json:"journal_rank_path,omitempty"`
+	ServerAddr                 string `json:"server_addr,omitempty"`
 }
 
 func Default() Config {
@@ -95,6 +96,7 @@ func Save(cfg Config) error {
 		fmt.Sprintf("ZOT_RETRY_BASE_DELAY_MS=%d", cfg.RetryBaseDelayMilliseconds),
 		fmt.Sprintf("ZOT_ALLOW_WRITE=%s", formatBool(cfg.AllowWrite)),
 		fmt.Sprintf("ZOT_ALLOW_DELETE=%s", formatBool(cfg.AllowDelete)),
+		fmt.Sprintf("ZOT_SERVER_ADDR=%s", cfg.ServerAddr),
 		"",
 	}
 	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o600)
@@ -131,6 +133,7 @@ func loadEnvConfig() (Config, bool, error) {
 		{"ZOT_STYLE", &cfg.Style},
 		{"ZOT_LOCALE", &cfg.Locale},
 		{"ZOT_JOURNAL_RANK_PATH", &cfg.JournalRankPath},
+		{"ZOT_SERVER_ADDR", &cfg.ServerAddr},
 	} {
 		if value := firstNonEmpty(os.Getenv(f.key), envFile[f.key]); value != "" {
 			*f.dst = value

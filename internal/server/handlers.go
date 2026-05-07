@@ -28,6 +28,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/overview", h.getOverview)
 	mux.HandleFunc("GET /api/v1/items", h.findItems)
 	mux.HandleFunc("GET /api/v1/items/{key}", h.getItem)
+	mux.HandleFunc("GET /api/v1/items/{key}/related", h.getRelated)
 	mux.HandleFunc("GET /api/v1/collections", h.getCollections)
 	mux.HandleFunc("GET /api/v1/tags", h.getTags)
 	mux.HandleFunc("GET /api/v1/notes", h.getNotes)
@@ -66,6 +67,17 @@ func (h *Handler) getItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, item, Meta{})
+}
+
+func (h *Handler) getRelated(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("key")
+	relations, err := h.reader.GetRelated(r.Context(), key)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	meta := Meta{Total: len(relations)}
+	writeJSON(w, http.StatusOK, relations, meta)
 }
 
 func (h *Handler) getCollections(w http.ResponseWriter, r *http.Request) {
