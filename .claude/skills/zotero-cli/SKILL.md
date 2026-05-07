@@ -5,7 +5,7 @@ description: >
   Zotero 文献管理 CLI（`zot`）。文献检索(find/show/abstract)、导出(export bibtex/csljson)、
   引用数据导出(export)、PDF 标注提取(annotations/extract-text/extract-figures)、
   关系网络(relate --aggregate --dot)、写操作(create-item/update-item/add-tag)。
-  支持 web/local/hybrid 三种模式。搜索/管理/分析 Zotero 文献库时使用。
+  支持 web/local/hybrid/remote 四种模式。搜索/管理/分析 Zotero 文献库时使用。
 when_to_use: >
   触发关键词：Zotero、文献管理、参考文献、PDF 标注、引文格式、文献检索、
   学术数据库、bibtex、文献关系网络。
@@ -42,8 +42,9 @@ zot version --check               # 检查是否有新版可更新
 | `hybrid` (默认) | 本地优先 + Web 回退 | **推荐默认**，兼顾速度与完整性 |
 | `local` | 读本地 SQLite 数据库 | 大量读操作、PDF 标注/提取 |
 | `web` | 纯云端 Zotero Web API | 无本地 Zotero 安装 |
+| `remote` | HTTP 客户端 → zot-server | 通过远程服务器访问 Zotero 数据（无本地 Zotero） |
 
-> 写操作：`web` 和 `hybrid` 支持全部写操作；`local` 支持**笔记创建**（Zotero 未运行时自动走 SQLite 直写 ~50ms）和 PDF 标注写入。
+> 写操作：`web` 和 `hybrid` 支持全部写操作；`local` 支持**笔记创建**（Zotero 未运行时自动走 SQLite 直写 ~50ms）和 PDF 标注写入；`remote` 模式下读操作走服务器，若同时配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID`（remote + web），写操作也可通过 Zotero Web API 直连。
 
 ---
 
@@ -72,11 +73,11 @@ zot relate ITEMKEY --json                          # 关联条目
 
 **基础过滤：** `--date-after` / `--date-before` / 多次 `--tag`(AND) / `--tag-any`(OR)
 
-**高级过滤（local/hybrid）：** `--collection` / `--no-collection` / `--tag-contains` / `--exclude-tag` / `--no-type` / `--has-pdf` / `--modified-within` / `--added-since` / `--attachment-name` / `--attachment-path`
+**高级过滤（local/hybrid/remote）：** `--collection` / `--no-collection` / `--tag-contains` / `--exclude-tag` / `--no-type` / `--has-pdf` / `--modified-within` / `--added-since` / `--attachment-name` / `--attachment-path`
 
 **输出控制：** `--include-fields` / `--full` / `--sort` + `--direction` / `--start` + `--limit`
 
-**FTS5 全文检索：** local/hybrid 下有索引时**自动启用**，搜索范围扩展至 PDF 全文内容。纯元数据搜索可临时设 `ZOT_MODE=web`。`--snippet` 默认限制 **50** 条。
+**FTS5 全文检索：** local/hybrid 下有索引时**自动启用**，搜索范围扩展至 PDF 全文内容。remote 模式下通过服务器获得全文检索能力（取决于服务器端模式）。纯元数据搜索可临时设 `ZOT_MODE=web`。`--snippet` 默认限制 **50** 条。
 
 ### 导出引用数据
 
@@ -99,7 +100,7 @@ zot relate ITEMKEY --from-file batch.json --dry-run   # 批量操作
 
 三层模型：①显式关系(itemRelations) → ②子笔记关系 → ③内嵌Citation（笔记HTML）。详见 [reference.md](reference.md) 模式支持矩阵。
 
-### PDF 操作（需 local/hybrid + PyMuPDF）
+### PDF 操作（需 local/hybrid + PyMuPDF；remote 模式通过服务器代理）
 
 ```shell
 zot extract-text ITEMKEY --json                       # 正文提取
@@ -159,6 +160,8 @@ zot schema template book --json            # 创建模板
 
 ```shell
 zot init                                    # 交互式初始化（默认 mode=hybrid）
+zot init --mode remote --server-addr http://192.168.1.100:8021  # 远程模式
+zot init --mode remote --server-addr http://host:8021 --library-id ID --api-key KEY  # 远程+写操作
 zot config show                              # 查看当前配置
 zot config validate --json                   # 校验 + 结构化诊断
 zot version --check [--json]                # 检查新版 + 更新指引

@@ -9,9 +9,15 @@
 ### 新增
 - **`date_added` 字段**：`find` 和 `show` 输出现在包含条目入库时间（`date_added` 字段），支持 web/local/hybrid 三种模式。find 表格输出新增"入库时间"列，show --full 新增 Date Added 区块
 - **`abstract` 摘要字段与命令**：条目数据新增 `abstract`（摘要）字段，在 find/show/abstract 命令中均可获取。新增独立 `zot abstract <key> [keys...] [--json]` 命令用于批量查看条目摘要。支持 `--include abstract` 字段过滤和 `--full` 默认展示
+- **remote 模式**：新增 `remote` 运行模式，CLI 通过 HTTP 连接远程 `zot-server` 实例访问 Zotero 数据。支持 `zot init --mode remote --server-addr URL` 初始化。服务器端默认端口 8021（`ZOT_SERVER_PORT`）
+- **remote + web 双通道**：remote 模式可额外配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID`，使写操作和 web-only 命令直连 Zotero Web API，读操作仍走远程服务器
+- **zot-server 独立二进制**：新增 `cmd/server/main.go`，构建 `zot-server` 提供 REST API（`/api/v1/items`、`/stats`、`/tags`、`/collections`、`/notes`、`/files/{key}` 等），支持 CORS、请求日志、错误恢复
+- **Web 前端增强**：无障碍访问、错误恢复、移动端响应式布局、PDF 查看器、收藏夹筛选
 
 ### 修复
 - **`find -l` 短标志**：`--limit` 选项现在支持 `-l` 短标志（此前仅支持完整 `--limit`）
+- **FindOptions 序列化**：修复 remote 模式下 FindOptions 序列化不完整导致过滤参数丢失的问题
+- **Content-Disposition 安全**：修复文件名含双引号时下载响应头解析错误
 
 ### 变更
 

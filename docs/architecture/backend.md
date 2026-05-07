@@ -20,6 +20,7 @@ local backend 不再是单个 `local.go`，而是按职责拆分：
 | `local_loaders.py` | item loaders / relation loaders / creators + tags + collections + attachments + notes 并行加载、attachment path resolution |
 | `local_prefs.go` | Zotero `prefs.js` 发现和解析、dataDir → profile 映射 |
 | `local_utils.go` | 本地专用格式化和归一化工具函数 |
+| `remote.go` | `RemoteReader`，HTTP client，remote 模式实现 |
 
 ### 扩展规则
 
@@ -54,6 +55,7 @@ local backend 不再是单个 `local.go`，而是按职责拆分：
 | `web` | 支持 | → Web API | 支持 |
 | `hybrid` | 支持（本地优先） | **Zotero 未运行 → local SQLite；运行中 → Web API** | 支持 |
 | `local` | 支持 | **Zotero 未运行 → local SQLite；运行中 → Web API fallback** | 显式拒绝 |
+| `remote` | 支持（经由 server 转发） | 需 API key（走 remote+web） | 需 API key（走 remote+web） |
 
 > 写操作安全规则不变：删除默认禁止、版本号乐观锁。local 写入仅在 Zotero 未运行时启用，避免与桌面端冲突。
 

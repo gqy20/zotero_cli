@@ -1,6 +1,6 @@
 # 架构概览
 
-项目结构、分层设计、三种运行模式和关键接口。
+项目结构、分层设计、四种运行模式和关键接口。
 
 > 后端实现细节见 [后端设计](./backend.md)，领域模型见 [领域模型](./domain-model.md)，设计决策见 [设计决策](./decisions.md)。
 
@@ -12,11 +12,14 @@
 zotero_cli/
 ├── cmd/zot/
 │   └── main.go                    # 入口：解析参数 → CLI.Run()
+├── cmd/server/
+│   └── main.go                    # server 二进制入口（remote 模式服务端）
 ├── internal/
 │   ├── backend/                   # 数据访问层
 │   │   ├── reader.go              # Reader 接口 + HybridReader
 │   │   ├── web.go                 # WebReader（Zotero Web API）
 │   │   ├── local.go               # LocalReader（SQLite + storage/）
+│   │   ├── remote.go              # RemoteReader（HTTP client → zot-server）
 │   │   ├── local_loaders.go       # SQLite 查询实现
 │   │   ├── local_fulltext.go      # FTS5 全文检索
 │   │   ├── local_export.go        # 本地 CSL-JSON 导出
@@ -35,6 +38,8 @@ zotero_cli/
 │   │   └── config.go              # .env 加载 / 环境变量 / 校验
 │   ├── domain/                    # 领域模型
 │   │   └── types.go               # 核心数据结构
+│   ├── server/                    # HTTP 服务端（remote 模式）
+│   │   └── server.go              # 路由注册、中间件、/api/v1/* 端点
 │   └── zoteroapi/               # Zotero API 客户端
 │       ├── types.go               # API 类型定义
 │       ├── client.go              # HTTP 客户端核心
@@ -61,7 +66,7 @@ zotero_cli/
 | 层 | 职责 | 关键文件 |
 |----|------|----------|
 | **CLI 层** (`internal/cli/`) | 参数解析、命令调度、输出格式化 | `cli.go`, `commands_*.go` |
-| **Backend 层** (`internal/backend/`) | 数据访问抽象，三种模式统一接口 | `reader.go`, `web.go`, `local.go` |
+| **Backend 层** (`internal/backend/`) | 数据访问抽象，四种模式统一接口 | `reader.go`, `web.go`, `local.go`, `remote.go` |
 | **Domain 层** (`internal/domain/` + `internal/zoteroapi/`) | 领域实体、API 客户端、配置 | `types.go`, `config.go`, `client_*.go` |
 
 ### Reader 接口
@@ -77,13 +82,14 @@ type Reader interface {
 
 ---
 
-## 三种模式
+## 四种模式
 
 | 模式 | 实现 | 数据源 | PDF 能力 |
 |------|------|--------|----------|
 | `web` | `WebReader` | Zotero Cloud API | 无 |
 | `local` | `LocalReader` | SQLite + `storage/` | PyMuPDF |
 | `hybrid` | `HybridReader` | 本地优先，Web 回退 | 同 local |
+| `remote` | `RemoteReader` | HTTP → zot-server | 同 server 端 |
 
 ### HybridReader 策略
 
@@ -93,6 +99,10 @@ type Reader interface {
 4. 返回结果携带 `read_source` 元数据标记实际来源
 
 详见 [设计决策 - Hybrid 回退策略](./decisions.md)。
+
+### RemoteReader
+
+`RemoteReader` 实现同一 `Reader` 接口，将所有调用通过 HTTP 代理到远端 `zot-server`（由 `cmd/server/main.go` 启动）的 `/api/v1/*` 端点。适用于从局域网内其他机器访问本机 Zotero 数据的场景，通过 `ZOT_SERVER_ADDR` 环境变量指定服务端地址。
 
 ---
 

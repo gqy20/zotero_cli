@@ -7,6 +7,8 @@ timeline
     title zot CLI 发展路线图
 
     section v0.0.x 当前焦点
+        已完成 : remote 模式 + zot-server + remote+web 双通道
+        已完成 : Web 前端（无障碍/移动端/PDF 查看器/收藏夹筛选）
         阶段 1 : 标注 dry-run + comment 截断修复
         阶段 2 : 批量标注 from-file
         阶段 3 : find → export 管道连接
@@ -92,13 +94,13 @@ timeline
 
 ### B. Web 前端完善
 
-MVP 已交付（v0.0.6），体验打磨已完成（v0.0.7：Skeleton / Toast / PdfViewer 懒加载）。剩余演进：
+MVP 已交付（v0.0.6），体验打磨已完成（v0.0.7：Skeleton / Toast / PdfViewer 懒加载）。无障碍访问、移动端响应式、PDF 查看器、收藏夹筛选已交付。剩余演进：
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | 1 | shadcn/ui 初始化 + 组件抽取 + 自定义 Hooks | 待开始 |
 | 2 | 写操作 UI（条目 CRUD 弹窗、标签/收藏夹管理） | ⏸ 后端路由待注册 |
-| 3 | 性能与工程化（Code Splitting / ESLint / a11y / 列表虚拟化） | 待开始 |
+| 3 | 性能与工程化（Code Splitting / ESLint / 列表虚拟化） | 待开始 |
 
 > CLI 层笔记创建已支持 hybrid 写入（v0.0.8）；前端写操作 UI 需先完成 handlers.go 路由注册。
 

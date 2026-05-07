@@ -29,7 +29,7 @@
 │   ├─ 可视化           → --dot > output.dot
 │   └─ 写入关系         → --add / --remove / --from-file（需写权限）
 │
-├─ 操作 PDF ───────────→ （需 local/hybrid + PyMuPDF）
+├─ 操作 PDF ───────────→ （需 local/hybrid + PyMuPDF；remote 模式通过服务器代理）
 │   ├─ 提取正文         → zot extract-text ITEMKEY --json
 │   ├─ 提取图表         → zot extract-figures ITEMKEY [...] [-o DIR] [-w N] [-m N] --json
 │   ├─ 读取标注         → zot annotations ITEMKEY [--type|--page|--author] --json
@@ -128,27 +128,27 @@ zot relate KEY_A --from-file batch.json                     # 执行
 
 ### 模式支持矩阵
 
-| 功能 | local | hybrid | web |
-|------|-------|--------|-----|
-| 查询显式关系 | ✅ | ✅ | ✅ |
-| `--aggregate` 聚合 | ✅ | ✅ | ❌ |
-| `--dot` 可视化 | ✅ | ✅ | ✅ |
-| `--add` / `--remove` | ✅ | ✅ | ❌ |
-| `--from-file` 批量 | ✅ | ✅ | ❌ |
-| `--predicate` 过滤 | ✅ | ✅ | ✅ |
+| 功能 | local | hybrid | web | remote |
+|------|-------|--------|-----|--------|
+| 查询显式关系 | ✅ | ✅ | ✅ | ✅ |
+| `--aggregate` 聚合 | ✅ | ✅ | ❌ | ✅（取决于服务器端模式） |
+| `--dot` 可视化 | ✅ | ✅ | ✅ | ✅ |
+| `--add` / `--remove` | ✅ | ✅ | ❌ | 需配置 API key |
+| `--from-file` 批量 | ✅ | ✅ | ❌ | 需配置 API key |
+| `--predicate` 过滤 | ✅ | ✅ | ✅ | ✅ |
 
 ## 模式行为差异速查
 
-| 功能 | web | local | hybrid |
-|------|-----|-------|--------|
-| **搜索范围** | 元数据 + 远程全文 | 本地元数据 | 元数据；有 FTS 索引时自动扩展至 PDF 全文 |
-| **过滤参数** | 基础过滤全部可用 | 全部过滤可用 | 全部过滤可用 |
-| **高级过滤** | ❌ 不支持 collection/no-collection/tag-contains 等 | ✅ | ✅（回退到 web 时降级为仅基础过滤） |
-| **FTS 全文检索** | ❌ | ✅（需先 `index build`） | ✅（同 local） |
-| **PDF 操作** | ❌ | ✅ | ✅ |
-| **写操作** | ✅ 全部 | 仅笔记创建 + PDF 标注 | ✅ 全部（笔记可本地直写） |
-| **relate 写入** | ❌ | ✅ | ✅ |
-| **快照缓存** | — | — | ✅ Zotero 运行时 ~0.3s/次 |
+| 功能 | web | local | hybrid | remote |
+|------|-----|-------|--------|--------|
+| **搜索范围** | 元数据 + 远程全文 | 本地元数据 | 元数据；有 FTS 索引时自动扩展至 PDF 全文 | 取决于服务器端模式 |
+| **过滤参数** | 基础过滤全部可用 | 全部过滤可用 | 全部过滤可用 | 全部过滤可用（服务器端处理） |
+| **高级过滤** | ❌ 不支持 collection/no-collection/tag-contains 等 | ✅ | ✅（回退到 web 时降级为仅基础过滤） | ✅（服务器端处理） |
+| **FTS 全文检索** | ❌ | ✅（需先 `index build`） | ✅（同 local） | ✅（服务器端有 FTS 索引时） |
+| **PDF 操作** | ❌ | ✅ | ✅ | ✅（通过服务器代理下载） |
+| **写操作** | ✅ 全部 | 仅笔记创建 + PDF 标注 | ✅ 全部（笔记可本地直写） | 需配置 API key（remote+web 模式） |
+| **relate 写入** | ❌ | ✅ | ✅ | 需配置 API key |
+| **快照缓存** | — | — | ✅ Zotero 运行时 ~0.3s/次 | — |
 
 ## 环境变量完整速查
 
@@ -156,8 +156,10 @@ zot relate KEY_A --from-file batch.json                     # 执行
 
 | 变量 | 说明 | 默认 |
 |------|------|------|
-| `ZOT_MODE` | `web` / `local` / `hybrid` | **`hybrid`** |
+| `ZOT_MODE` | `web` / `local` / `hybrid` / `remote` | **`hybrid`** |
 | `ZOT_DATA_DIR` | Zotero 数据目录 | — |
+| `ZOT_SERVER_ADDR` | 远程服务器地址（remote 模式必需） | — |
+| `ZOT_SERVER_PORT` | 服务器监听端口（服务器端使用） | `8021` |
 | `ZOT_LIBRARY_ID` | 库 ID | — |
 | `ZOT_API_KEY` | API 密钥 | — |
 | `ZOT_STYLE` | 引文样式 | `apa` |
@@ -185,3 +187,29 @@ zot relate KEY_A --from-file batch.json                     # 执行
 3. 数据中包含有效的 `parentItem` 和 `note` 字段
 
 直写性能约 **~50ms**，JSON 输出含 `"write_source": "local"` 标识。Web API 作为 fallback 保留（若 SQLite 直写失败则自动回退）。
+
+## Remote 模式
+
+### 架构
+
+```
+[CLI Client (remote)]  --HTTP/JSON-->  [zot-server]  --> [Zotero Local DB / Web API]
+```
+
+- 服务器端：`go build -o zot-server ./cmd/server`，默认端口 `8021`（`ZOT_SERVER_PORT` 可覆盖）
+- 客户端：`zot init --mode remote --server-addr http://HOST:8021`
+- 服务器必须以 web/local/hybrid 模式运行（不支持 remote 嵌套）
+
+### 两种配置
+
+1. **纯 remote**（只有 `ZOT_SERVER_ADDR`）：仅 reader 路径命令可用（find/show/stats/tags/notes/overview 等）
+2. **remote + web**（额外配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID` + `ZOT_LIBRARY_TYPE`）：全部命令可用。读操作走服务器，写操作和 web-only 命令（collections/searches/schema 等）直连 Zotero Web API
+
+初始化示例：
+```shell
+# 纯 remote（只读）
+zot init --mode remote --server-addr http://192.168.1.100:8021
+
+# remote + web（全功能）
+zot init --mode remote --server-addr http://192.168.1.100:8021 --library-type user --library-id 123 --api-key KEY
+```

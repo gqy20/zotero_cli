@@ -106,6 +106,10 @@ brew install gqy20/tap/zotcli
 ```bash
 zot version              # 验证安装
 zot init                 # 交互式配置（mode 选 hybrid）
+
+# 远程模式初始化（连接局域网内的 zot-server）
+zot init --mode remote --server-addr http://192.168.1.100:8021
+zot init --mode remote --server-addr http://host:8021 --library-id ID --api-key KEY
 zot config validate       # 校验配置
 zot overview --json        # 一站式库概览
 ```
@@ -118,6 +122,7 @@ zot overview --json        # 一站式库概览
 | `ZOT_LIBRARY_ID` | Zotero 首页 → 右键库 → Advanced → 数字 ID |
 | `ZOT_DATA_DIR` | Zotero → 编辑 → 首选项 → 高级 → 数据目录路径 |
 | `ZOT_MODE` | 推荐 `hybrid`（本地优先 + Web 回退） |
+| `ZOT_SERVER_ADDR` | 远程模式需要，zot-server 地址（如 `http://192.168.1.100:8021`） |
 
 > local/hybrid 下 `zot init` 会询问是否安装 PyMuPDF，也可事后 `zot init --pdf` 安装或 `zot init --check-pdf` 诊断。
 >
@@ -128,6 +133,7 @@ zot overview --json        # 一站式库概览
 ```bash
 git clone https://github.com/gqy20/zotero_cli.git && cd zotero_cli
 go build -o zot.exe ./cmd/zot     # Go 1.26+，无 CGO 依赖
+go build -o zot-server.exe ./cmd/server  # 远程模式服务端
 ```
 
 ## AI Agent 集成（Claude Code / Codex）
@@ -346,6 +352,7 @@ zot changes items --since 0 --json  # 版本变更记录
 | `web` | Zotero Cloud API | API key | 远程检索、云端管理 |
 | `local` | 本地 SQLite + storage/ | ZOT_DATA_DIR | 离线操作、PDF 处理、全文搜索 |
 | `hybrid`（推荐） | 本地优先，Web 回退 | 两者都要 | 日常使用，兼顾速度与完整性 |
+| `remote` | HTTP → zot-server (port 8021) | ZOT_SERVER_ADDR | 同服务器端模式，局域网访问 |
 
 通过 `ZOT_MODE` 环境变量或 `zot init` 设置。hybrid 模式下：
 - **读操作**：本地优先（全文检索、PDF 标注读取）不误回退 Web

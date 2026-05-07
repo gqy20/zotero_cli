@@ -57,15 +57,18 @@ go run .\cmd\zot config validate
 
 日期支持 `YYYY` / `YYYY-MM` / `YYYY-MM-DD`。
 
-### 5. 本地与混合模式
+### 5. 运行模式选择
 
 推荐设 `ZOT_MODE=hybrid`：
 
+- `web`：纯 Zotero Web API，无本地依赖
 - `local`：只读本地 SQLite + `storage/`
 - `hybrid`：优先本地，Web 仅在能承接时回退
-- `relate` / `extract-text` 在 hybrid 下仍是本地能力
+- `remote`：通过 HTTP 连接远程 `zot-server`，适合无本地 Zotero 的设备
 
-详见 [架构文档 - 三种模式](../architecture/overview.md#三种模式)。
+`relate` / `extract-text` 在 hybrid 下仍是本地能力。remote 模式通过服务器代理访问数据，额外配置 `ZOT_API_KEY` 后也可执行写操作。
+
+详见 [架构文档 - 四种模式](../architecture/overview.md#四种模式)。
 
 ## 安全规则
 

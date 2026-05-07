@@ -2,6 +2,8 @@
 
 完整用法、选项说明、模式边界和输出示例。
 
+> **模式说明**：支持 `web`、`local`、`hybrid`、`remote` 四种运行模式。`remote` 模式通过 HTTP 连接 `zot-server`（端口 8021），reader 路径命令（find/show/stats/tags/notes/overview 等）经由服务器代理；配置 `ZOT_API_KEY` 后写操作和 web-only 命令也可用。详见 [架构文档](../architecture/overview.md)。
+
 > AI Agent 使用规范见 [AI Agent 指南](./quickstart.md)，技术架构见 [架构文档](../architecture/overview.md)。
 > 标注操作详细文档见 [annotations 示例](./examples/annotations.md)。
 
