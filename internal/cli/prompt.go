@@ -44,6 +44,48 @@ func (c *CLI) promptInitSetup(cfg config.Config, provided map[string]bool, reade
 			}
 			cfg.ServerAddr = serverAddr
 		}
+
+		wantWeb, err := c.promptBool(reader, "Also configure Zotero Web API for write/full access? [y/N]: ", false)
+		if err != nil {
+			return config.Config{}, err
+		}
+		if wantWeb {
+			if !provided["library_type"] {
+				libraryType, err := c.promptWithDefault(reader, "Library type (user/group) [user]: ")
+				if err != nil {
+					return config.Config{}, err
+				}
+				if libraryType != "" {
+					cfg.LibraryType = libraryType
+				} else {
+					cfg.LibraryType = "user"
+				}
+			}
+			if !provided["library_id"] {
+				libraryID, err := c.promptRequired(reader, "Library ID: ", func(value string) error {
+					if strings.TrimSpace(value) == "" {
+						return fmt.Errorf("cannot be empty")
+					}
+					return nil
+				})
+				if err != nil {
+					return config.Config{}, err
+				}
+				cfg.LibraryID = libraryID
+			}
+			if !provided["api_key"] {
+				apiKey, err := c.promptRequired(reader, "API key: ", func(value string) error {
+					if strings.TrimSpace(value) == "" {
+						return fmt.Errorf("cannot be empty")
+					}
+					return nil
+				})
+				if err != nil {
+					return config.Config{}, err
+				}
+				cfg.APIKey = apiKey
+			}
+		}
 		return cfg, nil
 	}
 

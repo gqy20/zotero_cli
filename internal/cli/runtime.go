@@ -88,7 +88,11 @@ func (c *CLI) remoteClientConfig(cfg config.Config) (config.Config, error) {
 		normalized.Mode = "web"
 		return normalized, nil
 	case "remote":
-		return config.Config{}, fmt.Errorf("web API commands are not available in remote mode; use web or hybrid mode")
+		if normalized.APIKey != "" && normalized.LibraryID != "" {
+			normalized.Mode = "web"
+			return normalized, nil
+		}
+		return config.Config{}, fmt.Errorf("web API commands are not available in remote mode without API key; configure ZOT_API_KEY and ZOT_LIBRARY_ID, or use web/hybrid mode")
 	case "local":
 		return config.Config{}, fmt.Errorf("web API commands are not available in local mode; use web or hybrid mode")
 	default:

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"zotero_cli/internal/config"
 )
 
 func TestRunInitInteractiveWebMode(t *testing.T) {
@@ -247,5 +249,157 @@ func TestRunInitRemoteModeNonInteractive(t *testing.T) {
 	}
 	if !strings.Contains(cfgStr, "ZOT_SERVER_ADDR=http://192.168.1.100:8021") {
 		t.Fatalf("expected ZOT_SERVER_ADDR, got:\n%s", cfgStr)
+	}
+}
+
+func TestRunInitRemoteWithWebAPINonInteractive(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+
+	stdout, stderr := captureOutput(t)
+
+	exitCode := Run([]string{
+		"init",
+		"--mode", "remote",
+		"--server-addr", "http://192.168.1.100:8021",
+		"--library-id", "12345",
+		"--api-key", "mykey",
+	})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+
+	configPath := filepath.Join(configRoot, ".zot", ".env")
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("config file not created: %v", err)
+	}
+	cfgStr := string(content)
+	for _, expected := range []string{
+		"ZOT_MODE=remote",
+		"ZOT_SERVER_ADDR=http://192.168.1.100:8021",
+		"ZOT_LIBRARY_ID=12345",
+		"ZOT_API_KEY=mykey",
+	} {
+		if !strings.Contains(cfgStr, expected) {
+			t.Fatalf("expected %q in config, got:\n%s", expected, cfgStr)
+		}
+	}
+}
+
+func TestRunInitRemoteWithWebAPIInteractive(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+
+	stdout, stderr := captureOutput(t)
+	oldStdin := testCLI.stdin
+	testCLI.stdin = strings.NewReader("remote\nhttp://localhost:8021\ny\nuser\n999\napikey123\n")
+	t.Cleanup(func() { testCLI.stdin = oldStdin })
+
+	exitCode := Run([]string{"init", "--no-pdf"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "Also configure Zotero Web API") {
+		t.Fatalf("expected web API prompt, got %q", out)
+	}
+
+	configPath := filepath.Join(configRoot, ".zot", ".env")
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("config file not created: %v", err)
+	}
+	cfgStr := string(content)
+	for _, expected := range []string{
+		"ZOT_MODE=remote",
+		"ZOT_SERVER_ADDR=http://localhost:8021",
+		"ZOT_LIBRARY_TYPE=user",
+		"ZOT_LIBRARY_ID=999",
+		"ZOT_API_KEY=apikey123",
+	} {
+		if !strings.Contains(cfgStr, expected) {
+			t.Fatalf("expected %q in config, got:\n%s", expected, cfgStr)
+		}
+	}
+}
+
+func TestRunInitRemoteWithoutWebAPIInteractive(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+
+	stdout, stderr := captureOutput(t)
+	oldStdin := testCLI.stdin
+	testCLI.stdin = strings.NewReader("remote\nhttp://localhost:8021\nn\n")
+	t.Cleanup(func() { testCLI.stdin = oldStdin })
+
+	exitCode := Run([]string{"init", "--no-pdf"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+
+	configPath := filepath.Join(configRoot, ".zot", ".env")
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("config file not created: %v", err)
+	}
+	cfgStr := string(content)
+	if !strings.Contains(cfgStr, "ZOT_MODE=remote") {
+		t.Fatalf("expected ZOT_MODE=remote, got:\n%s", cfgStr)
+	}
+	for _, line := range strings.Split(cfgStr, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "ZOT_API_KEY=") {
+			val := strings.TrimPrefix(line, "ZOT_API_KEY=")
+			if val != "" {
+				t.Fatalf("did not expect non-empty ZOT_API_KEY in pure remote config, got %q", val)
+			}
+		}
+	}
+}
+
+func TestRemoteClientConfig_RemoteWithAPIKey(t *testing.T) {
+	cfg := config.Config{
+		Mode:       "remote",
+		ServerAddr: "http://localhost:8021",
+		APIKey:     "mykey",
+		LibraryID:  "12345",
+	}
+	result, err := testCLI.remoteClientConfig(cfg)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.Mode != "web" {
+		t.Fatalf("expected mode to be normalized to web, got %q", result.Mode)
+	}
+	if result.APIKey != "mykey" {
+		t.Fatalf("expected API key preserved, got %q", result.APIKey)
+	}
+}
+
+func TestRemoteClientConfig_RemoteWithoutAPIKey(t *testing.T) {
+	cfg := config.Config{
+		Mode:       "remote",
+		ServerAddr: "http://localhost:8021",
+	}
+	_, err := testCLI.remoteClientConfig(cfg)
+	if err == nil {
+		t.Fatal("expected error for remote mode without API key")
+	}
+	if !strings.Contains(err.Error(), "without API key") {
+		t.Fatalf("expected API key hint in error, got %q", err.Error())
+	}
+}
+
+func TestRemoteClientConfig_RemoteWithOnlyAPIKey(t *testing.T) {
+	cfg := config.Config{
+		Mode:       "remote",
+		ServerAddr: "http://localhost:8021",
+		APIKey:     "mykey",
+	}
+	_, err := testCLI.remoteClientConfig(cfg)
+	if err == nil {
+		t.Fatal("expected error when library_id is missing")
 	}
 }

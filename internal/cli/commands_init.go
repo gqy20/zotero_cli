@@ -84,7 +84,8 @@ func (c *CLI) runInit(args []string) int {
 
 	isNonInteractive := (provided["mode"] && provided["library_type"] &&
 		provided["library_id"] && provided["api_key"]) ||
-		(cfg.Mode == "remote" && provided["server_addr"])
+		(cfg.Mode == "remote" && provided["server_addr"] && !provided["api_key"]) ||
+		(cfg.Mode == "remote" && provided["server_addr"] && provided["library_id"] && provided["api_key"])
 
 	reader := bufio.NewReader(c.stdin)
 
@@ -280,7 +281,8 @@ Examples:
   zot init                              # Interactive guided setup
   zot init --mode hybrid --library-id 123 --api-key abc  # Partial flags, prompts for the rest
   zot init --mode web --library-type user --library-id 123 --api-key key  # Fully non-interactive
-  zot init --mode remote --server-addr http://192.168.1.100:8021  # Connect to remote server
+  zot init --mode remote --server-addr http://192.168.1.100:8021  # Remote only (read via server)
+  zot init --mode remote --server-addr http://192.168.1.100:8021 --library-id 123 --api-key key  # Remote + web API
   zot init --check-pdf                   # Check PyMuPDF installation status
 `
 
