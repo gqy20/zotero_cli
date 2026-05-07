@@ -220,3 +220,32 @@ func TestRunInitNoPdfFlagSkipsPdfSetup(t *testing.T) {
 		t.Fatal("--no-pdf should skip PyMuPDF prompt")
 	}
 }
+
+func TestRunInitRemoteModeNonInteractive(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+
+	stdout, stderr := captureOutput(t)
+
+	exitCode := Run([]string{
+		"init",
+		"--mode", "remote",
+		"--server-addr", "http://192.168.1.100:8021",
+	})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+
+	configPath := filepath.Join(configRoot, ".zot", ".env")
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("config file not created: %v", err)
+	}
+	cfgStr := string(content)
+	if !strings.Contains(cfgStr, "ZOT_MODE=remote") {
+		t.Fatalf("expected ZOT_MODE=remote, got:\n%s", cfgStr)
+	}
+	if !strings.Contains(cfgStr, "ZOT_SERVER_ADDR=http://192.168.1.100:8021") {
+		t.Fatalf("expected ZOT_SERVER_ADDR, got:\n%s", cfgStr)
+	}
+}

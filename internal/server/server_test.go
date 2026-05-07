@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
 )
 
@@ -188,5 +189,16 @@ func TestUnifiedResponseFormat(t *testing.T) {
 		if _, ok := raw["meta"]; !ok {
 			t.Errorf("%s: missing 'meta' field", ep)
 		}
+	}
+}
+
+func TestServeFromConfig_RejectsRemoteMode(t *testing.T) {
+	cfg := config.Config{
+		Mode:       "remote",
+		ServerAddr: "http://localhost:8021",
+	}
+	_, err := ServeFromConfig(cfg)
+	if err == nil {
+		t.Fatal("expected error when serving with remote mode")
 	}
 }

@@ -61,6 +61,10 @@ func Serve(reader backend.Reader, addr string) error {
 }
 
 func ServeFromConfig(cfg config.Config) (func(), error) {
+	if cfg.Mode == "remote" {
+		return nil, fmt.Errorf("cannot start server in remote mode; remote mode connects to an existing server, not creates one")
+	}
+
 	httpClient := &http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second}
 	reader, err := backend.NewReader(cfg, httpClient)
 	if err != nil {

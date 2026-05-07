@@ -82,8 +82,9 @@ func (c *CLI) runInit(args []string) int {
 		"server_addr":  flags.ServerAddr != "",
 	}
 
-	isNonInteractive := provided["mode"] && provided["library_type"] &&
-		provided["library_id"] && provided["api_key"]
+	isNonInteractive := (provided["mode"] && provided["library_type"] &&
+		provided["library_id"] && provided["api_key"]) ||
+		(cfg.Mode == "remote" && provided["server_addr"])
 
 	reader := bufio.NewReader(c.stdin)
 

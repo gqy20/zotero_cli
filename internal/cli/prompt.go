@@ -31,6 +31,22 @@ func (c *CLI) promptInitSetup(cfg config.Config, provided map[string]bool, reade
 		}
 	}
 
+	if cfg.Mode == "remote" {
+		if !provided["server_addr"] {
+			serverAddr, err := c.promptRequired(reader, "Server address (e.g. http://192.168.1.100:8021): ", func(value string) error {
+				if strings.TrimSpace(value) == "" {
+					return fmt.Errorf("cannot be empty in remote mode")
+				}
+				return nil
+			})
+			if err != nil {
+				return config.Config{}, err
+			}
+			cfg.ServerAddr = serverAddr
+		}
+		return cfg, nil
+	}
+
 	if !provided["library_type"] {
 		libraryType, err := c.promptRequired(reader, "Library type (user/group): ", func(value string) error {
 			if value != "user" && value != "group" {
