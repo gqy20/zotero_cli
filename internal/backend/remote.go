@@ -5,9 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"zotero_cli/internal/domain"
 )
@@ -21,64 +25,19 @@ func NewRemoteReader(baseURL string, httpClient *http.Client) *RemoteReader {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	return &RemoteReader{baseURL: baseURL, httpClient: httpClient}
+	return &RemoteReader{baseURL: strings.TrimRight(baseURL, "/"), httpClient: httpClient}
 }
 
-type apiResponse[T any] struct {
-	Ok    bool   `json:"ok"`
-	Data  T      `json:"data"`
-	Error string `json:"error"`
-	Meta  struct {
-		Total int `json:"total"`
-	} `json:"meta"`
+func (r *RemoteReader) buildURL(path string) string {
+	return r.baseURL + path
 }
 
 func (r *RemoteReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.baseURL+"/api/v1/items", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/items"), nil)
 	if err != nil {
 		return nil, err
 	}
-	q := req.URL.Query()
-	if opts.Query != "" {
-		q.Set("q", opts.Query)
-	}
-	if opts.ItemType != "" {
-		q.Set("item_type", opts.ItemType)
-	}
-	if opts.Tag != "" {
-		q.Set("tag", opts.Tag)
-	}
-	if len(opts.Tags) > 0 {
-		q.Set("tags", joinStrings(opts.Tags, ","))
-	}
-	if len(opts.Collection) > 0 {
-		q.Set("collection", opts.Collection[0])
-	}
-	if opts.DateAfter != "" {
-		q.Set("date_after", opts.DateAfter)
-	}
-	if opts.DateBefore != "" {
-		q.Set("date_before", opts.DateBefore)
-	}
-	if opts.HasPDF {
-		q.Set("has_pdf", "true")
-	}
-	if opts.Limit > 0 {
-		q.Set("limit", fmt.Sprintf("%d", opts.Limit))
-	}
-	if opts.Start > 0 {
-		q.Set("start", fmt.Sprintf("%d", opts.Start))
-	}
-	if opts.Sort != "" {
-		q.Set("sort", opts.Sort)
-	}
-	if opts.Direction != "" {
-		q.Set("direction", opts.Direction)
-	}
-	if opts.Full {
-		q.Set("full", "true")
-	}
-	req.URL.RawQuery = q.Encode()
+	req.URL.RawQuery = EncodeFindOptions(opts).Encode()
 
 	var resp apiResponse[[]domain.Item]
 	if err := r.doJSON(req, &resp); err != nil {
@@ -88,7 +47,7 @@ func (r *RemoteReader) FindItems(ctx context.Context, opts FindOptions) ([]domai
 }
 
 func (r *RemoteReader) GetItem(ctx context.Context, key string) (domain.Item, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.baseURL+"/api/v1/items/"+key, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/items/"+key), nil)
 	if err != nil {
 		return domain.Item{}, err
 	}
@@ -100,7 +59,7 @@ func (r *RemoteReader) GetItem(ctx context.Context, key string) (domain.Item, er
 }
 
 func (r *RemoteReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.baseURL+"/api/v1/items/"+key+"/related", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/items/"+key+"/related"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +71,7 @@ func (r *RemoteReader) GetRelated(ctx context.Context, key string) ([]domain.Rel
 }
 
 func (r *RemoteReader) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.baseURL+"/api/v1/stats", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/stats"), nil)
 	if err != nil {
 		return LibraryStats{}, err
 	}
@@ -124,7 +83,7 @@ func (r *RemoteReader) GetLibraryStats(ctx context.Context) (LibraryStats, error
 }
 
 func (r *RemoteReader) ListTags(ctx context.Context) ([]Tag, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.baseURL+"/api/v1/tags", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/tags"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +95,7 @@ func (r *RemoteReader) ListTags(ctx context.Context) ([]Tag, error) {
 }
 
 func (r *RemoteReader) ListCollections(ctx context.Context) ([]Collection, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.baseURL+"/api/v1/collections", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/collections"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +107,7 @@ func (r *RemoteReader) ListCollections(ctx context.Context) ([]Collection, error
 }
 
 func (r *RemoteReader) ListNotes(ctx context.Context) ([]domain.Note, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.baseURL+"/api/v1/notes", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/notes"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +119,7 @@ func (r *RemoteReader) ListNotes(ctx context.Context) ([]domain.Note, error) {
 }
 
 func (r *RemoteReader) GetAttachmentFile(ctx context.Context, key string) (string, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.baseURL+"/api/v1/files/"+key, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/files/"+key), nil)
 	if err != nil {
 		return "", "", err
 	}
@@ -176,7 +135,11 @@ func (r *RemoteReader) GetAttachmentFile(ctx context.Context, key string) (strin
 
 	filename := key
 	if disp := resp.Header.Get("Content-Disposition"); disp != "" {
-		filename = extractFilename(disp)
+		if _, params, err := mime.ParseMediaType(disp); err == nil {
+			if n, ok := params["filename"]; ok {
+				filename = n
+			}
+		}
 	}
 	ext := filepath.Ext(filename)
 	if ext == "" {
@@ -197,6 +160,15 @@ func (r *RemoteReader) GetAttachmentFile(ctx context.Context, key string) (strin
 
 	contentType := resp.Header.Get("Content-Type")
 	return tmpFile.Name(), contentType, nil
+}
+
+type apiResponse[T any] struct {
+	Ok    bool   `json:"ok"`
+	Data  T      `json:"data"`
+	Error string `json:"error"`
+	Meta  struct {
+		Total int `json:"total"`
+	} `json:"meta"`
 }
 
 func (r *RemoteReader) doJSON(req *http.Request, result any) error {
@@ -222,40 +194,112 @@ func (r *RemoteReader) doJSON(req *http.Request, result any) error {
 	return nil
 }
 
-func joinStrings(ss []string, sep string) string {
-	result := ""
-	for i, s := range ss {
-		if i > 0 {
-			result += sep
-		}
-		result += s
+// EncodeFindOptions converts FindOptions to URL query parameters for HTTP transport.
+func EncodeFindOptions(opts FindOptions) url.Values {
+	q := url.Values{}
+	setString(q, "q", opts.Query)
+	setString(q, "item_type", opts.ItemType)
+	setString(q, "tag", opts.Tag)
+	setString(q, "sort", opts.Sort)
+	setString(q, "direction", opts.Direction)
+	setString(q, "qmode", opts.QMode)
+	setString(q, "date_after", opts.DateAfter)
+	setString(q, "date_before", opts.DateBefore)
+	setString(q, "attachment_name", opts.AttachmentName)
+	setString(q, "attachment_path", opts.AttachmentPath)
+	setString(q, "attachment_type", opts.AttachmentType)
+	setString(q, "exclude_item_type", opts.ExcludeItemType)
+	setString(q, "date_modified_after", opts.DateModifiedAfter)
+	setString(q, "date_added_after", opts.DateAddedAfter)
+	setBool(q, "full_text", opts.FullText)
+	setBool(q, "full_text_any", opts.FullTextAny)
+	setBool(q, "all", opts.All)
+	setBool(q, "full", opts.Full)
+	setBool(q, "tag_any", opts.TagAny)
+	setBool(q, "include_trashed", opts.IncludeTrashed)
+	setBool(q, "has_pdf", opts.HasPDF)
+	if opts.Limit > 0 {
+		q.Set("limit", strconv.Itoa(opts.Limit))
 	}
-	return result
+	if opts.Start > 0 {
+		q.Set("start", strconv.Itoa(opts.Start))
+	}
+	setCommaList(q, "tags", opts.Tags)
+	setCommaList(q, "include_fields", opts.IncludeFields)
+	setCommaList(q, "collection", opts.Collection)
+	setCommaList(q, "no_collection", opts.NoCollection)
+	setCommaList(q, "tag_contains", opts.TagContains)
+	setCommaList(q, "exclude_tags", opts.ExcludeTags)
+	return q
 }
 
-func extractFilename(disp string) string {
-	for _, prefix := range []string{`filename="`, "filename="} {
-		idx := indexOf(disp, prefix)
-		if idx < 0 {
-			continue
-		}
-		start := idx + len(prefix)
-		rest := disp[start:]
-		if prefix[len(prefix)-1] == '"' {
-			if end := indexOf(rest, `"`); end >= 0 {
-				return rest[:end]
-			}
-		}
-		return rest
+// ParseFindOptionsFromQuery reconstructs FindOptions from URL query parameters.
+func ParseFindOptionsFromQuery(q url.Values) FindOptions {
+	opts := FindOptions{
+		Limit: 25,
+		Start: 0,
 	}
-	return ""
+	opts.Query = q.Get("q")
+	opts.ItemType = q.Get("item_type")
+	opts.Tag = q.Get("tag")
+	opts.Sort = q.Get("sort")
+	opts.Direction = q.Get("direction")
+	opts.QMode = q.Get("qmode")
+	opts.DateAfter = q.Get("date_after")
+	opts.DateBefore = q.Get("date_before")
+	opts.AttachmentName = q.Get("attachment_name")
+	opts.AttachmentPath = q.Get("attachment_path")
+	opts.AttachmentType = q.Get("attachment_type")
+	opts.ExcludeItemType = q.Get("exclude_item_type")
+	opts.DateModifiedAfter = q.Get("date_modified_after")
+	opts.DateAddedAfter = q.Get("date_added_after")
+	opts.FullText = q.Get("full_text") == "true"
+	opts.FullTextAny = q.Get("full_text_any") == "true"
+	opts.All = q.Get("all") == "true"
+	opts.Full = q.Get("full") == "true"
+	opts.TagAny = q.Get("tag_any") == "true"
+	opts.IncludeTrashed = q.Get("include_trashed") == "true"
+	opts.HasPDF = q.Get("has_pdf") == "true"
+	if v := q.Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			opts.Limit = n
+		}
+	}
+	if v := q.Get("start"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			opts.Start = n
+		}
+	}
+	opts.Tags = parseCommaList(q.Get("tags"))
+	opts.IncludeFields = parseCommaList(q.Get("include_fields"))
+	opts.Collection = parseCommaList(q.Get("collection"))
+	opts.NoCollection = parseCommaList(q.Get("no_collection"))
+	opts.TagContains = parseCommaList(q.Get("tag_contains"))
+	opts.ExcludeTags = parseCommaList(q.Get("exclude_tags"))
+	return opts
 }
 
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
+func setString(q url.Values, key, value string) {
+	if value != "" {
+		q.Set(key, value)
 	}
-	return -1
+}
+
+func setBool(q url.Values, key string, value bool) {
+	if value {
+		q.Set(key, "true")
+	}
+}
+
+func setCommaList(q url.Values, key string, values []string) {
+	if len(values) > 0 {
+		q.Set(key, strings.Join(values, ","))
+	}
+}
+
+func parseCommaList(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, ",")
 }

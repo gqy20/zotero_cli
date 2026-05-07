@@ -7,8 +7,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/domain"
@@ -147,54 +145,7 @@ func (h *Handler) getOverview(w http.ResponseWriter, r *http.Request) {
 }
 
 func parseFindOptions(q url.Values) backend.FindOptions {
-	opts := backend.FindOptions{
-		Limit: 25,
-		Start: 0,
-	}
-	if v := q.Get("q"); v != "" {
-		opts.Query = v
-	}
-	if v := q.Get("item_type"); v != "" {
-		opts.ItemType = v
-	}
-	if v := q.Get("tag"); v != "" {
-		opts.Tag = v
-	}
-	if v := q.Get("tags"); v != "" {
-		opts.Tags = strings.Split(v, ",")
-	}
-	if v := q.Get("collection"); v != "" {
-		opts.Collection = []string{v}
-	}
-	if v := q.Get("date_after"); v != "" {
-		opts.DateAfter = v
-	}
-	if v := q.Get("date_before"); v != "" {
-		opts.DateBefore = v
-	}
-	if v := q.Get("has_pdf"); v == "true" || v == "1" {
-		opts.HasPDF = true
-	}
-	if v := q.Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			opts.Limit = n
-		}
-	}
-	if v := q.Get("start"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-			opts.Start = n
-		}
-	}
-	if v := q.Get("sort"); v != "" {
-		opts.Sort = v
-	}
-	if v := q.Get("direction"); v != "" {
-		opts.Direction = v
-	}
-	if v := q.Get("full"); v == "true" || v == "1" {
-		opts.Full = true
-	}
-	return opts
+	return backend.ParseFindOptionsFromQuery(q)
 }
 
 type LibraryStats = backend.LibraryStats
