@@ -7,7 +7,7 @@
 ## [Unreleased]
 
 ### 新增
-- **`date_added` 字段**：`find` 和 `show` 输出现在包含条目入库时间（`date_added` 字段），支持 web/local/hybrid 三种模式。find 表格输出新增"入库时间"列，show --full 新增 Date Added 区块
+- **`date_added` 字段**：`find` 和 `show` 输出现在包含条目入库时间（`date_added` 字段），支持全部四种模式。find 表格输出新增"入库时间"列，show --full 新增 Date Added 区块
 - **`abstract` 摘要字段与命令**：条目数据新增 `abstract`（摘要）字段，在 find/show/abstract 命令中均可获取。新增独立 `zot abstract <key> [keys...] [--json]` 命令用于批量查看条目摘要。支持 `--include abstract` 字段过滤和 `--full` 默认展示
 - **remote 模式**：新增 `remote` 运行模式，CLI 通过 HTTP 连接远程 `zot-server` 实例访问 Zotero 数据。支持 `zot init --mode remote --server-addr URL` 初始化。服务器端默认端口 8021（`ZOT_SERVER_PORT`）
 - **remote + web 双通道**：remote 模式可额外配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID`，使写操作和 web-only 命令直连 Zotero Web API，读操作仍走远程服务器
