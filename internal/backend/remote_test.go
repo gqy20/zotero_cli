@@ -622,6 +622,36 @@ func assertQueryEqual(t *testing.T, q url.Values, key, expected string) {
 	}
 }
 
+func TestRemoteReader_ConsumeReadMetadata(t *testing.T) {
+	srv := httptest.NewServer(newRemoteTestHandler(t, "getStats", LibraryStats{}))
+	defer srv.Close()
+
+	r := NewRemoteReader(srv.URL, srv.Client())
+	_, err := r.GetLibraryStats(context.Background())
+	if err != nil {
+		t.Fatalf("GetLibraryStats: %v", err)
+	}
+
+	meta := r.ConsumeReadMetadata()
+	if meta.ReadSource != "remote" {
+		t.Errorf("expected read_source 'remote', got %q", meta.ReadSource)
+	}
+
+	// second call should return empty (consumed)
+	meta2 := r.ConsumeReadMetadata()
+	if meta2.ReadSource != "" {
+		t.Errorf("expected empty after consume, got %q", meta2.ReadSource)
+	}
+}
+
+func TestRemoteReader_ConsumeReadMetadata_BeforeAnyCall(t *testing.T) {
+	r := NewRemoteReader("http://localhost:1", nil)
+	meta := r.ConsumeReadMetadata()
+	if meta.ReadSource != "" {
+		t.Errorf("expected empty before any call, got %q", meta.ReadSource)
+	}
+}
+
 func testRemoteConfig() config.Config {
 	return config.Config{
 		Mode:        "web",

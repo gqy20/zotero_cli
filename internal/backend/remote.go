@@ -17,8 +17,9 @@ import (
 )
 
 type RemoteReader struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL          string
+	httpClient       *http.Client
+	lastReadMetadata ReadMetadata
 }
 
 func NewRemoteReader(baseURL string, httpClient *http.Client) *RemoteReader {
@@ -26,6 +27,16 @@ func NewRemoteReader(baseURL string, httpClient *http.Client) *RemoteReader {
 		httpClient = http.DefaultClient
 	}
 	return &RemoteReader{baseURL: strings.TrimRight(baseURL, "/"), httpClient: httpClient}
+}
+
+func (r *RemoteReader) markRead() {
+	r.lastReadMetadata = ReadMetadata{ReadSource: "remote"}
+}
+
+func (r *RemoteReader) ConsumeReadMetadata() ReadMetadata {
+	meta := r.lastReadMetadata
+	r.lastReadMetadata = ReadMetadata{}
+	return meta
 }
 
 func (r *RemoteReader) buildURL(path string) string {
@@ -43,6 +54,7 @@ func (r *RemoteReader) FindItems(ctx context.Context, opts FindOptions) ([]domai
 	if err := r.doJSON(req, &resp); err != nil {
 		return nil, err
 	}
+	r.markRead()
 	return resp.Data, nil
 }
 
@@ -55,6 +67,7 @@ func (r *RemoteReader) GetItem(ctx context.Context, key string) (domain.Item, er
 	if err := r.doJSON(req, &resp); err != nil {
 		return domain.Item{}, err
 	}
+	r.markRead()
 	return resp.Data, nil
 }
 
@@ -67,6 +80,7 @@ func (r *RemoteReader) GetRelated(ctx context.Context, key string) ([]domain.Rel
 	if err := r.doJSON(req, &resp); err != nil {
 		return nil, err
 	}
+	r.markRead()
 	return resp.Data, nil
 }
 
@@ -79,6 +93,7 @@ func (r *RemoteReader) GetLibraryStats(ctx context.Context) (LibraryStats, error
 	if err := r.doJSON(req, &resp); err != nil {
 		return LibraryStats{}, err
 	}
+	r.markRead()
 	return resp.Data, nil
 }
 
@@ -91,6 +106,7 @@ func (r *RemoteReader) ListTags(ctx context.Context) ([]Tag, error) {
 	if err := r.doJSON(req, &resp); err != nil {
 		return nil, err
 	}
+	r.markRead()
 	return resp.Data, nil
 }
 
@@ -103,6 +119,7 @@ func (r *RemoteReader) ListCollections(ctx context.Context) ([]Collection, error
 	if err := r.doJSON(req, &resp); err != nil {
 		return nil, err
 	}
+	r.markRead()
 	return resp.Data, nil
 }
 
@@ -115,6 +132,7 @@ func (r *RemoteReader) ListNotes(ctx context.Context) ([]domain.Note, error) {
 	if err := r.doJSON(req, &resp); err != nil {
 		return nil, err
 	}
+	r.markRead()
 	return resp.Data, nil
 }
 
@@ -159,6 +177,7 @@ func (r *RemoteReader) GetAttachmentFile(ctx context.Context, key string) (strin
 	tmpFile.Close()
 
 	contentType := resp.Header.Get("Content-Type")
+	r.markRead()
 	return tmpFile.Name(), contentType, nil
 }
 

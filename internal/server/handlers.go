@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -120,7 +121,7 @@ func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request) {
 		contentType = "application/octet-stream"
 	}
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Disposition", `inline; filename="`+filepath.Base(filePath)+`"`)
+	w.Header().Set("Content-Disposition", formatContentDisposition(filepath.Base(filePath)))
 	http.ServeFile(w, r, filePath)
 }
 
@@ -148,10 +149,15 @@ func parseFindOptions(q url.Values) backend.FindOptions {
 	return backend.ParseFindOptionsFromQuery(q)
 }
 
+func formatContentDisposition(filename string) string {
+	mediatype, params, _ := mime.ParseMediaType(`inline; filename="x"`)
+	params["filename"] = filename
+	return mime.FormatMediaType(mediatype, params)
+}
+
 type LibraryStats = backend.LibraryStats
 type Collection = backend.Collection
 type Tag = backend.Tag
 
-// Re-export domain types for JSON marshaling in tests
 var _ = json.Marshal
 var _ = domain.Item{}

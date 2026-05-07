@@ -1,11 +1,17 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"zotero_cli/internal/backend"
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
 )
@@ -201,4 +207,84 @@ func TestServeFromConfig_RejectsRemoteMode(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when serving with remote mode")
 	}
+}
+
+func TestServeFile_ContentDispositionEscapesQuotes(t *testing.T) {
+	tmpDir := t.TempDir()
+	specialName := "test paper (2024).pdf"
+	targetPath := filepath.Join(tmpDir, specialName)
+	if err := os.WriteFile(targetPath, []byte("%PDF-1.4"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mock := &fileMockReader{filePath: targetPath, contentType: "application/pdf"}
+	logger := NewLogger(io.Discard, "info")
+	mux := http.NewServeMux()
+	h := NewHandler(mock)
+	h.RegisterRoutes(mux)
+	handler := corsMiddleware(requestIDMiddleware(logger)(recoverMiddleware(logger)(mux)))
+
+	req := httptest.NewRequest("GET", "/api/v1/files/TEST1", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	disp := rec.Header().Get("Content-Disposition")
+	if disp == "" {
+		t.Fatal("missing Content-Disposition header")
+	}
+	if !strings.Contains(disp, specialName) {
+		t.Errorf("Content-Disposition should contain filename %q, got: %s", specialName, disp)
+	}
+}
+
+func TestFormatContentDisposition_EscapesDoubleQuotes(t *testing.T) {
+	// Simulate a filename that contains a double quote (e.g. from non-Windows systems)
+	disp := formatContentDisposition(`file"name.pdf`)
+	if strings.Contains(disp, `file"name`) {
+		t.Errorf("unescaped double quote in Content-Disposition: %s", disp)
+	}
+	if !strings.Contains(disp, `file\"name.pdf`) && !strings.Contains(disp, `file%22name.pdf`) {
+		t.Errorf("expected escaped quote, got: %s", disp)
+	}
+}
+
+func TestFormatContentDisposition_AsciiSafe(t *testing.T) {
+	disp := formatContentDisposition("simple.pdf")
+	if !strings.Contains(disp, `simple.pdf`) {
+		t.Errorf("expected simple filename, got: %s", disp)
+	}
+}
+
+type fileMockReader struct {
+	filePath    string
+	contentType string
+}
+
+func (m *fileMockReader) FindItems(ctx context.Context, opts backend.FindOptions) ([]domain.Item, error) {
+	return nil, nil
+}
+func (m *fileMockReader) GetItem(ctx context.Context, key string) (domain.Item, error) {
+	return domain.Item{}, backend.ErrItemNotFound
+}
+func (m *fileMockReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
+	return nil, nil
+}
+func (m *fileMockReader) GetLibraryStats(ctx context.Context) (backend.LibraryStats, error) {
+	return backend.LibraryStats{}, nil
+}
+func (m *fileMockReader) ListNotes(ctx context.Context) ([]domain.Note, error) {
+	return nil, nil
+}
+func (m *fileMockReader) ListTags(ctx context.Context) ([]backend.Tag, error) {
+	return nil, nil
+}
+func (m *fileMockReader) ListCollections(ctx context.Context) ([]backend.Collection, error) {
+	return nil, nil
+}
+func (m *fileMockReader) GetAttachmentFile(ctx context.Context, key string) (string, string, error) {
+	return m.filePath, m.contentType, nil
 }
