@@ -213,6 +213,70 @@ func (r *RemoteReader) doJSON(req *http.Request, result any) error {
 	return nil
 }
 
+// ExtractFigures calls the remote server to extract figures for an item,
+// then downloads each figure PNG to outputDir/{attachmentKey}/.
+func (r *RemoteReader) ExtractFigures(ctx context.Context, itemKey string, outputDir string) (ExtractFiguresResult, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/items/"+itemKey+"/figures"), nil)
+	if err != nil {
+		return ExtractFiguresResult{}, err
+	}
+
+	var resp apiResponse[ExtractFiguresResult]
+	if err := r.doJSON(req, &resp); err != nil {
+		return ExtractFiguresResult{}, err
+	}
+	r.markRead()
+
+	result := resp.Data
+	var errs []string
+
+	for _, fig := range result.Figures {
+		if fig.AttachmentKey == "" || fig.File == "" {
+			continue
+		}
+
+		attDir := filepath.Join(outputDir, fig.AttachmentKey)
+		if err := os.MkdirAll(attDir, 0o755); err != nil {
+			errs = append(errs, fmt.Sprintf("%s/%s: mkdir: %v", fig.AttachmentKey, fig.File, err))
+			continue
+		}
+
+		figURL := r.buildURL("/api/v1/figures/" + fig.AttachmentKey + "/" + fig.File)
+		dlReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, figURL, nil)
+		dlResp, err := r.httpClient.Do(dlReq)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s/%s: download: %v", fig.AttachmentKey, fig.File, err))
+			continue
+		}
+
+		if dlResp.StatusCode != http.StatusOK {
+			dlResp.Body.Close()
+			errs = append(errs, fmt.Sprintf("%s/%s: HTTP %d", fig.AttachmentKey, fig.File, dlResp.StatusCode))
+			continue
+		}
+
+		dstPath := filepath.Join(attDir, fig.File)
+		f, err := os.Create(dstPath)
+		if err != nil {
+			dlResp.Body.Close()
+			errs = append(errs, fmt.Sprintf("%s/%s: create: %v", fig.AttachmentKey, fig.File, err))
+			continue
+		}
+		_, copyErr := io.Copy(f, dlResp.Body)
+		f.Close()
+		dlResp.Body.Close()
+		if copyErr != nil {
+			os.Remove(dstPath)
+			errs = append(errs, fmt.Sprintf("%s/%s: write: %v", fig.AttachmentKey, fig.File, copyErr))
+		}
+	}
+
+	if len(errs) > 0 {
+		result.Error = strings.Join(errs, "; ")
+	}
+	return result, nil
+}
+
 // EncodeFindOptions converts FindOptions to URL query parameters for HTTP transport.
 func EncodeFindOptions(opts FindOptions) url.Values {
 	q := url.Values{}

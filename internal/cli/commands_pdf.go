@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"zotero_cli/internal/backend"
+	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
 )
 
@@ -253,6 +254,11 @@ func (c *CLI) runExtractFigures(args []string) int {
 	cfg, exitCode := c.loadConfig()
 	if exitCode != 0 {
 		return exitCode
+	}
+
+	// Remote mode: delegate to server API
+	if cfg.Mode == "remote" {
+		return c.runExtractFiguresRemote(cfg, itemKeys, outputDir, jsonOutput)
 	}
 
 	localReader, err := c.newLocalReader(cfg)
@@ -548,4 +554,32 @@ func (c *CLI) parseExtractFiguresArgs(args []string) ([]string, string, bool, in
 		return nil, "", false, 0, 0, false
 	}
 	return itemKeys, outputDir, jsonOutput, workers, maxPerPage, true
+}
+
+func (c *CLI) runExtractFiguresRemote(cfg config.Config, itemKeys []string, outputDir string, jsonOutput bool) int {
+	if outputDir == "" {
+		outputDir = filepath.Join(".", "figures")
+	}
+	absOutDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		return c.printErr(err)
+	}
+
+	reader, err := c.backendNewReader(cfg, nil)
+	if err != nil {
+		return c.printErr(err)
+	}
+	remoteReader, ok := reader.(*backend.RemoteReader)
+	if !ok {
+		return c.printErr(fmt.Errorf("extract-figures in remote mode requires a remote reader"))
+	}
+
+	ctx := context.Background()
+	var results []figureTaskResult
+	for _, key := range itemKeys {
+		res, extractErr := remoteReader.ExtractFigures(ctx, key, absOutDir)
+		results = append(results, figureTaskResult{itemKey: key, result: res, err: extractErr})
+	}
+
+	return c.outputFiguresResults(results, jsonOutput)
 }

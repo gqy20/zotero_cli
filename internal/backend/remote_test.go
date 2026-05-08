@@ -666,3 +666,137 @@ func parseFindOptionsForTest(t *testing.T, q url.Values) FindOptions {
 	t.Helper()
 	return ParseFindOptionsFromQuery(q)
 }
+
+// --- ExtractFigures remote tests ---
+
+func TestRemoteReader_ExtractFigures_Success(t *testing.T) {
+	apiResult := ExtractFiguresResult{
+		ItemKey:    "ABC123",
+		TotalPages: 10,
+		Figures: []FigureInfo{
+			{ID: 1, File: "p1_fig1.png", Page: 1, SizePx: "800x600", KB: 120.5, AttachmentKey: "ATT1"},
+			{ID: 2, File: "p3_fig2.png", Page: 3, SizePx: "1024x768", KB: 200.0, AttachmentKey: "ATT1"},
+		},
+		ElapsedSec: 1.5,
+		Method:     "cluster_drawings_v13",
+	}
+
+	figureServed := make(map[string]bool)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/items/ABC123/figures":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(apiResponse[ExtractFiguresResult]{
+				Ok:   true,
+				Data: apiResult,
+			})
+		case "/api/v1/figures/ATT1/p1_fig1.png":
+			figureServed["p1_fig1.png"] = true
+			w.Header().Set("Content-Type", "image/png")
+			w.Write([]byte{0x89, 0x50, 0x4E, 0x47, 0x00, 0x01})
+		case "/api/v1/figures/ATT1/p3_fig2.png":
+			figureServed["p3_fig2.png"] = true
+			w.Header().Set("Content-Type", "image/png")
+			w.Write([]byte{0x89, 0x50, 0x4E, 0x47, 0x00, 0x02})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	outputDir := t.TempDir()
+	r := NewRemoteReader(srv.URL, srv.Client())
+	result, err := r.ExtractFigures(context.Background(), "ABC123", outputDir)
+	if err != nil {
+		t.Fatalf("ExtractFigures: %v", err)
+	}
+	if result.ItemKey != "ABC123" {
+		t.Errorf("expected item_key ABC123, got %s", result.ItemKey)
+	}
+	if len(result.Figures) != 2 {
+		t.Fatalf("expected 2 figures, got %d", len(result.Figures))
+	}
+
+	// Check files were downloaded
+	for _, fig := range result.Figures {
+		expected := filepath.Join(outputDir, fig.AttachmentKey, fig.File)
+		if _, err := os.Stat(expected); err != nil {
+			t.Errorf("figure file not downloaded: %s: %v", expected, err)
+		}
+		if !figureServed[fig.File] {
+			t.Errorf("figure %s was not requested from server", fig.File)
+		}
+	}
+}
+
+func TestRemoteReader_ExtractFigures_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(apiResponse[any]{
+			Ok:    false,
+			Error: "python not found",
+		})
+	}))
+	defer srv.Close()
+
+	r := NewRemoteReader(srv.URL, srv.Client())
+	_, err := r.ExtractFigures(context.Background(), "ABC123", t.TempDir())
+	if err == nil {
+		t.Fatal("expected error for server failure")
+	}
+}
+
+func TestRemoteReader_ExtractFigures_FigureDownloadFailure(t *testing.T) {
+	apiResult := ExtractFiguresResult{
+		ItemKey: "ABC123",
+		Figures: []FigureInfo{
+			{ID: 1, File: "p1_fig1.png", AttachmentKey: "ATT1"},
+		},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/items/ABC123/figures":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(apiResponse[ExtractFiguresResult]{
+				Ok:   true,
+				Data: apiResult,
+			})
+		case "/api/v1/figures/ATT1/p1_fig1.png":
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	r := NewRemoteReader(srv.URL, srv.Client())
+	result, err := r.ExtractFigures(context.Background(), "ABC123", t.TempDir())
+	// Should not fail entirely — partial result with error info
+	if err != nil {
+		t.Fatalf("partial failure should not return error: %v", err)
+	}
+	if result.Error == "" {
+		t.Error("expected error info for failed download")
+	}
+}
+
+func TestRemoteReader_ExtractFigures_NoAPI(t *testing.T) {
+	// Server returns 501 (not implemented)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotImplemented)
+		json.NewEncoder(w).Encode(apiResponse[any]{
+			Ok:    false,
+			Error: "figure extraction not available",
+		})
+	}))
+	defer srv.Close()
+
+	r := NewRemoteReader(srv.URL, srv.Client())
+	_, err := r.ExtractFigures(context.Background(), "ABC123", t.TempDir())
+	if err == nil {
+		t.Fatal("expected error for 501 response")
+	}
+}

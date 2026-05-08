@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"mime"
@@ -14,11 +15,21 @@ import (
 )
 
 type Handler struct {
-	reader backend.Reader
+	reader  backend.Reader
+	dataDir string
 }
 
 func NewHandler(reader backend.Reader) *Handler {
 	return &Handler{reader: reader}
+}
+
+func NewHandlerWithDir(reader backend.Reader, dataDir string) *Handler {
+	return &Handler{reader: reader, dataDir: dataDir}
+}
+
+// FigureExtractor is implemented by readers that support figure extraction.
+type FigureExtractor interface {
+	ExtractFigures(ctx context.Context, item domain.Item, outputDir string) (backend.ExtractFiguresResult, error)
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -28,10 +39,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/items", h.findItems)
 	mux.HandleFunc("GET /api/v1/items/{key}", h.getItem)
 	mux.HandleFunc("GET /api/v1/items/{key}/related", h.getRelated)
+	mux.HandleFunc("GET /api/v1/items/{key}/figures", h.extractFigures)
 	mux.HandleFunc("GET /api/v1/collections", h.getCollections)
 	mux.HandleFunc("GET /api/v1/tags", h.getTags)
 	mux.HandleFunc("GET /api/v1/notes", h.getNotes)
 	mux.HandleFunc("GET /api/v1/files/{key}", h.serveFile)
+	mux.HandleFunc("GET /api/v1/figures/{attachmentKey}/{filename}", h.serveFigure)
 }
 
 func (h *Handler) healthCheck(w http.ResponseWriter, r *http.Request) {
@@ -153,6 +166,62 @@ func formatContentDisposition(filename string) string {
 	mediatype, params, _ := mime.ParseMediaType(`inline; filename="x"`)
 	params["filename"] = filename
 	return mime.FormatMediaType(mediatype, params)
+}
+
+func (h *Handler) extractFigures(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("key")
+
+	extractor, ok := h.reader.(FigureExtractor)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, fmt.Errorf("figure extraction not available on this server"))
+		return
+	}
+
+	item, err := h.reader.GetItem(r.Context(), key)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+
+	outputDir := filepath.Join(h.dataDir, ".zotero_cli", "figures")
+	result, err := extractor.ExtractFigures(r.Context(), item, outputDir)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	// Populate URL field for each figure
+	for i := range result.Figures {
+		fig := &result.Figures[i]
+		if fig.AttachmentKey != "" && fig.File != "" {
+			fig.URL = fmt.Sprintf("/api/v1/figures/%s/%s", fig.AttachmentKey, fig.File)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, result, Meta{})
+}
+
+func (h *Handler) serveFigure(w http.ResponseWriter, r *http.Request) {
+	attKey := r.PathValue("attachmentKey")
+	filename := r.PathValue("filename")
+
+	// Prevent path traversal
+	cleanAttKey := filepath.Base(attKey)
+	cleanFilename := filepath.Base(filename)
+	if cleanAttKey != attKey || cleanFilename != filename {
+		writeError(w, http.StatusNotFound, fmt.Errorf("invalid path"))
+		return
+	}
+
+	figurePath := filepath.Join(h.dataDir, ".zotero_cli", "figures", cleanAttKey, cleanFilename)
+	if _, err := os.Stat(figurePath); err != nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("figure not found"))
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeFile(w, r, figurePath)
 }
 
 type LibraryStats = backend.LibraryStats

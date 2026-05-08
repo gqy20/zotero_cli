@@ -32,6 +32,7 @@ type FigureInfo struct {
 	PctPage       float64 `json:"pct_page"`
 	Confidence    int     `json:"confidence"`     // V4: 0-100 quality score
 	AttachmentKey string  `json:"attachment_key"` // which PDF this figure came from
+	URL           string  `json:"url,omitempty"`  // download URL (populated by server API)
 }
 
 // ExtractFiguresResult is the result of extracting figures from a PDF item.
