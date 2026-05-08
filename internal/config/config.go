@@ -27,6 +27,7 @@ type Config struct {
 	AllowDelete                bool   `json:"allow_delete"`
 	JournalRankPath            string `json:"journal_rank_path,omitempty"`
 	ServerAddr                 string `json:"server_addr,omitempty"`
+	ServerAuthKey              string `json:"server_auth_key,omitempty"`
 }
 
 func Default() Config {
@@ -134,6 +135,7 @@ func loadEnvConfig() (Config, bool, error) {
 		{"ZOT_LOCALE", &cfg.Locale},
 		{"ZOT_JOURNAL_RANK_PATH", &cfg.JournalRankPath},
 		{"ZOT_SERVER_ADDR", &cfg.ServerAddr},
+		{"ZOT_SERVER_AUTH_KEY", &cfg.ServerAuthKey},
 	} {
 		if value := firstNonEmpty(os.Getenv(f.key), envFile[f.key]); value != "" {
 			*f.dst = value

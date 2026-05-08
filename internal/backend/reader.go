@@ -135,7 +135,7 @@ func NewReader(cfg config.Config, httpClient *http.Client) (Reader, error) {
 		if cfg.ServerAddr == "" {
 			return nil, fmt.Errorf("remote mode requires server_addr (ZOT_SERVER_ADDR) to be set")
 		}
-		return NewRemoteReader(cfg.ServerAddr, httpClient), nil
+		return NewRemoteReaderWithAuth(cfg.ServerAddr, cfg.ServerAuthKey, httpClient), nil
 	default:
 		return nil, fmt.Errorf("unsupported mode %q", mode)
 	}
@@ -224,6 +224,21 @@ func (r *HybridReader) GetAttachmentFile(ctx context.Context, key string) (strin
 		return r.local.GetAttachmentFile(ctx, key)
 	}
 	return "", "", fmt.Errorf("no local reader available")
+}
+
+// ExtractFigures delegates to the local reader if available.
+func (r *HybridReader) ExtractFigures(ctx context.Context, item domain.Item, outputDir string) (ExtractFiguresResult, error) {
+	if r.local == nil {
+		return ExtractFiguresResult{}, fmt.Errorf("figure extraction requires a local reader")
+	}
+	type figureExtractor interface {
+		ExtractFigures(ctx context.Context, item domain.Item, outputDir string) (ExtractFiguresResult, error)
+	}
+	ext, ok := r.local.(figureExtractor)
+	if !ok {
+		return ExtractFiguresResult{}, fmt.Errorf("local reader does not support figure extraction")
+	}
+	return ext.ExtractFigures(ctx, item, outputDir)
 }
 
 func readWithFallbackUsingPolicy[T any](r *HybridReader, shouldFallback func(error) bool, read func(Reader) (T, error)) (T, error) {

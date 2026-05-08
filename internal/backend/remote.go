@@ -18,15 +18,20 @@ import (
 
 type RemoteReader struct {
 	baseURL          string
+	authKey          string
 	httpClient       *http.Client
 	lastReadMetadata ReadMetadata
 }
 
 func NewRemoteReader(baseURL string, httpClient *http.Client) *RemoteReader {
+	return NewRemoteReaderWithAuth(baseURL, "", httpClient)
+}
+
+func NewRemoteReaderWithAuth(baseURL, authKey string, httpClient *http.Client) *RemoteReader {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	return &RemoteReader{baseURL: strings.TrimRight(baseURL, "/"), httpClient: httpClient}
+	return &RemoteReader{baseURL: strings.TrimRight(baseURL, "/"), authKey: authKey, httpClient: httpClient}
 }
 
 func (r *RemoteReader) markRead() {
@@ -41,6 +46,12 @@ func (r *RemoteReader) ConsumeReadMetadata() ReadMetadata {
 
 func (r *RemoteReader) buildURL(path string) string {
 	return r.baseURL + path
+}
+
+func (r *RemoteReader) setAuth(req *http.Request) {
+	if r.authKey != "" {
+		req.Header.Set("Authorization", "Bearer "+r.authKey)
+	}
 }
 
 func (r *RemoteReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
@@ -141,6 +152,7 @@ func (r *RemoteReader) GetAttachmentFile(ctx context.Context, key string) (strin
 	if err != nil {
 		return "", "", err
 	}
+	r.setAuth(req)
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
 		return "", "", err
@@ -191,6 +203,7 @@ type apiResponse[T any] struct {
 }
 
 func (r *RemoteReader) doJSON(req *http.Request, result any) error {
+	r.setAuth(req)
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("remote request failed: %w", err)
@@ -243,6 +256,7 @@ func (r *RemoteReader) ExtractFigures(ctx context.Context, itemKey string, outpu
 
 		figURL := r.buildURL("/api/v1/figures/" + fig.AttachmentKey + "/" + fig.File)
 		dlReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, figURL, nil)
+		r.setAuth(dlReq)
 		dlResp, err := r.httpClient.Do(dlReq)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s/%s: download: %v", fig.AttachmentKey, fig.File, err))

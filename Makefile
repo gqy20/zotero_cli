@@ -1,6 +1,7 @@
-.PHONY: build clean release fmt fmt-check lint test vet check install-hooks
+.PHONY: build build-server clean release release-server fmt fmt-check lint test vet check install-hooks
 
 BINARY := zot
+SERVER := zot-server
 EXT := $(shell go env GOEXE)
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -43,12 +44,23 @@ build:
 	rm -f $(BINARY)$(EXT)
 	go build -trimpath $(LDFLAGS) -o $(BINARY)$(EXT) ./cmd/zot
 
+build-server:
+	rm -f $(SERVER)$(EXT)
+	go build -trimpath $(LDFLAGS) -o $(SERVER)$(EXT) ./cmd/server
+
 # --- 发布（含 upx 压缩）---
 
 release: build
 	$(UPX) --best --lzma -o $(BINARY)$(EXT).tmp $(BINARY)$(EXT) && mv $(BINARY)$(EXT).tmp $(BINARY)$(EXT)
 	@echo "---"
 	@ls -lh $(BINARY)$(EXT)
+
+release-server: build-server
+	$(UPX) --best --lzma -o $(SERVER)$(EXT).tmp $(SERVER)$(EXT) && mv $(SERVER)$(EXT).tmp $(SERVER)$(EXT)
+	@echo "---"
+	@ls -lh $(SERVER)$(EXT)
+
+release-all: release release-server
 
 # --- CI 综合检查 ---
 
@@ -64,4 +76,4 @@ install-hooks:
 # --- 清理 ---
 
 clean:
-	rm -f $(BINARY)$(EXT)
+	rm -f $(BINARY)$(EXT) $(SERVER)$(EXT)

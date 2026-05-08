@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -132,4 +134,23 @@ func formatPanic(v any) string {
 		return s
 	}
 	return "unknown panic"
+}
+
+// authMiddleware rejects requests that lack a valid Bearer token when
+// ZOT_SERVER_AUTH_KEY is set. If the env var is empty, all requests pass.
+func authMiddleware(authKey string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if authKey == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			if token == authKey {
+				next.ServeHTTP(w, r)
+				return
+			}
+			writeError(w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
+		})
+	}
 }

@@ -37,10 +37,14 @@ func NewServerWithDirAndLogger(reader backend.Reader, addr string, dataDir strin
 	h.RegisterRoutes(mux)
 	RegisterStaticRoutes(mux)
 
+	authKey := os.Getenv("ZOT_SERVER_AUTH_KEY")
+
 	handler := corsMiddleware(
-		requestIDMiddleware(logger)(
-			recoverMiddleware(logger)(
-				loggingMiddleware(logger)(mux),
+		authMiddleware(authKey)(
+			requestIDMiddleware(logger)(
+				recoverMiddleware(logger)(
+					loggingMiddleware(logger)(mux),
+				),
 			),
 		),
 	)

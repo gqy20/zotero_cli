@@ -481,3 +481,67 @@ func TestExtractFiguresEndpoint_ExtractionError(t *testing.T) {
 		t.Fatalf("expected 500, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// --- Auth tests ---
+
+func TestAuthMiddleware_AllowsWhenNoKey(t *testing.T) {
+	srv := NewMockServerWithReader()
+
+	req := httptest.NewRequest("GET", "/api/v1/stats", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 without auth key, got %d", rec.Code)
+	}
+}
+
+func TestAuthMiddleware_RejectsInvalidToken(t *testing.T) {
+	logger := NewLogger(io.Discard, "info")
+	mux := http.NewServeMux()
+	h := NewHandler(&mockReader{})
+	h.RegisterRoutes(mux)
+	handler := corsMiddleware(authMiddleware("secret123")(requestIDMiddleware(logger)(recoverMiddleware(logger)(mux))))
+
+	req := httptest.NewRequest("GET", "/api/v1/stats", nil)
+	req.Header.Set("Authorization", "Bearer wrong-token")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for wrong token, got %d", rec.Code)
+	}
+}
+
+func TestAuthMiddleware_AllowsValidToken(t *testing.T) {
+	logger := NewLogger(io.Discard, "info")
+	mux := http.NewServeMux()
+	h := NewHandler(&mockReader{})
+	h.RegisterRoutes(mux)
+	handler := corsMiddleware(authMiddleware("secret123")(requestIDMiddleware(logger)(recoverMiddleware(logger)(mux))))
+
+	req := httptest.NewRequest("GET", "/api/v1/stats", nil)
+	req.Header.Set("Authorization", "Bearer secret123")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 with valid token, got %d", rec.Code)
+	}
+}
+
+func TestAuthMiddleware_RejectsMissingToken(t *testing.T) {
+	logger := NewLogger(io.Discard, "info")
+	mux := http.NewServeMux()
+	h := NewHandler(&mockReader{})
+	h.RegisterRoutes(mux)
+	handler := corsMiddleware(authMiddleware("secret123")(requestIDMiddleware(logger)(recoverMiddleware(logger)(mux))))
+
+	req := httptest.NewRequest("GET", "/api/v1/stats", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without token, got %d", rec.Code)
+	}
+}
