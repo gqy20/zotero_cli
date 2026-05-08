@@ -1,6 +1,7 @@
 .PHONY: build clean release fmt fmt-check lint test vet check install-hooks
 
 BINARY := zot
+EXT := $(shell go env GOEXE)
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -39,15 +40,15 @@ test-short:
 # --- 构建 ---
 
 build:
-	rm -f $(BINARY).exe $(BINARY)-compressed.exe
-	go build -trimpath $(LDFLAGS) -o $(BINARY).exe ./cmd/zot
+	rm -f $(BINARY)$(EXT)
+	go build -trimpath $(LDFLAGS) -o $(BINARY)$(EXT) ./cmd/zot
 
 # --- 发布（含 upx 压缩）---
 
 release: build
-	$(UPX) --best --lzma -o $(BINARY).exe.tmp $(BINARY).exe && mv $(BINARY).exe.tmp $(BINARY).exe
+	$(UPX) --best --lzma -o $(BINARY)$(EXT).tmp $(BINARY)$(EXT) && mv $(BINARY)$(EXT).tmp $(BINARY)$(EXT)
 	@echo "---"
-	@ls -lh $(BINARY).exe
+	@ls -lh $(BINARY)$(EXT)
 
 # --- CI 综合检查 ---
 
@@ -63,4 +64,4 @@ install-hooks:
 # --- 清理 ---
 
 clean:
-	rm -f $(BINARY).exe
+	rm -f $(BINARY)$(EXT)
