@@ -48,6 +48,7 @@ AI 原生的 Zotero 命令行工具。为 Claude Code、Codex 等 AI agent 设�
 | [Agent 运行时](plans/agent-runtime.md) | Agent Loop、记忆分层、行为规则、自进化 | 规划中 |
 | [限流优化](plans/optimizations/rate-limiting.md) | 重试/限流/缓存/熔断器分层方案 | 待实施 |
 | [原生能力对接](plans/optimizations/native-integration.md) | Zotero API/Web 本地 DB 优化机会 | 待实施 |
+| [平台统一化 + 手柄集成](plans/unified-platform.md) | 三层功能覆盖分析、补齐路线图、代码量估算、Gamepad 交互设计 | 规划中 |
 
 ### 开发指南
 
