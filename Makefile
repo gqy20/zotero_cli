@@ -1,4 +1,4 @@
-.PHONY: build build-server clean release release-server fmt fmt-check lint test vet check install-hooks
+.PHONY: build build-server clean release release-cli release-server release-all fmt fmt-check lint test vet check install-hooks
 
 BINARY := zot
 SERVER := zot-server
@@ -50,7 +50,7 @@ build-server:
 
 # --- 发布（含 upx 压缩）---
 
-release: build
+release-cli: build
 	$(UPX) --best --lzma -o $(BINARY)$(EXT).tmp $(BINARY)$(EXT) && mv $(BINARY)$(EXT).tmp $(BINARY)$(EXT)
 	@echo "---"
 	@ls -lh $(BINARY)$(EXT)
@@ -60,7 +60,11 @@ release-server: build-server
 	@echo "---"
 	@ls -lh $(SERVER)$(EXT)
 
-release-all: release release-server
+release:
+	$(MAKE) --no-print-directory -j2 release-cli release-server
+
+release-all:
+	$(MAKE) --no-print-directory release
 
 # --- CI 综合检查 ---
 
