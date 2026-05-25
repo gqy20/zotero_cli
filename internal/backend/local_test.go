@@ -86,6 +86,13 @@ func TestFullTextCacheSaveAndLoad(t *testing.T) {
 	if attachmentName != "paper.pdf" {
 		t.Fatalf("indexed attachment_name = %q, want %q", attachmentName, "paper.pdf")
 	}
+	var textHash, indexedTextHash string
+	if err := indexDB.QueryRow(`SELECT text_hash, indexed_text_hash FROM fulltext_meta WHERE attachment_key = ?`, "ATT123").Scan(&textHash, &indexedTextHash); err != nil {
+		t.Fatalf("query fulltext_meta index status: %v", err)
+	}
+	if textHash == "" || indexedTextHash != textHash {
+		t.Fatalf("indexed_text_hash = %q, text_hash = %q, want matching non-empty hashes", indexedTextHash, textHash)
+	}
 }
 
 func TestFullTextCacheLoadRejectsStaleEntry(t *testing.T) {
@@ -464,6 +471,16 @@ func TestFullTextCacheSaveBatchPreservesExistingIndexEntries(t *testing.T) {
 	}
 	if len(matches) != 1 || matches[0].AttachmentKey != "ATT456" {
 		t.Fatalf("Search() second matches = %#v, want ATT456", matches)
+	}
+	statuses, err := cache.IndexStatuses()
+	if err != nil {
+		t.Fatalf("IndexStatuses() error = %v", err)
+	}
+	for _, key := range []string{"ATT123", "ATT456"} {
+		status := statuses[key]
+		if status.TextHash == "" || status.IndexedTextHash != status.TextHash {
+			t.Fatalf("IndexStatuses()[%s] = %#v, want matching hashes", key, status)
+		}
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,6 +37,8 @@ type fullTextCacheMeta struct {
 	SourceMtimeUnix int64  `json:"source_mtime_unix,omitempty"`
 	SourceSize      int64  `json:"source_size,omitempty"`
 	TextHash        string `json:"text_hash,omitempty"`
+	IndexedTextHash string `json:"indexed_text_hash,omitempty"`
+	IndexedAt       string `json:"indexed_at,omitempty"`
 	ExtractedAt     string `json:"extracted_at,omitempty"`
 	Pages           int    `json:"pages,omitempty"`
 	Chars           int    `json:"chars,omitempty"`
@@ -66,6 +69,11 @@ type fullTextIndexMatch struct {
 	ChunkIndex      int
 	ChunkPage       int
 	ChunkBBox       [4]float64
+}
+
+type fullTextIndexStatus struct {
+	TextHash        string
+	IndexedTextHash string
 }
 
 func newFullTextCache(rootDir string) fullTextCache {
@@ -136,15 +144,49 @@ func (c fullTextCache) HasIndexEntry(attachmentKey string) (bool, error) {
 	if err := ensureFullTextIndexSchema(db); err != nil {
 		return false, err
 	}
-	var docCount int
-	if err := db.QueryRow(`SELECT count(*) FROM fulltext_documents WHERE attachment_key = ?`, key).Scan(&docCount); err != nil {
+	var textHash, indexedTextHash sql.NullString
+	if err := db.QueryRow(`SELECT text_hash, indexed_text_hash FROM fulltext_meta WHERE attachment_key = ?`, key).Scan(&textHash, &indexedTextHash); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
 		return false, err
 	}
-	var chunkCount int
-	if err := db.QueryRow(`SELECT count(*) FROM fulltext_chunks WHERE attachment_key = ?`, key).Scan(&chunkCount); err != nil {
-		return false, err
+	return textHash.String != "" && indexedTextHash.String == textHash.String, nil
+}
+
+func (c fullTextCache) IndexStatuses() (map[string]fullTextIndexStatus, error) {
+	statuses := map[string]fullTextIndexStatus{}
+	if _, err := os.Stat(c.indexPath()); err != nil {
+		if os.IsNotExist(err) {
+			return statuses, nil
+		}
+		return nil, err
 	}
-	return docCount > 0 && chunkCount > 0, nil
+	db, err := sql.Open("sqlite", c.indexPath())
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	if err := ensureFullTextIndexSchema(db); err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(`SELECT attachment_key, text_hash, indexed_text_hash FROM fulltext_meta`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key string
+		var textHash, indexedTextHash sql.NullString
+		if err := rows.Scan(&key, &textHash, &indexedTextHash); err != nil {
+			return nil, err
+		}
+		statuses[key] = fullTextIndexStatus{
+			TextHash:        textHash.String,
+			IndexedTextHash: indexedTextHash.String,
+		}
+	}
+	return statuses, rows.Err()
 }
 
 func (c fullTextCache) SyncIndexIfMissing(doc FullTextDocument) error {
@@ -228,8 +270,8 @@ func (c fullTextCache) writeMetaBatch(db *sql.DB, docs []FullTextDocument) error
 	metaStmt, err := tx.Prepare(`INSERT OR REPLACE INTO fulltext_meta (
 		attachment_key, parent_item_key, resolved_path, content_type,
 		title, creators, tags, attachment_title, attachment_name, attachment_path,
-		extractor, source_mtime_unix, source_size, text_hash, extracted_at, pages, chars
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		extractor, source_mtime_unix, source_size, text_hash, indexed_text_hash, indexed_at, extracted_at, pages, chars
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -261,6 +303,8 @@ func (c fullTextCache) writeMetaBatch(db *sql.DB, docs []FullTextDocument) error
 			doc.Meta.SourceMtimeUnix,
 			doc.Meta.SourceSize,
 			doc.Meta.TextHash,
+			doc.Meta.IndexedTextHash,
+			doc.Meta.IndexedAt,
 			doc.Meta.ExtractedAt,
 			doc.Meta.Pages,
 			doc.Meta.Chars,
@@ -384,6 +428,9 @@ func (c fullTextCache) upsertFTSIndex(db *sql.DB, docs []FullTextDocument) error
 	if err := c.upsertFTSIndexTx(tx, docs); err != nil {
 		return err
 	}
+	if err := c.markIndexedTx(tx, docs); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -447,6 +494,25 @@ func (c fullTextCache) upsertFTSIndexTx(tx *sql.Tx, docs []FullTextDocument) err
 			); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func (c fullTextCache) markIndexedTx(tx *sql.Tx, docs []FullTextDocument) error {
+	indexedAt := time.Now().UTC().Format(time.RFC3339)
+	stmt, err := tx.Prepare(`UPDATE fulltext_meta SET indexed_text_hash = ?, indexed_at = ? WHERE attachment_key = ?`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, doc := range docs {
+		key := strings.TrimSpace(doc.Meta.AttachmentKey)
+		if key == "" {
+			continue
+		}
+		if _, err := stmt.Exec(doc.Meta.TextHash, indexedAt, key); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -564,8 +630,8 @@ func (c fullTextCache) syncIndexWithReset(doc FullTextDocument, reset bool) erro
 		`INSERT INTO fulltext_meta (
 		 attachment_key, parent_item_key, resolved_path, content_type,
 		 title, creators, tags, attachment_title, attachment_name, attachment_path,
-		 extractor, source_mtime_unix, source_size, text_hash, extracted_at, pages, chars
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 extractor, source_mtime_unix, source_size, text_hash, indexed_text_hash, indexed_at, extracted_at, pages, chars
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		doc.Meta.AttachmentKey,
 		doc.Meta.ParentItemKey,
 		doc.Meta.ResolvedPath,
@@ -580,6 +646,8 @@ func (c fullTextCache) syncIndexWithReset(doc FullTextDocument, reset bool) erro
 		doc.Meta.SourceMtimeUnix,
 		doc.Meta.SourceSize,
 		doc.Meta.TextHash,
+		doc.Meta.TextHash,
+		time.Now().UTC().Format(time.RFC3339),
 		doc.Meta.ExtractedAt,
 		doc.Meta.Pages,
 		doc.Meta.Chars,
@@ -662,6 +730,8 @@ func ensureFullTextIndexSchema(db *sql.DB) error {
 		 source_mtime_unix INTEGER,
 		 source_size INTEGER,
 		 text_hash TEXT,
+		 indexed_text_hash TEXT,
+		 indexed_at TEXT,
 		 extracted_at TEXT,
 		 pages INTEGER,
 		 chars INTEGER
@@ -692,16 +762,47 @@ func ensureFullTextIndexSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	if err := ensureTableColumn(db, "fulltext_meta", "indexed_text_hash", "TEXT"); err != nil {
+		return err
+	}
+	if err := ensureTableColumn(db, "fulltext_meta", "indexed_at", "TEXT"); err != nil {
+		return err
+	}
 	return nil
 }
 
+func ensureTableColumn(db *sql.DB, table string, column string, columnType string) error {
+	columns, err := tableColumns(db, table)
+	if err != nil {
+		return err
+	}
+	if _, ok := columns[column]; ok {
+		return nil
+	}
+	_, err = db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + columnType)
+	return err
+}
+
 func tableHasColumns(db *sql.DB, table string, required []string) (bool, error) {
-	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
+	seen, err := tableColumns(db, table)
 	if err != nil {
 		return false, err
 	}
+	for _, column := range required {
+		if _, ok := seen[column]; !ok {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func tableColumns(db *sql.DB, table string) (map[string]struct{}, error) {
+	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
-	seen := make(map[string]struct{}, len(required))
+	seen := make(map[string]struct{})
 	for rows.Next() {
 		var (
 			cid        int
@@ -712,19 +813,14 @@ func tableHasColumns(db *sql.DB, table string, required []string) (bool, error) 
 			pk         int
 		)
 		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultVal, &pk); err != nil {
-			return false, err
+			return nil, err
 		}
 		seen[name] = struct{}{}
 	}
 	if err := rows.Err(); err != nil {
-		return false, err
+		return nil, err
 	}
-	for _, column := range required {
-		if _, ok := seen[column]; !ok {
-			return false, nil
-		}
-	}
-	return true, nil
+	return seen, nil
 }
 
 func isFullTextIndexSchemaError(err error) bool {

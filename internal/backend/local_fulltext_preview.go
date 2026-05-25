@@ -275,11 +275,25 @@ func (r *LocalReader) ExtractAttachmentFullTextOnly(ctx context.Context, item do
 }
 
 func (r *LocalReader) SaveFullText(doc FullTextDocument) error {
-	return newFullTextCache(r.FullTextCacheDir).Save(doc)
+	if err := newFullTextCache(r.FullTextCacheDir).Save(doc); err != nil {
+		return err
+	}
+	r.clearFullTextIndexStatusCache()
+	return nil
 }
 
 func (r *LocalReader) SaveFullTextBatch(docs []FullTextDocument) error {
-	return newFullTextCache(r.FullTextCacheDir).SaveBatch(docs)
+	if err := newFullTextCache(r.FullTextCacheDir).SaveBatch(docs); err != nil {
+		return err
+	}
+	r.clearFullTextIndexStatusCache()
+	return nil
+}
+
+func (r *LocalReader) clearFullTextIndexStatusCache() {
+	r.fullTextIndexMu.Lock()
+	defer r.fullTextIndexMu.Unlock()
+	r.fullTextIndex = nil
 }
 
 func (r *LocalReader) loadFullTextDocumentForAttachment(item domain.Item, attachment domain.Attachment, cache fullTextCache) (FullTextDocument, bool, error) {

@@ -31,6 +31,8 @@ type LocalReader struct {
 	SnapshotCacheDir  string
 	AttachmentBaseDir string
 	lastReadMetadata  ReadMetadata
+	fullTextIndexMu   sync.Mutex
+	fullTextIndex     map[string]fullTextIndexStatus
 	openSQLiteDB      func(string) (*sql.DB, error)
 	createSnapshot    func(string) (string, string, error)
 	findZoteroPrefs   func() ([]string, error)
@@ -100,8 +102,17 @@ func (r *LocalReader) IsFullTextCached(attachment domain.Attachment) bool {
 }
 
 func (r *LocalReader) IsFullTextIndexed(attachment domain.Attachment) bool {
-	ok, err := newFullTextCache(r.FullTextCacheDir).HasIndexEntry(attachment.Key)
-	return err == nil && ok
+	r.fullTextIndexMu.Lock()
+	defer r.fullTextIndexMu.Unlock()
+	if r.fullTextIndex == nil {
+		statuses, err := newFullTextCache(r.FullTextCacheDir).IndexStatuses()
+		if err != nil {
+			return false
+		}
+		r.fullTextIndex = statuses
+	}
+	status, ok := r.fullTextIndex[attachment.Key]
+	return ok && status.TextHash != "" && status.IndexedTextHash == status.TextHash
 }
 
 func (r *LocalReader) IsMarkedFailed(key string) bool {
