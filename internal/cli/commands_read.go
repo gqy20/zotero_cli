@@ -73,7 +73,7 @@ func (c *CLI) runFind(args []string) int {
 		return exitCode
 	}
 
-	if !opts.FullText && cfg.Mode != "web" {
+	if !opts.FullText && cfg.Mode != "web" && strings.TrimSpace(opts.Query) != "" && !opts.All {
 		if hasFullTextData(reader) {
 			opts.FullText = true
 		}

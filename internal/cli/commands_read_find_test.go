@@ -598,6 +598,83 @@ func TestRunFindLocalJSONSupportsSortingAndPagination(t *testing.T) {
 	}
 }
 
+func TestRunFindLocalJSONSupportsSortingByDateAddedDesc(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "--all", "--sort", "dateAdded", "--direction", "desc", "--limit", "1", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	item := data[0].(map[string]any)
+	if item["key"] != "ARTFULL2" {
+		t.Fatalf("unexpected item payload: %#v", item)
+	}
+}
+
+func TestRunFindAllLocalJSONSortsByDateAddedWithoutAutoFullText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	buildGlobalFTSCacheForTest(t, dataDir, []ftsCacheRow{
+		{
+			AttachmentKey:   "ATTA1111",
+			ParentItemKey:   "ART67890",
+			Title:           "Mixed Survey",
+			AttachmentTitle: "Mixed Attachment",
+			Body:            "mixed genome survey full text",
+		},
+	})
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "--all", "--sort", "dateAdded", "--direction", "desc", "--limit", "1", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	item := data[0].(map[string]any)
+	if item["key"] != "ARTFULL2" {
+		t.Fatalf("unexpected item payload: %#v", item)
+	}
+}
+
 func TestRunFindLocalRejectsQMode(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

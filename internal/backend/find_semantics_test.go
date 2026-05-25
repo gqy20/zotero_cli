@@ -121,3 +121,12 @@ func TestMatchesDateRangeSupportsYearMonthAndDate(t *testing.T) {
 		})
 	}
 }
+
+func TestCompareFindDateTimesUsesFullTimestampPrecision(t *testing.T) {
+	if got := compareFindDateTimes("2026-05-25 06:14:50", "2026-05-25 02:01:27"); got <= 0 {
+		t.Fatalf("compareFindDateTimes() = %d, want > 0 for later timestamp", got)
+	}
+	if got := compareFindDateTimes("2026-05-25T06:14:50Z", "2026-05-25 06:14:50"); got != 0 {
+		t.Fatalf("compareFindDateTimes() = %d, want 0 for equivalent timestamps", got)
+	}
+}

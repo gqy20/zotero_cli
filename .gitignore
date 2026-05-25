@@ -6,6 +6,8 @@
 *.so
 *.dylib
 zot
+zot-server
+zot-linux-amd64
 tools/
 !cmd/
 !cmd/zot/
@@ -39,6 +41,9 @@ PROFILE
 _test_*.py
 _test_*/
 figures/
+pdf-preview-test.png
+pdf-viewer-fullscreen.png
+pdf-viewer-with-controls.png
 
 # Frontend (web/)
 web/node_modules/

@@ -151,6 +151,27 @@ func compareFindDates(left string, right string) int {
 	return strings.Compare(left, right)
 }
 
+func compareFindDateTimes(left string, right string) int {
+	leftTime, leftOK := parseFindDateTime(left)
+	rightTime, rightOK := parseFindDateTime(right)
+	if leftOK && rightOK {
+		if leftTime.Before(rightTime) {
+			return -1
+		}
+		if leftTime.After(rightTime) {
+			return 1
+		}
+		return 0
+	}
+	if leftOK {
+		return -1
+	}
+	if rightOK {
+		return 1
+	}
+	return compareFindDates(left, right)
+}
+
 func matchesTags(itemTags []string, required []string, anyMode bool) bool {
 	if len(required) == 0 {
 		return true
@@ -208,6 +229,30 @@ func parseDateRange(value string) (time.Time, time.Time, bool) {
 		}
 		return time.Time{}, time.Time{}, false
 	}
+}
+
+func parseFindDateTime(value string) (time.Time, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, false
+	}
+	layouts := []string{
+		time.RFC3339,
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05",
+	}
+	for _, layout := range layouts {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed, true
+		}
+	}
+	if len(value) >= len("2006-01-02 15:04:05") {
+		prefix := value[:len("2006-01-02 15:04:05")]
+		if parsed, err := time.Parse("2006-01-02 15:04:05", prefix); err == nil {
+			return parsed, true
+		}
+	}
+	return time.Time{}, false
 }
 
 func parseRelativeDate(s string) (string, bool) {

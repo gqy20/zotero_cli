@@ -553,7 +553,15 @@ func buildLocalFindFixture(t *testing.T, dataDir string, sqlitePath string, stor
 
 	inserts := []string{
 		`INSERT INTO itemTypes(itemTypeID, typeName) VALUES (1, 'journalArticle'), (2, 'book'), (3, 'attachment'), (4, 'note'), (5, 'annotation');`,
-		`INSERT INTO items(itemID, key, version, itemTypeID) VALUES (1, 'ITEM1234', 7, 1), (2, 'ART67890', 3, 1), (3, 'BOOK1234', 2, 2), (4, 'ATTA1111', 1, 3), (5, 'NOTE1111', 1, 4), (6, 'ANNO1111', 1, 5), (7, 'ARTFULL2', 4, 1), (8, 'ATTB2222', 1, 3);`,
+		`INSERT INTO items(itemID, key, version, itemTypeID, dateAdded) VALUES
+			(1, 'ITEM1234', 7, 1, '2024-01-09 08:00:00'),
+			(2, 'ART67890', 3, 1, '2024-05-04 09:30:00'),
+			(3, 'BOOK1234', 2, 2, '2023-02-01 07:00:00'),
+			(4, 'ATTA1111', 1, 3, '2024-05-04 09:31:00'),
+			(5, 'NOTE1111', 1, 4, '2024-05-04 09:32:00'),
+			(6, 'ANNO1111', 1, 5, '2024-05-04 09:33:00'),
+			(7, 'ARTFULL2', 4, 1, '2024-06-08 10:15:00'),
+			(8, 'ATTB2222', 1, 3, '2024-06-08 10:16:00');`,
 		`INSERT INTO fieldsCombined(fieldID, fieldName) VALUES (1, 'title'), (2, 'date'), (3, 'publicationTitle'), (4, 'DOI'), (5, 'url'), (6, 'filename'), (7, 'note'), (8, 'volume'), (9, 'issue'), (10, 'pages');`,
 		`INSERT INTO itemDataValues(valueID, value) VALUES (1, 'Attention Is All You Need'), (2, '2024-01-08 2024-01-08 00:00:00'), (3, 'NeurIPS'), (4, '10.1/example'), (5, 'https://example.com/paper'), (6, 'Mixed Survey'), (7, '2024-05-03'), (8, 'Mixed Book'), (9, '2023'), (10, 'mixed.pdf'), (11, '<p>Mixed note</p>'), (12, 'Mixed Attachment'), (13, '37'), (14, '11'), (15, '1234-1248'), (16, '29'), (17, '20'), (18, 'R1094-R1103'), (19, 'Prefix Match Article'), (20, '2024-06-07'), (21, 'prefix.pdf'), (22, 'Prefix Attachment');`,
 		`INSERT INTO itemData(itemID, fieldID, valueID) VALUES (1, 1, 1), (1, 2, 2), (1, 3, 3), (1, 4, 4), (1, 5, 5), (1, 8, 13), (1, 9, 14), (1, 10, 15), (2, 1, 6), (2, 2, 7), (2, 8, 16), (2, 9, 17), (2, 10, 18), (3, 1, 8), (3, 2, 9), (4, 1, 12), (4, 6, 10), (5, 7, 11), (7, 1, 19), (7, 2, 20), (8, 1, 22), (8, 6, 21);`,

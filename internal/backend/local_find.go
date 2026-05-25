@@ -394,13 +394,17 @@ func compareFindItems(left domain.Item, right domain.Item, sortBy string) int {
 		}
 		return 1
 	}
-	switch sortBy {
+	switch strings.ToLower(strings.TrimSpace(sortBy)) {
 	case "title":
 		if cmp := strings.Compare(strings.ToLower(left.Title), strings.ToLower(right.Title)); cmp != 0 {
 			return cmp
 		}
 	case "date":
 		if cmp := compareFindDates(left.Date, right.Date); cmp != 0 {
+			return cmp
+		}
+	case "dateadded", "date_added":
+		if cmp := compareFindDateTimes(left.DateAdded, right.DateAdded); cmp != 0 {
 			return cmp
 		}
 	}
