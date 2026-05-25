@@ -26,6 +26,14 @@ func (c *CLI) runAnnotations(args []string) int {
 		return exitCode
 	}
 
+	if clearMode && cfg.Mode == "remote" {
+		return c.printErr(fmt.Errorf("annotation deletion is not available in remote mode"))
+	}
+
+	if !clearMode {
+		return c.runAnnotationsReadOnly(itemKey, pageFilter, typeFilter, jsonOutput)
+	}
+
 	localReader, err := c.newLocalReader(cfg)
 	if err != nil {
 		return c.printErr(err)
@@ -83,30 +91,37 @@ func (c *CLI) runAnnotations(args []string) int {
 		return 0
 	}
 
-	// Source 1: PDF file annotations (PyMuPDF)
-	var pdfAnns []backend.PDFAnnotation
-	lr, ok := localReader.(interface {
-		ReadPDFAnnotations(context.Context, domain.Attachment) (backend.ReadAnnotationsResult, error)
-	})
-	if ok {
-		pdfResult, err := lr.ReadPDFAnnotations(context.Background(), att)
-		if err == nil {
-			pdfAnns = pdfResult.Annotations
-		}
+	return 0
+}
+
+func (c *CLI) runAnnotationsReadOnly(itemKey string, pageFilter int, typeFilter string, jsonOutput bool) int {
+	_, reader, exitCode := c.loadReader()
+	if exitCode != 0 {
+		return exitCode
 	}
 
-	// Source 2: Zotero reader annotations (SQLite itemAnnotations table)
-	dbAnns := item.Annotations
+	item, err := reader.GetItem(context.Background(), itemKey)
+	if err != nil {
+		return c.printErr(err)
+	}
 
-	// Apply filters to both sources
-	filteredPDF := filterPDFAnns(pdfAnns, pageFilter, typeFilter)
-	filteredDB := filterDBAnns(dbAnns, pageFilter, typeFilter)
+	annotationsReader, ok := reader.(itemAnnotationsReader)
+	if !ok {
+		return c.printErr(fmt.Errorf("annotations are not available for the current reader"))
+	}
+	result, err := annotationsReader.ReadItemAnnotations(context.Background(), item)
+	if err != nil {
+		return c.printErr(err)
+	}
+
+	filteredPDF := filterPDFAnns(result.PDFAnnotations, pageFilter, typeFilter)
+	filteredDB := filterDBAnns(result.DBAnnotations, pageFilter, typeFilter)
 
 	if jsonOutput {
 		data := map[string]any{
 			"item_key":        itemKey,
-			"attachment_key":  att.Key,
-			"pdf_path":        att.ResolvedPath,
+			"attachment_key":  result.AttachmentKey,
+			"pdf_path":        result.PDFPath,
 			"pdf_annotations": filteredPDF,
 			"db_annotations":  filteredDB,
 			"total_pdf":       len(filteredPDF),
@@ -116,7 +131,7 @@ func (c *CLI) runAnnotations(args []string) int {
 			"total_pdf": len(filteredPDF),
 			"total_db":  len(filteredDB),
 		}
-		c.appendReadMetadata(meta, localReader)
+		c.appendReadMetadata(meta, reader)
 		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "annotations",
@@ -126,7 +141,9 @@ func (c *CLI) runAnnotations(args []string) int {
 	}
 
 	fmt.Fprintf(c.stdout, "Annotations for %s (%s)\n", itemKey, item.Title)
-	fmt.Fprintf(c.stdout, "PDF: %s\n", att.ResolvedPath)
+	if strings.TrimSpace(result.PDFPath) != "" {
+		fmt.Fprintf(c.stdout, "PDF: %s\n", result.PDFPath)
+	}
 
 	if len(filteredDB) > 0 {
 		fmt.Fprintf(c.stdout, "\nZotero Reader Annotations (%d):\n", len(filteredDB))

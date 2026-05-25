@@ -30,6 +30,21 @@ func (r *LocalReader) ExtractItemFullText(ctx context.Context, item domain.Item)
 	return result.Text, nil
 }
 
+func (r *HybridReader) ExtractItemFullText(ctx context.Context, item domain.Item) (string, error) {
+	textReader, ok := r.local.(interface {
+		ExtractItemFullText(context.Context, domain.Item) (string, error)
+	})
+	if !ok {
+		return "", fmt.Errorf("extract-text requires local full-text extraction support")
+	}
+	text, err := textReader.ExtractItemFullText(ctx, item)
+	if err != nil {
+		return "", err
+	}
+	r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, consumeReadMetadata(r.local))
+	return text, nil
+}
+
 func (r *LocalReader) ExtractItemAttachmentTexts(ctx context.Context, item domain.Item) (ItemFullTextResult, error) {
 	cache := newFullTextCache(r.FullTextCacheDir)
 	result := ItemFullTextResult{}
@@ -66,6 +81,21 @@ func (r *LocalReader) ExtractItemAttachmentTexts(ctx context.Context, item domai
 	if result.Text == "" {
 		return ItemFullTextResult{}, fmt.Errorf("no PDF attachment text available for item %s", item.Key)
 	}
+	return result, nil
+}
+
+func (r *HybridReader) ExtractItemAttachmentTexts(ctx context.Context, item domain.Item) (ItemFullTextResult, error) {
+	textReader, ok := r.local.(interface {
+		ExtractItemAttachmentTexts(context.Context, domain.Item) (ItemFullTextResult, error)
+	})
+	if !ok {
+		return ItemFullTextResult{}, fmt.Errorf("extract-text requires local full-text extraction support")
+	}
+	result, err := textReader.ExtractItemAttachmentTexts(ctx, item)
+	if err != nil {
+		return ItemFullTextResult{}, err
+	}
+	r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, consumeReadMetadata(r.local))
 	return result, nil
 }
 

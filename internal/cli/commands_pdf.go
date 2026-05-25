@@ -31,12 +31,20 @@ func (c *CLI) runExtractText(args []string) int {
 		return exitCode
 	}
 
-	localReader, err := c.newLocalReader(cfg)
+	var (
+		reader backend.Reader
+		err    error
+	)
+	if cfg.Mode == "remote" {
+		reader, err = c.backendNewReader(cfg, nil)
+	} else {
+		reader, err = c.newLocalReader(cfg)
+	}
 	if err != nil {
 		return c.printErr(err)
 	}
 
-	item, err := localReader.GetItem(context.Background(), itemKey)
+	item, err := reader.GetItem(context.Background(), itemKey)
 	if err != nil {
 		return c.printErr(err)
 	}
@@ -45,10 +53,10 @@ func (c *CLI) runExtractText(args []string) int {
 			result backend.ItemFullTextResult
 			err    error
 		)
-		if attachmentReader, ok := localReader.(attachmentTextReader); ok {
+		if attachmentReader, ok := reader.(attachmentTextReader); ok {
 			result, err = attachmentReader.ExtractItemAttachmentTexts(context.Background(), item)
 		} else {
-			textReader, ok := localReader.(fullTextReader)
+			textReader, ok := reader.(fullTextReader)
 			if !ok {
 				return c.printErr(fmt.Errorf("extract-text requires local full-text extraction support"))
 			}
@@ -60,7 +68,7 @@ func (c *CLI) runExtractText(args []string) int {
 			return c.printErr(err)
 		}
 
-		readMeta := c.consumeReaderReadMetadata(localReader)
+		readMeta := c.consumeReaderReadMetadata(reader)
 		meta := map[string]any{
 			"total": len([]rune(result.Text)),
 		}
@@ -107,7 +115,7 @@ func (c *CLI) runExtractText(args []string) int {
 		})
 	}
 
-	textReader, ok := localReader.(fullTextReader)
+	textReader, ok := reader.(fullTextReader)
 	if !ok {
 		return c.printErr(fmt.Errorf("extract-text requires local full-text extraction support"))
 	}
@@ -115,7 +123,7 @@ func (c *CLI) runExtractText(args []string) int {
 	if err != nil {
 		return c.printErr(err)
 	}
-	readMeta := c.consumeReaderReadMetadata(localReader)
+	readMeta := c.consumeReaderReadMetadata(reader)
 	c.warnIfSnapshotRead(readMeta)
 	fmt.Fprintln(c.stdout, text)
 	return 0

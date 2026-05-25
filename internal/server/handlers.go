@@ -32,12 +32,32 @@ type FigureExtractor interface {
 	ExtractFigures(ctx context.Context, item domain.Item, outputDir string) (backend.ExtractFiguresResult, error)
 }
 
+type previewReader interface {
+	FullTextPreview(context.Context, domain.Item) (string, error)
+}
+
+type snippetReader interface {
+	FullTextSnippet(context.Context, domain.Item, string) (string, error)
+}
+
+type attachmentTextReader interface {
+	ExtractItemAttachmentTexts(context.Context, domain.Item) (backend.ItemFullTextResult, error)
+}
+
+type itemAnnotationsReader interface {
+	ReadItemAnnotations(context.Context, domain.Item) (backend.ItemAnnotationsResult, error)
+}
+
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/health", h.healthCheck)
 	mux.HandleFunc("GET /api/v1/stats", h.getStats)
 	mux.HandleFunc("GET /api/v1/overview", h.getOverview)
 	mux.HandleFunc("GET /api/v1/items", h.findItems)
 	mux.HandleFunc("GET /api/v1/items/{key}", h.getItem)
+	mux.HandleFunc("GET /api/v1/items/{key}/preview", h.getItemPreview)
+	mux.HandleFunc("GET /api/v1/items/{key}/snippet", h.getItemSnippet)
+	mux.HandleFunc("GET /api/v1/items/{key}/text", h.getItemText)
+	mux.HandleFunc("GET /api/v1/items/{key}/annotations", h.getItemAnnotations)
 	mux.HandleFunc("GET /api/v1/items/{key}/related", h.getRelated)
 	mux.HandleFunc("GET /api/v1/items/{key}/figures", h.extractFigures)
 	mux.HandleFunc("GET /api/v1/collections", h.getCollections)
@@ -68,7 +88,7 @@ func (h *Handler) findItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	meta := Meta{Total: len(items)}
-	writeJSON(w, http.StatusOK, items, meta)
+	writeJSON(w, http.StatusOK, sanitizeItemsForRemote(items), meta)
 }
 
 func (h *Handler) getItem(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +98,87 @@ func (h *Handler) getItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, item, Meta{})
+	writeJSON(w, http.StatusOK, sanitizeItemForRemote(item), Meta{})
+}
+
+func (h *Handler) getItemPreview(w http.ResponseWriter, r *http.Request) {
+	item, err := h.loadItem(r.Context(), r.PathValue("key"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	previewer, ok := h.reader.(previewReader)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, fmt.Errorf("full-text preview not available on this server"))
+		return
+	}
+	preview, err := previewer.FullTextPreview(r.Context(), item)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, preview, Meta{})
+}
+
+func (h *Handler) getItemSnippet(w http.ResponseWriter, r *http.Request) {
+	item, err := h.loadItem(r.Context(), r.PathValue("key"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	snippeter, ok := h.reader.(snippetReader)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, fmt.Errorf("full-text snippet not available on this server"))
+		return
+	}
+	snippet, err := snippeter.FullTextSnippet(r.Context(), item, r.URL.Query().Get("q"))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, snippet, Meta{})
+}
+
+func (h *Handler) getItemText(w http.ResponseWriter, r *http.Request) {
+	item, err := h.loadItem(r.Context(), r.PathValue("key"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	reader, ok := h.reader.(attachmentTextReader)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, fmt.Errorf("full-text extraction not available on this server"))
+		return
+	}
+	result, err := reader.ExtractItemAttachmentTexts(r.Context(), item)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	for i := range result.Attachments {
+		result.Attachments[i].Attachment = sanitizeAttachmentForRemote(result.Attachments[i].Attachment)
+	}
+	writeJSON(w, http.StatusOK, result, Meta{Total: len([]rune(result.Text))})
+}
+
+func (h *Handler) getItemAnnotations(w http.ResponseWriter, r *http.Request) {
+	item, err := h.loadItem(r.Context(), r.PathValue("key"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	reader, ok := h.reader.(itemAnnotationsReader)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, fmt.Errorf("annotations not available on this server"))
+		return
+	}
+	result, err := reader.ReadItemAnnotations(r.Context(), item)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	result.PDFPath = ""
+	writeJSON(w, http.StatusOK, result, Meta{})
 }
 
 func (h *Handler) getRelated(w http.ResponseWriter, r *http.Request) {
@@ -154,7 +254,7 @@ func (h *Handler) getOverview(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, OverviewResponse{
 		Stats:       stats,
-		RecentItems: recentItems,
+		RecentItems: sanitizeItemsForRemote(recentItems),
 	}, Meta{})
 }
 
@@ -222,6 +322,37 @@ func (h *Handler) serveFigure(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeFile(w, r, figurePath)
+}
+
+func (h *Handler) loadItem(ctx context.Context, key string) (domain.Item, error) {
+	return h.reader.GetItem(ctx, key)
+}
+
+func sanitizeItemsForRemote(items []domain.Item) []domain.Item {
+	out := make([]domain.Item, 0, len(items))
+	for _, item := range items {
+		out = append(out, sanitizeItemForRemote(item))
+	}
+	return out
+}
+
+func sanitizeItemForRemote(item domain.Item) domain.Item {
+	item.Attachments = sanitizeAttachmentsForRemote(item.Attachments)
+	return item
+}
+
+func sanitizeAttachmentsForRemote(attachments []domain.Attachment) []domain.Attachment {
+	out := make([]domain.Attachment, 0, len(attachments))
+	for _, attachment := range attachments {
+		out = append(out, sanitizeAttachmentForRemote(attachment))
+	}
+	return out
+}
+
+func sanitizeAttachmentForRemote(attachment domain.Attachment) domain.Attachment {
+	attachment.ResolvedPath = ""
+	attachment.ZoteroPath = ""
+	return attachment
 }
 
 type LibraryStats = backend.LibraryStats

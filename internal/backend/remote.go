@@ -82,6 +82,71 @@ func (r *RemoteReader) GetItem(ctx context.Context, key string) (domain.Item, er
 	return resp.Data, nil
 }
 
+func (r *RemoteReader) FullTextPreview(ctx context.Context, item domain.Item) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/items/"+item.Key+"/preview"), nil)
+	if err != nil {
+		return "", err
+	}
+	var resp apiResponse[string]
+	if err := r.doJSON(req, &resp); err != nil {
+		return "", err
+	}
+	r.markRead()
+	return resp.Data, nil
+}
+
+func (r *RemoteReader) FullTextSnippet(ctx context.Context, item domain.Item, query string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/items/"+item.Key+"/snippet"), nil)
+	if err != nil {
+		return "", err
+	}
+	if query != "" {
+		values := url.Values{}
+		values.Set("q", query)
+		req.URL.RawQuery = values.Encode()
+	}
+	var resp apiResponse[string]
+	if err := r.doJSON(req, &resp); err != nil {
+		return "", err
+	}
+	r.markRead()
+	return resp.Data, nil
+}
+
+func (r *RemoteReader) ExtractItemFullText(ctx context.Context, item domain.Item) (string, error) {
+	result, err := r.ExtractItemAttachmentTexts(ctx, item)
+	if err != nil {
+		return "", err
+	}
+	return result.Text, nil
+}
+
+func (r *RemoteReader) ExtractItemAttachmentTexts(ctx context.Context, item domain.Item) (ItemFullTextResult, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/items/"+item.Key+"/text"), nil)
+	if err != nil {
+		return ItemFullTextResult{}, err
+	}
+	var resp apiResponse[ItemFullTextResult]
+	if err := r.doJSON(req, &resp); err != nil {
+		return ItemFullTextResult{}, err
+	}
+	r.markRead()
+	return resp.Data, nil
+}
+
+func (r *RemoteReader) ReadItemAnnotations(ctx context.Context, item domain.Item) (ItemAnnotationsResult, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/items/"+item.Key+"/annotations"), nil)
+	if err != nil {
+		return ItemAnnotationsResult{}, err
+	}
+	var resp apiResponse[ItemAnnotationsResult]
+	if err := r.doJSON(req, &resp); err != nil {
+		return ItemAnnotationsResult{}, err
+	}
+	r.markRead()
+	return resp.Data, nil
+}
+
 func (r *RemoteReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/items/"+key+"/related"), nil)
 	if err != nil {

@@ -29,6 +29,16 @@ type ReadAnnotationsResult struct {
 	Total         int             `json:"total"`
 }
 
+type ItemAnnotationsResult struct {
+	ItemKey        string              `json:"item_key"`
+	AttachmentKey  string              `json:"attachment_key"`
+	PDFPath        string              `json:"pdf_path,omitempty"`
+	PDFAnnotations []PDFAnnotation     `json:"pdf_annotations"`
+	DBAnnotations  []domain.Annotation `json:"db_annotations"`
+	TotalPDF       int                 `json:"total_pdf"`
+	TotalDB        int                 `json:"total_db"`
+}
+
 func (r *LocalReader) ReadPDFAnnotations(ctx context.Context, attachment domain.Attachment) (ReadAnnotationsResult, error) {
 	if !attachment.Resolved || strings.TrimSpace(attachment.ResolvedPath) == "" {
 		return ReadAnnotationsResult{}, fmt.Errorf("attachment %s has no resolved path", attachment.Key)
@@ -116,6 +126,53 @@ sys.stdout.buffer.write(payload.encode("utf-8"))
 		Annotations:   rawResult.Annotations,
 		Total:         len(rawResult.Annotations),
 	}, nil
+}
+
+func (r *LocalReader) ReadItemAnnotations(ctx context.Context, item domain.Item) (ItemAnnotationsResult, error) {
+	var att domain.Attachment
+	found := false
+	for _, attachment := range item.Attachments {
+		if strings.EqualFold(strings.TrimSpace(attachment.ContentType), "application/pdf") {
+			att = attachment
+			found = true
+			break
+		}
+	}
+	if !found {
+		return ItemAnnotationsResult{}, fmt.Errorf("item %s has no PDF attachment", item.Key)
+	}
+
+	var pdfAnns []PDFAnnotation
+	pdfResult, err := r.ReadPDFAnnotations(ctx, att)
+	if err == nil {
+		pdfAnns = pdfResult.Annotations
+	}
+
+	dbAnns := append([]domain.Annotation(nil), item.Annotations...)
+	return ItemAnnotationsResult{
+		ItemKey:        item.Key,
+		AttachmentKey:  att.Key,
+		PDFPath:        att.ResolvedPath,
+		PDFAnnotations: pdfAnns,
+		DBAnnotations:  dbAnns,
+		TotalPDF:       len(pdfAnns),
+		TotalDB:        len(dbAnns),
+	}, nil
+}
+
+func (r *HybridReader) ReadItemAnnotations(ctx context.Context, item domain.Item) (ItemAnnotationsResult, error) {
+	reader, ok := r.local.(interface {
+		ReadItemAnnotations(context.Context, domain.Item) (ItemAnnotationsResult, error)
+	})
+	if !ok {
+		return ItemAnnotationsResult{}, fmt.Errorf("annotations require local or hybrid mode with local data")
+	}
+	result, err := reader.ReadItemAnnotations(ctx, item)
+	if err != nil {
+		return ItemAnnotationsResult{}, err
+	}
+	r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, consumeReadMetadata(r.local))
+	return result, nil
 }
 
 type DeleteAnnotationsRequest struct {
