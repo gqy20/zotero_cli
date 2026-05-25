@@ -33,6 +33,10 @@ PROFILE
 
 # Codex CLI (symlinked to .claude/, no need to track separately)
 .codex/
+!.codex/
+!.codex/skills/
+!.codex/skills/zotero-cli/
+!.codex/skills/zotero-cli/SKILL.md
 
 # MCP tool artifacts
 .playwright-mcp/

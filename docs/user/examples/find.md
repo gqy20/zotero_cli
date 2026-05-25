@@ -134,6 +134,22 @@ zot find "CRISPR gene editing" --fulltext --snippet --json
 # 按日期和标签筛选
 zot find "evolution" --date-after 2023 --tag "review" --json
 
+# 最近入库：按 Zotero dateAdded 排序
+zot find --all --sort dateAdded --direction desc --limit 10 --json
+
+# 最近 7 天入库
+zot find --all --added-since 7d --sort dateAdded --direction desc --json
+
+# 某个月发表的文献
+zot find --all --date-after 2026-03 --date-before 2026-03 --sort date --direction desc --json
+
+# 快速人工浏览最近入库标题（文本模式）
+zot find --all --sort dateAdded --direction desc --limit 10 --include-fields title,date_added,container
+
 # 返回完整字段
 zot find "speciation" --full --json
 ```
+
+`--date-after` / `--date-before` 过滤发表日期，支持 `YYYY` / `YYYY-MM` / `YYYY-MM-DD`。local/hybrid 会兼容 Zotero 常见的部分日期字符串，如 `YYYY-MM-00 YYYY-MM` 和 `MM/YYYY`。
+
+`dateAdded` / `--added-since` 表示加入 Zotero 的时间；它和发表日期不是同一个字段。`--include-fields` 主要用于文本输出，JSON 模式默认返回完整 Item。

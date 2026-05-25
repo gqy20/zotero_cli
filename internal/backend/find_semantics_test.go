@@ -110,6 +110,8 @@ func TestMatchesDateRangeSupportsYearMonthAndDate(t *testing.T) {
 		{name: "year after", itemDate: "2024", after: "2023", before: "", want: true},
 		{name: "month after", itemDate: "2024-05", after: "2024-04", before: "", want: true},
 		{name: "date bounded", itemDate: "2024-05-03", after: "2024-05-01", before: "2024-12-31", want: true},
+		{name: "zotero zero day month matches month range", itemDate: "2026-03-00 2026-03", after: "2026-03", before: "2026-03", want: true},
+		{name: "zotero slash month matches month range", itemDate: "2025-11-00 11/2025", after: "2025-11", before: "2025-11", want: true},
 		{name: "before fails", itemDate: "2023", after: "2024", before: "", want: false},
 	}
 
@@ -119,6 +121,15 @@ func TestMatchesDateRangeSupportsYearMonthAndDate(t *testing.T) {
 				t.Fatalf("MatchesDateRange(%q, %q, %q) = %v, want %v", tt.itemDate, tt.after, tt.before, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCompareFindDatesHandlesZoteroPartialDates(t *testing.T) {
+	if got := compareFindDates("2026-03-00 2026-03", "2026-01-00 2026-01"); got <= 0 {
+		t.Fatalf("compareFindDates() = %d, want March after January", got)
+	}
+	if got := compareFindDates("2025-11-00 11/2025", "2025-12-00 2025-12"); got >= 0 {
+		t.Fatalf("compareFindDates() = %d, want November before December", got)
 	}
 }
 

@@ -235,6 +235,12 @@ zot find "hybrid speciation" --json
 # 按时间范围筛选
 zot find "CRISPR" --date-after 2023 --date-before 2025 --json
 
+# 最近入库（按 Zotero dateAdded，而不是发表日期）
+zot find --all --sort dateAdded --direction desc --limit 10 --json
+
+# 某个月发表的文献
+zot find --all --date-after 2026-03 --date-before 2026-03 --sort date --direction desc --json
+
 # 按标签过滤（AND / OR）
 zot find "基因编辑" --tag "高引用" --tag "综述" --json
 zot find "基因编辑" --tag "高引用" --tag-any --json
@@ -243,7 +249,7 @@ zot find "基因编辑" --tag "高引用" --tag-any --json
 zot find "CRISPR" --collection ABC123 --exclude-tag "已读" --attachment-name PDF --modified-within 30d --json
 
 # 全文搜索 PDF 内容（local / hybrid）
-# 注意：FTS 索引有数据时会自动启用全文检索，无需手动加 --fulltext
+# 注意：有 query 且 FTS 索引有数据时会自动启用全文检索；--all 不会自动走全文
 zot find "同源多倍体" --fulltext --snippet --json
 # snippet 默认限制 50 条，需要更多结果时显式指定 --limit
 zot find "同源多倍体" --snippet --limit 200 --json

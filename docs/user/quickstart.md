@@ -55,9 +55,28 @@ go run .\cmd\zot config validate
 .\zot.exe find "query" --tag "A" --tag "B" --tag-any --json    # OR
 ```
 
-日期支持 `YYYY` / `YYYY-MM` / `YYYY-MM-DD`。
+`--date-after` / `--date-before` 过滤的是发表日期。日期支持 `YYYY` / `YYYY-MM` / `YYYY-MM-DD`；local/hybrid 也兼容 Zotero 常见的部分日期字符串，如 `YYYY-MM-00 YYYY-MM` 和 `MM/YYYY`。
 
-### 5. 运行模式选择
+### 5. 最近入库和最近修改
+
+```powershell
+# 最近加入 Zotero 的条目
+.\zot.exe find --all --sort dateAdded --direction desc --limit 10 --json
+
+# 只看最近 7 天入库
+.\zot.exe find --all --added-since 7d --sort dateAdded --direction desc --json
+
+# 最近修改元数据的条目
+.\zot.exe find --all --modified-within 7d --sort dateModified --direction desc --json
+```
+
+快速人工浏览标题时，可用文本模式控制字段：
+
+```powershell
+.\zot.exe find --all --sort dateAdded --direction desc --limit 10 --include-fields title,date_added,container
+```
+
+### 6. 运行模式选择
 
 推荐设 `ZOT_MODE=hybrid`：
 
@@ -128,19 +147,21 @@ go run .\cmd\zot config validate
 ### 全文检索最佳实践
 
 ```powershell
-# local / hybrid 模式下 FTS5 有数据时自动启用全文检索
+# local / hybrid 模式下，有 query 且 FTS5 有数据时自动启用全文检索
 .\zot.exe find "同源多倍体" --snippet --json
 # snippet 默认限制 50 条，需要更多结果时显式指定 --limit
 .\zot.exe find "基因编辑" --snippet --limit 200 --json
 ```
+
+`find --all` 或纯时间/标签列表不会自动走全文索引，适合最近入库、发表时间范围等元数据查询。
 
 ## 性能优化建议
 
 | 建议 | 说明 |
 |------|------|
 | **`--snippet` 默认限 50 条** | 保护批量提取性能 |
-| **自动全文检索** | local/hybrid 下 FTS5 有数据时即使不加 `--fulltext` 也走全文路径 |
-| **`--include-fields` 减少传输** | 只需特定字段时减少 JSON 体积 |
+| **自动全文检索** | local/hybrid 下有 query 且 FTS5 有数据时可自动走全文路径；`--all` 不自动走全文 |
+| **`--include-fields` 控制文本输出** | 快速人工浏览时只展示指定字段；`--json` 默认返回完整 Item |
 | **优先 `--full`** | 一次获取完整数据比多次往返更高效 |
 
 ### API 调优环境变量

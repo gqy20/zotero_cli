@@ -29,6 +29,8 @@
 
 用法和示例见 [find 示例](./examples/find.md)。
 
+时间字段提示：`--date-after` / `--date-before` 过滤发表日期；`--added-since` 和 `--sort dateAdded` 使用加入 Zotero 的时间。最近入库列表建议显式使用 `find --all --sort dateAdded --direction desc`。
+
 ---
 
 ## 关系 (`relate`)

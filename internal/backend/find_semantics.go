@@ -2,9 +2,16 @@ package backend
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+)
+
+var (
+	yearDatePattern       = regexp.MustCompile(`\b(\d{4})\b`)
+	yearMonthDatePattern  = regexp.MustCompile(`\b(\d{4})-(\d{2})(?:-\d{2})?\b`)
+	slashMonthDatePattern = regexp.MustCompile(`\b(\d{1,2})/(\d{4})\b`)
 )
 
 func NormalizeFindOptions(opts FindOptions) FindOptions {
@@ -221,14 +228,47 @@ func parseDateRange(value string) (time.Time, time.Time, bool) {
 	default:
 		if len(value) >= len("2006-01-02") {
 			start, err := time.Parse("2006-01-02", value[:10])
-			if err != nil {
-				return time.Time{}, time.Time{}, false
+			if err == nil {
+				end := time.Date(start.Year(), start.Month(), start.Day(), 23, 59, 59, 0, time.UTC)
+				return start, end, true
 			}
-			end := time.Date(start.Year(), start.Month(), start.Day(), 23, 59, 59, 0, time.UTC)
+		}
+	}
+	return parseLooseDateRange(value)
+}
+
+func parseLooseDateRange(value string) (time.Time, time.Time, bool) {
+	if match := yearMonthDatePattern.FindStringSubmatch(value); len(match) == 3 {
+		year, errYear := strconv.Atoi(match[1])
+		month, errMonth := strconv.Atoi(match[2])
+		if errYear == nil && errMonth == nil && month >= 1 && month <= 12 {
+			return monthRange(year, time.Month(month)), monthRangeEnd(year, time.Month(month)), true
+		}
+	}
+	if match := slashMonthDatePattern.FindStringSubmatch(value); len(match) == 3 {
+		month, errMonth := strconv.Atoi(match[1])
+		year, errYear := strconv.Atoi(match[2])
+		if errYear == nil && errMonth == nil && month >= 1 && month <= 12 {
+			return monthRange(year, time.Month(month)), monthRangeEnd(year, time.Month(month)), true
+		}
+	}
+	if match := yearDatePattern.FindStringSubmatch(value); len(match) == 2 {
+		year, err := strconv.Atoi(match[1])
+		if err == nil {
+			start := time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC)
+			end := time.Date(year, time.December, 31, 23, 59, 59, 0, time.UTC)
 			return start, end, true
 		}
-		return time.Time{}, time.Time{}, false
 	}
+	return time.Time{}, time.Time{}, false
+}
+
+func monthRange(year int, month time.Month) time.Time {
+	return time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
+}
+
+func monthRangeEnd(year int, month time.Month) time.Time {
+	return time.Date(year, month+1, 0, 23, 59, 59, 0, time.UTC)
 }
 
 func parseFindDateTime(value string) (time.Time, bool) {
