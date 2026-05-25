@@ -237,3 +237,16 @@ sys.stdout.buffer.write(payload.encode("utf-8"))
 		Matches:       matches,
 	}, nil
 }
+
+func (r *LocalReader) AnnotateItem(ctx context.Context, item domain.Item, req AnnotateRequest) (AnnotateResult, error) {
+	att, found := firstPDFAttachment(item.Attachments)
+	if !found {
+		return AnnotateResult{}, fmt.Errorf("item %s has no PDF attachment", item.Key)
+	}
+	result, err := r.AnnotatePDF(ctx, att, req)
+	if err != nil {
+		return AnnotateResult{}, err
+	}
+	result.AttachmentKey = att.Key
+	return result, nil
+}

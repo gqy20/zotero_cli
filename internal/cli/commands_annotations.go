@@ -26,68 +26,27 @@ func (c *CLI) runAnnotations(args []string) int {
 		return exitCode
 	}
 
-	if clearMode && cfg.Mode == "remote" {
-		return c.printErr(fmt.Errorf("annotation deletion is not available in remote mode"))
-	}
-
 	if !clearMode {
 		return c.runAnnotationsReadOnly(itemKey, pageFilter, typeFilter, jsonOutput)
 	}
 
-	localReader, err := c.newLocalReader(cfg)
-	if err != nil {
-		return c.printErr(err)
+	_, reader, exitCode := c.loadReader()
+	if exitCode != 0 {
+		return exitCode
 	}
 
-	item, err := localReader.GetItem(context.Background(), itemKey)
-	if err != nil {
-		return c.printErr(err)
-	}
-
-	pdfs := filterPDFAttachments(item.Attachments)
-	if len(pdfs) == 0 {
-		return c.printErr(fmt.Errorf("item %s has no PDF attachment", itemKey))
-	}
-	att := pdfs[0]
-
-	if clearMode {
-		totalDeleted := 0
-
-		lr, ok := localReader.(pdfAnnotationDeleter)
-		if ok {
-			req := backend.DeleteAnnotationsRequest{
-				Page:   pageFilter,
-				Type:   typeFilter,
-				Author: authorFilter,
-			}
-			result, err := lr.DeletePDFAnnotations(context.Background(), att, req)
-			if err != nil {
-				return c.printErr(err)
-			}
-			totalDeleted += result.Deleted
+	if cfg.Mode != "remote" {
+		if exitCode := c.ensureDeleteAllowed(cfg); exitCode != 0 {
+			return exitCode
 		}
-
-		dbLR, ok := localReader.(dbAnnotationDeleter)
-		if ok {
-			req := backend.DeleteAnnotationsRequest{
-				Page:   pageFilter,
-				Type:   typeFilter,
-				Author: authorFilter,
-			}
-			result, err := dbLR.DeleteDBAnnotations(context.Background(), itemKey, req)
-			if err != nil {
-				fmt.Fprintf(c.stderr, "warning: could not delete DB annotations (Zotero may be running): %v\n", err)
-			} else {
-				totalDeleted += result.Deleted
-			}
-		}
-
-		fmt.Fprintf(c.stdout, "Deleted %d annotation(s) from %s\n", totalDeleted, itemKey)
-		fmt.Fprintf(c.stdout, "PDF: %s\n", att.ResolvedPath)
-		return 0
 	}
 
-	return 0
+	req := backend.DeleteAnnotationsRequest{
+		Page:   pageFilter,
+		Type:   typeFilter,
+		Author: authorFilter,
+	}
+	return c.runAnnotationClear(reader, itemKey, req, jsonOutput, "annotations")
 }
 
 func (c *CLI) runAnnotationsReadOnly(itemKey string, pageFilter int, typeFilter string, jsonOutput bool) int {
@@ -194,6 +153,55 @@ func (c *CLI) runAnnotationsReadOnly(itemKey string, pageFilter int, typeFilter 
 		fmt.Fprintf(c.stdout, "\nNo annotations found.\n")
 	} else {
 		fmt.Fprintf(c.stdout, "\nTotal: %d (db:%d + pdf:%d)\n", total, len(filteredDB), len(filteredPDF))
+	}
+	return 0
+}
+
+func (c *CLI) runAnnotationClear(reader backend.Reader, itemKey string, req backend.DeleteAnnotationsRequest, jsonOutput bool, command string) int {
+	item, err := reader.GetItem(context.Background(), itemKey)
+	if err != nil {
+		return c.printErr(err)
+	}
+
+	clearer, ok := reader.(itemAnnotationClearer)
+	if !ok {
+		return c.printErr(fmt.Errorf("annotation deletion is not available for the current reader"))
+	}
+
+	result, err := clearer.ClearItemAnnotations(context.Background(), item, req)
+	if err != nil {
+		return c.printErr(err)
+	}
+
+	if jsonOutput {
+		data := map[string]any{
+			"item_key":       itemKey,
+			"attachment_key": result.AttachmentKey,
+			"pdf_path":       result.PDFPath,
+			"pdf_deleted":    result.PDFDeleted,
+			"db_deleted":     result.DBDeleted,
+			"deleted":        result.Deleted,
+		}
+		if result.DBError != "" {
+			data["db_error"] = result.DBError
+		}
+		meta := map[string]any{
+			"deleted": result.Deleted,
+		}
+		return c.writeJSON(jsonResponse{
+			OK:      true,
+			Command: command,
+			Data:    data,
+			Meta:    meta,
+		})
+	}
+
+	fmt.Fprintf(c.stdout, "Deleted %d annotation(s) from %s\n", result.Deleted, itemKey)
+	if strings.TrimSpace(result.PDFPath) != "" {
+		fmt.Fprintf(c.stdout, "PDF: %s\n", result.PDFPath)
+	}
+	if result.DBError != "" {
+		fmt.Fprintf(c.stderr, "warning: could not delete DB annotations (Zotero may be running): %s\n", result.DBError)
 	}
 	return 0
 }

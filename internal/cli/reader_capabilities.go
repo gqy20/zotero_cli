@@ -43,6 +43,14 @@ type pdfAnnotator interface {
 	AnnotatePDF(context.Context, domain.Attachment, backend.AnnotateRequest) (backend.AnnotateResult, error)
 }
 
+type itemAnnotator interface {
+	AnnotateItem(context.Context, domain.Item, backend.AnnotateRequest) (backend.AnnotateResult, error)
+}
+
+type itemAnnotationClearer interface {
+	ClearItemAnnotations(context.Context, domain.Item, backend.DeleteAnnotationsRequest) (backend.ItemAnnotationClearResult, error)
+}
+
 type attachmentFullTextReader interface {
 	ExtractAttachmentFullText(context.Context, domain.Item, domain.Attachment) (backend.FullTextDocument, bool, error)
 }

@@ -39,6 +39,16 @@ type ItemAnnotationsResult struct {
 	TotalDB        int                 `json:"total_db"`
 }
 
+type ItemAnnotationClearResult struct {
+	ItemKey       string `json:"item_key"`
+	AttachmentKey string `json:"attachment_key"`
+	PDFPath       string `json:"pdf_path,omitempty"`
+	PDFDeleted    int    `json:"pdf_deleted"`
+	DBDeleted     int    `json:"db_deleted"`
+	Deleted       int    `json:"deleted"`
+	DBError       string `json:"db_error,omitempty"`
+}
+
 func (r *LocalReader) ReadPDFAnnotations(ctx context.Context, attachment domain.Attachment) (ReadAnnotationsResult, error) {
 	if !attachment.Resolved || strings.TrimSpace(attachment.ResolvedPath) == "" {
 		return ReadAnnotationsResult{}, fmt.Errorf("attachment %s has no resolved path", attachment.Key)
@@ -129,15 +139,7 @@ sys.stdout.buffer.write(payload.encode("utf-8"))
 }
 
 func (r *LocalReader) ReadItemAnnotations(ctx context.Context, item domain.Item) (ItemAnnotationsResult, error) {
-	var att domain.Attachment
-	found := false
-	for _, attachment := range item.Attachments {
-		if strings.EqualFold(strings.TrimSpace(attachment.ContentType), "application/pdf") {
-			att = attachment
-			found = true
-			break
-		}
-	}
+	att, found := firstPDFAttachment(item.Attachments)
 	if !found {
 		return ItemAnnotationsResult{}, fmt.Errorf("item %s has no PDF attachment", item.Key)
 	}
@@ -160,6 +162,36 @@ func (r *LocalReader) ReadItemAnnotations(ctx context.Context, item domain.Item)
 	}, nil
 }
 
+func (r *LocalReader) ClearItemAnnotations(ctx context.Context, item domain.Item, req DeleteAnnotationsRequest) (ItemAnnotationClearResult, error) {
+	att, found := firstPDFAttachment(item.Attachments)
+	if !found {
+		return ItemAnnotationClearResult{}, fmt.Errorf("item %s has no PDF attachment", item.Key)
+	}
+
+	pdfResult, err := r.DeletePDFAnnotations(ctx, att, req)
+	if err != nil {
+		return ItemAnnotationClearResult{}, err
+	}
+
+	dbDeleted := 0
+	dbError := ""
+	if dbResult, err := r.DeleteDBAnnotations(ctx, item.Key, req); err != nil {
+		dbError = err.Error()
+	} else {
+		dbDeleted = dbResult.Deleted
+	}
+
+	return ItemAnnotationClearResult{
+		ItemKey:       item.Key,
+		AttachmentKey: att.Key,
+		PDFPath:       att.ResolvedPath,
+		PDFDeleted:    pdfResult.Deleted,
+		DBDeleted:     dbDeleted,
+		Deleted:       pdfResult.Deleted + dbDeleted,
+		DBError:       dbError,
+	}, nil
+}
+
 func (r *HybridReader) ReadItemAnnotations(ctx context.Context, item domain.Item) (ItemAnnotationsResult, error) {
 	reader, ok := r.local.(interface {
 		ReadItemAnnotations(context.Context, domain.Item) (ItemAnnotationsResult, error)
@@ -175,6 +207,36 @@ func (r *HybridReader) ReadItemAnnotations(ctx context.Context, item domain.Item
 	return result, nil
 }
 
+func (r *HybridReader) AnnotateItem(ctx context.Context, item domain.Item, req AnnotateRequest) (AnnotateResult, error) {
+	reader, ok := r.local.(interface {
+		AnnotateItem(context.Context, domain.Item, AnnotateRequest) (AnnotateResult, error)
+	})
+	if !ok {
+		return AnnotateResult{}, fmt.Errorf("annotation writing requires local or hybrid mode with local data")
+	}
+	result, err := reader.AnnotateItem(ctx, item, req)
+	if err != nil {
+		return AnnotateResult{}, err
+	}
+	r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, consumeReadMetadata(r.local))
+	return result, nil
+}
+
+func (r *HybridReader) ClearItemAnnotations(ctx context.Context, item domain.Item, req DeleteAnnotationsRequest) (ItemAnnotationClearResult, error) {
+	reader, ok := r.local.(interface {
+		ClearItemAnnotations(context.Context, domain.Item, DeleteAnnotationsRequest) (ItemAnnotationClearResult, error)
+	})
+	if !ok {
+		return ItemAnnotationClearResult{}, fmt.Errorf("annotation deletion requires local or hybrid mode with local data")
+	}
+	result, err := reader.ClearItemAnnotations(ctx, item, req)
+	if err != nil {
+		return ItemAnnotationClearResult{}, err
+	}
+	r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, consumeReadMetadata(r.local))
+	return result, nil
+}
+
 type DeleteAnnotationsRequest struct {
 	Page   int    `json:"page,omitempty"`
 	Type   string `json:"type,omitempty"`
@@ -185,6 +247,15 @@ type DeleteAnnotationsResult struct {
 	AttachmentKey string `json:"attachment_key"`
 	PDFPath       string `json:"pdf_path"`
 	Deleted       int    `json:"deleted"`
+}
+
+func firstPDFAttachment(attachments []domain.Attachment) (domain.Attachment, bool) {
+	for _, attachment := range attachments {
+		if strings.EqualFold(strings.TrimSpace(attachment.ContentType), "application/pdf") {
+			return attachment, true
+		}
+	}
+	return domain.Attachment{}, false
 }
 
 func (r *LocalReader) DeletePDFAnnotations(ctx context.Context, attachment domain.Attachment, req DeleteAnnotationsRequest) (DeleteAnnotationsResult, error) {

@@ -15,8 +15,10 @@ import (
 )
 
 type Handler struct {
-	reader  backend.Reader
-	dataDir string
+	reader      backend.Reader
+	dataDir     string
+	allowWrite  bool
+	allowDelete bool
 }
 
 func NewHandler(reader backend.Reader) *Handler {
@@ -24,7 +26,11 @@ func NewHandler(reader backend.Reader) *Handler {
 }
 
 func NewHandlerWithDir(reader backend.Reader, dataDir string) *Handler {
-	return &Handler{reader: reader, dataDir: dataDir}
+	return NewHandlerWithPermissions(reader, dataDir, false, false)
+}
+
+func NewHandlerWithPermissions(reader backend.Reader, dataDir string, allowWrite bool, allowDelete bool) *Handler {
+	return &Handler{reader: reader, dataDir: dataDir, allowWrite: allowWrite, allowDelete: allowDelete}
 }
 
 // FigureExtractor is implemented by readers that support figure extraction.
@@ -48,6 +54,14 @@ type itemAnnotationsReader interface {
 	ReadItemAnnotations(context.Context, domain.Item) (backend.ItemAnnotationsResult, error)
 }
 
+type itemAnnotator interface {
+	AnnotateItem(context.Context, domain.Item, backend.AnnotateRequest) (backend.AnnotateResult, error)
+}
+
+type itemAnnotationClearer interface {
+	ClearItemAnnotations(context.Context, domain.Item, backend.DeleteAnnotationsRequest) (backend.ItemAnnotationClearResult, error)
+}
+
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/health", h.healthCheck)
 	mux.HandleFunc("GET /api/v1/stats", h.getStats)
@@ -58,6 +72,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/items/{key}/snippet", h.getItemSnippet)
 	mux.HandleFunc("GET /api/v1/items/{key}/text", h.getItemText)
 	mux.HandleFunc("GET /api/v1/items/{key}/annotations", h.getItemAnnotations)
+	mux.HandleFunc("POST /api/v1/items/{key}/annotate", h.annotateItem)
+	mux.HandleFunc("POST /api/v1/items/{key}/annotations/clear", h.clearItemAnnotations)
 	mux.HandleFunc("GET /api/v1/items/{key}/related", h.getRelated)
 	mux.HandleFunc("GET /api/v1/items/{key}/figures", h.extractFigures)
 	mux.HandleFunc("GET /api/v1/collections", h.getCollections)
@@ -179,6 +195,64 @@ func (h *Handler) getItemAnnotations(w http.ResponseWriter, r *http.Request) {
 	}
 	result.PDFPath = ""
 	writeJSON(w, http.StatusOK, result, Meta{})
+}
+
+func (h *Handler) annotateItem(w http.ResponseWriter, r *http.Request) {
+	if !h.allowWrite {
+		writeError(w, http.StatusForbidden, fmt.Errorf("annotation writing is disabled on this server"))
+		return
+	}
+	item, err := h.loadItem(r.Context(), r.PathValue("key"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	annotator, ok := h.reader.(itemAnnotator)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, fmt.Errorf("annotation writing not available on this server"))
+		return
+	}
+	var req backend.AnnotateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+	result, err := annotator.AnnotateItem(r.Context(), item, req)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	result.PDFPath = ""
+	writeJSON(w, http.StatusOK, result, Meta{Total: len(result.Matches)})
+}
+
+func (h *Handler) clearItemAnnotations(w http.ResponseWriter, r *http.Request) {
+	if !h.allowDelete {
+		writeError(w, http.StatusForbidden, fmt.Errorf("annotation deletion is disabled on this server"))
+		return
+	}
+	item, err := h.loadItem(r.Context(), r.PathValue("key"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	clearer, ok := h.reader.(itemAnnotationClearer)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, fmt.Errorf("annotation deletion not available on this server"))
+		return
+	}
+	var req backend.DeleteAnnotationsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+	result, err := clearer.ClearItemAnnotations(r.Context(), item, req)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	result.PDFPath = ""
+	writeJSON(w, http.StatusOK, result, Meta{Total: result.Deleted})
 }
 
 func (h *Handler) getRelated(w http.ResponseWriter, r *http.Request) {

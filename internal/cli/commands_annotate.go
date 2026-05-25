@@ -24,70 +24,38 @@ func (c *CLI) runAnnotate(args []string) int {
 		return exitCode
 	}
 
-	if cfg.Mode == "remote" {
-		return c.printErr(fmt.Errorf("annotate is not available in remote mode"))
+	_, reader, exitCode := c.loadReader()
+	if exitCode != 0 {
+		return exitCode
 	}
 
-	localReader, err := c.newLocalReader(cfg)
+	if cfg.Mode != "remote" {
+		if exitCode := c.ensureWriteAllowed(cfg); exitCode != 0 {
+			return exitCode
+		}
+	}
+
+	item, err := reader.GetItem(context.Background(), itemKey)
 	if err != nil {
 		return c.printErr(err)
 	}
-
-	item, err := localReader.GetItem(context.Background(), itemKey)
-	if err != nil {
-		return c.printErr(err)
-	}
-
-	pdfs := filterPDFAttachments(item.Attachments)
-	if len(pdfs) == 0 {
-		return c.printErr(fmt.Errorf("item %s has no PDF attachment", itemKey))
-	}
-	att := pdfs[0]
 
 	// Handle --clear mode: delete annotations instead of creating
 	if clearMode {
-		totalDeleted := 0
-
-		lr, ok := localReader.(pdfAnnotationDeleter)
-		if ok {
-			delReq := backend.DeleteAnnotationsRequest{
-				Page:   req.Page,
-				Type:   req.Type,
-				Author: authorFilter,
-			}
-			result, err := lr.DeletePDFAnnotations(context.Background(), att, delReq)
-			if err != nil {
-				return c.printErr(err)
-			}
-			totalDeleted += result.Deleted
+		delReq := backend.DeleteAnnotationsRequest{
+			Page:   req.Page,
+			Type:   req.Type,
+			Author: authorFilter,
 		}
-
-		dbLR, ok := localReader.(dbAnnotationDeleter)
-		if ok {
-			delReq := backend.DeleteAnnotationsRequest{
-				Page:   req.Page,
-				Type:   req.Type,
-				Author: authorFilter,
-			}
-			result, err := dbLR.DeleteDBAnnotations(context.Background(), itemKey, delReq)
-			if err != nil {
-				fmt.Fprintf(c.stderr, "warning: could not delete DB annotations (Zotero may be running): %v\n", err)
-			} else {
-				totalDeleted += result.Deleted
-			}
-		}
-
-		fmt.Fprintf(c.stdout, "Deleted %d annotation(s) from %s\n", totalDeleted, itemKey)
-		fmt.Fprintf(c.stdout, "PDF: %s\n", att.ResolvedPath)
-		return 0
+		return c.runAnnotationClear(reader, itemKey, delReq, jsonOutput, "annotate")
 	}
 
-	lr, ok := localReader.(pdfAnnotator)
+	lr, ok := reader.(itemAnnotator)
 	if !ok {
-		return c.printErr(fmt.Errorf("annotate requires local reader support"))
+		return c.printErr(fmt.Errorf("annotation writing is not available for the current reader"))
 	}
 
-	result, err := lr.AnnotatePDF(context.Background(), att, req)
+	result, err := lr.AnnotateItem(context.Background(), item, req)
 	if err != nil {
 		return c.printErr(err)
 	}
@@ -103,7 +71,7 @@ func (c *CLI) runAnnotate(args []string) int {
 		meta := map[string]any{
 			"total_matches": len(result.Matches),
 		}
-		c.appendReadMetadata(meta, localReader)
+		c.appendReadMetadata(meta, reader)
 		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "annotate",
@@ -113,7 +81,9 @@ func (c *CLI) runAnnotate(args []string) int {
 	}
 
 	fmt.Fprintf(c.stdout, "Annotated %s (%s)\n", itemKey, result.AttachmentKey)
-	fmt.Fprintf(c.stdout, "PDF: %s\n", result.PDFPath)
+	if strings.TrimSpace(result.PDFPath) != "" {
+		fmt.Fprintf(c.stdout, "PDF: %s\n", result.PDFPath)
+	}
 	fmt.Fprintf(c.stdout, "Matches: %d\n\n", len(result.Matches))
 	for _, m := range result.Matches {
 		fmt.Fprintf(c.stdout, "  Page %d [%s %s]: \"%s\"\n", m.Page, m.Type, m.Color, m.Text)

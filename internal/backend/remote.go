@@ -147,6 +147,44 @@ func (r *RemoteReader) ReadItemAnnotations(ctx context.Context, item domain.Item
 	return resp.Data, nil
 }
 
+func (r *RemoteReader) AnnotateItem(ctx context.Context, item domain.Item, reqBody AnnotateRequest) (AnnotateResult, error) {
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return AnnotateResult{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.buildURL("/api/v1/items/"+item.Key+"/annotate"), strings.NewReader(string(body)))
+	if err != nil {
+		return AnnotateResult{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	var resp apiResponse[AnnotateResult]
+	if err := r.doJSON(req, &resp); err != nil {
+		return AnnotateResult{}, err
+	}
+	r.markRead()
+	resp.Data.PDFPath = ""
+	return resp.Data, nil
+}
+
+func (r *RemoteReader) ClearItemAnnotations(ctx context.Context, item domain.Item, reqBody DeleteAnnotationsRequest) (ItemAnnotationClearResult, error) {
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return ItemAnnotationClearResult{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.buildURL("/api/v1/items/"+item.Key+"/annotations/clear"), strings.NewReader(string(body)))
+	if err != nil {
+		return ItemAnnotationClearResult{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	var resp apiResponse[ItemAnnotationClearResult]
+	if err := r.doJSON(req, &resp); err != nil {
+		return ItemAnnotationClearResult{}, err
+	}
+	r.markRead()
+	resp.Data.PDFPath = ""
+	return resp.Data, nil
+}
+
 func (r *RemoteReader) GetRelated(ctx context.Context, key string) ([]domain.Relation, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/items/"+key+"/related"), nil)
 	if err != nil {

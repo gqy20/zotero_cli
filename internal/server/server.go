@@ -32,8 +32,12 @@ func NewServerWithLogger(reader backend.Reader, addr string, logger *Logger) *Se
 }
 
 func NewServerWithDirAndLogger(reader backend.Reader, addr string, dataDir string, logger *Logger) *Server {
+	return NewServerWithPermissionsAndLogger(reader, addr, dataDir, false, false, logger)
+}
+
+func NewServerWithPermissionsAndLogger(reader backend.Reader, addr string, dataDir string, allowWrite bool, allowDelete bool, logger *Logger) *Server {
 	mux := http.NewServeMux()
-	h := NewHandlerWithDir(reader, dataDir)
+	h := NewHandlerWithPermissions(reader, dataDir, allowWrite, allowDelete)
 	h.RegisterRoutes(mux)
 	RegisterStaticRoutes(mux)
 
@@ -92,7 +96,7 @@ func ServeFromConfig(cfg config.Config) (func(), error) {
 	if port := os.Getenv("ZOT_SERVER_PORT"); port != "" {
 		addr = ":" + port
 	}
-	s := NewServerWithDirAndLogger(reader, addr, cfg.DataDir, logger)
+	s := NewServerWithPermissionsAndLogger(reader, addr, cfg.DataDir, cfg.AllowWrite, cfg.AllowDelete, logger)
 	go func() {
 		if err := s.Start(); err != nil && err != http.ErrServerClosed {
 			logger.Error("server fatal error", "err", err)
