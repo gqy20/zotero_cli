@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### 新增
+- remote 模式下 `annotate` 与 `annotations --clear` 现在可直接通过 `zot-server` 在服务端执行，不再要求客户端额外配置 `ZOT_API_KEY`
 
 ### 修复
 
@@ -19,6 +20,7 @@
 ### 工具链
 
 ### 文档
+- 同步 README、commands、quickstart、backend 架构文档，以及 `.claude` / `.codex` skills，澄清 remote 下 PDF 标注读写与普通 Web API 写操作的边界
 
 ## [0.0.10] - 2026-05-07
 

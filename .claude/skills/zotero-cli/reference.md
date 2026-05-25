@@ -145,8 +145,8 @@ zot relate KEY_A --from-file batch.json                     # 执行
 | **过滤参数** | 基础过滤全部可用 | 全部过滤可用 | 全部过滤可用 | 全部过滤可用（服务器端处理） |
 | **高级过滤** | ❌ 不支持 collection/no-collection/tag-contains 等 | ✅ | ✅（回退到 web 时降级为仅基础过滤） | ✅（服务器端处理） |
 | **FTS 全文检索** | ❌ | ✅（需先 `index build`） | ✅（同 local） | ✅（服务器端有 FTS 索引时） |
-| **PDF 操作** | ❌ | ✅ | ✅ | ✅（通过服务器代理下载） |
-| **写操作** | ✅ 全部 | 仅笔记创建 + PDF 标注 | ✅ 全部（笔记可本地直写） | 需配置 API key（remote+web 模式） |
+| **PDF 操作** | ❌ | ✅ | ✅ | ✅（通过服务器代理执行） |
+| **写操作** | ✅ 全部 | 仅笔记创建 + PDF 标注 | ✅ 全部（笔记可本地直写） | `annotate` / `annotations --clear` 可直走 server；其余需配置 API key（remote+web 模式） |
 | **relate 写入** | ❌ | ✅ | ✅ | 需配置 API key |
 | **快照缓存** | — | — | ✅ Zotero 运行时 ~0.3s/次 | — |
 
@@ -202,8 +202,8 @@ zot relate KEY_A --from-file batch.json                     # 执行
 
 ### 两种配置
 
-1. **纯 remote**（只有 `ZOT_SERVER_ADDR`）：仅 reader 路径命令可用（find/show/stats/tags/notes/overview 等）
-2. **remote + web**（额外配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID` + `ZOT_LIBRARY_TYPE`）：全部命令可用。读操作走服务器，写操作和 web-only 命令（collections/searches/schema 等）直连 Zotero Web API
+1. **纯 remote**（只有 `ZOT_SERVER_ADDR`）：reader 路径命令可用；`annotations` / `annotate` 也可通过 server 执行
+2. **remote + web**（额外配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID` + `ZOT_LIBRARY_TYPE`）：全部命令可用。读操作走服务器，普通写操作和 web-only 命令（collections/searches/schema 等）直连 Zotero Web API
 
 初始化示例：
 ```shell

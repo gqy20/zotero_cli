@@ -34,7 +34,7 @@
 - **JSON 优先** — 所有命令支持 `--json`，输出结构化数据供 AI 直接解析
 - **Skill 自动发现** — 内置 `.claude/skills/`，Codex/Cursor 等可复用同一套说明文件
 - **安全写操作** — 删除默认禁止、版本号乐观锁，防止 AI 误操作
-- **本地能力优先** — hybrid 模式下本地 SQLite 全文检索、PDF 标注/笔记读写不走网络（Zotero 未运行时自动切换）
+- **本地能力优先** — hybrid 模式下本地 SQLite 全文检索、PDF 标注/笔记读写不走网络；remote 模式下 PDF 标注读写由 `zot-server` 代理并受服务端写/删权限保护
 
 ## 快速开始
 
@@ -298,6 +298,8 @@ zot 不是独立工具，它直接读写你的 **Zotero 本地数据目录**，�
 | `zot annotations KEY` | SQLite + PyMuPDF 双源读取 | 同时获取 DB 层标注 **和** PDF 文件内嵌入的标注，支持 `--clear` 双层清除 |
 | `zot annotate KEY` | PyMuPDF 直接写入 PDF | 3 种定位模式写入标注，支持 `--clear` 双层删除（DB 删除非阻断） |
 
+在 `remote` 模式下，`annotations` / `annotate` 会通过 `zot-server` 在服务器端读取或修改 PDF；服务端必须以 `local` / `hybrid` / `web` 等非 `remote` 模式运行，并按 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 控制写入和清除。普通 Zotero Web API 写操作（如 `create-item`、标签、集合等）在 remote 客户端仍需额外配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID`。
+
 数据来源：
 
 - **Zotero Reader 标注** → 读取 `zotero.sqlite` 的 `itemAnnotations` 表（含你手动添加的高亮、笔记、时间戳）
@@ -358,11 +360,16 @@ zot changes items --since 0 --json  # 版本变更记录
 | `web` | Zotero Cloud API | API key | 远程检索、云端管理 |
 | `local` | 本地 SQLite + storage/ | ZOT_DATA_DIR | 离线操作、PDF 处理、全文搜索 |
 | `hybrid`（推荐） | 本地优先，Web 回退 | 两者都要 | 日常使用，兼顾速度与完整性 |
-| `remote` | HTTP → zot-server (port 8021) | ZOT_SERVER_ADDR | 同服务器端模式，局域网访问 |
+| `remote` | HTTP → zot-server (port 8021) | ZOT_SERVER_ADDR | 同服务器端模式，局域网访问；PDF 标注读写走服务器 |
 
 通过 `ZOT_MODE` 环境变量或 `zot init` 设置。hybrid 模式下：
 - **读操作**：本地优先（全文检索、PDF 标注读取）不误回退 Web
 - **写操作**（笔记）：Zotero 未运行时走 SQLite 直写（~50ms），运行时自动 fallback Web API
+
+remote 模式下：
+- **读操作**：经由 `zot-server` 代理
+- **PDF 标注读写**：经由 `zot-server` 在服务端执行
+- **普通 Web API 写操作**：仍需 remote+web 配置（`ZOT_API_KEY` + `ZOT_LIBRARY_ID`）
 
 ## 命令速查
 

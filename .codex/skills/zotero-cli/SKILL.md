@@ -228,6 +228,8 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 
 > **remote 模式**：当配置了 `ZOT_API_KEY` 时，remote 模式（remote+web）同样支持写操作，遵循与 web 模式相同的写/删安全规范。
 
+> **补充**：`annotations` / `annotate` 属于例外。它们在 pure remote 下也可通过 `zot-server` 执行，不要求客户端配置 `ZOT_API_KEY`；是否允许写入/清除由服务端 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 控制。
+
 执行任何删除操作前：
 
 1. 复述目标 key 或 keys。
