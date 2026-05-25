@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"zotero_cli/internal/backend"
-	"zotero_cli/internal/domain"
 )
 
 func (c *CLI) runAnnotate(args []string) int {
@@ -23,6 +22,10 @@ func (c *CLI) runAnnotate(args []string) int {
 	cfg, exitCode := c.loadConfig()
 	if exitCode != 0 {
 		return exitCode
+	}
+
+	if cfg.Mode == "remote" {
+		return c.printErr(fmt.Errorf("annotate is not available in remote mode"))
 	}
 
 	localReader, err := c.newLocalReader(cfg)
@@ -45,9 +48,7 @@ func (c *CLI) runAnnotate(args []string) int {
 	if clearMode {
 		totalDeleted := 0
 
-		lr, ok := localReader.(interface {
-			DeletePDFAnnotations(context.Context, domain.Attachment, backend.DeleteAnnotationsRequest) (backend.DeleteAnnotationsResult, error)
-		})
+		lr, ok := localReader.(pdfAnnotationDeleter)
 		if ok {
 			delReq := backend.DeleteAnnotationsRequest{
 				Page:   req.Page,
@@ -61,9 +62,7 @@ func (c *CLI) runAnnotate(args []string) int {
 			totalDeleted += result.Deleted
 		}
 
-		dbLR, ok := localReader.(interface {
-			DeleteDBAnnotations(context.Context, string, backend.DeleteAnnotationsRequest) (backend.DeleteDBAnnotationsResult, error)
-		})
+		dbLR, ok := localReader.(dbAnnotationDeleter)
 		if ok {
 			delReq := backend.DeleteAnnotationsRequest{
 				Page:   req.Page,
@@ -83,9 +82,7 @@ func (c *CLI) runAnnotate(args []string) int {
 		return 0
 	}
 
-	lr, ok := localReader.(interface {
-		AnnotatePDF(context.Context, domain.Attachment, backend.AnnotateRequest) (backend.AnnotateResult, error)
-	})
+	lr, ok := localReader.(pdfAnnotator)
 	if !ok {
 		return c.printErr(fmt.Errorf("annotate requires local reader support"))
 	}

@@ -53,9 +53,7 @@ func (c *CLI) runAnnotations(args []string) int {
 	if clearMode {
 		totalDeleted := 0
 
-		lr, ok := localReader.(interface {
-			DeletePDFAnnotations(context.Context, domain.Attachment, backend.DeleteAnnotationsRequest) (backend.DeleteAnnotationsResult, error)
-		})
+		lr, ok := localReader.(pdfAnnotationDeleter)
 		if ok {
 			req := backend.DeleteAnnotationsRequest{
 				Page:   pageFilter,
@@ -69,9 +67,7 @@ func (c *CLI) runAnnotations(args []string) int {
 			totalDeleted += result.Deleted
 		}
 
-		dbLR, ok := localReader.(interface {
-			DeleteDBAnnotations(context.Context, string, backend.DeleteAnnotationsRequest) (backend.DeleteDBAnnotationsResult, error)
-		})
+		dbLR, ok := localReader.(dbAnnotationDeleter)
 		if ok {
 			req := backend.DeleteAnnotationsRequest{
 				Page:   pageFilter,

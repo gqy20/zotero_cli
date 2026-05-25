@@ -27,6 +27,22 @@ type itemAnnotationsReader interface {
 	ReadItemAnnotations(context.Context, domain.Item) (backend.ItemAnnotationsResult, error)
 }
 
+type pdfAnnotationReader interface {
+	ReadPDFAnnotations(context.Context, domain.Attachment) (backend.ReadAnnotationsResult, error)
+}
+
+type pdfAnnotationDeleter interface {
+	DeletePDFAnnotations(context.Context, domain.Attachment, backend.DeleteAnnotationsRequest) (backend.DeleteAnnotationsResult, error)
+}
+
+type dbAnnotationDeleter interface {
+	DeleteDBAnnotations(context.Context, string, backend.DeleteAnnotationsRequest) (backend.DeleteDBAnnotationsResult, error)
+}
+
+type pdfAnnotator interface {
+	AnnotatePDF(context.Context, domain.Attachment, backend.AnnotateRequest) (backend.AnnotateResult, error)
+}
+
 type attachmentFullTextReader interface {
 	ExtractAttachmentFullText(context.Context, domain.Item, domain.Attachment) (backend.FullTextDocument, bool, error)
 }
