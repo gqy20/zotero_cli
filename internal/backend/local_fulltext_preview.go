@@ -254,7 +254,8 @@ func (r *LocalReader) ExtractAttachmentFullText(ctx context.Context, item domain
 }
 
 func (r *LocalReader) ExtractAttachmentFullTextOnly(ctx context.Context, item domain.Item, att domain.Attachment) (FullTextDocument, bool, error) {
-	doc, ok, err := newFullTextCache(r.FullTextCacheDir).Load(att)
+	cache := newFullTextCache(r.FullTextCacheDir)
+	doc, ok, err := cache.Load(att)
 	if err != nil {
 		return FullTextDocument{}, false, err
 	}
@@ -289,6 +290,9 @@ func (r *LocalReader) loadFullTextDocumentForAttachment(item domain.Item, attach
 	if ok && doc.Text != "" {
 		doc.Meta.ParentItemKey = firstNonEmptyString(doc.Meta.ParentItemKey, item.Key)
 		doc.CacheHit = true
+		if err := cache.SyncIndexIfMissing(doc); err != nil {
+			return FullTextDocument{}, false, err
+		}
 		return doc, true, nil
 	}
 	doc, ok, err = r.buildFullTextDocument(item, attachment)

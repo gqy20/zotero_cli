@@ -415,6 +415,58 @@ func TestFullTextCacheSearchReturnsIndexedMatches(t *testing.T) {
 	}
 }
 
+func TestFullTextCacheSaveBatchPreservesExistingIndexEntries(t *testing.T) {
+	rootDir := t.TempDir()
+	cache := newFullTextCache(rootDir)
+	sourceDir := t.TempDir()
+
+	makeDoc := func(attachmentKey, parentKey, text string) FullTextDocument {
+		sourcePath := filepath.Join(sourceDir, attachmentKey+".pdf")
+		if err := os.WriteFile(sourcePath, []byte("pdf"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Stat(sourcePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return FullTextDocument{
+			Text: text,
+			Meta: fullTextCacheMeta{
+				AttachmentKey:   attachmentKey,
+				ParentItemKey:   parentKey,
+				ResolvedPath:    sourcePath,
+				ContentType:     "application/pdf",
+				SourceMtimeUnix: info.ModTime().Unix(),
+				SourceSize:      info.Size(),
+			},
+		}
+	}
+
+	first := makeDoc("ATT123", "ITEM123", "first document mentions chestnut restoration")
+	if err := cache.Save(first); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	second := makeDoc("ATT456", "ITEM456", "second document mentions wheat breeding")
+	if err := cache.SaveBatch([]FullTextDocument{second}); err != nil {
+		t.Fatalf("SaveBatch() error = %v", err)
+	}
+
+	matches, err := cache.Search("chestnut restoration", false, 10)
+	if err != nil {
+		t.Fatalf("Search() first error = %v", err)
+	}
+	if len(matches) != 1 || matches[0].AttachmentKey != "ATT123" {
+		t.Fatalf("Search() first matches = %#v, want preserved ATT123", matches)
+	}
+	matches, err = cache.Search("wheat breeding", false, 10)
+	if err != nil {
+		t.Fatalf("Search() second error = %v", err)
+	}
+	if len(matches) != 1 || matches[0].AttachmentKey != "ATT456" {
+		t.Fatalf("Search() second matches = %#v, want ATT456", matches)
+	}
+}
+
 func TestFullTextCacheSearchDedupesParentItems(t *testing.T) {
 	rootDir := t.TempDir()
 	cache := newFullTextCache(rootDir)

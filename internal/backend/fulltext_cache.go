@@ -117,6 +117,47 @@ func (c fullTextCache) Load(attachment domain.Attachment) (FullTextDocument, boo
 	return FullTextDocument{Text: string(content), Meta: meta, CacheHit: true}, true, nil
 }
 
+func (c fullTextCache) HasIndexEntry(attachmentKey string) (bool, error) {
+	key := strings.TrimSpace(attachmentKey)
+	if key == "" {
+		return false, nil
+	}
+	if _, err := os.Stat(c.indexPath()); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	db, err := sql.Open("sqlite", c.indexPath())
+	if err != nil {
+		return false, err
+	}
+	defer db.Close()
+	if err := ensureFullTextIndexSchema(db); err != nil {
+		return false, err
+	}
+	var docCount int
+	if err := db.QueryRow(`SELECT count(*) FROM fulltext_documents WHERE attachment_key = ?`, key).Scan(&docCount); err != nil {
+		return false, err
+	}
+	var chunkCount int
+	if err := db.QueryRow(`SELECT count(*) FROM fulltext_chunks WHERE attachment_key = ?`, key).Scan(&chunkCount); err != nil {
+		return false, err
+	}
+	return docCount > 0 && chunkCount > 0, nil
+}
+
+func (c fullTextCache) SyncIndexIfMissing(doc FullTextDocument) error {
+	indexed, err := c.HasIndexEntry(doc.Meta.AttachmentKey)
+	if err != nil {
+		return err
+	}
+	if indexed {
+		return nil
+	}
+	return c.syncIndex(doc)
+}
+
 func (c fullTextCache) Save(doc FullTextDocument) error {
 	key := strings.TrimSpace(doc.Meta.AttachmentKey)
 	if key == "" {
@@ -174,7 +215,7 @@ func (c fullTextCache) SaveBatch(docs []FullTextDocument) error {
 		return err
 	}
 
-	return c.rebuildFTSIndex(db, docs)
+	return c.upsertFTSIndex(db, docs)
 }
 
 func (c fullTextCache) writeMetaBatch(db *sql.DB, docs []FullTextDocument) error {
@@ -330,6 +371,87 @@ func (c fullTextCache) rebuildFTSIndex(db *sql.DB, docs []FullTextDocument) erro
 	return tx.Commit()
 }
 
+func (c fullTextCache) upsertFTSIndex(db *sql.DB, docs []FullTextDocument) error {
+	if len(docs) == 0 {
+		return nil
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := c.upsertFTSIndexTx(tx, docs); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (c fullTextCache) upsertFTSIndexTx(tx *sql.Tx, docs []FullTextDocument) error {
+	docStmt, err := tx.Prepare(`INSERT INTO fulltext_documents (
+		attachment_key, parent_item_key, content_type, resolved_path,
+		title, creators, tags, attachment_title, attachment_name, attachment_path, body
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer docStmt.Close()
+
+	chunkStmt, err := tx.Prepare(`INSERT INTO fulltext_chunks (
+		attachment_key, parent_item_key, chunk_index, page, bbox, body
+	) VALUES (?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer chunkStmt.Close()
+
+	for _, doc := range docs {
+		key := strings.TrimSpace(doc.Meta.AttachmentKey)
+		if key == "" {
+			continue
+		}
+		if _, err := tx.Exec(`DELETE FROM fulltext_documents WHERE attachment_key = ?`, key); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM fulltext_chunks WHERE attachment_key = ?`, key); err != nil {
+			return err
+		}
+		docChunks := doc.Chunks
+		if len(docChunks) == 0 && doc.Text != "" {
+			docChunks = []chunk{{Page: 1, Text: doc.Text, BlockCount: 1}}
+		}
+		if _, err := docStmt.Exec(
+			doc.Meta.AttachmentKey,
+			doc.Meta.ParentItemKey,
+			doc.Meta.ContentType,
+			doc.Meta.ResolvedPath,
+			doc.Meta.Title,
+			doc.Meta.Creators,
+			doc.Meta.Tags,
+			doc.Meta.AttachmentTitle,
+			doc.Meta.AttachmentName,
+			doc.Meta.AttachmentPath,
+			doc.Text,
+		); err != nil {
+			return err
+		}
+		for ci, ch := range docChunks {
+			bboxStr := fmt.Sprintf("[%g,%g,%g,%g]", ch.BBox[0], ch.BBox[1], ch.BBox[2], ch.BBox[3])
+			if _, err := chunkStmt.Exec(
+				doc.Meta.AttachmentKey,
+				doc.Meta.ParentItemKey,
+				ci,
+				ch.Page,
+				bboxStr,
+				ch.Text,
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (c fullTextCache) prepareDoc(doc FullTextDocument) FullTextDocument {
 	if doc.Meta.TextHash == "" && doc.Text != "" {
 		hash := sha256.Sum256([]byte(doc.Text))
@@ -467,59 +589,16 @@ func (c fullTextCache) syncIndexWithReset(doc FullTextDocument, reset bool) erro
 	if _, err := tx.Exec(`DELETE FROM fulltext_documents WHERE attachment_key = ?`, doc.Meta.AttachmentKey); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(
-		`INSERT INTO fulltext_documents (
-		 attachment_key, parent_item_key, content_type, resolved_path,
-		 title, creators, tags, attachment_title, attachment_name, attachment_path, body
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		doc.Meta.AttachmentKey,
-		doc.Meta.ParentItemKey,
-		doc.Meta.ContentType,
-		doc.Meta.ResolvedPath,
-		doc.Meta.Title,
-		doc.Meta.Creators,
-		doc.Meta.Tags,
-		doc.Meta.AttachmentTitle,
-		doc.Meta.AttachmentName,
-		doc.Meta.AttachmentPath,
-		doc.Text,
-	); err != nil {
+	if _, err := tx.Exec(`DELETE FROM fulltext_chunks WHERE attachment_key = ?`, doc.Meta.AttachmentKey); err != nil {
+		return err
+	}
+	if err := c.upsertFTSIndexTx(tx, []FullTextDocument{doc}); err != nil {
 		if !reset && isFullTextIndexSchemaError(err) {
 			_ = tx.Rollback()
 			_ = db.Close()
 			return c.syncIndexWithReset(doc, true)
 		}
 		return err
-	}
-	if _, err := tx.Exec(`DELETE FROM fulltext_chunks WHERE attachment_key = ?`, doc.Meta.AttachmentKey); err != nil {
-		return err
-	}
-	chunks := doc.Chunks
-	if len(chunks) == 0 && doc.Text != "" {
-		chunks = []chunk{{Page: 1, Text: doc.Text, BlockCount: 1}}
-	}
-	if len(chunks) > 0 {
-		chunkStmt, err := tx.Prepare(`INSERT INTO fulltext_chunks (
-			attachment_key, parent_item_key, chunk_index, page, bbox, body
-		) VALUES (?, ?, ?, ?, ?, ?)`)
-		if err != nil {
-			return err
-		}
-		for ci, ch := range chunks {
-			bboxStr := fmt.Sprintf("[%g,%g,%g,%g]", ch.BBox[0], ch.BBox[1], ch.BBox[2], ch.BBox[3])
-			if _, err := chunkStmt.Exec(
-				doc.Meta.AttachmentKey,
-				doc.Meta.ParentItemKey,
-				ci,
-				ch.Page,
-				bboxStr,
-				ch.Text,
-			); err != nil {
-				chunkStmt.Close()
-				return err
-			}
-		}
-		chunkStmt.Close()
 	}
 	if err := tx.Commit(); err != nil {
 		if !reset && isFullTextIndexSchemaError(err) {
@@ -552,12 +631,8 @@ func ensureFullTextIndexSchema(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	_, chunksOk := true, true
-	if rows, e := db.Query(`PRAGMA table_info(fulltext_chunks)`); e == nil {
-		rows.Close()
-		chunksOk, _ = tableHasColumns(db, "fulltext_chunks", chunkColumns)
-	} else {
-		rows.Close()
+	chunksOk, err := tableHasColumns(db, "fulltext_chunks", chunkColumns)
+	if err != nil {
 		chunksOk = false
 	}
 	if !metaOk || !docOk || !chunksOk {

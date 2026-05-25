@@ -99,6 +99,11 @@ func (r *LocalReader) IsFullTextCached(attachment domain.Attachment) bool {
 	return err == nil && ok
 }
 
+func (r *LocalReader) IsFullTextIndexed(attachment domain.Attachment) bool {
+	ok, err := newFullTextCache(r.FullTextCacheDir).HasIndexEntry(attachment.Key)
+	return err == nil && ok
+}
+
 func (r *LocalReader) IsMarkedFailed(key string) bool {
 	return newFullTextCache(r.FullTextCacheDir).IsMarkedFailed(key)
 }

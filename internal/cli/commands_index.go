@@ -125,6 +125,7 @@ func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexB
 
 	writer, hasWriter := reader.(fullTextWriter)
 	cacheChecker, hasCacheCheck := reader.(fullTextCacheChecker)
+	indexChecker, hasIndexCheck := reader.(fullTextIndexChecker)
 	failedMarker, hasFailedMark := reader.(failedMarker)
 
 	startTime := time.Now()
@@ -163,8 +164,10 @@ func (c *CLI) indexBuild(ctx context.Context, reader backend.Reader, opts indexB
 				continue
 			}
 			if hasCacheCheck && cacheChecker.IsFullTextCached(att) {
-				result.Skipped++
-				continue
+				if !hasIndexCheck || indexChecker.IsFullTextIndexed(att) {
+					result.Skipped++
+					continue
+				}
 			}
 			if hasFailedMark && cacheChecker.IsMarkedFailed(att.Key) {
 				result.Skipped++

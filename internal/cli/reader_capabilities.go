@@ -44,6 +44,10 @@ type fullTextCacheChecker interface {
 	IsMarkedFailed(string) bool
 }
 
+type fullTextIndexChecker interface {
+	IsFullTextIndexed(domain.Attachment) bool
+}
+
 type failedMarker interface {
 	IsMarkedFailed(string) bool
 	MarkExtractFailed(string) error
