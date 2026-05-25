@@ -227,6 +227,8 @@ func maskConfig(cfg config.Config) map[string]any {
 		"library_type":        cfg.LibraryType,
 		"library_id":          cfg.LibraryID,
 		"api_key":             maskSecret(cfg.APIKey),
+		"server_addr":         cfg.ServerAddr,
+		"server_auth_key":     maskSecret(cfg.ServerAuthKey),
 		"style":               cfg.Style,
 		"locale":              cfg.Locale,
 		"timeout_seconds":     cfg.TimeoutSeconds,

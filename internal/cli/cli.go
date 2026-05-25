@@ -199,12 +199,14 @@ Modes (set via ZOT_MODE env):
   web      (default)  Cloud-only via Zotero Web API; no local Zotero needed
   local               Read from local Zotero SQLite (requires ZOT_DATA_DIR)
   hybrid              Local-first with Web API fallback for unsupported features
+  remote              Read via zot-server over HTTP (requires ZOT_SERVER_ADDR)
 
 Environment (run 'zot config show' for full list):
-  ZOT_MODE         Operating mode: web | local | hybrid   (default: web)
+  ZOT_MODE         Operating mode: web | local | hybrid | remote   (default: web)
   ZOT_API_KEY      Zotero Web API key
   ZOT_LIBRARY_ID   Numeric user or group library ID
   ZOT_LIBRARY_TYPE Library type: user | group            (default: user)
+  ZOT_SERVER_ADDR  zot-server URL for remote mode
 
 Delete Warnings:
   Delete commands are destructive. Review the target key, library, and version carefully before running them.

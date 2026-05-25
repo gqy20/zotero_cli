@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 
+	"zotero_cli/internal/backend"
 	"zotero_cli/internal/config"
 )
 
@@ -248,6 +249,10 @@ func (c *CLI) runOpen(args []string) int {
 
 	resolveZoteroExePath(cfg)
 
+	if cfg.Mode == "remote" {
+		return c.runOpenRemote(cfg, itemKey, page)
+	}
+
 	localReader, err := c.newLocalReader(cfg)
 	if err != nil {
 		return c.printErr(err)
@@ -308,6 +313,64 @@ func (c *CLI) runOpen(args []string) int {
 		fmt.Fprintf(c.stdout, "Page hint: %d\n", page)
 	}
 	return 0
+}
+
+func (c *CLI) runOpenRemote(cfg config.Config, itemKey string, page int) int {
+	reader, err := c.backendNewReader(cfg, nil)
+	if err != nil {
+		return c.printErr(err)
+	}
+
+	item, err := reader.GetItem(context.Background(), itemKey)
+	if err != nil {
+		return c.printErr(err)
+	}
+
+	pdfs := filterPDFAttachments(item.Attachments)
+	if len(pdfs) == 0 {
+		return c.printErr(fmt.Errorf("item %s has no PDF attachment", itemKey))
+	}
+
+	attachmentKey := pdfs[0].Key
+	path, _, err := reader.GetAttachmentFile(context.Background(), attachmentKey)
+	if err != nil {
+		return c.printErr(err)
+	}
+
+	if err := openDownloadedFile(path); err != nil {
+		return c.printErr(fmt.Errorf("failed to open downloaded PDF: %w", err))
+	}
+
+	readMeta := backend.ReadMetadata{}
+	if reporter, ok := reader.(interface {
+		ConsumeReadMetadata() backend.ReadMetadata
+	}); ok {
+		readMeta = reporter.ConsumeReadMetadata()
+	}
+
+	fmt.Fprintf(c.stdout, "Opened: %s\n", path)
+	fmt.Fprintf(c.stdout, "Item: %s (%s)\n", itemKey, item.Title)
+	fmt.Fprintf(c.stdout, "Attachment: %s\n", attachmentKey)
+	if readMeta.ReadSource != "" {
+		fmt.Fprintf(c.stdout, "Read source: %s\n", readMeta.ReadSource)
+	}
+	if page > 0 {
+		fmt.Fprintf(c.stdout, "Page hint: %d\n", page)
+	}
+	return 0
+}
+
+func openDownloadedFile(path string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", "", path)
+	case "darwin":
+		cmd = exec.Command("open", path)
+	default:
+		cmd = exec.Command("xdg-open", path)
+	}
+	return cmd.Start()
 }
 
 func (c *CLI) parseOpenArgs(args []string) (string, int, bool) {
