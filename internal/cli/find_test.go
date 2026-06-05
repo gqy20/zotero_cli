@@ -397,7 +397,7 @@ func TestRunFindJSONIncludesStructuredFieldsForAgents(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "attention", "--json"})
+	exitCode := Run([]string{"find", "attention", "--json", "--full"})
 	restoreOutput()
 
 	if exitCode != 0 {

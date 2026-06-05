@@ -2,7 +2,7 @@ package cli
 
 const (
 	usageFind        = "usage: zot find <query> [--json] [--full] [--snippet] [--fulltext] [--fulltext-any] [--include-fields FIELD[,FIELD...]] [--item-type TYPE] [--no-type TYPE] [--tag TAG ...] [--tag-any] [--tag-contains WORD ...] [--exclude-tag TAG ...] [--collection KEY ...] [--no-collection KEY ...] [--date-after YYYY[-MM[-DD]]] [--date-before YYYY[-MM[-DD]]] [--modified-within DURATION] [--added-since DURATION] [--limit N] [--has-pdf] [--attachment-name TEXT] [--attachment-path TEXT] [--attachment-type TEXT] [--qmode titleCreatorYear|everything] [--include-trashed] | zot find --all [--json] [--full] [--snippet] [--include-fields FIELD[,FIELD...]] [--item-type TYPE] [--no-type TYPE] [--tag TAG ...] [--tag-any] [--tag-contains WORD ...] [--exclude-tag TAG ...] [--collection KEY ...] [--no-collection KEY ...] [--date-after YYYY[-MM[-DD]]] [--date-before YYYY[-MM[-DD]]] [--modified-within DURATION] [--added-since DURATION] [--limit N] [--has-pdf] [--attachment-name TEXT] [--attachment-path TEXT] [--attachment-type TEXT] [--qmode titleCreatorYear|everything] [--include-trashed]"
-	usageShow        = "usage: zot show <item-key> [--json] [--snippet]"
+	usageShow        = "usage: zot show <item-key> [--json] [--full] [--snippet]"
 	usageExtractText = "usage: zot extract-text <item-key> [--json]"
 	usageRelate      = "usage: zot relate <item-key> [--json] [--aggregate] [--dot] [--predicate PRED] [--add TARGET] [--remove TARGET] [--dry-run] [--from-file PATH]"
 	usageExport      = "usage: zot export <query> [--limit N] [--format bibtex|biblatex|csljson|ris] [--json] | zot export --item-key KEY [--format bibtex|biblatex|csljson|ris] [--json] | zot export --collection KEY [--format bibtex|biblatex|csljson|ris] [--json]"

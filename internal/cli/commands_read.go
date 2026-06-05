@@ -122,10 +122,16 @@ func (c *CLI) runFind(args []string) int {
 			"total": len(items),
 		}
 		c.appendReadMetadata(meta, reader)
+		var data any
+		if opts.Full || snippet {
+			data = items // full mode: original domain.Item slice
+		} else {
+			data = toLeanItems(items, false) // lean mode
+		}
 		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "find",
-			Data:    items,
+			Data:    data,
 			Meta:    meta,
 		})
 	}
@@ -210,6 +216,7 @@ func (c *CLI) runShow(args []string) int {
 
 	jsonOutput := false
 	snippet := false
+	full := false
 	key := ""
 	for _, arg := range args {
 		if arg == "--json" {
@@ -218,6 +225,10 @@ func (c *CLI) runShow(args []string) int {
 		}
 		if arg == "--snippet" {
 			snippet = true
+			continue
+		}
+		if arg == "--full" {
+			full = true
 			continue
 		}
 		if key == "" {
@@ -260,10 +271,16 @@ func (c *CLI) runShow(args []string) int {
 			"total": 1,
 		}
 		c.appendReadMetadata(meta, reader)
+		var data any
+		if full || snippet {
+			data = item // full mode: original domain.Item
+		} else {
+			data = toLeanItem(item, false) // lean mode
+		}
 		return c.writeJSON(jsonResponse{
 			OK:      true,
 			Command: "show",
-			Data:    item,
+			Data:    data,
 			Meta:    meta,
 		})
 	}

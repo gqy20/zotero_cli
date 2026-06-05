@@ -55,7 +55,7 @@ func TestRunShowJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"show", "X42A7DEE", "--json"})
+	exitCode := Run([]string{"show", "X42A7DEE", "--json", "--full"})
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())

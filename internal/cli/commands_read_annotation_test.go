@@ -256,7 +256,7 @@ func TestShowLocalJSONIncludesAnnotations(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"show", "ITEM1234", "--json"})
+	exitCode := Run([]string{"show", "ITEM1234", "--json", "--full"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

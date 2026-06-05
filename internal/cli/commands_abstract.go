@@ -72,10 +72,11 @@ func (c *CLI) runAbstractJSON(reader backend.Reader, keys []string) int {
 		"total": len(items),
 	}
 	c.appendReadMetadata(meta, reader)
+	// Lean mode but include abstract (it's the whole point of this command)
 	return c.writeJSON(jsonResponse{
 		OK:      true,
 		Command: "abstract",
-		Data:    items,
+		Data:    toLeanItems(items, true), // includeAbstract=true
 		Meta:    meta,
 	})
 }
