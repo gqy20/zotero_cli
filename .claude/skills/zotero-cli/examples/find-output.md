@@ -1,6 +1,8 @@
 # `zot find --json` 输出示例
 
-## 基础搜索
+> **默认走 lean 模式**（蛇形字段，~80% 小）。要原始 `domain.Item` 字段加 `--full`。详细字段表见 [show-output.md](./show-output.md#full-模式字段)。
+
+## 基础搜索（lean 默认）
 
 ```bash
 zot find "CRISPR gene editing" --limit 2 --json
@@ -10,46 +12,39 @@ zot find "CRISPR gene editing" --limit 2 --json
 {
   "ok": true,
   "command": "find",
-  "data": {
-    "items": [
-      {
-        "key": "ABCD1234",
-        "version": 1234,
-        "itemType": "journalArticle",
-        "title": "CRISPR-Cas9 gene editing: advances and challenges",
-        "creators": [
-          {"creatorType": "author", "lastName": "Zhang", "firstName": "Feng"}
-        ],
-        "date": "2024-03",
-        "publicationTitle": "Nature Reviews Genetics",
-        "volume": "25",
-        "pages": "1-20",
-        "doi": "10.1038/nrg.2024.001",
-        "url": "https://doi.org/10.1038/nrg.2024.001",
-        "abstractNote": "CRISPR-Cas9 has revolutionized genome editing...",
-        "tags": [{"tag": "基因编辑"}, {"tag": "CRISPR"}],
-        "collections": ["COLLECTION_KEY"],
-        "journal_rank": {"IF": 53.2, "分区": "Q1", "JCI": 12.8}
-      },
-      {
-        "key": "EFGH5678",
-        "version": 1235,
-        "itemType": "journalArticle",
-        "title": "Base editing with CRISPR: precision without double-strand breaks",
-        "creators": [
-          {"creatorType": "author", "lastName": "Liu", "firstName": "David"}
-        ],
-        "date": "2024-01",
-        "publicationTitle": "Cell",
-        "doi": "10.1016/j.cell.2024.001",
-        "tags": [{"tag": "基因编辑"}, {"tag": "碱基编辑"}],
-        "journal_rank": {"IF": 64.5, "分区": "Q1", "JCI": 15.2}
-      }
-    ],
+  "data": [
+    {
+      "key": "ABCD1234",
+      "item_type": "journalArticle",
+      "title": "CRISPR-Cas9 gene editing: advances and challenges",
+      "date": "2024-03",
+      "creators": "Zhang Feng, Wang Mei, Smith John (ed.)",
+      "container": "Nature Reviews Genetics",
+      "volume": "25",
+      "issue": "3",
+      "pages": "1-20",
+      "doi": "10.1038/nrg.2024.001",
+      "url": "https://doi.org/10.1038/nrg.2024.001",
+      "tags": ["基因编辑", "CRISPR", "综述"],
+      "collections": ["Genetics", "Reviews"],
+      "date_added": "2024-03-15T00:00:00Z"
+    },
+    {
+      "key": "EFGH5678",
+      "item_type": "journalArticle",
+      "title": "Base editing with CRISPR: precision without double-strand breaks",
+      "date": "2024-01",
+      "creators": "Liu David",
+      "container": "Cell",
+      "doi": "10.1016/j.cell.2024.001",
+      "tags": ["基因编辑", "碱基编辑"]
+    }
+  ],
+  "meta": {
+    "read_source": "web",
     "total": 47,
     "start": 0,
-    "limit": 2,
-    "query": "CRISPR gene editing"
+    "limit": 2
   }
 }
 ```
@@ -60,23 +55,25 @@ zot find "CRISPR gene editing" --limit 2 --json
 zot find --tag 基因编辑 --date-after 2024-01 --limit 1 --json
 ```
 
+只要带了至少一个 filter（`--tag` / `--collection` / `--date-after` 等），**不需要 `--all` 也不需要查询词**，命令自动按过滤条件搜索。
+
 ```json
 {
   "ok": true,
   "command": "find",
-  "data": {
-    "items": [
-      {
-        "key": "ABCD1234",
-        "version": 1234,
-        "itemType": "journalArticle",
-        "title": "CRISPR-Cas9 gene editing: advances and challenges",
-        "tags": [{"tag": "基因编辑"}, {"tag": "CRISPR"}],
-        "date": "2024-03"
-      }
-    ],
-    "total": 15,
-    "filters": {"tags": ["基因编辑"], "dateAfter": "2024-01-01"}
+  "data": [
+    {
+      "key": "ABCD1234",
+      "item_type": "journalArticle",
+      "title": "CRISPR-Cas9 gene editing: advances and challenges",
+      "date": "2024-03",
+      "creators": "Zhang Feng",
+      "tags": ["基因编辑", "CRISPR"]
+    }
+  ],
+  "meta": {
+    "read_source": "hybrid",
+    "total": 15
   }
 }
 ```
@@ -87,33 +84,54 @@ zot find --tag 基因编辑 --date-after 2024-01 --limit 1 --json
 zot find "hybrid speciation" --snippet --limit 1 --json
 ```
 
+> `--snippet` / `--fulltext` 仅 local/hybrid 模式 + 已有 FTS5 索引时生效。`--snippet` 默认 limit 50。
+
 ```json
 {
   "ok": true,
   "command": "find",
-  "data": {
-    "items": [
-      {
-        "key": "IJKL9012",
-        "title": "Hybrid speciation in plants: genomic perspectives",
-        "snippet": "...evidence for <match>hybrid speciation</match> has accumulated from genomic studies...<match>hybrid</match> zones show elevated recombination rates..."
-      }
-    ],
+  "data": [
+    {
+      "key": "IJKL9012",
+      "item_type": "journalArticle",
+      "title": "Hybrid speciation in plants: genomic perspectives",
+      "creators": "Lexer C, Rieseberg L",
+      "matched_on": ["title", "fulltext"]
+    }
+  ],
+  "meta": {
+    "read_source": "hybrid",
     "total": 8,
-    "fulltextEnabled": true
+    "fulltext_enabled": true
   }
 }
 ```
 
-### 关键字段说明
+> Snippet 文本只在使用 `--full` 时才会注入到每个 item 上（作为 `full_text_preview` 字段）；lean 模式只标记 `matched_on`。
+
+## 关键字段说明（lean 模式）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `key` | string | Zotero 条目唯一标识 |
-| `version` | int | 乐观并发版本号 |
-| `itemType` | string | 文献类型（journalArticle/book 等） |
-| `creators` | array | 作者列表，含 creatorType/lastName/firstName |
-| `tags` | array | 标签列表 |
-| `journal_rank` | object/null | 期刊等级（需 EasyScholar 插件），含 IF/分区/JCI |
-| `snippet` | string | FTS 匹配片段（仅 `--snippet` 时出现） |
-| `total` | int | 符合条件的总条目数 |
+| `item_type` | string | 文献类型（`journalArticle` / `book` / `note` 等） |
+| `title` | string | 条目标题 |
+| `creators` | string | 作者摘要（`"Zhang Feng, Wang Mei"`） |
+| `container` | string | 期刊/书名/会议名 |
+| `tags` | string[] | 标签列表 |
+| `collections` | string[] | 所在收藏夹名（不是 key） |
+| `date_added` | string | 加入 Zotero 的时间（ISO 8601） |
+| `matched_on` | string[] | 匹配来源（`title` / `fulltext` / `tag` 等） |
+| `abstract` | string | 仅 `abstract` 命令或带 `--include-fields abstract` 时出现 |
+
+> `version` / `creators[]`（结构化数组）/ `attachments` / `notes` / `annotations` / `journal_rank` 等是 **full 模式**才有的字段，加 `--full` 切换。
+
+## meta 字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `read_source` | string | `"web"` / `"local"` / `"hybrid"` / `"remote"` / `"snapshot"` — 实际数据源 |
+| `total` | int | 匹配总数（不是当前返回的条数） |
+| `start` | int | 分页起点 |
+| `limit` | int | 本次返回条数上限 |
+| `fulltext_enabled` | bool | FTS5 是否生效 |

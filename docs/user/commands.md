@@ -12,16 +12,14 @@
 ## 目录
 
 - [检索 (`find`)](#检索-find)
-- [查看 (`show`)](#查看-show)
+- [JSON 输出总览](#json-输出总览)
 - [关系 (`relate`)](#关系-relate)
 - [标注读取 (`annotations`)](#标注读取-annotations)
 - [标注写入 (`annotate`)](#标注写入-annotate)
+- [创建条目 (`create-item`)](#创建条目-create-item)
 - [文本提取 (`extract-text`)](#文本提取-extract-text)
 - [图片提取 (`extract-figures`)](#图片提取-extract-figures)
-- [打开/选中 (`open` / `select`)](#打开选中-open--select)
-- [导出 (`export`)](#导出-export)
-- [引用 (`cite`)](#引用-cite)
-- [其他命令](#其他命令)
+- [其他命令索引](#其他命令索引)
 
 ---
 
@@ -29,7 +27,31 @@
 
 用法和示例见 [find 示例](./examples/find.md)。
 
-时间字段提示：`--date-after` / `--date-before` 过滤发表日期；`--added-since` 和 `--sort dateAdded` 使用加入 Zotero 的时间。最近入库列表建议显式使用 `find --all --sort dateAdded --direction desc`。
+时间字段提示：`--date-after` / `--date-before` 过滤 **加入 Zotero 的时间（`dateAdded`）**，不是发表日期。发表日期过滤请用 `--sort dateAdded` 配合 `--direction desc`，或先用 `zot find --all --json | jq` 后处理。最近入库列表建议显式使用 `find --all --sort dateAdded --direction desc`。
+
+## JSON 输出总览
+
+所有 `read` 路径命令（`find` / `show` / `abstract` / `relate` / `notes` / `tags` / `stats` / `overview` 等）支持 `--json`，统一信封为 `{ok, command, data, meta, code}`。
+
+**默认走 lean 模式**（`LeanItem`，蛇形字段，约原始 1/5 体积，详见 [`internal/cli/lean.go`](../../internal/cli/lean.go)）。要原始 `domain.Item` 完整字段加 `--full`：
+
+| 命令 | lean 默认 | full 切换 |
+|------|----------|----------|
+| `find` | ✅ | `--full` |
+| `show` | ✅ | `--full` |
+| `abstract` | ✅ | `--full` |
+| `relate` | ❌（直接 `AggregatedRelations`） | — |
+| `notes` / `tags` / `stats` / `overview` | 不涉及（结构本身小） | — |
+
+完整字段表见：
+- lean：`internal/cli/lean.go` 的 `LeanItem` 定义
+- full：`internal/domain/types.go` 的 `Item` 定义
+- 错误信封：`internal/cli/types.go` 的 `errorData` 定义
+
+完整 JSON 示例：
+- [find-output.md](https://github.com/gqy20/zotero_cli/blob/master/.claude/skills/zotero-cli/examples/find-output.md) / [Gitee](https://gitee.com/gqy20/zotero_cli/blob/master/.claude/skills/zotero-cli/examples/find-output.md)
+- [show-output.md](https://github.com/gqy20/zotero_cli/blob/master/.claude/skills/zotero-cli/examples/show-output.md) / [Gitee](https://gitee.com/gqy20/zotero_cli/blob/master/.claude/skills/zotero-cli/examples/show-output.md)
+- [error.md](./examples/error.md)
 
 ---
 
@@ -145,7 +167,7 @@ zot annotate <item-key> (--text TEXT | --page N (--rect x0,y0,x1,y2 | --point x,
 
 ## 创建条目 (`create-item`)
 
-通过 JSON 数据创建新条目（笔记、文献等）。支持 **hybrid 写入**：Zotero 未运行时自动走本地 SQLite 直写。
+通过 JSON 数据创建新条目（笔记、文献等）。支持 **hybrid write routing**：Zotero 未运行时自动走本地 SQLite 直写。
 
 ### 用法
 
@@ -153,12 +175,12 @@ zot annotate <item-key> (--text TEXT | --page N (--rect x0,y0,x1,y2 | --point x,
 zot create-item (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]
 ```
 
-### Hybrid 写入行为
+### Hybrid write routing
 
 | 条件 | 路径 | 输出标识 |
 |------|------|----------|
-| mode = `local`/`hybrid` + Zotero **未运行** + itemType = `note` | local SQLite 直写（~50ms） | `"write_source": "local"` |
-| 其他情况 | Web API POST（~2s） | 正常 API 响应 |
+| mode = `local`/`hybrid` + Zotero **未运行** + itemType = `note` | local SQLite direct write (~50ms) | `"write_source": "local"` |
+| 其他情况 | Web API POST (~2s) | 正常 API 响应 |
 
 > 自动检测通过 `isZoteroRunning()` 检查进程状态，无需手动指定路径。
 
@@ -288,5 +310,96 @@ zot extract-figures <item-key> [...] [--output-dir DIR] [--json] [--workers N]
 - mode 必须为 `local` 或 `hybrid`
 - 需要 Python + PyMuPDF
 - 仅处理第一个 PDF 附件
+
+---
+
+## 其他命令索引
+
+上方 8 个章节覆盖了最常用的命令。`zot` 还有以下命令，每个命令的完整 `-h` 是最权威的参考（参见 `internal/cli/commandRegistry` 单源）。
+
+### Setup（初始化与配置）
+
+| 命令 | 用途 |
+|------|------|
+| `init` | 交互式初始化 `~/.zot/.env`（mode 选择、API key、library id、PyMuPDF 一站式） |
+| `config <sub>` | `path` / `show` / `validate` 三个子命令，校验当前凭据 |
+| `index build` | 构建 FTS5 全文索引（`find --fulltext` / `show --snippet` 的前置） |
+| `setup pdf-extract` | **旧命令**，已被 `zot init --pdf` 替代（保留兼容） |
+| `version [--check]` | 显示当前版本；`--check` 查 GitHub 最新 release 并给出升级提示 |
+
+### Read（只读）
+
+| 命令 | 用途 | 关键标志 |
+|------|------|----------|
+| `find` | 主检索命令（详见上文） | `--all` / `--tag` / `--date-after` / `--snippet` |
+| `show` | 单条目详情（详见上文） | `--full` / `--snippet` |
+| `abstract` | 条目摘要，支持 **多 key 批量** | `--json` |
+| `relate` | 关系查询（详见上文） | `--aggregate` / `--dot` |
+| `export` | 导出引文（csljson/bibtex/biblatex/ris） | `--format` / `--collection` |
+| `collections` | 列出全部收藏夹（含嵌套） | `--json` |
+| `collections-top` | 仅顶级收藏夹 | `--json` |
+| `notes` | 列出笔记（可 `--query` 过滤） | `--query` / `--json` |
+| `tags` | 列出所有标签 | `--json` |
+| `searches` | 列出已保存的搜索 | `--json` |
+| `groups` | 列出可访问的群组 | `--json` |
+| `publications` | 列出 "My Publications" | `--json` |
+| `trash` | 列出回收站条目 | `--json` |
+| `deleted` | 已删除 key（Zotero API 软删除） | `--json` |
+| `changes <type> --since N` | 自版本 N 以来的变更（`items` / `items-top` / `collections` / `searches`） | `--since` / `--if-modified-since-version` |
+| `stats` | 库内条目/收藏夹/搜索/附件/笔记计数 | `--json` |
+| `overview` | 一站式库概览（**Agent 入口**）：stats + Top 收藏夹 + Top 标签 + 最近条目 + FTS 状态 | `--json` |
+| `key-info [KEY]` | API key 权限与所属用户查询 | `--json` |
+| `schema <sub>` | 元数据 schema 自省（`types` / `fields` / `creator-types` / `fields-for` / `creator-types-for` / `template`） | `--json` |
+| `extract-text` | 从 PDF 提取全文（详见上文） | `--json` |
+| `extract-figures` | 从 PDF 提取科学插图（详见上文） | `--output-dir` / `--workers` / `--max-per-page` / `--json` |
+| `open` | 在系统默认 PDF 阅读器中打开条目附件 | — |
+| `select` | 在 Zotero UI 中定位条目 | — |
+
+### Annotate（标注操作）
+
+| 命令 | 用途 |
+|------|------|
+| `annotations` | 读取/清除 PDF 标注（详见上文；`--clear` 双层删除） |
+| `annotate` | 写入 PDF 标注（详见上文；Mode 1 / 1.5 / 2） |
+
+### Write（写操作 — 需 `ZOT_ALLOW_WRITE=1`）
+
+所有写命令接受 `--data <json>` / `--from-file <path>` 之一，并通过 `--if-unmodified-since-version N` 做乐观锁。
+
+| 命令 | 用途 |
+|------|------|
+| `create-item` | 创建条目（笔记 / 普通条目）。hybrid 模式下 Zotero 关闭 + itemType=note 走 SQLite 直写 |
+| `update-item` | 局部更新条目（patch 语义） |
+| `add-tag` | 批量给条目打标签 |
+| `remove-tag` | 批量移除标签 |
+| `create-collection` | 创建收藏夹 |
+| `update-collection` | 局部更新收藏夹 |
+| `create-search` | 创建已保存搜索 |
+| `update-search` | 局部更新已保存搜索 |
+
+### Destructive（不可逆 — 需 `ZOT_ALLOW_WRITE=1` + `--if-unmodified-since-version`）
+
+| 命令 | 用途 |
+|------|------|
+| `delete-item` | 删除条目 |
+| `delete-collection` | 删除收藏夹 |
+| `delete-search` | 删除已保存搜索 |
+
+> 删除前必须 `get-show` 复述目标 key → 无歧义确认 → 有不确定先询问。`--json` 模式自动跳过确认提示。
+
+---
+
+## 输出 JSON 字段出处速查
+
+为方便 agent 写解析逻辑，所有 JSON 字段定义都集中在三个 Go 结构体里（不要在文档里逐字段列）：
+
+| 命令 | lean 模式 | full 模式 / 原始结构 |
+|------|----------|-------------------|
+| `find` / `show` / `abstract` | `internal/cli/lean.go:8` (`LeanItem`) | `internal/domain/types.go:3` (`Item`) |
+| `relate --aggregate` | — | `internal/domain/types.go:97` (`AggregatedRelations`) |
+| 错误信封 | `internal/cli/types.go:35` (`errorData`) | — |
+
+任何字段名疑问，去看 struct tag，不要凭记忆。
+
 
 ---
