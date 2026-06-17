@@ -825,13 +825,14 @@ func TestRunSchemaNoSubcommandShowsUsageAndError(t *testing.T) {
 	if exitCode != ExitUsage {
 		t.Fatalf("expected exit code %d, got %d", ExitUsage, exitCode)
 	}
-	gotErr := stderr.String()
-	if !strings.Contains(gotErr, "subcommands:") {
-		t.Fatalf("expected subcommand list in stderr, got %q", gotErr)
+	// 结构性：缺 subcommand 时，stderr 应包含 schema 父命令的 Long（子命令列表 + usage）
+	schemaLong := lookupCommand("schema").Long
+	if !strings.Contains(stderr.String(), schemaLong) {
+		t.Fatalf("expected schema long help in stderr, got %q", stderr.String())
 	}
-	gotOut := stdout.String()
-	if !strings.Contains(gotOut, "usage: zot schema") {
-		t.Fatalf("expected usage in stdout, got %q", gotOut)
+	// stdout 应为空（之前 split 在两个流，现合并到 stderr）
+	if stdout.Len() != 0 {
+		t.Fatalf("expected no stdout, got %q", stdout.String())
 	}
 }
 

@@ -18,6 +18,38 @@ import (
 	"zotero_cli/internal/config"
 )
 
+const usageInit = `usage: zot init [--mode MODE] [--library-type TYPE] [--library-id ID] [--api-key KEY] [--data-dir PATH] [--pdf] [--no-pdf] [--check-pdf]
+
+Initialize ~/.zot/.env with a streamlined interactive setup.
+
+Options:
+  --mode MODE           Operating mode: web | local | hybrid | remote (default: web)
+  --library-type TYPE   Library type: user | group
+  --library-id ID       Your Zotero library numeric ID
+  --api-key KEY         Zotero Web API key
+  --data-dir PATH       Zotero local data directory (required for local/hybrid; auto-detected if omitted)
+  --server-addr ADDR    Remote server address for remote mode (e.g. http://192.168.1.100:8021)
+  --pdf                 Force PyMuPDF setup after config creation, or use existing config
+  --no-pdf              Skip PyMuPDF setup
+  --check-pdf           Check PyMuPDF status without installing
+
+Provide all required flags for non-interactive mode.
+Omit flags for interactive mode with guided prompts.
+Data directory is auto-detected from Zotero prefs.js or default location when possible.
+
+If you are running this command via an AI assistant with browser access,
+it can navigate to https://www.zotero.org/settings/keys to obtain
+your library ID and API key automatically.
+
+Examples:
+  zot init                              # Interactive guided setup
+  zot init --mode hybrid --library-id 123 --api-key abc  # Partial flags, prompts for the rest
+  zot init --mode web --library-type user --library-id 123 --api-key key  # Fully non-interactive
+  zot init --mode remote --server-addr http://192.168.1.100:8021  # Remote only (read via server)
+  zot init --mode remote --server-addr http://192.168.1.100:8021 --library-id 123 --api-key key  # Remote + web API
+  zot init --check-pdf                   # Check PyMuPDF installation status
+`
+
 func (c *CLI) runInit(args []string) int {
 	if isHelpOnly(args) {
 		return c.printCommandUsage(usageInit)
@@ -253,38 +285,6 @@ func parseInitFlags(args []string) (initFlags, []string) {
 	}
 	return f, rest
 }
-
-const usageInit = `usage: zot init [--mode MODE] [--library-type TYPE] [--library-id ID] [--api-key KEY] [--data-dir PATH] [--pdf] [--no-pdf] [--check-pdf]
-
-Initialize ~/.zot/.env with a streamlined interactive setup.
-
-Options:
-  --mode MODE           Operating mode: web | local | hybrid | remote (default: web)
-  --library-type TYPE   Library type: user | group
-  --library-id ID       Your Zotero library numeric ID
-  --api-key KEY         Zotero Web API key
-  --data-dir PATH       Zotero local data directory (required for local/hybrid; auto-detected if omitted)
-  --server-addr ADDR    Remote server address for remote mode (e.g. http://192.168.1.100:8021)
-  --pdf                 Force PyMuPDF setup after config creation, or use existing config
-  --no-pdf              Skip PyMuPDF setup
-  --check-pdf           Check PyMuPDF status without installing
-
-Provide all required flags for non-interactive mode.
-Omit flags for interactive mode with guided prompts.
-Data directory is auto-detected from Zotero prefs.js or default location when possible.
-
-If you are running this command via an AI assistant with browser access,
-it can navigate to https://www.zotero.org/settings/keys to obtain
-your library ID and API key automatically.
-
-Examples:
-  zot init                              # Interactive guided setup
-  zot init --mode hybrid --library-id 123 --api-key abc  # Partial flags, prompts for the rest
-  zot init --mode web --library-type user --library-id 123 --api-key key  # Fully non-interactive
-  zot init --mode remote --server-addr http://192.168.1.100:8021  # Remote only (read via server)
-  zot init --mode remote --server-addr http://192.168.1.100:8021 --library-id 123 --api-key key  # Remote + web API
-  zot init --check-pdf                   # Check PyMuPDF installation status
-`
 
 func discoverDataDir() string {
 	if runtime.GOOS != "windows" {

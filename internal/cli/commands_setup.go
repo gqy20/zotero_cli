@@ -7,6 +7,9 @@ import (
 )
 
 func (c *CLI) runSetup(args []string) int {
+	if isHelpOnly(args) || containsHelp(args) {
+		return c.printCommandUsage(lookupCommand("setup").Long)
+	}
 	if len(args) == 0 || args[0] != "pdf-extract" {
 		fmt.Fprintln(c.stderr, "`zot setup pdf-extract` has been replaced by `zot init --pdf`")
 		fmt.Fprintln(c.stderr, "run `zot init --mode hybrid --api-key KEY --library-id ID` to set up config and PyMuPDF in one step")

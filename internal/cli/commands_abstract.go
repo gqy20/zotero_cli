@@ -8,6 +8,21 @@ import (
 	"zotero_cli/internal/domain"
 )
 
+const usageAbstract = `usage: zot abstract <item-key> [item-key ...] [--json]
+
+What: Return the abstract field for one or more item keys. Accepts multiple
+positional keys; the result list preserves input order. Items without an
+abstract are reported as empty in --json and skipped in text mode.
+
+Examples:
+  zot abstract ABCD
+  zot abstract ABC1 ABC2 ABC3 --json
+  zot abstract --json < keys.txt          # one key per line on stdin
+
+Notes:
+  - --json returns one entry per key (preserves duplicates in input).
+  - See also: show <key> (full metadata), find (search by abstract content).`
+
 func (c *CLI) runAbstract(args []string) int {
 	if isHelpOnly(args) || containsHelp(args) {
 		return c.printCommandUsage(usageAbstract)

@@ -7,6 +7,16 @@ import (
 	"strings"
 )
 
+const usageSelect = `usage: zot select <item-key>
+
+What: Highlight the item in the Zotero desktop UI (Windows / macOS). If Zotero
+is not running, this command exits with an error. The remote Zotero web
+interface is NOT targeted by this command — use 'open' for the PDF.
+
+Notes:
+  - Requires Zotero desktop to be running.
+  - See also: open <key> (opens the attached PDF in the system viewer).`
+
 func (c *CLI) runSelect(args []string) int {
 	if isHelpOnly(args) {
 		return c.printCommandUsage(usageSelect)

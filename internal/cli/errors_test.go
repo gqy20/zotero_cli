@@ -28,11 +28,24 @@ func TestHelpIncludesDeleteWarnings(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "Delete Warnings:") {
-		t.Fatalf("expected delete warning section, got %q", stdout.String())
+	// 结构性：顶层 -h 必须有 Destructive 分组标识 + ⚠ 警告符号
+	out := stdout.String()
+	if !strings.Contains(out, "Destructive") {
+		t.Fatalf("expected Destructive section, got %q", out)
 	}
-	if !strings.Contains(stdout.String(), "If you are an agent or automation tool, stop and think before deleting anything.") {
-		t.Fatalf("expected agent warning, got %q", stdout.String())
+	if !strings.Contains(out, "⚠") {
+		t.Fatalf("expected warning marker, got %q", out)
+	}
+	// 进一步：registry 至少有一个 CatDestructive 命令
+	found := false
+	for _, s := range commandRegistry {
+		if s.Category == CatDestructive {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected at least one CatDestructive command in registry")
 	}
 }
 

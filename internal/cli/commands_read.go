@@ -15,6 +15,145 @@ import (
 	"zotero_cli/internal/zoteroapi"
 )
 
+const (
+	usageFind = `usage: zot find <query> [filters...] [output...] | zot find --all [filters...] [output...]
+
+What: Search items in the library. local/hybrid mode auto-enables FTS5 (PDF
+full-text). Source must be one of: a query, --all, or at least one filter
+(with no source at all the command errors out). Filters alone implicitly
+turn on --all.
+
+Filters (AND across categories, OR within --tag-any):
+  --tag TAG              Repeat for AND. --tag-any switches to OR.
+  --tag-contains W       Substring match against tag names.
+  --exclude-tag TAG      Exclude tag.
+  --collection KEY       Restrict to one collection (repeat for OR).
+  --no-collection KEY    Exclude these collections.
+  --item-type TYPE       book | journalArticle | ... (see 'zot schema types').
+  --no-type TYPE         Exclude item types.
+  --date-after / --date-before   YYYY[-MM[-DD]] bounds on dateAdded.
+  --modified-within / --added-since   Duration: 24h | 7d | 30d.
+  --has-pdf              Only items with PDF attachments.
+  --attachment-name / --attachment-path / --attachment-type   Attachment match.
+  --include-trashed      Include items in trash.
+
+Output:
+  --json                 Structured for agents (strongly recommended).
+  --full                 Include abstract/notes/tags.
+  --include-fields F[,F] Restrict to specific fields.
+  --snippet N            FTS5 context length (enables FTS5; local/hybrid only).
+  --fulltext             Match against PDF text (local/hybrid + FTS5).
+  --fulltext-any         OR semantics for --fulltext terms.
+  --qmode MODE           titleCreatorYear (default) | everything (adds abstract+tags).
+  --limit N              Max results; no default (returns all matches).
+  --sort FIELD           dateAdded | title | creator | year. --direction asc|desc.
+
+Examples:
+  zot find "CRISPR" --json                              # Basic search
+  zot find --tag ai --tag ml --json                     # AND-tag filter
+  zot find "attention" --fulltext --snippet 100 --json  # FTS5 over PDF text
+  zot find --all --has-pdf --json                       # All PDFs
+
+Notes:
+  - FTS5 is automatic in local/hybrid when the index exists (run 'zot index build' first).
+    Force metadata-only by setting ZOT_MODE=web.
+  - --snippet / --fulltext require FTS5; ignored in web/remote mode.
+  - See also: export (write results), show <key> (item detail), schema types.`
+
+	usageShow = `usage: zot show <item-key> [--json] [--full] [--snippet]
+
+What: Show one item's metadata, child notes, annotations, and (if present)
+journal-tier info. Single positional argument; the rest are flags.
+
+Output:
+  (default)    Title, creators, year, tags, collections, child notes count.
+  --full       Include abstract, full note bodies, all child annotations,
+               journal-tier codes (sciUp/pku/sjtu/...).
+  --json       Structured output for agents.
+  --snippet    Use FTS5 snippet context for note bodies (local/hybrid + index).
+
+Examples:
+  zot show ABCD
+  zot show ABCD --json
+  zot show ABCD --full --json
+
+Notes:
+  - Multiple item keys are NOT accepted. Use 'zot abstract KEY1 KEY2 ...'
+    for batch abstract lookup, or call 'zot show' in a loop.
+  - See also: abstract, find, annotations.`
+
+	usageRelate = `usage: zot relate <item-key> [--json] [--aggregate] [--dot] [--predicate PRED] [--add TARGET] [--remove TARGET] [--dry-run] [--from-file PATH]
+
+What: Read or modify explicit item relations. By default returns the relations
+declared via the Zotero itemRelations field. Use --aggregate to expand the
+neighborhood across three layers:
+
+  Layer 1    Explicit itemRelations  (author-declared, always present)
+  Layer 2    Notes attached to the item that link to other items
+  Layer 3    Citations inside the note HTML (Zotero citation links)
+
+Read flags:
+  --json             Structured output (recommended for agents).
+  --aggregate        Expand across layers 1-3. local/hybrid only.
+  --predicate PRED   Restrict to one relation predicate (e.g. 'dc:replaces').
+  --dot              Emit Graphviz DOT instead of JSON (pipe to 'dot -Tpng').
+
+Write flags (modify itemRelations on the source item):
+  --add TARGET       Add a relation to TARGET.
+  --remove TARGET    Remove the relation to TARGET.
+  --dry-run          Preview changes without applying.
+  --from-file PATH   Batch operations from a JSON file
+                     {"add":[{...}],"remove":[{...}]}.
+
+Examples:
+  zot relate ABCD --json                              # All relations
+  zot relate ABCD --predicate dc:replaces --json      # Filter by predicate
+  zot relate ABCD --aggregate --json                  # Three-layer expansion
+  zot relate ABCD --dot > net.dot                     # Graphviz export
+  zot relate ABCD --add EFGH --dry-run                # Preview addition
+  zot relate ABCD --from-file ops.json --dry-run      # Batch preview
+
+Notes:
+  - --aggregate / --add / --remove / --from-file require local/hybrid mode.
+    In web/remote mode only the basic relation read is supported.
+  - Write operations require ZOT_ALLOW_WRITE=1 in env.
+  - See also: find, show <key> (inspect related items).`
+	usageExport = `usage: zot export <query> [--limit N] [--format FMT] [--json]
+       | zot export --item-key KEY [--format FMT] [--json]
+       | zot export --collection KEY [--format FMT] [--json]
+       | zot export --all [--format FMT] [--json]
+
+What: Export bibliographic entries in the chosen format. By default emits the
+formatted text on stdout. With --json, the response is wrapped in the standard
+JSON envelope ({"ok":true,"command":"export","data":...}).
+
+Source (pick exactly one):
+  <query>                 Reuse 'zot find' query syntax — same filters apply.
+  --item-key KEY          Single item.
+  --collection KEY        All items in a collection.
+  --all                   Entire library.
+
+Format (--format / -f):
+  csljson    (default)    Citation Style Language JSON — structured, agent-friendly.
+  bibtex                  Classic BibTeX.
+  biblatex                BibLaTeX.
+  ris                     RIS (RefMan) — useful for EndNote/Zotero import.
+
+Examples:
+  zot export "CRISPR" --format bibtex                         # stdout text
+  zot export --item-key ABCD --format csljson --json          # JSON envelope
+  zot export --collection COLL1 --format ris > refs.ris
+  zot export --all --format csljson --json | jq '.data[]'     # Pipeline to jq
+
+Notes:
+  - Exactly one source mode: query, --item-key, --collection, or --all.
+    Combining any two is rejected.
+  - --json wraps the formatted text in the agent envelope; the text itself
+    stays plain (decodable by the matching importer).
+  - See also: find, show <key>.`
+	usageStats = "usage: zot stats [--json]\n\nLibrary counters: items, collections, saved searches, attachments, and notes. Single-call snapshot for agents that need a quick size check."
+)
+
 func hasSubstantiveFilters(opts backend.FindOptions) bool {
 	return len(opts.Tags) > 0 ||
 		len(opts.TagContains) > 0 ||
