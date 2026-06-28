@@ -23,7 +23,7 @@ const usageInit = `usage: zot init [--mode MODE] [--library-type TYPE] [--librar
 Initialize ~/.zot/.env with a streamlined interactive setup.
 
 Options:
-  --mode MODE           Operating mode: web | local | hybrid | remote (default: web)
+  --mode MODE           Operating mode: web | local | hybrid | remote (default: hybrid)
   --library-type TYPE   Library type: user | group
   --library-id ID       Your Zotero library numeric ID
   --api-key KEY         Zotero Web API key

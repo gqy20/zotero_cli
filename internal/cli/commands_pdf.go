@@ -45,8 +45,8 @@ as PNG files. Filters cover pages, logos, and author headshots by default.
 Options:
   --output-dir DIR      Where to write PNGs. Default: {ZOT_DATA_DIR}/.zotero_cli/figures
                         (auto-created). Override with this flag.
-  --workers N           Parallel workers. Default 4. Capped at 20.
-  --max-per-page N      Stop after N figures per page to bound output (default 20).
+  --workers N           Parallel workers. Default: CPU count (min 2, max 8).
+  --max-per-page N      Stop after N figures per page to bound output (default 25).
   --json                Return JSON {key, page, file, ...} instead of writing.
 
 Modes:

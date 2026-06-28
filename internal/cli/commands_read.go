@@ -41,17 +41,17 @@ Output:
   --json                 Structured for agents (strongly recommended).
   --full                 Include abstract/notes/tags.
   --include-fields F[,F] Restrict to specific fields.
-  --snippet N            FTS5 context length (enables FTS5; local/hybrid only).
+  --snippet              Enable FTS5 match-snippet preview (local/hybrid + index).
   --fulltext             Match against PDF text (local/hybrid + FTS5).
   --fulltext-any         OR semantics for --fulltext terms.
   --qmode MODE           titleCreatorYear (default) | everything (adds abstract+tags).
-  --limit N              Max results; no default (returns all matches).
+  --limit N              Max results. No default unless --snippet is set (then 50).
   --sort FIELD           dateAdded | title | creator | year. --direction asc|desc.
 
 Examples:
   zot find "CRISPR" --json                              # Basic search
   zot find --tag ai --tag ml --json                     # AND-tag filter
-  zot find "attention" --fulltext --snippet 100 --json  # FTS5 over PDF text
+  zot find "attention" --fulltext --snippet --limit 20 --json  # FTS5 over PDF text
   zot find --all --has-pdf --json                       # All PDFs
 
 Notes:

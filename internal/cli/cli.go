@@ -168,8 +168,17 @@ func (c *CLI) printUsage() {
 
 	categoryOrder := []Category{CatSetup, CatRead, CatAnnotate, CatWrite, CatDestructive}
 	byCat := make(map[Category][]CommandSpec, len(categoryOrder))
+	// nameWidth is the global column width for command names, derived from the
+	// longest non-hidden name so descriptions align uniformly across every category.
+	nameWidth := 0
 	for _, s := range commandRegistry {
+		if s.Hidden {
+			continue
+		}
 		byCat[s.Category] = append(byCat[s.Category], s)
+		if len(s.Name) > nameWidth {
+			nameWidth = len(s.Name)
+		}
 	}
 	for _, cat := range categoryOrder {
 		specs := byCat[cat]
@@ -180,27 +189,39 @@ func (c *CLI) printUsage() {
 		label := cat.String()
 		if cat == CatDestructive {
 			prefix = "  ⚠ "
-			label = "Destructive (irreversible — use --if-unmodified-since-version)"
+			label = "Destructive (irreversible)"
 		}
 		fmt.Fprintf(c.stdout, "%s:\n", label)
 		for _, s := range specs {
-			fmt.Fprintf(c.stdout, "%s%-18s %s\n", prefix, s.Name, s.Short)
+			fmt.Fprintf(c.stdout, "%s%-*s  %s\n", prefix, nameWidth, s.Name, s.Short)
 		}
 		fmt.Fprintln(c.stdout)
 	}
 
-	fmt.Fprint(c.stdout, `Modes (set via ZOT_MODE env):
-  web      (default)  Cloud-only via Zotero Web API; no local Zotero needed
-  local               Read from local Zotero SQLite (requires ZOT_DATA_DIR)
-  hybrid              Local-first with Web API fallback for unsupported features
-  remote              Read via zot-server over HTTP (requires ZOT_SERVER_ADDR)
+	fmt.Fprint(c.stdout, `Modes (set via ZOT_MODE env, or run 'zot init'):
+  web     Cloud-only via Zotero Web API; no local Zotero needed
+  local   Read from local Zotero SQLite (requires ZOT_DATA_DIR)
+  hybrid  Local-first with Web API fallback for unsupported features (default)
+  remote  Read via zot-server over HTTP (requires ZOT_SERVER_ADDR)
+
+Web-mode limits: PDF-text commands need a local PDF and are unavailable in web
+mode — extract-text, extract-figures, 'find --fulltext/--snippet', and
+'relate --aggregate'. Switch to local/hybrid (or remote) to use them.
 
 Environment (run 'zot config show' for full list):
-  ZOT_MODE         Operating mode: web | local | hybrid | remote   (default: web)
+  ZOT_MODE         Operating mode: web | local | hybrid | remote   (default: hybrid)
   ZOT_API_KEY      Zotero Web API key
   ZOT_LIBRARY_ID   Numeric user or group library ID
   ZOT_LIBRARY_TYPE Library type: user | group            (default: user)
   ZOT_SERVER_ADDR  zot-server URL for remote mode
+  ZOT_DATA_DIR     Local Zotero data dir; required for local/hybrid mode
+  ZOT_ALLOW_WRITE  On by default (1); set to 0 to make the library read-only.
+                    Gates create/update-item, add/remove-tag, annotate,
+                    create/update-collection/search.
+  ZOT_ALLOW_DELETE Off by default (0) for safety; set to 1 to allow
+                    delete-item/collection/search.
+
+Run 'zot <command> -h' for usage, examples, and per-command mode support.
 `)
 }
 

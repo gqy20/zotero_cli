@@ -13,6 +13,7 @@ type CommandSpec struct {
 	Long     string   // 子命令 -h 输出的完整 usage 块（可含 Examples / See also / Hybrid 路由说明等）
 	Category Category // 顶层 -h 的分组
 	SeeAlso  []string // 顶层 -h 末尾交叉引用（出现在短描述尾部）
+	Hidden   bool     // 隐藏：不进顶层 -h 列表，但仍可调用（用于已废弃命令的向后兼容）
 }
 
 // Category 把顶层 -h 的命令按风险和意图分组渲染。
@@ -79,6 +80,7 @@ Subcommands:
 		Category: CatSetup,
 		Short:    "Old PDF setup helper (use `zot init --pdf`)",
 		Long:     "usage: zot setup pdf-extract [--check]\n\nDeprecated. Use `zot init --pdf` to install PyMuPDF, or `zot init --check-pdf` to check status.",
+		Hidden:   true,
 	},
 
 	{
