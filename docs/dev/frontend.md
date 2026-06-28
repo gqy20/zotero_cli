@@ -407,7 +407,7 @@ ZOT_LIBRARY_ID=...            # 图书馆 ID
 ```bash
 # --- 后端 ---
 # 运行 server
-go run ./cmd/server
+go run ./cmd/zot server
 
 # 运行 server 测试
 go test ./internal/server/... -v
@@ -426,7 +426,7 @@ npx shadcn@latest add button card badge tabs dialog
 
 # --- 全流程 ---
 # Terminal 1: 启动后端
-go run ./cmd/server
+go run ./cmd/zot server
 
 # Terminal 2: 启动前端（自动 proxy API 到后端）
 cd web && npm run dev

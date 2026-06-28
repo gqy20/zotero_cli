@@ -1,7 +1,6 @@
-.PHONY: build build-server clean release release-cli release-server release-all fmt fmt-check lint test vet check install-hooks
+.PHONY: build clean release fmt fmt-check lint test vet check install-hooks
 
 BINARY := zot
-SERVER := zot-server
 EXT := $(shell go env GOEXE)
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -44,27 +43,12 @@ build:
 	rm -f $(BINARY)$(EXT)
 	go build -trimpath $(LDFLAGS) -o $(BINARY)$(EXT) ./cmd/zot
 
-build-server:
-	rm -f $(SERVER)$(EXT)
-	go build -trimpath $(LDFLAGS) -o $(SERVER)$(EXT) ./cmd/server
-
 # --- 发布（含 upx 压缩）---
 
-release-cli: build
+release: build
 	$(UPX) --best --lzma -o $(BINARY)$(EXT).tmp $(BINARY)$(EXT) && mv $(BINARY)$(EXT).tmp $(BINARY)$(EXT)
 	@echo "---"
 	@ls -lh $(BINARY)$(EXT)
-
-release-server: build-server
-	$(UPX) --best --lzma -o $(SERVER)$(EXT).tmp $(SERVER)$(EXT) && mv $(SERVER)$(EXT).tmp $(SERVER)$(EXT)
-	@echo "---"
-	@ls -lh $(SERVER)$(EXT)
-
-release:
-	$(MAKE) --no-print-directory -j2 release-cli release-server
-
-release-all:
-	$(MAKE) --no-print-directory release
 
 # --- CI 综合检查 ---
 
@@ -80,4 +64,4 @@ install-hooks:
 # --- 清理 ---
 
 clean:
-	rm -f $(BINARY)$(EXT) $(SERVER)$(EXT)
+	rm -f $(BINARY)$(EXT)

@@ -20,7 +20,10 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: 'dist',
+    // Output directly to where internal/server/embed.go expects it
+    // (//go:embed all:web/dist, resolved relative to internal/server/).
+    // This makes `go build -tags embed` pick up the frontend without a copy step.
+    outDir: '../internal/server/web/dist',
     emptyOutDir: true,
   },
 })

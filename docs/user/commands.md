@@ -2,7 +2,7 @@
 
 完整用法、选项说明、模式边界和输出示例。
 
-> **模式说明**：支持 `web`、`local`、`hybrid`、`remote` 四种运行模式。`remote` 模式通过 HTTP 连接 `zot-server`（端口 8021），reader 路径命令（find/show/stats/tags/notes/overview 等）经由服务器代理；`annotations` / `annotate` 也会经由服务器执行。其余普通写操作和 web-only 命令仍需额外配置 `ZOT_API_KEY` 后可用。详见 [架构文档](../architecture/overview.md)。
+> **模式说明**：支持 `web`、`local`、`hybrid`、`remote` 四种运行模式。`remote` 模式通过 HTTP 连接 `zot server`（端口 8021），reader 路径命令（find/show/stats/tags/notes/overview 等）经由服务器代理；`annotations` / `annotate` 也会经由服务器执行。其余普通写操作和 web-only 命令仍需额外配置 `ZOT_API_KEY` 后可用。详见 [架构文档](../architecture/overview.md)。
 
 > AI Agent 使用规范见 [AI Agent 指南](./quickstart.md)，技术架构见 [架构文档](../architecture/overview.md)。
 > 标注操作详细文档见 [annotations 示例](./examples/annotations.md)。
@@ -86,7 +86,7 @@ zot relate <item-key> [--json] [--aggregate] [--dot] [--predicate PRED]
 
 读取 PDF 标注（双源：PDF 文件层 + Zotero DB 层），支持过滤和删除。
 
-在 `remote` 模式下，本命令通过 `zot-server` 在服务端读取/清除标注；清除是否允许由服务端 `ZOT_ALLOW_DELETE` 控制。
+在 `remote` 模式下，本命令通过 `zot server` 在服务端读取/清除标注；清除是否允许由服务端 `ZOT_ALLOW_DELETE` 控制。
 
 ### 用法
 
@@ -122,7 +122,7 @@ zot annotations <item-key> [--json] [--clear] [--page N] [--type TYPE] [--author
 
 向 PDF 文件写入高亮、下划线或便签笔记。
 
-在 `remote` 模式下，本命令通过 `zot-server` 在服务端写入 PDF 标注；是否允许写入由服务端 `ZOT_ALLOW_WRITE` 控制，不依赖客户端 `ZOT_API_KEY`。
+在 `remote` 模式下，本命令通过 `zot server` 在服务端写入 PDF 标注；是否允许写入由服务端 `ZOT_ALLOW_WRITE` 控制，不依赖客户端 `ZOT_API_KEY`。
 
 ### 用法
 

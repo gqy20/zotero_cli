@@ -42,7 +42,7 @@ zot version --check               # 检查是否有新版可更新
 | `hybrid` (默认) | 本地优先 + Web 回退 | **推荐默认**，兼顾速度与完整性 |
 | `local` | 读本地 SQLite 数据库 | 大量读操作、PDF 标注/提取 |
 | `web` | 纯云端 Zotero Web API | 无本地 Zotero 安装 |
-| `remote` | HTTP 客户端 → zot-server | 通过远程服务器访问 Zotero 数据（无本地 Zotero） |
+| `remote` | HTTP 客户端 → 远端 `zot server` | 通过远程服务器访问 Zotero 数据（无本地 Zotero） |
 
 > 写操作：`web` 和 `hybrid` 支持全部写操作；`local` 支持**笔记创建**（Zotero 未运行时自动走 SQLite 直写 ~50ms）和 PDF 标注写入；`remote` 模式下读操作走服务器，`annotations` / `annotate` 也由服务器端执行；其余普通写操作若同时配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID`（remote + web），则通过 Zotero Web API 直连。
 
@@ -113,7 +113,7 @@ zot open ITEMKEY --page 5                              # Zotero 阅读器中打�
 
 **图表提取要点：** 支持一个或多个 item key；多篇会按 PDF 页数长任务优先并行；`--workers/-w` 控制并发；`--max-per-page/-m` 防止病态页输出过多碎片；结果有磁盘缓存，并会过滤封面、logo、作者头像等低质量 raster 误检。遇到旧版二进制不识别命令时，先重新构建或确认 PATH 中 `zot version`。
 
-**标注要点：** 推荐 `--page N --text "keyword"` (Mode 1.5)；`--clear` 双层删除需 Zotero 关闭才能删 DB 层；remote 模式下标注读写由 `zot-server` 代理，权限取决于服务端 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE`；详细文档见 [annotations 示例](https://github.com/gqy20/zotero_cli/blob/master/docs/user/examples/annotations.md)（[Gitee 镜像](https://gitee.com/gqy20/zotero_cli/blob/master/docs/user/examples/annotations.md)）。
+**标注要点：** 推荐 `--page N --text "keyword"` (Mode 1.5)；`--clear` 双层删除需 Zotero 关闭才能删 DB 层；remote 模式下标注读写由远端 `zot server` 代理，权限取决于服务端 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE`；详细文档见 [annotations 示例](https://github.com/gqy20/zotero_cli/blob/master/docs/user/examples/annotations.md)（[Gitee 镜像](https://gitee.com/gqy20/zotero_cli/blob/master/docs/user/examples/annotations.md)）。
 
 ### 元数据 Schema 与其他只读命令
 

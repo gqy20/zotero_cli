@@ -7,11 +7,13 @@
 ## [Unreleased]
 
 ### 新增
-- remote 模式下 `annotate` 与 `annotations --clear` 现在可直接通过 `zot-server` 在服务端执行，不再要求客户端额外配置 `ZOT_API_KEY`
+- remote 模式下 `annotate` 与 `annotations --clear` 现在可直接通过远端 `zot server` 在服务端执行，不再要求客户端额外配置 `ZOT_API_KEY`
 
 ### 修复
 
 ### 变更
+- **`zot-server` 独立二进制合并为 `zot server` 子命令**：单一 `zot` 二进制即可启动服务端（`zot server [--port PORT]`，支持 Ctrl+C 优雅关闭）。删除 `cmd/server` 入口及 `build-server` / `release-server` 构建目标，release 只产出一个 `zot`
+- 修复前端 embed 路径：vite `outDir` 改为 `../internal/server/web/dist`，对齐 `internal/server/embed.go` 的 `//go:embed all:web/dist`，使 `go build -tags embed` 能正确打包 Web UI（此前因路径不匹配，发布的服务端实际不含前端）
 
 ### 性能
 

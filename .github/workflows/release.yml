@@ -124,7 +124,6 @@ jobs:
         shell: bash
         env:
           BINARY_NAME: zot
-          SERVER_NAME: zot-server
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
@@ -147,29 +146,18 @@ jobs:
           package_dir="package/${artifact_base}"
           mkdir -p "${package_dir}"
 
-          go build -trimpath -ldflags "${GO_VERSION_LDFLAGS}" -o "${package_dir}/${BINARY_NAME}${ext}" ./cmd/zot &
-          pid_cli=$!
-          go build -trimpath -ldflags "${GO_VERSION_LDFLAGS}" -o "${package_dir}/${SERVER_NAME}${ext}" ./cmd/server &
-          pid_server=$!
-          wait "${pid_cli}"
-          wait "${pid_server}"
+          go build -trimpath -ldflags "${GO_VERSION_LDFLAGS}" -o "${package_dir}/${BINARY_NAME}${ext}" ./cmd/zot
 
           if [[ "${GOOS}" == "linux" && "${GOARCH}" == "amd64" ]]; then
             "${package_dir}/${BINARY_NAME}" version
             "${package_dir}/${BINARY_NAME}" --help >/dev/null
-            "${package_dir}/${SERVER_NAME}" --help >/dev/null
           fi
           cp README.md "${package_dir}/README.md" 2>/dev/null || true
           cp LICENSE "${package_dir}/LICENSE" 2>/dev/null || true
 
-          # Windows: UPX 压缩后直接覆盖为 zot.exe / zot-server.exe
+          # Windows: UPX 压缩后覆盖，并额外拷一份独立 .exe 到 dist 供直链下载
           if [[ "${GOOS}" == "windows" ]]; then
-            upx --best --lzma -o "${package_dir}/${BINARY_NAME}${ext}.tmp" "${package_dir}/${BINARY_NAME}${ext}" && mv "${package_dir}/${BINARY_NAME}${ext}.tmp" "${package_dir}/${BINARY_NAME}${ext}" &
-            pid_upx_cli=$!
-            upx --best --lzma -o "${package_dir}/${SERVER_NAME}${ext}.tmp" "${package_dir}/${SERVER_NAME}${ext}" && mv "${package_dir}/${SERVER_NAME}${ext}.tmp" "${package_dir}/${SERVER_NAME}${ext}" &
-            pid_upx_server=$!
-            wait "${pid_upx_cli}"
-            wait "${pid_upx_server}"
+            upx --best --lzma -o "${package_dir}/${BINARY_NAME}${ext}.tmp" "${package_dir}/${BINARY_NAME}${ext}" && mv "${package_dir}/${BINARY_NAME}${ext}.tmp" "${package_dir}/${BINARY_NAME}${ext}"
             cp "${package_dir}/${BINARY_NAME}${ext}" "dist/${artifact_base}.exe"
             echo "压缩大小: $(du -h "dist/${artifact_base}.exe" | cut -f1)"
           fi
@@ -239,12 +227,12 @@ jobs:
             echo
             echo "| 平台 | 文件 |"
             echo "|------|------|"
-            echo "| Windows（推荐） | \`${binary_name}_${VERSION}_windows_amd64.exe\` (~6MB, UPX, CLI only) |"
-            echo "| Windows（完整包） | \`${binary_name}_${VERSION}_windows_amd64.zip\`（含 \`zot\` + \`zot-server\`） |"
-            echo "| macOS (Apple Silicon) | \`${binary_name}_${VERSION}_darwin_arm64.tar.gz\`（含 \`zot\` + \`zot-server\`） |"
-            echo "| macOS (Intel) | \`${binary_name}_${VERSION}_darwin_amd64.tar.gz\`（含 \`zot\` + \`zot-server\`） |"
-            echo "| Linux (x86_64) | \`${binary_name}_${VERSION}_linux_amd64.tar.gz\`（含 \`zot\` + \`zot-server\`） |"
-            echo "| Linux (arm64) | \`${binary_name}_${VERSION}_linux_arm64.tar.gz\`（含 \`zot\` + \`zot-server\`） |"
+            echo "| Windows（推荐） | \`${binary_name}_${VERSION}_windows_amd64.exe\` (~6MB, UPX) |"
+            echo "| Windows（完整包） | \`${binary_name}_${VERSION}_windows_amd64.zip\` |"
+            echo "| macOS (Apple Silicon) | \`${binary_name}_${VERSION}_darwin_arm64.tar.gz\` |"
+            echo "| macOS (Intel) | \`${binary_name}_${VERSION}_darwin_amd64.tar.gz\` |"
+            echo "| Linux (x86_64) | \`${binary_name}_${VERSION}_linux_amd64.tar.gz\` |"
+            echo "| Linux (arm64) | \`${binary_name}_${VERSION}_linux_arm64.tar.gz\` |"
             echo "| 校验和 | \`checksums.txt\` |"
             echo
             echo "### 更新内容"

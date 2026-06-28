@@ -34,7 +34,7 @@
 - **JSON 优先** — 所有命令支持 `--json`，输出结构化数据供 AI 直接解析
 - **Skill 自动发现** — 内置 `.claude/skills/`，Codex/Cursor 等可复用同一套说明文件
 - **安全写操作** — 删除默认禁止、版本号乐观锁，防止 AI 误操作
-- **本地能力优先** — hybrid 模式下本地 SQLite 全文检索、PDF 标注/笔记读写不走网络；remote 模式下 PDF 标注读写由 `zot-server` 代理并受服务端写/删权限保护
+- **本地能力优先** — hybrid 模式下本地 SQLite 全文检索、PDF 标注/笔记读写不走网络；remote 模式下 PDF 标注读写由 `zot server` 代理并受服务端写/删权限保护
 
 ## 快速开始
 
@@ -107,7 +107,7 @@ brew install gqy20/tap/zotcli
 zot version              # 验证安装
 zot init                 # 交互式配置（mode 选 hybrid）
 
-# 远程模式初始化（连接局域网内的 zot-server）
+# 远程模式初始化（连接局域网内一台运行 `zot server` 的机器）
 zot init --mode remote --server-addr http://192.168.1.100:8021
 zot init --mode remote --server-addr http://host:8021 --library-id ID --api-key KEY
 zot config validate       # 校验配置
@@ -122,7 +122,7 @@ zot overview --json        # 一站式库概览
 | `ZOT_LIBRARY_ID` | Zotero 首页 → 右键库 → Advanced → 数字 ID |
 | `ZOT_DATA_DIR` | Zotero → 编辑 → 首选项 → 高级 → 数据目录路径 |
 | `ZOT_MODE` | 推荐 `hybrid`（本地优先 + Web 回退） |
-| `ZOT_SERVER_ADDR` | 远程模式需要，zot-server 地址（如 `http://192.168.1.100:8021`） |
+| `ZOT_SERVER_ADDR` | 远程模式需要，运行 `zot server` 的地址（如 `http://192.168.1.100:8021`） |
 
 > local/hybrid 下 `zot init` 会询问是否安装 PyMuPDF，也可事后 `zot init --pdf` 安装或 `zot init --check-pdf` 诊断。
 >
@@ -133,7 +133,10 @@ zot overview --json        # 一站式库概览
 ```bash
 git clone https://github.com/gqy20/zotero_cli.git && cd zotero_cli
 go build -o zot.exe ./cmd/zot     # Go 1.26+，无 CGO 依赖
-go build -o zot-server.exe ./cmd/server  # 远程模式服务端
+# 远程模式服务端就是同一个二进制的子命令：
+#   zot server                    # 起服务端（默认 :8021）
+# 想要带 Web UI 的版本（需先在 web/ 下 npm run build）：
+#   go build -tags embed -o zot.exe ./cmd/zot
 ```
 
 ## AI Agent 集成（Claude Code / Codex）
@@ -298,7 +301,7 @@ zot 不是独立工具，它直接读写你的 **Zotero 本地数据目录**，�
 | `zot annotations KEY` | SQLite + PyMuPDF 双源读取 | 同时获取 DB 层标注 **和** PDF 文件内嵌入的标注，支持 `--clear` 双层清除 |
 | `zot annotate KEY` | PyMuPDF 直接写入 PDF | 3 种定位模式写入标注，支持 `--clear` 双层删除（DB 删除非阻断） |
 
-在 `remote` 模式下，`annotations` / `annotate` 会通过 `zot-server` 在服务器端读取或修改 PDF；服务端必须以 `local` / `hybrid` / `web` 等非 `remote` 模式运行，并按 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 控制写入和清除。普通 Zotero Web API 写操作（如 `create-item`、标签、集合等）在 remote 客户端仍需额外配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID`。
+在 `remote` 模式下，`annotations` / `annotate` 会通过远端 `zot server` 在服务器侧读取或修改 PDF；服务端必须以 `local` / `hybrid` / `web` 等非 `remote` 模式运行，并按 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 控制写入和清除。普通 Zotero Web API 写操作（如 `create-item`、标签、集合等）在 remote 客户端仍需额外配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID`。
 
 数据来源：
 
@@ -360,15 +363,15 @@ zot changes items --since 0 --json  # 版本变更记录
 | `web` | Zotero Cloud API | API key | 远程检索、云端管理 |
 | `local` | 本地 SQLite + storage/ | ZOT_DATA_DIR | 离线操作、PDF 处理、全文搜索 |
 | `hybrid`（推荐） | 本地优先，Web 回退 | 两者都要 | 日常使用，兼顾速度与完整性 |
-| `remote` | HTTP → zot-server (port 8021) | ZOT_SERVER_ADDR | 同服务器端模式，局域网访问；PDF 标注读写走服务器 |
+| `remote` | HTTP → 远端 `zot server` (port 8021) | ZOT_SERVER_ADDR | 同服务器端模式，局域网访问；PDF 标注读写走服务器 |
 
 通过 `ZOT_MODE` 环境变量或 `zot init` 设置。hybrid 模式下：
 - **读操作**：本地优先（全文检索、PDF 标注读取）不误回退 Web
 - **写操作**（笔记）：Zotero 未运行时走 SQLite 直写（~50ms），运行时自动 fallback Web API
 
 remote 模式下：
-- **读操作**：经由 `zot-server` 代理
-- **PDF 标注读写**：经由 `zot-server` 在服务端执行
+- **读操作**：经由远端 `zot server` 代理
+- **PDF 标注读写**：经由 `zot server` 在服务端执行
 - **普通 Web API 写操作**：仍需 remote+web 配置（`ZOT_API_KEY` + `ZOT_LIBRARY_ID`）
 
 ## 命令速查

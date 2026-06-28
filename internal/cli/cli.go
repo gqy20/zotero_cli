@@ -81,6 +81,8 @@ func (c *CLI) dispatch(name string, args []string) int {
 		return c.runIndex(args)
 	case "setup":
 		return c.runSetup(args)
+	case "server":
+		return c.runServer(args)
 	case "find":
 		return c.runFind(args)
 	case "show":
@@ -202,7 +204,7 @@ func (c *CLI) printUsage() {
   web     Cloud-only via Zotero Web API; no local Zotero needed
   local   Read from local Zotero SQLite (requires ZOT_DATA_DIR)
   hybrid  Local-first with Web API fallback for unsupported features (default)
-  remote  Read via zot-server over HTTP (requires ZOT_SERVER_ADDR)
+  remote  Read from a running 'zot server' over HTTP (requires ZOT_SERVER_ADDR)
 
 Web-mode limits: PDF-text commands need a local PDF and are unavailable in web
 mode — extract-text, extract-figures, 'find --fulltext/--snippet', and
@@ -213,7 +215,7 @@ Environment (run 'zot config show' for full list):
   ZOT_API_KEY      Zotero Web API key
   ZOT_LIBRARY_ID   Numeric user or group library ID
   ZOT_LIBRARY_TYPE Library type: user | group            (default: user)
-  ZOT_SERVER_ADDR  zot-server URL for remote mode
+  ZOT_SERVER_ADDR  URL of a running 'zot server' (remote mode)
   ZOT_DATA_DIR     Local Zotero data dir; required for local/hybrid mode
   ZOT_ALLOW_WRITE  On by default (1); set to 0 to make the library read-only.
                     Gates create/update-item, add/remove-tag, annotate,

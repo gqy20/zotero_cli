@@ -193,10 +193,10 @@ zot relate KEY_A --from-file batch.json                     # 执行
 ### 架构
 
 ```
-[CLI Client (remote)]  --HTTP/JSON-->  [zot-server]  --> [Zotero Local DB / Web API]
+[CLI Client (remote)]  --HTTP/JSON-->  [zot server]  --> [Zotero Local DB / Web API]
 ```
 
-- 服务器端：`go build -o zot-server ./cmd/server`，默认端口 `8021`（`ZOT_SERVER_PORT` 可覆盖）
+- 服务器端：运行 `zot server`（同一 `zot` 二进制的子命令），默认端口 `8021`（`ZOT_SERVER_PORT` 或 `--port` 可覆盖）
 - 客户端：`zot init --mode remote --server-addr http://HOST:8021`
 - 服务器必须以 web/local/hybrid 模式运行（不支持 remote 嵌套）
 

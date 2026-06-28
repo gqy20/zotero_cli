@@ -82,6 +82,12 @@ Subcommands:
 		Long:     "usage: zot setup pdf-extract [--check]\n\nDeprecated. Use `zot init --pdf` to install PyMuPDF, or `zot init --check-pdf` to check status.",
 		Hidden:   true,
 	},
+	{
+		Name:     "server",
+		Category: CatSetup,
+		Short:    "Start the HTTP API server (remote-mode backend)",
+		Long:     usageServer,
+	},
 
 	{
 		Name:     "find",

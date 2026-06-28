@@ -83,7 +83,7 @@ go run .\cmd\zot config validate
 - `web`：纯 Zotero Web API，无本地依赖
 - `local`：只读本地 SQLite + `storage/`
 - `hybrid`：优先本地，Web 仅在能承接时回退
-- `remote`：通过 HTTP 连接远程 `zot-server`，适合无本地 Zotero 的设备
+- `remote`：通过 HTTP 连接远程 `zot server`，适合无本地 Zotero 的设备
 
 `relate` / `extract-text` 在 hybrid 下仍是本地能力。remote 模式通过服务器代理访问数据；其中 `annotations` / `annotate` 走服务器端 PDF 能力，其他普通写操作仍需额外配置 `ZOT_API_KEY`。
 
@@ -133,7 +133,7 @@ go run .\cmd\zot config validate
 # 写入标注到 PDF
 .\zot.exe annotate ITEMKEY --text "关键概念" --color red --comment "重要"
 
-# remote 模式下以上两条也可用，但实际执行发生在 zot-server 所在机器
+# remote 模式下以上两条也可用，但实际执行发生在 zot server 所在机器
 
 # 在 Zotero 阅读器中打开
 .\zot.exe open ITEMKEY --page 5

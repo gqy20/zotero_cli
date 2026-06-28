@@ -54,6 +54,8 @@ web/node_modules/
 web/dist/
 web/.vite/
 web/tsconfig.tsbuildinfo
+# Frontend build output (vite outDir); embed.go reads internal/server/web/dist
+internal/server/web/dist/
 
 # Frontend env
 web/.env
