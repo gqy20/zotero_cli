@@ -83,6 +83,8 @@ func (c *CLI) dispatch(name string, args []string) int {
 		return c.runSetup(args)
 	case "server":
 		return c.runServer(args)
+	case "sync":
+		return c.runSync(args)
 	case "find":
 		return c.runFind(args)
 	case "show":

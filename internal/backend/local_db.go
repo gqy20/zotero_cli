@@ -100,6 +100,13 @@ func createSQLiteSnapshot(sqlitePath string) (string, string, error) {
 	return snapshotDir, snapshotPath, nil
 }
 
+// CreateSQLiteSnapshot is the exported form of createSQLiteSnapshot, used by
+// the server's sync endpoint to obtain a consistent copy of the SQLite
+// database (main file plus wal/shm/journal sidecars) for streaming to clients.
+func CreateSQLiteSnapshot(sqlitePath string) (snapshotDir, snapshotPath string, err error) {
+	return createSQLiteSnapshot(sqlitePath)
+}
+
 func copySQLiteFileIfExists(sourcePath string, targetPath string) error {
 	source, err := os.Open(sourcePath)
 	if err != nil {

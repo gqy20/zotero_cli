@@ -162,6 +162,7 @@ zot schema template book --json            # 创建模板
 zot init                                    # 交互式初始化（默认 mode=hybrid）
 zot init --mode remote --server-addr http://192.168.1.100:8021  # 远程模式
 zot init --mode remote --server-addr http://host:8021 --library-id ID --api-key KEY  # 远程+写操作
+zot sync --server-addr http://host:8021     # 把整库一次性同步到本地 ~/.zot/sync/，之后 ZOT_MODE=local 离线用
 zot config show                              # 查看当前配置
 zot config validate --json                   # 校验 + 结构化诊断
 zot version --check [--json]                # 检查新版 + 更新指引

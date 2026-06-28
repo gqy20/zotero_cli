@@ -81,6 +81,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/notes", h.getNotes)
 	mux.HandleFunc("GET /api/v1/files/{key}", h.serveFile)
 	mux.HandleFunc("GET /api/v1/figures/{attachmentKey}/{filename}", h.serveFigure)
+
+	// Sync: pull raw zotero.sqlite + storage/ for offline local-mode use.
+	mux.HandleFunc("GET /api/v1/sync/manifest", h.syncManifest)
+	mux.HandleFunc("GET /api/v1/sync/sqlite", h.syncSQLite)
+	mux.HandleFunc("GET /api/v1/sync/storage/{key}/{file}", h.syncStorageFile)
+	mux.HandleFunc("GET /api/v1/sync/fulltext/{path...}", h.syncFulltextFile)
 }
 
 func (h *Handler) healthCheck(w http.ResponseWriter, r *http.Request) {

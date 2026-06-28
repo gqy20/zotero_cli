@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### 新增
+- **`zot sync` 子命令**：把远端 `zot server` 的整库一次性同步到本地（默认 `~/.zot/sync/`），之后用 `ZOT_MODE=local ZOT_DATA_DIR=...` 离线工作，无需远程常开服务。同步内容：`zotero.sqlite`（数据库）+ `storage/`（PDF/附件原文件）+ `.zotero_cli/fulltext/`（FTS5 全文索引 + 解析文本），因此同步后 `find --fulltext` 立即可用、无需本地 `zot index build`。支持增量同步（按 size+mtime 跳过未变文件）、并发下载、原子写入（`*.tmp` + rename）、3s 进度输出。server 端新增 `/api/v1/sync/manifest`、`/sync/sqlite`（tar 流）、`/sync/storage/{key}/{file}`、`/sync/fulltext/{path...}` 四个端点，复用 `ZOT_SERVER_AUTH_KEY` 鉴权。`venv`/`snapshot`/`figures_cache` 不同步（平台相关或运行时自动生成）
 - remote 模式下 `annotate` 与 `annotations --clear` 现在可直接通过远端 `zot server` 在服务端执行，不再要求客户端额外配置 `ZOT_API_KEY`
 
 ### 修复

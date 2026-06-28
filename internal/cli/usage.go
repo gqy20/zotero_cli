@@ -88,6 +88,12 @@ Subcommands:
 		Short:    "Start the HTTP API server (remote-mode backend)",
 		Long:     usageServer,
 	},
+	{
+		Name:     "sync",
+		Category: CatSetup,
+		Short:    "Pull the remote library (sqlite + storage) for offline local use",
+		Long:     usageSync,
+	},
 
 	{
 		Name:     "find",

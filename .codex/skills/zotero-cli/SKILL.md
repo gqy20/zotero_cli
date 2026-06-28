@@ -246,6 +246,7 @@ CLI 配置存储在 `~/.zot/.env`。
 .\zot.exe init                    # 一键初始化（推荐，含模式选择和可选 PyMuPDF 安装）
 .\zot.exe init --mode hybrid --api-key ...  # 非交互模式
 .\zot.exe init --mode remote --server-addr http://192.168.1.100:8021
+.\zot.exe sync --server-addr http://host:8021   # 整库一次性同步到本地 ~/.zot/sync/，之后 ZOT_MODE=local 离线用
 .\zot.exe config show       # 查看当前配置
 .\zot.exe config validate   # 校验配置有效性
 ```

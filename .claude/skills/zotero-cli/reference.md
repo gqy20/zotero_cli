@@ -213,3 +213,23 @@ zot init --mode remote --server-addr http://192.168.1.100:8021
 # remote + web（全功能）
 zot init --mode remote --server-addr http://192.168.1.100:8021 --library-type user --library-id 123 --api-key KEY
 ```
+
+### 一次性同步到本地（`zot sync`）
+
+不想保持远程服务常开时，把整库一次性拉到本地、之后断网用 `local` 模式：
+
+```shell
+# 在有 Zotero 数据的机器上起服务端
+HOST$ zot server                       # 默认 :8021
+
+# 客户端同步到 ~/.zot/sync/（zotero.sqlite + storage/，增量、并发）
+CLIENT$ zot sync --server-addr http://HOST:8021
+# 之后离线使用
+CLIENT$ ZOT_MODE=local ZOT_DATA_DIR=~/.zot/sync zot find ...
+CLIENT$ zot index build --data-dir ~/.zot/sync   # 可选，建全文索引
+```
+
+- 拉取原始 `zotero.sqlite`（数据库）+ `storage/`（PDF/附件）+ `.zotero_cli/fulltext/`（FTS5 全文索引 + 解析文本），落地的库与 Zotero 原生数据隔离；同步后 `local` 模式零改动可用、`find --fulltext` 立即可用（无需本地 `zot index build`）
+- **增量**：按文件 size+mtime 跳过未变文件（远程 mtime 写回本地）；`--force` 全量重下
+- **并发**：`--concurrency N`（默认 4），`--no-storage` 只同步 sqlite
+- server 端复用 `ZOT_SERVER_AUTH_KEY` 鉴权；端点 `/api/v1/sync/manifest|sqlite|storage/{key}/{file}`

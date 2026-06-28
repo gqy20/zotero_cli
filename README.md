@@ -372,6 +372,21 @@ zot changes items --since 0 --json  # 版本变更记录
 remote 模式下：
 - **读操作**：经由远端 `zot server` 代理
 - **PDF 标注读写**：经由 `zot server` 在服务端执行
+
+不想让远程服务一直开着？用 `zot sync` 把整库一次性同步到本地，之后断网用 `local` 模式工作：
+
+```bash
+# 服务端：在有 Zotero 数据的机器上起服务
+zot server                              # 默认 :8021
+
+# 客户端：同步到 ~/.zot/sync/（sqlite + 所有附件，增量、并发）
+zot sync --server-addr http://192.168.1.50:8021
+# 之后离线使用
+ZOT_MODE=local ZOT_DATA_DIR=~/.zot/sync zot find ...
+zot index build --data-dir ~/.zot/sync  # 可选，建全文索引
+```
+
+`zot sync` 拉取原始 `zotero.sqlite`（数据库）+ `storage/`（PDF/附件）+ `.zotero_cli/fulltext/`（FTS5 全文索引），落到与 Zotero 原生数据隔离的专门目录，同步后 `local` 模式零改动直接可用、`find --fulltext` 立即可用（无需本地 `zot index build`）。再次运行只下载变化的文件。
 - **普通 Web API 写操作**：仍需 remote+web 配置（`ZOT_API_KEY` + `ZOT_LIBRARY_ID`）
 
 ## 命令速查
