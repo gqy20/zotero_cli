@@ -77,7 +77,7 @@ zot relate ITEMKEY --json                          # 关联条目
 
 **输出控制：** `--include-fields` / `--full` / `--sort` + `--direction` / `--start` + `--limit`
 
-**FTS5 全文检索：** local/hybrid 下有索引时**自动启用**，搜索范围扩展至 PDF 全文内容。remote 模式下通过服务器获得全文检索能力（取决于服务器端模式）。纯元数据搜索可临时设 `ZOT_MODE=web`。`--snippet` 默认限制 **50** 条。
+**FTS5 全文检索：** local/hybrid 下有索引时**自动启用**，搜索范围扩展至 PDF 全文内容。remote 模式下通过服务器获得全文检索能力（取决于服务器端模式）。纯元数据搜索可临时设 `ZOT_MODE=web`。`--snippet` 是布尔开关（启用 FTS5 片段预览），未指定 `--limit` 时回退 50 条。
 
 ### 导出引用数据
 
@@ -132,7 +132,7 @@ zot schema template book --json            # 创建模板
 | `searches` | 已保存搜索 |
 | `groups` | 可访问群组 |
 | `trash` / `publications` / `deleted` | 回收站 / 我的发表 / 已删除 key |
-| `versions <type> --since N` | 版本变更（type: collections\|searches\|items\|items-top） |
+| `changes <type> --since N` | 版本变更（type: collections\|searches\|items\|items-top） |
 | `key-info` | API Key 权限信息 |
 | `index build [--force]` | FTS5 全文索引构建 |
 
@@ -175,7 +175,7 @@ zot version --check [--json]                # 检查新版 + 更新指引
 
 - `overview` 并行调用 4 个 API（~6s），优于逐个请求
 - **快照缓存**：hybrid 下 Zotero 运行时自动走持久化快照（~0.3s/次）；关闭时直连 SQLite（~0ms）
-- `extract-text` 结果有缓存；`--snippet` 默认 limit 50；高频脚本遇 `429` 自动退避
+- `extract-text` 结果有缓存；`--snippet` 是布尔开关（未指定 `--limit` 时回退 50）；高频脚本遇 `429` 自动退避
 - `extract-figures` 多篇按页数排序并行，命中磁盘缓存会直接复用结果；批量任务通常从 `--workers 8` 起测，机器负载高再下调
 
 ---

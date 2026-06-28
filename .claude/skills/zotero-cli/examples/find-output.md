@@ -84,7 +84,7 @@ zot find --tag 基因编辑 --date-after 2024-01 --limit 1 --json
 zot find "hybrid speciation" --snippet --limit 1 --json
 ```
 
-> `--snippet` / `--fulltext` 仅 local/hybrid 模式 + 已有 FTS5 索引时生效。`--snippet` 默认 limit 50。
+> `--snippet` / `--fulltext` 仅 local/hybrid 模式 + 已有 FTS5 索引时生效。`--snippet` 是布尔开关；未指定 `--limit` 时回退 50 条。
 
 ```json
 {

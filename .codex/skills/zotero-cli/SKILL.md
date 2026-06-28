@@ -169,7 +169,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 **全文检索：**
 - `--fulltext` — FTS5 全文搜索；local/hybrid 下有 query 且非 `--all` 时可自动启用
 - `--fulltext-any` — 任一词匹配
-- `--snippet` — 匹配片段预览（默认限制 **50** 条，需更多时加 `--limit N`）
+- `--snippet` — 布尔开关，启用 FTS5 匹配片段预览（未指定 `--limit` 时回退 50 条）
 
 文本模式辅助选项：
 
@@ -271,7 +271,7 @@ CLI 配置存储在 `~/.zot/.env`。
 
 ## 性能注意
 
-- `--snippet` 默认 limit 50，需要更多结果显式加 `--limit`
+- `--snippet` 是布尔开关（启用片段预览）；未指定 `--limit` 时回退 50 条
 - local/hybrid 下有 query 且 FTS 有数据时自动启用全文检索；`--all` / 纯过滤列表不会自动走全文索引
 - `extract-text` 结果有缓存，重复提取同一 PDF 直接命中
 - 高频脚本遇 `429` 会自动退避+抖动，但仍应主动降速

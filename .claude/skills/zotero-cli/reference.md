@@ -77,13 +77,13 @@
 | **每页图表上限** | 25 | `extract-figures --max-per-page/-m` 可覆盖 |
 | **搜索推断** | 自动 | 有过滤标志时自动设 `All=true`，无需手动 `--all` |
 | **FTS 全文检索** | 自动启用 | local/hybrid 下 `{dataDir}/.zotero_cli/fulltext/index.sqlite` > 4KB 时 |
-| **Snippet 条数** | 50 | `--snippet` 默认上限，更多结果需显式 `--limit` |
-| **写权限** | 关闭 | 需 `ZOT_ALLOW_WRITE=1`，否则拒绝写入 |
+| **Snippet limit 回退** | 50 | `--snippet` 是布尔开关（非条数参数）；启用时若未指定 `--limit` 则回退为 50 |
+| **写权限** | 开启 | 默认 `ZOT_ALLOW_WRITE=1`；设为 `0` 使库只读 |
 | **删除权限** | 关闭 | 需 `ZOT_ALLOW_DELETE=1`，且交互模式需确认 |
 | **删除确认** | `[y/N]` 提示 | `--yes`/`-y` 跳过；`--json` 模式自动跳过 |
 | **快照缓存** | 自动 | hybrid 下 Zotero 运行时使用持久化快照（~0.3s/次） |
 | **版本检查** | 手动 | `zot version --check` 查询 GitHub Releases API，有新版时输出更新命令 |
-| **重试** | 5 次 | 遇 429 等可重试错误自动退避+抖动 |
+| **重试** | 3 次 | 遇 429 等可重试错误自动退避+抖动；基础延迟 250ms（`ZOT_RETRY_BASE_DELAY_MS`） |
 
 ## 写操作 JSON 输入格式
 
@@ -166,8 +166,8 @@ zot relate KEY_A --from-file batch.json                     # 执行
 | `ZOT_TIMEOUT_SECONDS` | API 超时秒数 | `20` |
 | `ZOT_ALLOW_WRITE` | 允许写操作 | `1` |
 | `ZOT_ALLOW_DELETE` | 允许删除操作 | `0` |
-| `ZOT_RETRY_MAX_ATTEMPTS` | 最大重试次数 | `5` |
-| `ZOT_RETRY_BASE_DELAY_MS` | 重试基础延迟 ms | `1000` |
+| `ZOT_RETRY_MAX_ATTEMPTS` | 最大重试次数 | `3` |
+| `ZOT_RETRY_BASE_DELAY_MS` | 重试基础延迟 ms | `250` |
 | `ZOT_JSON_ERRORS` | 错误以 JSON 输出到 stdout | `0` |
 
 ## FTS5 全文检索详解
@@ -175,7 +175,7 @@ zot relate KEY_A --from-file batch.json                     # 执行
 - **自动启用条件**：local/hybrid 模式下 `{dataDir}/.zotero_cli/fulltext/index.sqlite` 文件大小 > 4096 bytes (4KB)
 - **搜索范围变化**：启用后 `find` 命令从纯元数据匹配切换到 **PDF 全文内容** 匹配，结果可能包含正文中提及关键词但主题不直接相关的条目
 - **禁用方法**：临时设 `ZOT_MODE=web`，或删除索引目录 `{dataDir}/.zotero_cli/fulltext/` 后重建
-- **Snippet**：`--snippet` 显示匹配片段预览，默认限制 **50** 条，更多结果需显式加 `--limit`
+- **Snippet**：`--snippet` 是布尔开关，启用 FTS5 匹配片段预览输出；若同时未指定 `--limit`，则回退上限为 **50** 条
 - **匹配模式**：默认所有词匹配（AND）；`--fulltext-any` 切换为任一词匹配（OR）
 
 ## Hybrid 笔记创建特殊行为
