@@ -231,5 +231,6 @@ CLIENT$ zot index build --data-dir ~/.zot/sync   # 可选，建全文索引
 
 - 拉取原始 `zotero.sqlite`（数据库）+ `storage/`（PDF/附件）+ `.zotero_cli/fulltext/`（FTS5 全文索引 + 解析文本），落地的库与 Zotero 原生数据隔离；同步后 `local` 模式零改动可用、`find --fulltext` 立即可用（无需本地 `zot index build`）
 - **增量**：按文件 size+mtime 跳过未变文件（远程 mtime 写回本地）；`--force` 全量重下
-- **并发**：`--concurrency N`（默认 4），`--no-storage` 只同步 sqlite
+- **并发**：`--concurrency N`（默认 4）；`--no-storage` 跳过 storage（PDF/附件），仍同步 sqlite + fulltext 索引
+- **范围限制**：仅同步 `storage/` 下的 imported 附件；`linked_file`（外部绝对路径）附件不同步。首错即停止（fail-fast），中断残留的 `.tmp`/staging 目录在下次 sync 自动清理
 - server 端复用 `ZOT_SERVER_AUTH_KEY` 鉴权；端点 `/api/v1/sync/manifest|sqlite|storage/{key}/{file}`

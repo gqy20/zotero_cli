@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -34,7 +35,7 @@ Flags:
   --data-dir DIR      Local destination (default: ~/.zot/sync/)
   --force             Re-download everything, ignore incremental state
   --concurrency N     Parallel attachment downloads (default 4)
-  --no-storage        Only sync zotero.sqlite, skip attachments
+  --no-storage        Skip storage (PDF/attachments); sqlite + fulltext index still sync
 
 Examples:
   zot sync                                        # uses ZOT_SERVER_ADDR, writes ~/.zot/sync/
@@ -131,6 +132,7 @@ func (c *CLI) runSync(args []string) int {
 		fmt.Fprintf(c.stderr, "create data-dir: %v\n", err)
 		return ExitError
 	}
+	cleanupStaleSync(dataDir)
 
 	client := &syncClient{baseURL: strings.TrimRight(serverAddr, "/"), authKey: authKey, httpClient: &http.Client{}}
 	ctx := context.Background()
@@ -177,6 +179,7 @@ func (c *CLI) runSync(args []string) int {
 	fmt.Fprintf(c.stdout, "\nUse it:\n")
 	fmt.Fprintf(c.stdout, "  ZOT_MODE=local ZOT_DATA_DIR=%s zot find ...\n", dataDir)
 	fmt.Fprintf(c.stdout, "  (full-text index already synced; run 'zot index build --data-dir %s' only if you re-extract PDFs)\n", dataDir)
+	fmt.Fprintf(c.stdout, "  note: only storage/ attachments are synced; linked_file attachments (external paths) are not.\n")
 	return ExitOK
 }
 
@@ -267,8 +270,36 @@ func (c *syncClient) getStream(ctx context.Context, path string) (io.ReadCloser,
 	return resp.Body, nil
 }
 
+// cleanupStaleSync removes leftovers from a previously interrupted sync:
+// .sqlite-staging-* dirs (from syncSQLite) and stray *.tmp files under
+// storage/ and .zotero_cli/fulltext/ (from interrupted downloads).
+func cleanupStaleSync(dataDir string) {
+	if entries, err := os.ReadDir(dataDir); err == nil {
+		for _, e := range entries {
+			if e.IsDir() && strings.HasPrefix(e.Name(), ".sqlite-staging-") {
+				_ = os.RemoveAll(filepath.Join(dataDir, e.Name()))
+			}
+		}
+	}
+	for _, sub := range []string{"storage", filepath.Join(".zotero_cli", "fulltext")} {
+		root := filepath.Join(dataDir, sub)
+		_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d == nil {
+				return nil
+			}
+			if !d.IsDir() && strings.HasSuffix(d.Name(), ".tmp") {
+				_ = os.Remove(path)
+			}
+			return nil
+		})
+	}
+}
+
 // syncSQLite pulls the sqlite tar and extracts zotero.sqlite + sidecars into
 // dataDir. Incremental: skipped when local main file matches size+mtime.
+// All files stage into a temp dir first and are swapped in together (sidecars
+// before the main file) only after the whole tar landed — so an interrupted
+// sync never leaves a mismatched main db + wal pair.
 func syncSQLite(ctx context.Context, client *syncClient, meta syncFileMeta, dataDir string, force bool) (changed bool, err error) {
 	if !force {
 		if fi, e := os.Stat(filepath.Join(dataDir, meta.Name)); e == nil &&
@@ -283,6 +314,14 @@ func syncSQLite(ctx context.Context, client *syncClient, meta syncFileMeta, data
 	}
 	defer body.Close()
 
+	// Stage inside dataDir so the final rename is on the same filesystem (atomic).
+	staging, err := os.MkdirTemp(dataDir, ".sqlite-staging-*")
+	if err != nil {
+		return false, err
+	}
+	defer os.RemoveAll(staging)
+
+	var names []string
 	tr := tar.NewReader(body)
 	mtime := time.Unix(meta.Mtime, 0)
 	for {
@@ -297,23 +336,37 @@ func syncSQLite(ctx context.Context, client *syncClient, meta syncFileMeta, data
 		if !strings.HasPrefix(name, "zotero.sqlite") {
 			continue // only trust sqlite sidecars from the tar
 		}
-		dest := filepath.Join(dataDir, name)
-		tmp := dest + ".tmp"
-		f, err := os.Create(tmp)
+		dest := filepath.Join(staging, name)
+		f, err := os.Create(dest)
 		if err != nil {
 			return false, err
 		}
 		if _, err := io.CopyN(f, tr, hdr.Size); err != nil {
 			f.Close()
-			os.Remove(tmp)
 			return false, err
 		}
 		f.Close()
-		_ = os.Chtimes(tmp, mtime, mtime)
-		if err := os.Rename(tmp, dest); err != nil {
-			os.Remove(tmp)
+		if err := os.Chtimes(dest, mtime, mtime); err != nil {
 			return false, err
 		}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return false, fmt.Errorf("sqlite tar contained no zotero.sqlite file")
+	}
+
+	// Swap sidecars first, main db last, so a reader never sees a new main db
+	// without its matching wal/shm.
+	for _, name := range names {
+		if name == meta.Name {
+			continue
+		}
+		if err := os.Rename(filepath.Join(staging, name), filepath.Join(dataDir, name)); err != nil {
+			return false, err
+		}
+	}
+	if err := os.Rename(filepath.Join(staging, meta.Name), filepath.Join(dataDir, meta.Name)); err != nil {
+		return false, err
 	}
 	return true, nil
 }
@@ -370,20 +423,33 @@ func runDownloads(ctx context.Context, targetDir string, files []fileDownload, f
 		defer func() { close(done) }()
 	}
 
+	// Fail-fast: cancel on the first download error so in-flight requests abort
+	// and remaining jobs are skipped (avoids hammering a broken/auth-failing
+	// server with the whole queue).
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var firstErr error
 	for _, j := range jobs {
+		if ctx.Err() != nil {
+			break // a worker failed; stop launching new ones
+		}
 		sem <- struct{}{}
 		wg.Add(1)
 		go func(j fileDownload) {
 			defer wg.Done()
 			defer func() { <-sem }()
+			if ctx.Err() != nil {
+				return
+			}
 			if e := downloadOne(ctx, targetDir, j, fetch); e != nil {
 				mu.Lock()
 				if firstErr == nil {
 					firstErr = e
+					cancel()
 				}
 				mu.Unlock()
 				return

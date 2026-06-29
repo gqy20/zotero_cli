@@ -58,8 +58,20 @@ func (h *Handler) syncManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// mtime is the max over the main file and its wal/shm/journal sidecars, so
+	// the client re-syncs when Zotero appends to the WAL even if the main file
+	// size is unchanged.
+	sqliteMtime := fi.ModTime().Unix()
+	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+		if sfi, err := os.Stat(sqlitePath + suffix); err == nil {
+			if m := sfi.ModTime().Unix(); m > sqliteMtime {
+				sqliteMtime = m
+			}
+		}
+	}
+
 	manifest := syncManifest{
-		SQLite: syncFileEntry{Name: sqliteFileName, Size: fi.Size(), Mtime: fi.ModTime().Unix()},
+		SQLite: syncFileEntry{Name: sqliteFileName, Size: fi.Size(), Mtime: sqliteMtime},
 	}
 
 	storageDir := filepath.Join(h.dataDir, "storage")
