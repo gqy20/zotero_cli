@@ -1,15 +1,11 @@
 package server
 
 import (
-	"archive/tar"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"zotero_cli/internal/backend"
 )
 
 // Sync endpoints let a client pull the raw Zotero data files (zotero.sqlite +
@@ -36,7 +32,7 @@ type syncPathEntry struct {
 }
 
 type syncManifest struct {
-	SQLite   syncFileEntry      `json:"sqlite"`
+	SQLite   []syncPathEntry    `json:"sqlite"`
 	Storage  []syncStorageEntry `json:"storage"`
 	Fulltext []syncPathEntry    `json:"fulltext"`
 }
@@ -51,27 +47,22 @@ func (h *Handler) syncManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sqlitePath := filepath.Join(h.dataDir, sqliteFileName)
-	fi, err := os.Stat(sqlitePath)
-	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("zotero.sqlite not found in data_dir"))
-		return
-	}
-
-	// mtime is the max over the main file and its wal/shm/journal sidecars, so
-	// the client re-syncs when Zotero appends to the WAL even if the main file
-	// size is unchanged.
-	sqliteMtime := fi.ModTime().Unix()
-	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
-		if sfi, err := os.Stat(sqlitePath + suffix); err == nil {
-			if m := sfi.ModTime().Unix(); m > sqliteMtime {
-				sqliteMtime = m
-			}
+	// SQLite main db + wal/shm/journal sidecars, listed individually so the
+	// client syncs incrementally per file: in WAL mode most Zotero writes only
+	// change -wal (small), leaving the ~hundred-MB main db untouched.
+	manifest := syncManifest{}
+	for _, name := range []string{sqliteFileName, sqliteFileName + "-wal", sqliteFileName + "-shm", sqliteFileName + "-journal"} {
+		if fi, err := os.Stat(filepath.Join(h.dataDir, name)); err == nil {
+			manifest.SQLite = append(manifest.SQLite, syncPathEntry{
+				Path:  name,
+				Size:  fi.Size(),
+				Mtime: fi.ModTime().Unix(),
+			})
 		}
 	}
-
-	manifest := syncManifest{
-		SQLite: syncFileEntry{Name: sqliteFileName, Size: fi.Size(), Mtime: sqliteMtime},
+	if len(manifest.SQLite) == 0 || manifest.SQLite[0].Path != sqliteFileName {
+		writeError(w, http.StatusNotFound, fmt.Errorf("zotero.sqlite not found in data_dir"))
+		return
 	}
 
 	storageDir := filepath.Join(h.dataDir, "storage")
@@ -166,62 +157,30 @@ func (h *Handler) syncFulltextFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, abs)
 }
 
-// syncSQLite streams a tar of a consistent SQLite snapshot: zotero.sqlite plus
-// its -wal/-shm/-journal sidecars when present. The snapshot is a read-only
-// copy (see backend.CreateSQLiteSnapshot), safe to produce while Zotero runs.
-func (h *Handler) syncSQLite(w http.ResponseWriter, r *http.Request) {
+// syncSqliteFile serves a single sqlite file (zotero.sqlite or a wal/shm/
+// journal sidecar) for per-file incremental sync. WAL mode means most writes
+// only touch -wal, so the client skips the large main db and re-fetches only
+// the changed sidecar.
+func (h *Handler) syncSqliteFile(w http.ResponseWriter, r *http.Request) {
 	if h.dataDir == "" {
 		writeError(w, http.StatusServiceUnavailable, fmt.Errorf("server has no data_dir; cannot sync"))
 		return
 	}
-	sqlitePath := filepath.Join(h.dataDir, sqliteFileName)
-	if _, err := os.Stat(sqlitePath); err != nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("zotero.sqlite not found"))
+	name := filepath.Base(r.PathValue("name"))
+	if !strings.HasPrefix(name, sqliteFileName) {
+		writeError(w, http.StatusNotFound, fmt.Errorf("invalid path"))
 		return
 	}
-
-	snapshotDir, _, err := backend.CreateSQLiteSnapshot(sqlitePath)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Errorf("snapshot sqlite: %w", err))
+	abs := filepath.Join(h.dataDir, name)
+	if !pathIsWithin(abs, h.dataDir) {
+		writeError(w, http.StatusNotFound, fmt.Errorf("invalid path"))
 		return
 	}
-	defer os.RemoveAll(snapshotDir)
-
-	entries, err := os.ReadDir(snapshotDir)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Errorf("read snapshot: %w", err))
+	if fi, err := os.Stat(abs); err != nil || fi.IsDir() {
+		writeError(w, http.StatusNotFound, fmt.Errorf("file not found"))
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/x-tar")
-	w.Header().Set("Content-Disposition", `attachment; filename="zotero.sqlite.tar"`)
-
-	tw := tar.NewWriter(w)
-	defer tw.Close()
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		hdr := &tar.Header{
-			Name:    e.Name(),
-			Size:    info.Size(),
-			Mode:    int64(info.Mode().Perm()),
-			ModTime: info.ModTime(),
-		}
-		if err := tw.WriteHeader(hdr); err != nil {
-			return
-		}
-		f, err := os.Open(filepath.Join(snapshotDir, e.Name()))
-		if err != nil {
-			return
-		}
-		io.Copy(tw, f) // best-effort; client failure surfaces as short write
-		f.Close()
-	}
+	http.ServeFile(w, r, abs)
 }
 
 // syncStorageFile serves a single storage/{key}/{file}, looked up by path

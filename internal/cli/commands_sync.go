@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"archive/tar"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -143,7 +142,7 @@ func (c *CLI) runSync(args []string) int {
 		return ExitError
 	}
 
-	sqliteChanged, err := syncSQLite(ctx, client, manifest.SQLite, dataDir, flags.Force)
+	sqliteChanged, err := syncSqlite(ctx, client, manifest.SQLite, dataDir, flags.Force, c.stderr)
 	if err != nil {
 		fmt.Fprintf(c.stderr, "sync sqlite: %v\n", err)
 		return ExitError
@@ -203,7 +202,7 @@ type syncPathMeta struct {
 }
 
 type syncManifest struct {
-	SQLite   syncFileMeta      `json:"sqlite"`
+	SQLite   []syncPathMeta    `json:"sqlite"`
 	Storage  []syncStorageMeta `json:"storage"`
 	Fulltext []syncPathMeta    `json:"fulltext"`
 }
@@ -309,78 +308,80 @@ func cleanupStaleSync(dataDir string) {
 	}
 }
 
-// syncSQLite pulls the sqlite tar and extracts zotero.sqlite + sidecars into
-// dataDir. Incremental: skipped when local main file matches size+mtime.
-// All files stage into a temp dir first and are swapped in together (sidecars
-// before the main file) only after the whole tar landed — so an interrupted
-// sync never leaves a mismatched main db + wal pair.
-func syncSQLite(ctx context.Context, client *syncClient, meta syncFileMeta, dataDir string, force bool) (changed bool, err error) {
-	if !force {
-		if fi, e := os.Stat(filepath.Join(dataDir, meta.Name)); e == nil &&
-			fi.Size() == meta.Size && fi.ModTime().Unix() == meta.Mtime {
-			return false, nil
-		}
-	}
+const sqliteFileName = "zotero.sqlite"
 
-	body, err := client.getStream(ctx, "/api/v1/sync/sqlite")
-	if err != nil {
-		return false, err
-	}
-	defer body.Close()
-
-	// Stage inside dataDir so the final rename is on the same filesystem (atomic).
+// syncSqlite fetches the SQLite main db + wal/shm/journal sidecars, per file
+// incrementally. Unchanged files (matching size+mtime in dataDir) are skipped;
+// changed files stage in a temp dir and swap in together (sidecars first, main
+// last) so an interrupted sync never leaves a mismatched main db + wal. Under
+// WAL mode this usually means only the small -wal is re-fetched.
+func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta, dataDir string, force bool, progress io.Writer) (changed bool, err error) {
 	staging, err := os.MkdirTemp(dataDir, ".sqlite-staging-*")
 	if err != nil {
 		return false, err
 	}
 	defer os.RemoveAll(staging)
 
-	var names []string
-	tr := tar.NewReader(body)
-	mtime := time.Unix(meta.Mtime, 0)
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
+	var toSwap []string
+	var downloaded, skipped int
+	for _, e := range entries {
+		local := filepath.Join(dataDir, e.Path)
+		if !force {
+			if fi, perr := os.Stat(local); perr == nil && fi.Size() == e.Size && fi.ModTime().Unix() == e.Mtime {
+				skipped++
+				continue
+			}
 		}
+		body, err := client.getStream(ctx, "/api/v1/sync/sqlite-file/"+url.PathEscape(e.Path))
 		if err != nil {
 			return false, err
 		}
-		name := filepath.Base(hdr.Name)
-		if !strings.HasPrefix(name, "zotero.sqlite") {
-			continue // only trust sqlite sidecars from the tar
-		}
-		dest := filepath.Join(staging, name)
+		dest := filepath.Join(staging, e.Path)
 		f, err := os.Create(dest)
 		if err != nil {
+			body.Close()
 			return false, err
 		}
-		if _, err := io.CopyN(f, tr, hdr.Size); err != nil {
+		if _, err := io.Copy(f, body); err != nil {
+			body.Close()
 			f.Close()
 			return false, err
 		}
+		body.Close()
 		f.Close()
-		if err := os.Chtimes(dest, mtime, mtime); err != nil {
+		if err := os.Chtimes(dest, time.Unix(e.Mtime, 0), time.Unix(e.Mtime, 0)); err != nil {
 			return false, err
 		}
-		names = append(names, name)
-	}
-	if len(names) == 0 {
-		return false, fmt.Errorf("sqlite tar contained no zotero.sqlite file")
+		toSwap = append(toSwap, e.Path)
+		downloaded++
 	}
 
+	if len(toSwap) == 0 {
+		if progress != nil {
+			fmt.Fprintf(progress, "  sqlite: %d files up to date\n", skipped)
+		}
+		return false, nil
+	}
 	// Swap sidecars first, main db last, so a reader never sees a new main db
 	// without its matching wal/shm.
-	for _, name := range names {
-		if name == meta.Name {
+	for _, name := range toSwap {
+		if name == sqliteFileName {
 			continue
 		}
 		if err := os.Rename(filepath.Join(staging, name), filepath.Join(dataDir, name)); err != nil {
 			return false, err
 		}
 	}
-	if err := os.Rename(filepath.Join(staging, meta.Name), filepath.Join(dataDir, meta.Name)); err != nil {
-		return false, err
+	for _, name := range toSwap {
+		if name == sqliteFileName {
+			if err := os.Rename(filepath.Join(staging, sqliteFileName), filepath.Join(dataDir, sqliteFileName)); err != nil {
+				return false, err
+			}
+			break
+		}
+	}
+	if progress != nil {
+		fmt.Fprintf(progress, "  sqlite: %d downloaded, %d up to date\n", downloaded, skipped)
 	}
 	return true, nil
 }

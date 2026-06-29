@@ -7,7 +7,7 @@
 ## [Unreleased]
 
 ### 新增
-- **`zot sync` 子命令**：把远端 `zot server` 的整库一次性同步到本地（默认 `~/.zot/sync/`），之后用 `ZOT_MODE=local ZOT_DATA_DIR=...` 离线工作，无需远程常开服务。同步内容：`zotero.sqlite`（数据库）+ `storage/`（PDF/附件原文件）+ `.zotero_cli/fulltext/`（FTS5 全文索引 + 解析文本），因此同步后 `find --fulltext` 立即可用、无需本地 `zot index build`。支持增量同步（按 size+mtime 跳过未变文件）、并发下载（`--concurrency N` 默认 4）、3s 进度输出。健壮性：SQLite 端用 staging 目录原子 swap（中断不致主库与 wal 不一致），manifest 的 sqlite mtime 取主库+wal/shm/journal 的最大值以捕获 WAL 写入，下载 fail-fast（首错即停），启动时清理上次中断残留的 `.tmp`/staging 目录。server 端新增 `/api/v1/sync/manifest`、`/sync/sqlite`（tar 流）、`/sync/storage/{key}/{file}`、`/sync/fulltext/{path...}` 四个端点，复用 `ZOT_SERVER_AUTH_KEY` 鉴权。`venv`/`snapshot`/`figures_cache` 不同步（平台相关或运行时自动生成）
+- **`zot sync` 子命令**：把远端 `zot server` 的整库一次性同步到本地（默认 `~/.zot/sync/`），之后用 `ZOT_MODE=local ZOT_DATA_DIR=...` 离线工作，无需远程常开服务。同步内容：`zotero.sqlite`（数据库）+ `storage/`（PDF/附件原文件）+ `.zotero_cli/fulltext/`（FTS5 全文索引 + 解析文本），因此同步后 `find --fulltext` 立即可用、无需本地 `zot index build`。支持增量同步（按 size+mtime 跳过未变文件）、并发下载（`--concurrency N` 默认 8，连接池 `MaxIdleConnsPerHost=32` 复用 keep-alive）、3s 进度输出。SQLite 按文件增量：manifest 列出主库 + wal/shm/journal 各自 size+mtime，WAL 模式下 Zotero 写入通常只改 `-wal`，因此二次 sync 只传小 wal、跳过数百 MB 主库。健壮性：SQLite 端用 staging 目录原子 swap（中断不致主库与 wal 不一致）、下载 fail-fast（首错即停）、启动时清理上次中断残留的 `.tmp`/staging 目录。server 端新增 `/api/v1/sync/manifest`、`/sync/sqlite-file/{name}`、`/sync/storage/{key}/{file}`、`/sync/fulltext/{path...}` 四个端点，复用 `ZOT_SERVER_AUTH_KEY` 鉴权。`venv`/`snapshot`/`figures_cache` 不同步（平台相关或运行时自动生成）
 - remote 模式下 `annotate` 与 `annotations --clear` 现在可直接通过远端 `zot server` 在服务端执行，不再要求客户端额外配置 `ZOT_API_KEY`
 
 ### 修复

@@ -1,9 +1,7 @@
 package server
 
 import (
-	"archive/tar"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -62,11 +60,16 @@ func TestSyncManifest(t *testing.T) {
 	if !resp.Ok {
 		t.Fatal("expected ok=true")
 	}
-	if resp.Data.SQLite.Name != "zotero.sqlite" || resp.Data.SQLite.Size != int64(len("FAKE SQLITE")) {
-		t.Fatalf("sqlite entry wrong: %+v", resp.Data.SQLite)
+	// SQLite is a per-file list (main db + sidecars); main db must be present.
+	sqlitePaths := map[string]int64{}
+	for _, e := range resp.Data.SQLite {
+		if e.Mtime == 0 {
+			t.Fatalf("sqlite entry missing mtime: %+v", e)
+		}
+		sqlitePaths[e.Path] = e.Size
 	}
-	if resp.Data.SQLite.Mtime == 0 {
-		t.Fatal("sqlite mtime should be set")
+	if sqlitePaths["zotero.sqlite"] != int64(len("FAKE SQLITE")) {
+		t.Fatalf("sqlite main entry wrong: %+v", sqlitePaths)
 	}
 	keys := map[string]bool{}
 	for _, e := range resp.Data.Storage {
@@ -125,42 +128,38 @@ func TestSyncFulltextFileNotFound(t *testing.T) {
 	}
 }
 
-func TestSyncSQLiteTar(t *testing.T) {
+func TestSyncSqliteFile(t *testing.T) {
 	dataDir := t.TempDir()
 	writeSyncFixture(t, dataDir)
-	// Add a -wal sidecar to confirm it's included.
 	mustWrite(t, filepath.Join(dataDir, "zotero.sqlite-wal"), "WAL")
 	mux := newSyncMux(t, dataDir)
 
-	req := httptest.NewRequest("GET", "/api/v1/sync/sqlite", nil)
+	// Main db and sidecar are each fetchable independently (per-file sync).
+	for _, c := range []struct {
+		path string
+		want string
+	}{
+		{"/api/v1/sync/sqlite-file/zotero.sqlite", "FAKE SQLITE"},
+		{"/api/v1/sync/sqlite-file/zotero.sqlite-wal", "WAL"},
+	} {
+		req := httptest.NewRequest("GET", c.path, nil)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d", c.path, rec.Code)
+		}
+		if rec.Body.String() != c.want {
+			t.Fatalf("%s: body %q, want %q", c.path, rec.Body.String(), c.want)
+		}
+	}
+
+	// Non-zotero.sqlite files are rejected.
+	req := httptest.NewRequest("GET", "/api/v1/sync/sqlite-file/secret.txt", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/x-tar" {
-		t.Fatalf("expected tar content-type, got %s", ct)
-	}
-
-	tr := tar.NewReader(rec.Body)
-	names := map[string]string{}
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatalf("tar read: %v", err)
-		}
-		body, _ := io.ReadAll(tr)
-		names[hdr.Name] = string(body)
-	}
-	if names["zotero.sqlite"] != "FAKE SQLITE" {
-		t.Fatalf("sqlite content wrong: %q", names["zotero.sqlite"])
-	}
-	if names["zotero.sqlite-wal"] != "WAL" {
-		t.Fatalf("wal not included: %+v", names)
+	// writeSyncFixture writes storage/KEY1/paper.pdf etc., not secret.txt at root
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for non-sqlite name, got %d", rec.Code)
 	}
 }
 

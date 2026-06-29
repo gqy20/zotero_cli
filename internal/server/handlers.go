@@ -84,7 +84,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Sync: pull raw zotero.sqlite + storage/ for offline local-mode use.
 	mux.HandleFunc("GET /api/v1/sync/manifest", h.syncManifest)
-	mux.HandleFunc("GET /api/v1/sync/sqlite", h.syncSQLite)
+	mux.HandleFunc("GET /api/v1/sync/sqlite-file/{name}", h.syncSqliteFile)
 	mux.HandleFunc("GET /api/v1/sync/storage/{key}/{file}", h.syncStorageFile)
 	mux.HandleFunc("GET /api/v1/sync/fulltext/{path...}", h.syncFulltextFile)
 }
