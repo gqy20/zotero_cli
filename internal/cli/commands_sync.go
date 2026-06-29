@@ -34,7 +34,7 @@ Flags:
   --server-addr URL   Remote 'zot server' URL (default: ZOT_SERVER_ADDR from config)
   --data-dir DIR      Local destination (default: ~/.zot/sync/)
   --force             Re-download everything, ignore incremental state
-  --concurrency N     Parallel attachment downloads (default 4)
+  --concurrency N     Parallel attachment downloads (default 8)
   --no-storage        Skip storage (PDF/attachments); sqlite + fulltext index still sync
 
 Examples:
@@ -56,7 +56,7 @@ type syncFlags struct {
 }
 
 func parseSyncFlags(args []string) (syncFlags, error) {
-	f := syncFlags{Concurrency: 4}
+	f := syncFlags{Concurrency: 8}
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--server-addr":
@@ -134,7 +134,7 @@ func (c *CLI) runSync(args []string) int {
 	}
 	cleanupStaleSync(dataDir)
 
-	client := &syncClient{baseURL: strings.TrimRight(serverAddr, "/"), authKey: authKey, httpClient: &http.Client{}}
+	client := &syncClient{baseURL: strings.TrimRight(serverAddr, "/"), authKey: authKey, httpClient: newSyncHTTPClient()}
 	ctx := context.Background()
 
 	manifest, err := client.getManifest(ctx)
@@ -209,6 +209,20 @@ type syncManifest struct {
 }
 
 // --- sync client ---
+
+// newSyncHTTPClient returns an *http.Client tuned for many parallel file
+// downloads: a generous per-host idle connection pool so keep-alive actually
+// reuses connections across the concurrency fan-out (DefaultTransport caps
+// MaxIdleConnsPerHost at 2, which defeats pooling when concurrency > 2).
+func newSyncHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConns:        128,
+			MaxIdleConnsPerHost: 32,
+			IdleConnTimeout:     90 * time.Second,
+		},
+	}
+}
 
 type syncClient struct {
 	baseURL    string
