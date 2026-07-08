@@ -27,7 +27,7 @@ type CLI struct {
 }
 
 var (
-	version   = "0.0.10"
+	version   = "0.0.11"
 	commit    = "unknown"
 	buildDate = "unknown"
 )

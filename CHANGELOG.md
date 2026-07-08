@@ -7,14 +7,10 @@
 ## [Unreleased]
 
 ### 新增
-- **`zot sync` 子命令**：把远端 `zot server` 的整库一次性同步到本地（默认 `~/.zot/sync/`），之后用 `ZOT_MODE=local ZOT_DATA_DIR=...` 离线工作，无需远程常开服务。同步内容：`zotero.sqlite`（数据库）+ `storage/`（PDF/附件原文件）+ `.zotero_cli/fulltext/`（FTS5 全文索引 + 解析文本），因此同步后 `find --fulltext` 立即可用、无需本地 `zot index build`。支持增量同步（按 size+mtime 跳过未变文件）、并发下载（`--concurrency N` 默认 8，连接池 `MaxIdleConnsPerHost=32` 复用 keep-alive）、3s 进度输出。SQLite 按文件增量：manifest 列出主库 + wal/shm/journal 各自 size+mtime，WAL 模式下 Zotero 写入通常只改 `-wal`，因此二次 sync 只传小 wal、跳过数百 MB 主库。健壮性：SQLite 端用 staging 目录原子 swap（中断不致主库与 wal 不一致）、下载 fail-fast（首错即停）、启动时清理上次中断残留的 `.tmp`/staging 目录。server 端新增 `/api/v1/sync/manifest`、`/sync/sqlite-file/{name}`、`/sync/storage/{key}/{file}`、`/sync/fulltext/{path...}` 四个端点，复用 `ZOT_SERVER_AUTH_KEY` 鉴权。`venv`/`snapshot`/`figures_cache` 不同步（平台相关或运行时自动生成）
-- remote 模式下 `annotate` 与 `annotations --clear` 现在可直接通过远端 `zot server` 在服务端执行，不再要求客户端额外配置 `ZOT_API_KEY`
 
 ### 修复
 
 ### 变更
-- **`zot-server` 独立二进制合并为 `zot server` 子命令**：单一 `zot` 二进制即可启动服务端（`zot server [--port PORT]`，支持 Ctrl+C 优雅关闭）。删除 `cmd/server` 入口及 `build-server` / `release-server` 构建目标，release 只产出一个 `zot`
-- 修复前端 embed 路径：vite `outDir` 改为 `../internal/server/web/dist`，对齐 `internal/server/embed.go` 的 `//go:embed all:web/dist`，使 `go build -tags embed` 能正确打包 Web UI（此前因路径不匹配，发布的服务端实际不含前端）
 
 ### 性能
 
@@ -23,7 +19,44 @@
 ### 工具链
 
 ### 文档
-- 同步 README、commands、quickstart、backend 架构文档，以及 `.claude` / `.codex` skills，澄清 remote 下 PDF 标注读写与普通 Web API 写操作的边界
+
+## [0.0.11] - 2026-07-08
+
+### 新增
+- **`zot sync` 子命令**：把远端 `zot server` 的整库一次性同步到本地（默认 `~/.zot/sync/`），之后可用 `ZOT_MODE=local ZOT_DATA_DIR=...` 离线工作，无需远程服务常开。同步内容包含 `zotero.sqlite`、`storage/` 附件原文件和 `.zotero_cli/fulltext/` 全文索引缓存；server 端新增 `/api/v1/sync/manifest`、`/sync/sqlite-file/{name}`、`/sync/storage/{key}/{file}`、`/sync/fulltext/{path...}` 端点，并复用 `ZOT_SERVER_AUTH_KEY` 鉴权。
+- **远程 PDF 能力补全**：remote 模式支持全文提取、标注读取、`annotate` 写入和 `annotations --clear` 清除；服务端负责执行 PDF 文件操作，客户端不再需要额外配置 `ZOT_API_KEY`。
+- **`extract-text` 轻量输出控制**：新增 `--pages`、`--grep`、`--max-chars`，可只提取指定页码、按关键词过滤段落并限制输出长度，避免方法段/结果段分析时一次性吐出整篇 PDF。
+- **本地补充材料发现 (`supplements`)**：新增 `zot supplements`，扫描 Zotero 本地附件中的 Supplementary tables、Source data、Reporting summary、`MOESM` / `mmc` / 表格数据文件等候选，并返回 `kind`、`confidence`、`evidence`、`local_path`、`resolution_status` 等字段。
+- **表格附件预览 (`inspect-attachment`)**：新增 `zot inspect-attachment`，可预览本地 `.xlsx` / `.xlsm` 附件的 sheet、行列规模、前几行内容和表头候选，便于在多个补充表格中快速定位应分析的 sheet。
+- **在线补充材料发现**：`zot supplements KEY --online --json` 支持 Zenodo、Figshare 和 Nature/Springer provider。Zenodo/Figshare 走公开 API；Nature/Springer 解析页面里的 `static-content.springer.com` 链接，并对 `#MOESM` 锚点做轻量 HEAD 探测以升级为 direct download metadata。在线发现只返回 metadata/link，不自动下载文件内容。
+- **Lean JSON 默认输出**：`find`、`show`、`abstract` 的 JSON 默认返回轻量字段，避免默认 payload 带出大型附件、笔记、标注和期刊等级对象；需要完整数据时继续使用 `--full`。
+- **remote/hybrid 读写能力增强**：补齐 remote 下打开文件、可见性提示、读能力边界和 HybridReader figure 支持；服务端增加鉴权与更多内容端点。
+
+### 修复
+- **PDF 提取与 JSON 诊断**：修复 `extract-text` usage 与解析行为不一致、错误 JSON 中 `command` 为空、lean JSON 缺少附件省略提示等问题；错误响应保留结构化 `type` / `code`，便于 agent 判断失败原因。
+- **全文索引陈旧问题**：修复 stale fulltext index 条目，增强索引 freshness 检查，减少 PDF 文件变化后命中旧文本的情况。
+- **最近入库排序**：修复 local find 中最近条目的排序语义，补充 `dateAdded` 相关测试。
+- **帮助与命令导航**：修正顶层 `-h` / `--help` 信息、命令表与实际 dispatch 的偏差，完善 agent 使用路径。
+- **remote annotation 边界**：收紧 remote 标注读写能力边界，避免客户端能力判断与服务端实际支持不一致。
+- **跨平台构建**：Makefile 使用 `GOEXE`，修复 Windows 等平台下构建产物扩展名不一致的问题。
+
+### 变更
+- **`zot-server` 合并为 `zot server`**：单一 `zot` 二进制即可启动服务端（`zot server [--port PORT]`，支持 Ctrl+C 优雅关闭）。删除独立 `cmd/server` 入口和 server 专用 release 构建目标，发布包只产出一个 `zot`。
+- **所有命令帮助重组**：usage 常量与对应 `runXxx` 实现 co-locate，减少 help 文案与实际解析器漂移。
+- **前端 embed 路径对齐**：vite `outDir` 改为 `../internal/server/web/dist`，匹配 `internal/server/embed.go` 的 embed 路径，使 `go build -tags embed` 能正确打包 Web UI。
+
+### 性能
+- **`zot sync` 增量和并发优化**：同步按 size+mtime 跳过未变文件，默认并发 8，HTTP 连接池 `MaxIdleConnsPerHost=32` 复用 keep-alive；SQLite manifest 拆分主库与 `-wal` / `-shm` / `-journal`，WAL 模式下二次同步通常只传小 wal 文件。
+- **`zot sync` 稳定性优化**：SQLite 文件使用 staging 目录原子 swap，下载 fail-fast，启动时清理上次中断残留 `.tmp` / staging 目录，降低中断后主库与 wal 不一致的风险。
+- **全文索引 freshness 加速**：优化 fulltext index 新鲜度检查，减少重复扫描和不必要的缓存刷新。
+- **Release 构建并行化**：并行构建发布产物，缩短 release workflow 时间。
+
+### 工具链
+- **提交信息规范检查**：新增 `scripts/commit-msg`，并在 `scripts/pre-commit` 中校验本地是否已安装 commit-msg hook，限制 Conventional Commits 格式。
+
+### 文档
+- 同步 README、commands、quickstart、backend 架构文档，以及 `.claude` / `.codex` skills，覆盖 lean JSON、remote 标注读写、`zot sync`、`extract-text` 输出控制、本地/在线补充材料发现和表格附件预览等新能力。
+- 新增统一平台规划文档，并更新 agent 面向的 find/show 输出示例，避免仍按旧的完整 JSON 结构解析。
 
 ## [0.0.10] - 2026-05-07
 
