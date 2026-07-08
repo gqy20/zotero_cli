@@ -457,6 +457,71 @@ func TestRunExtractTextLocalJSON(t *testing.T) {
 	}
 }
 
+func TestRunExtractTextLocalJSONOutputControls(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	previousLocalReader := testCLI.newLocalReader
+	t.Cleanup(func() {
+		testCLI.newLocalReader = previousLocalReader
+	})
+	testCLI.newLocalReader = func(config.Config) (backend.Reader, error) {
+		return stubLocalTextReader{
+			item: domain.Item{
+				Key: "ITEM123",
+				Attachments: []domain.Attachment{
+					{Key: "ATT123", Title: "Paper PDF", ContentType: "application/pdf", ResolvedPath: "D:/paper.pdf", Resolved: true},
+					{Key: "ATT456", Title: "Supplementary PDF", ContentType: "application/pdf", ResolvedPath: "D:/supplement.pdf", Resolved: true},
+				},
+			},
+			text: "abstract\nmethods: short primary text\nresults",
+			attachments: []backend.AttachmentFullText{
+				{
+					Attachment: domain.Attachment{Key: "ATT123", Title: "Paper PDF", ContentType: "application/pdf", ResolvedPath: "D:/paper.pdf", Resolved: true},
+					Text:       "abstract\nmethods: short primary text\nresults",
+				},
+				{
+					Attachment: domain.Attachment{Key: "ATT456", Title: "Supplementary PDF", ContentType: "application/pdf", ResolvedPath: "D:/supplement.pdf", Resolved: true},
+					Text:       "intro\nMethods: supplementary dataset and processing details\nresults",
+				},
+			},
+		}, nil
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"extract-text", "ITEM123", "--json", "--attachment", "ATT456", "--grep", "methods", "--max-chars", "20"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	meta := got["meta"].(map[string]any)
+	if meta["truncated"] != true || meta["returned_chars"] != float64(20) {
+		t.Fatalf("unexpected meta: %#v", meta)
+	}
+	filters := meta["filters"].(map[string]any)
+	if filters["attachment_key"] != "ATT456" || filters["grep"] != "methods" || filters["max_chars"] != float64(20) {
+		t.Fatalf("unexpected filters: %#v", filters)
+	}
+	data := got["data"].(map[string]any)
+	if data["text"] != "Methods: supplementa" {
+		t.Fatalf("unexpected truncated text: %#v", data["text"])
+	}
+	attachments := data["attachments"].([]any)
+	if len(attachments) != 1 {
+		t.Fatalf("expected one filtered attachment, got %#v", attachments)
+	}
+	attachment := attachments[0].(map[string]any)
+	if attachment["attachment_key"] != "ATT456" || attachment["truncated"] != true {
+		t.Fatalf("unexpected attachment payload: %#v", attachment)
+	}
+}
+
 func TestRunShowTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

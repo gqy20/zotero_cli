@@ -46,7 +46,7 @@ Output:
   --fulltext-any         OR semantics for --fulltext terms.
   --qmode MODE           titleCreatorYear (default) | everything (adds abstract+tags).
   --limit N              Max results. No default unless --snippet is set (then 50).
-  --sort FIELD           dateAdded | title | creator | year. --direction asc|desc.
+  --sort FIELD           relevance | dateAdded | title | creator | year. --direction asc|desc.
 
 Examples:
   zot find "CRISPR" --json                              # Basic search
@@ -266,6 +266,7 @@ func (c *CLI) runFind(args []string) int {
 			data = items // full mode: original domain.Item slice
 		} else {
 			data = toLeanItems(items, false) // lean mode
+			appendLeanMeta(meta)
 		}
 		return c.writeJSON(jsonResponse{
 			OK:      true,
@@ -415,6 +416,7 @@ func (c *CLI) runShow(args []string) int {
 			data = item // full mode: original domain.Item
 		} else {
 			data = toLeanItem(item, false) // lean mode
+			appendLeanMeta(meta)
 		}
 		return c.writeJSON(jsonResponse{
 			OK:      true,

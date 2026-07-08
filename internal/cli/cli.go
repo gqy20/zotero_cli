@@ -21,6 +21,7 @@ type CLI struct {
 	stdout           io.Writer
 	stderr           io.Writer
 	stdin            io.Reader
+	currentCommand   string
 	backendNewReader func(config.Config, *http.Client) (backend.Reader, error)
 	newLocalReader   func(config.Config) (backend.Reader, error)
 }
@@ -70,6 +71,12 @@ func (c *CLI) Run(args []string) int {
 // commandRegistry 只管展示元数据（Name/Short/Long/Category），不分发行为，
 // 以避免 commandRegistry 与 runXxx 方法形成初始化/调用环。
 func (c *CLI) dispatch(name string, args []string) int {
+	previousCommand := c.currentCommand
+	c.currentCommand = name
+	defer func() {
+		c.currentCommand = previousCommand
+	}()
+
 	switch name {
 	case "version":
 		return c.runVersion(args)
@@ -259,7 +266,7 @@ func (c *CLI) runVersion(args []string) int {
 	latest, date, err := checkLatestVersion()
 	if err != nil {
 		if jsonOutput {
-			return c.jsonError(fmt.Errorf("failed to check latest version: %w", err), "")
+			return c.jsonError(fmt.Errorf("failed to check latest version: %w", err), "version")
 		}
 		fmt.Fprintf(c.stderr, "error checking for updates: %v\n", err)
 		return 1
@@ -324,7 +331,7 @@ func (c *CLI) printConfigUsage() {
 }
 
 func (c *CLI) printErr(err error) int {
-	return c.jsonError(err, "")
+	return c.jsonError(err, c.currentCommand)
 }
 
 func (c *CLI) jsonErrorsEnabled() bool {

@@ -52,6 +52,17 @@ func TestShowJSONDefaultIsLean(t *testing.T) {
 	if data["doi"] != "10.1038/nrg.2024.001" {
 		t.Errorf("doi = %q, want 10.1038/nrg.2024.001", data["doi"])
 	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected meta to be a map, got %T", got["meta"])
+	}
+	if meta["lean"] != true || meta["full_hint"] == "" {
+		t.Fatalf("expected lean meta hint, got %#v", meta)
+	}
+	omitted, ok := meta["omitted_fields"].([]any)
+	if !ok || len(omitted) == 0 {
+		t.Fatalf("expected omitted_fields in meta, got %#v", meta["omitted_fields"])
+	}
 
 	// Creators must be folded string
 	creators, ok := data["creators"].(string)

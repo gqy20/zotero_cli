@@ -19,6 +19,12 @@ func NormalizeFindOptions(opts FindOptions) FindOptions {
 	opts.ItemType = strings.TrimSpace(opts.ItemType)
 	opts.Sort = strings.TrimSpace(opts.Sort)
 	opts.Direction = strings.TrimSpace(opts.Direction)
+	if strings.EqualFold(opts.Sort, "relevance") || strings.EqualFold(opts.Sort, "relevance_score") {
+		opts.Sort = "relevance"
+		if opts.Direction == "" {
+			opts.Direction = "desc"
+		}
+	}
 	opts.QMode = strings.TrimSpace(opts.QMode)
 	opts.DateAfter = strings.TrimSpace(opts.DateAfter)
 	opts.DateBefore = strings.TrimSpace(opts.DateBefore)

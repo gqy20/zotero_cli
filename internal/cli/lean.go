@@ -21,6 +21,7 @@ type LeanItem struct {
 	Collections     []string `json:"collections,omitempty"` // names only
 	DateAdded       string   `json:"date_added,omitempty"`
 	MatchedOn       []string `json:"matched_on,omitempty"`
+	RelevanceScore  int      `json:"relevance_score,omitempty"`
 	Abstract        string   `json:"abstract,omitempty"` // only when includeAbstract=true
 }
 
@@ -48,6 +49,7 @@ func toLeanItem(item domain.Item, includeAbstract bool) LeanItem {
 		Collections:     collections,
 		DateAdded:       item.DateAdded,
 		MatchedOn:       item.MatchedOn,
+		RelevanceScore:  item.SearchScore,
 	}
 
 	if includeAbstract {
@@ -64,4 +66,10 @@ func toLeanItems(items []domain.Item, includeAbstract bool) []LeanItem {
 		out = append(out, toLeanItem(items[i], includeAbstract))
 	}
 	return out
+}
+
+func appendLeanMeta(meta map[string]any) {
+	meta["lean"] = true
+	meta["omitted_fields"] = []string{"abstract", "attachments", "notes", "annotations", "journal_rank"}
+	meta["full_hint"] = "Use --full --json to include omitted fields."
 }

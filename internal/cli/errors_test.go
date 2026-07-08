@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -157,6 +160,28 @@ func TestRunShowRejectsExtraPositionalArgs(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), usageShow) {
 		t.Fatalf("expected usage message, got %q", stderr.String())
+	}
+}
+
+func TestJSONErrorIncludesCurrentCommand(t *testing.T) {
+	t.Setenv("ZOT_JSON_ERRORS", "1")
+
+	stdout := &bytes.Buffer{}
+	cli := New()
+	cli.stdout = stdout
+	cli.currentCommand = "show"
+
+	exitCode := cli.printErr(errors.New("boom"))
+	if exitCode != ExitError {
+		t.Fatalf("expected exit code %d, got %d", ExitError, exitCode)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	if got["command"] != "show" {
+		t.Fatalf("command = %#v, want show", got["command"])
 	}
 }
 

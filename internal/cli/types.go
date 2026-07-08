@@ -46,12 +46,15 @@ func (c *CLI) jsonError(err error, command string) int {
 	msg := err.Error()
 	errType := classifyErrorType(err)
 	if c.jsonErrorsEnabled() {
-		return c.writeJSON(jsonResponse{
+		if writeCode := c.writeJSON(jsonResponse{
 			OK:      false,
 			Command: command,
 			Data:    errorData{Error: msg, Type: errType, Code: code},
 			Code:    code,
-		})
+		}); writeCode != ExitOK {
+			return writeCode
+		}
+		return code
 	}
 	fmt.Fprintf(c.stderr, "error: %s\n", msg)
 	return code

@@ -86,9 +86,8 @@ func TestJSONErrorsEnabledOutputsStructuredError(t *testing.T) {
 	err := fmt.Errorf("test error: item not found")
 	exitCode := cli.jsonError(err, "show")
 
-	// JSON mode always returns exit 0; error details are in the JSON payload
-	if exitCode != ExitOK {
-		t.Fatalf("expected exit code %d (JSON mode), got %d", ExitOK, exitCode)
+	if exitCode != ExitError {
+		t.Fatalf("expected exit code %d, got %d", ExitError, exitCode)
 	}
 
 	var got map[string]any

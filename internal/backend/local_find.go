@@ -395,6 +395,13 @@ func compareFindItems(left domain.Item, right domain.Item, sortBy string) int {
 		return 1
 	}
 	switch strings.ToLower(strings.TrimSpace(sortBy)) {
+	case "relevance", "relevance_score":
+		if left.SearchScore != right.SearchScore {
+			if left.SearchScore < right.SearchScore {
+				return -1
+			}
+			return 1
+		}
 	case "title":
 		if cmp := strings.Compare(strings.ToLower(left.Title), strings.ToLower(right.Title)); cmp != 0 {
 			return cmp

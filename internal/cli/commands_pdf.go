@@ -17,11 +17,16 @@ import (
 )
 
 const (
-	usageExtractText = `usage: zot extract-text <item-key> [--json]
+	usageExtractText = `usage: zot extract-text <item-key> [--json] [--max-chars N] [--grep TEXT] [--attachment KEY]
 
 What: Extract plain text from a PDF attachment. Returns the concatenated text
 content of all pages. Results are cached to disk (keyed by item key + file
 mtime), so repeat calls are near-instant.
+
+Output controls:
+  --max-chars N      Return at most N characters of text (applies per field).
+  --grep TEXT        Return only lines containing TEXT (case-insensitive).
+  --attachment KEY   Return text for one attachment key.
 
 Modes:
   local/hybrid    Read PDF from local Zotero storage. Requires PyMuPDF.
@@ -30,7 +35,8 @@ Modes:
 
 Examples:
   zot extract-text ABCD --json
-  zot extract-text ABC1 ABC2 ABC3 --json            # Multiple items
+  zot extract-text ABCD --json --max-chars 12000
+  zot extract-text ABCD --json --grep methods --attachment ATT123
 
 Notes:
   - Requires PyMuPDF; install via 'zot init --pdf' or 'pip install pymupdf'.
@@ -66,12 +72,27 @@ Notes:
   - See also: extract-text, annotations, open <key> (view in Zotero).`
 )
 
+type extractTextArgs struct {
+	ItemKey       string
+	JSONOutput    bool
+	MaxChars      int
+	Grep          string
+	AttachmentKey string
+}
+
+type textFieldView struct {
+	Text          string
+	Total         int
+	ReturnedChars int
+	Truncated     bool
+}
+
 func (c *CLI) runExtractText(args []string) int {
 	if isHelpOnly(args) {
 		return c.printCommandUsage(usageExtractText)
 	}
 
-	itemKey, jsonOutput, ok := c.parseExtractTextArgs(args)
+	parsed, ok := c.parseExtractTextArgs(args)
 	if !ok {
 		return 2
 	}
@@ -94,11 +115,11 @@ func (c *CLI) runExtractText(args []string) int {
 		return c.printErr(err)
 	}
 
-	item, err := reader.GetItem(context.Background(), itemKey)
+	item, err := reader.GetItem(context.Background(), parsed.ItemKey)
 	if err != nil {
 		return c.printErr(err)
 	}
-	if jsonOutput {
+	if parsed.JSONOutput {
 		var (
 			result backend.ItemFullTextResult
 			err    error
@@ -119,16 +140,43 @@ func (c *CLI) runExtractText(args []string) int {
 		}
 
 		readMeta := c.consumeReaderReadMetadata(reader)
-		meta := map[string]any{
-			"total": len([]rune(result.Text)),
+		dataText := result.Text
+		if parsed.AttachmentKey != "" {
+			selected := make([]string, 0, 1)
+			for _, attachment := range result.Attachments {
+				if strings.EqualFold(attachment.Attachment.Key, parsed.AttachmentKey) {
+					selected = append(selected, attachment.Text)
+				}
+			}
+			if len(selected) == 0 {
+				return c.printErr(fmt.Errorf("attachment %s not found on item %s", parsed.AttachmentKey, item.Key))
+			}
+			dataText = strings.Join(selected, "\n")
 		}
+		dataTextView := formatExtractedText(dataText, parsed)
+		meta := map[string]any{
+			"total":          dataTextView.Total,
+			"returned_chars": dataTextView.ReturnedChars,
+		}
+		if dataTextView.Truncated {
+			meta["truncated"] = true
+		}
+		appendExtractTextFilterMeta(meta, parsed)
 		c.appendExplicitReadMetadata(meta, readMeta)
 		attachments := make([]map[string]any, 0, len(result.Attachments))
 		for _, attachment := range result.Attachments {
+			if parsed.AttachmentKey != "" && !strings.EqualFold(attachment.Attachment.Key, parsed.AttachmentKey) {
+				continue
+			}
+			textView := formatExtractedText(attachment.Text, parsed)
 			entry := map[string]any{
 				"attachment_key": attachment.Attachment.Key,
-				"text":           attachment.Text,
-				"total":          len([]rune(attachment.Text)),
+				"text":           textView.Text,
+				"total":          textView.Total,
+				"returned_chars": textView.ReturnedChars,
+			}
+			if textView.Truncated {
+				entry["truncated"] = true
 			}
 			if attachment.Attachment.Title != "" {
 				entry["title"] = attachment.Attachment.Title
@@ -149,7 +197,7 @@ func (c *CLI) runExtractText(args []string) int {
 		}
 		data := map[string]any{
 			"item_key": item.Key,
-			"text":     result.Text,
+			"text":     dataTextView.Text,
 		}
 		if result.PrimaryAttachmentKey != "" {
 			data["primary_attachment_key"] = result.PrimaryAttachmentKey
@@ -165,6 +213,9 @@ func (c *CLI) runExtractText(args []string) int {
 		})
 	}
 
+	if parsed.AttachmentKey != "" {
+		return c.printErr(fmt.Errorf("--attachment requires --json"))
+	}
 	textReader, ok := reader.(fullTextReader)
 	if !ok {
 		return c.printErr(fmt.Errorf("extract-text requires local full-text extraction support"))
@@ -175,32 +226,114 @@ func (c *CLI) runExtractText(args []string) int {
 	}
 	readMeta := c.consumeReaderReadMetadata(reader)
 	c.warnIfSnapshotRead(readMeta)
+	text = formatExtractedText(text, parsed).Text
 	fmt.Fprintln(c.stdout, text)
 	return 0
 }
 
-func (c *CLI) parseExtractTextArgs(args []string) (string, bool, bool) {
-	itemKey := ""
-	jsonOutput := false
+func (c *CLI) parseExtractTextArgs(args []string) (extractTextArgs, bool) {
+	parsed := extractTextArgs{}
 
-	for _, arg := range args {
-		switch arg {
+	for i := 0; i < len(args); i++ {
+		switch arg := args[i]; arg {
 		case "--json":
-			jsonOutput = true
-		default:
-			if strings.HasPrefix(arg, "--") || itemKey != "" {
+			parsed.JSONOutput = true
+		case "--max-chars":
+			if i+1 >= len(args) {
 				fmt.Fprintln(c.stderr, usageExtractText)
-				return "", false, false
+				return extractTextArgs{}, false
 			}
-			itemKey = arg
+			i++
+			maxChars, err := strconv.Atoi(args[i])
+			if err != nil || maxChars <= 0 {
+				fmt.Fprintln(c.stderr, usageExtractText)
+				return extractTextArgs{}, false
+			}
+			parsed.MaxChars = maxChars
+		case "--grep":
+			if i+1 >= len(args) {
+				fmt.Fprintln(c.stderr, usageExtractText)
+				return extractTextArgs{}, false
+			}
+			i++
+			parsed.Grep = strings.TrimSpace(args[i])
+			if parsed.Grep == "" {
+				fmt.Fprintln(c.stderr, usageExtractText)
+				return extractTextArgs{}, false
+			}
+		case "--attachment":
+			if i+1 >= len(args) {
+				fmt.Fprintln(c.stderr, usageExtractText)
+				return extractTextArgs{}, false
+			}
+			i++
+			parsed.AttachmentKey = strings.TrimSpace(args[i])
+			if parsed.AttachmentKey == "" {
+				fmt.Fprintln(c.stderr, usageExtractText)
+				return extractTextArgs{}, false
+			}
+		default:
+			if strings.HasPrefix(arg, "--") || parsed.ItemKey != "" {
+				fmt.Fprintln(c.stderr, usageExtractText)
+				return extractTextArgs{}, false
+			}
+			parsed.ItemKey = arg
 		}
 	}
 
-	if strings.TrimSpace(itemKey) == "" {
+	if strings.TrimSpace(parsed.ItemKey) == "" {
 		fmt.Fprintln(c.stderr, usageExtractText)
-		return "", false, false
+		return extractTextArgs{}, false
 	}
-	return itemKey, jsonOutput, true
+	return parsed, true
+}
+
+func appendExtractTextFilterMeta(meta map[string]any, args extractTextArgs) {
+	filters := map[string]any{}
+	if args.MaxChars > 0 {
+		filters["max_chars"] = args.MaxChars
+	}
+	if args.Grep != "" {
+		filters["grep"] = args.Grep
+	}
+	if args.AttachmentKey != "" {
+		filters["attachment_key"] = args.AttachmentKey
+	}
+	if len(filters) > 0 {
+		meta["filters"] = filters
+	}
+}
+
+func formatExtractedText(text string, args extractTextArgs) textFieldView {
+	originalTotal := len([]rune(text))
+	if args.Grep != "" {
+		text = grepTextLines(text, args.Grep)
+	}
+	view := textFieldView{Text: text, Total: originalTotal}
+	if args.MaxChars > 0 {
+		runes := []rune(view.Text)
+		if len(runes) > args.MaxChars {
+			view.Text = string(runes[:args.MaxChars])
+			view.Truncated = true
+		}
+	}
+	view.ReturnedChars = len([]rune(view.Text))
+	return view
+}
+
+func grepTextLines(text string, needle string) string {
+	needle = strings.ToLower(strings.TrimSpace(needle))
+	if needle == "" {
+		return text
+	}
+	lines := strings.Split(text, "\n")
+	matches := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.Contains(strings.ToLower(line), needle) {
+			matches = append(matches, line)
+		}
+	}
+	return strings.Join(matches, "\n")
 }
 
 func filterPDFAttachments(attachments []domain.Attachment) []domain.Attachment {

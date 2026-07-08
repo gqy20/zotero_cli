@@ -1,6 +1,10 @@
 package backend
 
-import "testing"
+import (
+	"testing"
+
+	"zotero_cli/internal/domain"
+)
 
 func TestShouldIncludeFindItemFiltersNonTopItemsByDefault(t *testing.T) {
 	tests := []struct {
@@ -21,6 +25,21 @@ func TestShouldIncludeFindItemFiltersNonTopItemsByDefault(t *testing.T) {
 				t.Fatalf("ShouldIncludeFindItem(%q) = %v, want %v", tt.itemType, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNormalizeFindOptionsDefaultsRelevanceDirectionDesc(t *testing.T) {
+	got := NormalizeFindOptions(FindOptions{Sort: " relevance "})
+	if got.Sort != "relevance" || got.Direction != "desc" {
+		t.Fatalf("NormalizeFindOptions relevance sort = (%q, %q), want (relevance, desc)", got.Sort, got.Direction)
+	}
+}
+
+func TestCompareFindItemsSupportsRelevanceSort(t *testing.T) {
+	low := domain.Item{Key: "LOW", SearchScore: 10}
+	high := domain.Item{Key: "HIGH", SearchScore: 20}
+	if cmp := compareFindItems(low, high, "relevance"); cmp >= 0 {
+		t.Fatalf("compareFindItems(low, high, relevance) = %d, want low before high for ascending comparator", cmp)
 	}
 }
 

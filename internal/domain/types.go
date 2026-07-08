@@ -6,7 +6,7 @@ type Item struct {
 	ItemType             string            `json:"item_type"`
 	Title                string            `json:"title"`
 	Date                 string            `json:"date"`
-	SearchScore          int               `json:"-"`
+	SearchScore          int               `json:"relevance_score,omitempty"`
 	SnippetAttachmentKey string            `json:"-"`
 	Creators             []Creator         `json:"creators"`
 	MatchedOn            []string          `json:"matched_on,omitempty"`
