@@ -19,6 +19,7 @@ type AnnotateRequest struct {
 	Page    int         `json:"page,omitempty"`
 	Rect    *[4]float64 `json:"rect,omitempty"`
 	Point   *[2]float64 `json:"point,omitempty"`
+	DryRun  bool        `json:"dry_run,omitempty"`
 }
 
 type AnnotateMatch struct {
@@ -33,6 +34,7 @@ type AnnotateResult struct {
 	AttachmentKey string          `json:"attachment_key"`
 	PDFPath       string          `json:"pdf_path"`
 	Matches       []AnnotateMatch `json:"matches"`
+	DryRun        bool            `json:"dry_run,omitempty"`
 }
 
 type annotateMatchRaw struct {
@@ -63,6 +65,8 @@ req = ` + string(reqJSON) + `
 
 doc = fitz.open(pdf_path)
 results = []
+dry_run = bool(req.get("dry_run", False))
+MATCH_TEXT_LIMIT = 500
 
 COLOR_MAP = {
     "yellow": (1.0, 0.83, 0.0),
@@ -89,6 +93,49 @@ info = {"title": "zotero_cli"}
 if comment:
     info["content"] = comment
 
+def preview_text(value):
+    value = value.strip().replace("\n", " ")
+    if len(value) > MATCH_TEXT_LIMIT:
+        return value[:MATCH_TEXT_LIMIT]
+    return value
+
+def result_rect(rect):
+    return [round(rect.x0, 1), round(rect.y0, 1),
+            round(rect.x1, 1), round(rect.y1, 1)]
+
+def add_result(page_number, rect, text):
+    results.append({
+        "page": page_number,
+        "rect": result_rect(rect),
+        "text": preview_text(text),
+    })
+
+def add_text_annotation(page, q):
+    if dry_run:
+        return
+    if atype == "highlight":
+        annot = page.add_highlight_annot(q)
+    elif atype == "underline":
+        annot = page.add_underline_annot(q)
+    else:
+        annot = page.add_highlight_annot(q)
+    annot.set_colors(stroke=color)
+    annot.set_info(**info)
+    annot.update()
+
+def add_rect_annotation(page, rect):
+    if dry_run:
+        return
+    if atype == "highlight":
+        annot = page.add_highlight_annot(rect)
+    elif atype == "underline":
+        annot = page.add_underline_annot(rect)
+    else:
+        annot = page.add_highlight_annot(rect)
+    annot.set_colors(stroke=color)
+    annot.set_info(**info)
+    annot.update()
+
 # Mode 1: text search across all pages
 search_text = req.get("text", "")
 if search_text and not req.get("page"):
@@ -96,22 +143,9 @@ if search_text and not req.get("page"):
         page = doc[pi]
         quads = page.search_for(search_text, quads=True)
         for q in quads:
-            if atype == "highlight":
-                annot = page.add_highlight_annot(q)
-            elif atype == "underline":
-                annot = page.add_underline_annot(q)
-            else:
-                annot = page.add_highlight_annot(q)
-            annot.set_colors(stroke=color)
-            annot.set_info(**info)
-            annot.update()
+            add_text_annotation(page, q)
             text = page.get_text("text", clip=q.rect).strip().replace("\n", " ")
-            results.append({
-                "page": pi + 1,
-                "rect": [round(q.rect.x0, 1), round(q.rect.y0, 1),
-                        round(q.rect.x1, 1), round(q.rect.y1, 1)],
-                "text": text[:200],
-            })
+            add_result(pi + 1, q.rect, text)
 
 # Mode 1.5: text search on a specific page only
 elif search_text and req.get("page"):
@@ -120,22 +154,9 @@ elif search_text and req.get("page"):
         page = doc[pi]
         quads = page.search_for(search_text, quads=True)
         for q in quads:
-            if atype == "highlight":
-                annot = page.add_highlight_annot(q)
-            elif atype == "underline":
-                annot = page.add_underline_annot(q)
-            else:
-                annot = page.add_highlight_annot(q)
-            annot.set_colors(stroke=color)
-            annot.set_info(**info)
-            annot.update()
+            add_text_annotation(page, q)
             text = page.get_text("text", clip=q.rect).strip().replace("\n", " ")
-            results.append({
-                "page": pi + 1,
-                "rect": [round(q.rect.x0, 1), round(q.rect.y0, 1),
-                        round(q.rect.x1, 1), round(q.rect.y1, 1)],
-                "text": text[:200],
-            })
+            add_result(pi + 1, q.rect, text)
 
 # Mode 2: specific page + rect (direct position annotation)
 elif req.get("page") and req.get("rect") is not None:
@@ -144,42 +165,17 @@ elif req.get("page") and req.get("rect") is not None:
         page = doc[pi]
         rc = req["rect"]
         rect = fitz.Rect(rc[0], rc[1], rc[2], rc[3])
-        if atype == "highlight":
-            annot = page.add_highlight_annot(rect)
-        elif atype == "underline":
-            annot = page.add_underline_annot(rect)
-        else:
-            annot = page.add_highlight_annot(rect)
-        annot.set_colors(stroke=color)
-        annot.set_info(**info)
-        annot.update()
+        add_rect_annotation(page, rect)
         text = page.get_text("text", clip=rect).strip().replace("\n", " ")
-        results.append({
-            "page": req["page"],
-            "rect": [round(rc[0], 1), round(rc[1], 1), round(rc[2], 1), round(rc[3], 1)],
-            "text": text[:200],
-        })
+        add_result(req["page"], rect, text)
     # Also search text on this page if provided
     if search_text:
         page = doc[pi]
         quads = page.search_for(search_text, quads=True)
         for q in quads:
-            if atype == "highlight":
-                annot = page.add_highlight_annot(q)
-            elif atype == "underline":
-                annot = page.add_underline_annot(q)
-            else:
-                annot = page.add_highlight_annot(q)
-            annot.set_colors(stroke=color)
-            annot.set_info(**info)
-            annot.update()
+            add_text_annotation(page, q)
             t = page.get_text("text", clip=q.rect).strip().replace("\n", " ")
-            results.append({
-                "page": req["page"],
-                "rect": [round(q.rect.x0, 1), round(q.rect.y0, 1),
-                        round(q.rect.x1, 1), round(q.rect.y1, 1)],
-                "text": t[:200],
-            })
+            add_result(req["page"], q.rect, t)
 
 # Mode 3: specific page + point (note/sticky note)
 elif req.get("page") and req.get("point") is not None:
@@ -189,18 +185,17 @@ elif req.get("page") and req.get("point") is not None:
         pt = req["point"]
         point = fitz.Point(pt[0], pt[1])
         note_text = comment or "Note"
-        annot = page.add_text_annot(point, note_text, icon="Note")
-        annot.set_info(**info)
-        annot.update()
-        results.append({
-            "page": req["page"],
-            "rect": [round(pt[0], 1), round(pt[1], 1), round(pt[0], 1), round(pt[1], 1)],
-            "text": note_text[:200],
-        })
+        if not dry_run:
+            annot = page.add_text_annot(point, note_text, icon="Note")
+            annot.set_info(**info)
+            annot.update()
+        rect = fitz.Rect(pt[0], pt[1], pt[0], pt[1])
+        add_result(req["page"], rect, note_text)
 
-doc.save(pdf_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+if not dry_run:
+    doc.save(pdf_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
 
-payload = json.dumps({"matches": results}, ensure_ascii=False)
+payload = json.dumps({"matches": results, "dry_run": dry_run}, ensure_ascii=False)
 sys.stdout.buffer.write(payload.encode("utf-8"))
 `
 	cmd := exec.CommandContext(ctx, pythonCmd, "-", attachment.ResolvedPath)
@@ -213,6 +208,7 @@ sys.stdout.buffer.write(payload.encode("utf-8"))
 	}
 	var rawResult struct {
 		Matches []annotateMatchRaw `json:"matches"`
+		DryRun  bool               `json:"dry_run"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &rawResult); err != nil {
 		return AnnotateResult{}, err
@@ -235,6 +231,7 @@ sys.stdout.buffer.write(payload.encode("utf-8"))
 		AttachmentKey: attachment.Key,
 		PDFPath:       attachment.ResolvedPath,
 		Matches:       matches,
+		DryRun:        rawResult.DryRun,
 	}, nil
 }
 

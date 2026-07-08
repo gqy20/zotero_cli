@@ -225,10 +225,6 @@ func (h *Handler) getItemAnnotations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) annotateItem(w http.ResponseWriter, r *http.Request) {
-	if !h.allowWrite {
-		writeError(w, http.StatusForbidden, fmt.Errorf("annotation writing is disabled on this server"))
-		return
-	}
 	item, err := h.loadItem(r.Context(), r.PathValue("key"))
 	if err != nil {
 		writeError(w, http.StatusNotFound, err)
@@ -242,6 +238,10 @@ func (h *Handler) annotateItem(w http.ResponseWriter, r *http.Request) {
 	var req backend.AnnotateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+	if !req.DryRun && !h.allowWrite {
+		writeError(w, http.StatusForbidden, fmt.Errorf("annotation writing is disabled on this server"))
 		return
 	}
 	result, err := annotator.AnnotateItem(r.Context(), item, req)

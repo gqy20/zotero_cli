@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"zotero_cli/internal/backend"
@@ -93,6 +94,20 @@ func contentReaderItem() domain.Item {
 		}},
 	}
 }
+func (contentReader) AnnotateItem(ctx context.Context, item domain.Item, req backend.AnnotateRequest) (backend.AnnotateResult, error) {
+	return backend.AnnotateResult{
+		AttachmentKey: "ATT1",
+		PDFPath:       "D:/secret.pdf",
+		DryRun:        req.DryRun,
+		Matches: []backend.AnnotateMatch{{
+			Page:  1,
+			Text:  req.Text,
+			Rect:  [4]float64{1, 2, 3, 4},
+			Type:  req.Type,
+			Color: req.Color,
+		}},
+	}, nil
+}
 
 func TestItemEndpointSanitizesAttachmentPaths(t *testing.T) {
 	mux := http.NewServeMux()
@@ -177,5 +192,37 @@ func TestPreviewSnippetTextAndAnnotationsEndpoints(t *testing.T) {
 	}
 	if annResp.Data.PDFPath != "" {
 		t.Fatalf("expected sanitized pdf_path, got %q", annResp.Data.PDFPath)
+	}
+}
+
+func TestAnnotateDryRunDoesNotRequireWritePermission(t *testing.T) {
+	mux := http.NewServeMux()
+	NewHandlerWithPermissions(contentReader{}, "", false, false).RegisterRoutes(mux)
+
+	dryReq := httptest.NewRequest("POST", "/api/v1/items/ABC123/annotate", strings.NewReader(`{"text":"hello","type":"highlight","color":"yellow","dry_run":true}`))
+	dryRec := httptest.NewRecorder()
+	mux.ServeHTTP(dryRec, dryReq)
+	if dryRec.Code != http.StatusOK {
+		t.Fatalf("dry-run expected 200, got %d: %s", dryRec.Code, dryRec.Body.String())
+	}
+
+	var resp struct {
+		Data backend.AnnotateResult `json:"data"`
+	}
+	if err := json.Unmarshal(dryRec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal dry-run response: %v", err)
+	}
+	if !resp.Data.DryRun {
+		t.Fatalf("expected dry_run=true, got %#v", resp.Data)
+	}
+	if resp.Data.PDFPath != "" {
+		t.Fatalf("expected sanitized pdf_path, got %q", resp.Data.PDFPath)
+	}
+
+	writeReq := httptest.NewRequest("POST", "/api/v1/items/ABC123/annotate", strings.NewReader(`{"text":"hello","type":"highlight","color":"yellow"}`))
+	writeRec := httptest.NewRecorder()
+	mux.ServeHTTP(writeRec, writeReq)
+	if writeRec.Code != http.StatusForbidden {
+		t.Fatalf("write expected 403, got %d: %s", writeRec.Code, writeRec.Body.String())
 	}
 }

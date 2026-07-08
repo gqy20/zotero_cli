@@ -9,7 +9,7 @@ import (
 	"zotero_cli/internal/backend"
 )
 
-const usageAnnotate = `usage: zot annotate <item-key> (--text TEXT | --page N (--rect x0,y0,x1,y2 | --point x,y)) [--color COLOR] [--comment TEXT] [--type TYPE] [--clear] [--author AUTHOR] [--json]
+const usageAnnotate = `usage: zot annotate <item-key> (--text TEXT | --page N (--rect x0,y0,x1,y2 | --point x,y)) [--color COLOR] [--comment TEXT] [--type TYPE] [--dry-run] [--clear] [--author AUTHOR] [--json]
 
 What: Add highlights/underlines/notes to a PDF. Three modes:
 
@@ -31,12 +31,14 @@ Options:
   --type        highlight (default) | underline | note | image
   --comment     Sticky note text (when --type=note)
   --author      Annotation author (defaults to current Zotero user)
+  --dry-run     Preview matched pages/rectangles without writing the PDF.
   --clear       Remove existing annotations. By default clears both API and
                 local DB; the DB layer is only removable when Zotero is closed.
                 Combine with --type / --page to scope.
 
 Examples:
   zot annotate ABCD --page 4 --text "GATK" --color yellow --json
+  zot annotate ABCD --page 4 --text "GATK" --dry-run --json
   zot annotate ABCD --page 1 --rect 50,100,300,150 --color red --json
   zot annotate ABCD --type note --page 5 --comment "TODO" --json
   zot annotate ABCD --clear --page 4 --type highlight
@@ -67,7 +69,7 @@ func (c *CLI) runAnnotate(args []string) int {
 		return exitCode
 	}
 
-	if cfg.Mode != "remote" {
+	if cfg.Mode != "remote" && !req.DryRun {
 		if exitCode := c.ensureWriteAllowed(cfg); exitCode != 0 {
 			return exitCode
 		}
@@ -105,9 +107,11 @@ func (c *CLI) runAnnotate(args []string) int {
 			"pdf_path":       result.PDFPath,
 			"matches":        result.Matches,
 			"total_matches":  len(result.Matches),
+			"dry_run":        result.DryRun,
 		}
 		meta := map[string]any{
 			"total_matches": len(result.Matches),
+			"dry_run":       result.DryRun,
 		}
 		c.appendReadMetadata(meta, reader)
 		return c.writeJSON(jsonResponse{
@@ -118,7 +122,11 @@ func (c *CLI) runAnnotate(args []string) int {
 		})
 	}
 
-	fmt.Fprintf(c.stdout, "Annotated %s (%s)\n", itemKey, result.AttachmentKey)
+	if result.DryRun {
+		fmt.Fprintf(c.stdout, "[dry-run] Would annotate %s (%s)\n", itemKey, result.AttachmentKey)
+	} else {
+		fmt.Fprintf(c.stdout, "Annotated %s (%s)\n", itemKey, result.AttachmentKey)
+	}
 	if strings.TrimSpace(result.PDFPath) != "" {
 		fmt.Fprintf(c.stdout, "PDF: %s\n", result.PDFPath)
 	}
@@ -201,6 +209,8 @@ func (c *CLI) parseAnnotateArgs(args []string) (string, backend.AnnotateRequest,
 			jsonOutput = true
 		case "--clear":
 			clearMode = true
+		case "--dry-run", "-n":
+			req.DryRun = true
 		case "--text":
 			nextFlag = "text"
 		case "--color":
