@@ -268,6 +268,7 @@ zot extract-text KEY --json --pages 3-8 --grep methods --max-chars 12000
 
 # 查找本地 Zotero 已保存的 Supplementary / Source data / 表格数据附件
 zot supplements KEY --json
+zot supplements KEY --online --json
 zot supplements --all --json --limit 50
 zot inspect-attachment ATTKEY --json
 zot inspect-attachment --item KEY --json

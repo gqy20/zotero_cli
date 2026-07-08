@@ -3,31 +3,40 @@ package cli
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/cookiejar"
 	"strconv"
 	"strings"
+	"time"
 
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/domain"
 )
 
-const usageSupplements = `usage: zot supplements <item-key> [--json]
+const usageSupplements = `usage: zot supplements <item-key> [--json] [--online]
        zot supplements --all [--json] [--limit N]
 
-What: Find local supplementary/data attachments already present in the Zotero
-library. This command inspects attachment metadata and resolved local paths; it
-does not fetch publisher pages or DOI records.
+What: Find supplementary/data attachments. By default this inspects local Zotero
+attachments and resolved local paths. With --online, it also checks public
+publisher/repository metadata without logging in or downloading files.
 
 Output:
   --json       Structured output for agents.
   --all        Scan all local library items.
   --limit N    Limit emitted supplement records after scanning.
+  --online     For one item, query public Zenodo, Figshare, and
+               Nature/Springer pages for downloadable supplement metadata.
 
 Examples:
   zot supplements ABCD --json
+  zot supplements ABCD --online --json
   zot supplements --all --json --limit 50
 
 Notes:
-  - Requires local/hybrid mode with local Zotero data.
+  - Local discovery requires local/hybrid mode with local Zotero data.
+  - Online discovery supports public pages/records only; private/login-gated
+    content is reported as blocked or partial.
+  - --online is intentionally not supported with --all in the first version.
   - Classification uses attachment title, filename, path, content type, and
     extension. Parent item titles are not used as supplement evidence.
   - See also: show KEY --full --json, extract-text.`
@@ -36,6 +45,7 @@ type supplementsArgs struct {
 	key        string
 	all        bool
 	jsonOutput bool
+	online     bool
 	limit      int
 }
 
@@ -54,7 +64,12 @@ func (c *CLI) runSupplements(args []string) int {
 		return exitCode
 	}
 	if cfg.Mode == "web" || cfg.Mode == "remote" {
-		return c.printErr(fmt.Errorf("supplements requires local or hybrid mode with local Zotero data"))
+		if !parsed.online {
+			return c.printErr(fmt.Errorf("supplements requires local or hybrid mode with local Zotero data; add --online to query public provider metadata"))
+		}
+	}
+	if parsed.online && parsed.all {
+		return c.printErr(fmt.Errorf("supplements --online does not support --all; query one item key at a time"))
 	}
 
 	ctx := context.Background()
@@ -62,7 +77,21 @@ func (c *CLI) runSupplements(args []string) int {
 	if err != nil {
 		return c.printErr(err)
 	}
-	supplements := backend.LocalSupplements(items)
+	supplements := []backend.Supplement{}
+	includeLocal := cfg.Mode != "web" && cfg.Mode != "remote"
+	if includeLocal {
+		supplements = append(supplements, backend.LocalSupplements(items)...)
+	}
+	var onlineDiscovery backend.OnlineSupplementDiscovery
+	if parsed.online {
+		jar, _ := cookiejar.New(nil)
+		onlineClient := &http.Client{Timeout: 30 * time.Second, Jar: jar}
+		for _, item := range items {
+			discovery := backend.DiscoverOnlineSupplements(ctx, onlineClient, item)
+			onlineDiscovery.Providers = append(onlineDiscovery.Providers, discovery.Providers...)
+			supplements = append(supplements, discovery.Supplements...)
+		}
+	}
 	totalBeforeLimit := len(supplements)
 	if parsed.limit > 0 && len(supplements) > parsed.limit {
 		supplements = supplements[:parsed.limit]
@@ -73,9 +102,12 @@ func (c *CLI) runSupplements(args []string) int {
 			"total":                 len(supplements),
 			"total_before_limit":    totalBeforeLimit,
 			"scanned_items":         len(items),
-			"provider":              "local",
-			"provider_status":       "complete",
-			"online_lookup_enabled": false,
+			"provider":              supplementsProviderSummary(includeLocal, parsed.online),
+			"provider_status":       supplementsProviderStatus(includeLocal, parsed.online, onlineDiscovery.Providers),
+			"online_lookup_enabled": parsed.online,
+		}
+		if parsed.online {
+			meta["online_providers"] = onlineDiscovery.Providers
 		}
 		c.appendReadMetadata(meta, reader)
 		return c.writeJSON(jsonResponse{
@@ -103,6 +135,9 @@ func (c *CLI) runSupplements(args []string) int {
 			fmt.Fprintf(c.stdout, "  path: %s\n", supplement.LocalPath)
 		} else if supplement.ZoteroPath != "" {
 			fmt.Fprintf(c.stdout, "  path: unresolved (%s)\n", supplement.ZoteroPath)
+		}
+		if supplement.DownloadURL != "" {
+			fmt.Fprintf(c.stdout, "  download: %s\n", supplement.DownloadURL)
 		}
 		if len(supplement.Evidence) > 0 {
 			fmt.Fprintf(c.stdout, "  evidence: %s\n", strings.Join(supplement.Evidence, ", "))
@@ -132,6 +167,8 @@ func parseSupplementsArgs(args []string) (supplementsArgs, bool) {
 			parsed.jsonOutput = true
 		case "--all":
 			parsed.all = true
+		case "--online":
+			parsed.online = true
 		case "--limit":
 			nextFlag = "limit"
 		default:
@@ -162,4 +199,50 @@ func loadSupplementItems(ctx context.Context, reader backend.Reader, parsed supp
 		return nil, err
 	}
 	return []domain.Item{item}, nil
+}
+
+func supplementsProviderSummary(includeLocal bool, online bool) string {
+	parts := []string{}
+	if includeLocal {
+		parts = append(parts, "local")
+	}
+	if online {
+		parts = append(parts, "online")
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "+")
+}
+
+func supplementsProviderStatus(includeLocal bool, online bool, statuses []backend.SupplementProviderStatus) string {
+	if !online {
+		if includeLocal {
+			return "complete"
+		}
+		return ""
+	}
+	if len(statuses) == 0 {
+		return "not_applicable"
+	}
+	complete := false
+	partialOrBlocked := false
+	for _, status := range statuses {
+		switch status.Status {
+		case "complete":
+			complete = true
+		case "partial", "blocked":
+			partialOrBlocked = true
+		}
+	}
+	if complete && !partialOrBlocked {
+		return "complete"
+	}
+	if complete {
+		return "partial"
+	}
+	if partialOrBlocked {
+		return "partial"
+	}
+	return "blocked"
 }

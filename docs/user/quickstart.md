@@ -130,6 +130,7 @@ go run .\cmd\zot config validate
 
 # 查找本地已保存的 Supplementary / Source data / 表格数据附件
 .\zot.exe supplements ITEMKEY --json
+.\zot.exe supplements ITEMKEY --online --json
 .\zot.exe supplements --all --json --limit 50
 .\zot.exe inspect-attachment ATTKEY --json
 .\zot.exe inspect-attachment --item ITEMKEY --json

@@ -215,12 +215,12 @@ JSON 字段说明：
 
 ## 补充材料 (`supplements`)
 
-扫描 Zotero 本地库里已经保存的附件，识别 Supplementary tables、Source data、Reporting summary、`MOESM` / `mmc` / 表格数据文件等候选。
+扫描 Zotero 本地库里已经保存的附件，识别 Supplementary tables、Source data、Reporting summary、`MOESM` / `mmc` / 表格数据文件等候选。加 `--online` 时，会额外查询公开的 Zenodo、Figshare 和 Nature/Springer metadata/页面链接。
 
 ### 用法
 
 ```bash
-zot supplements <item-key> [--json]
+zot supplements <item-key> [--json] [--online]
 zot supplements --all [--json] [--limit N]
 ```
 
@@ -231,20 +231,25 @@ zot supplements --all [--json] [--limit N]
 | `--json` | JSON 格式输出 |
 | `--all` | 扫描整个本地库 |
 | `--limit N` | 扫描后限制输出的候选附件数量 |
+| `--online` | 对单个条目查询公开在线 provider；不登录、不下载文件 |
 
 ### 示例
 
 ```bash
 zot supplements ABCD --json
+zot supplements ABCD --online --json
 zot supplements --all --json --limit 50
 ```
 
 ### 说明
 
-- 需要 `local` / `hybrid` 模式和本地 Zotero 数据。
-- 第一版只分析本地附件，不联网抓 DOI、publisher 页面或 Zenodo/Figshare。
+- 本地发现需要 `local` / `hybrid` 模式和本地 Zotero 数据。
+- 在线发现可在单个条目上使用公开 DOI/URL metadata；第一版 provider 为 Zenodo、Figshare、Nature/Springer。
+- Nature/Springer 会解析 `static-content.springer.com` 附件链接；如果页面只给出 `#MOESM` 锚点，会用轻量 HEAD 请求探测对应静态附件候选，但仍不下载文件内容。
+- `--online` 不支持 `--all`，避免一次性批量请求 publisher/API。
+- 在线发现只返回 metadata/link，不自动下载；私有或登录门槛内容会标成 `blocked` / `partial`。
 - 识别依据来自附件标题、文件名、路径、content type 和扩展名；不会因为父文献标题里有 "supplement" 就把普通 PDF 误判成补充材料。
-- JSON 输出包含 `kind`、`confidence`、`evidence`、`resolution_status`、`local_path` 等字段。
+- JSON 输出包含 `kind`、`confidence`、`evidence`、`resolution_status`、`local_path`、`download_url`、`link_type` 等字段。
 
 ---
 

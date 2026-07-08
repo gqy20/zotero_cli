@@ -22,6 +22,9 @@ type Supplement struct {
 	Filename         string            `json:"filename,omitempty"`
 	ZoteroPath       string            `json:"zotero_path,omitempty"`
 	LocalPath        string            `json:"local_path,omitempty"`
+	SourceURL        string            `json:"source_url,omitempty"`
+	DownloadURL      string            `json:"download_url,omitempty"`
+	LinkType         string            `json:"link_type,omitempty"`
 	Resolved         bool              `json:"resolved"`
 	ResolutionStatus string            `json:"resolution_status"`
 	Size             int64             `json:"size,omitempty"`
