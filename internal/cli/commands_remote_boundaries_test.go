@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -43,6 +45,7 @@ func newRemoteWriteServer(t *testing.T) *httptest.Server {
 				"data": map[string]any{
 					"attachment_key": "PDF123",
 					"pdf_path":       "",
+					"dry_run":        req["dry_run"],
 					"matches": []map[string]any{
 						{"page": 1, "text": "hello", "rect": []float64{1, 2, 3, 4}, "type": "highlight", "color": "yellow"},
 					},
@@ -113,5 +116,49 @@ func TestRunAnnotationsClearRemoteUsesServer(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), "error:") {
 		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
+func TestRunAnnotateBatchRemoteDryRun(t *testing.T) {
+	root := t.TempDir()
+	setTestConfigDir(t, root)
+	writeTestConfig(t, root)
+
+	srv := newRemoteWriteServer(t)
+	defer srv.Close()
+
+	t.Setenv("ZOT_MODE", "remote")
+	t.Setenv("ZOT_SERVER_ADDR", srv.URL)
+
+	batchPath := filepath.Join(t.TempDir(), "annotations.json")
+	if err := os.WriteFile(batchPath, []byte(`[{"page":1,"text":"hello"},{"item_key":"ITEM123","page":2,"rect":[1,2,3,4]}]`), 0o600); err != nil {
+		t.Fatalf("write batch: %v", err)
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"annotate", "ITEM123", "--from-file", batchPath, "--dry-run", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d, stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal stdout: %v\n%s", err, stdout.String())
+	}
+	if got["ok"] != true {
+		t.Fatalf("expected ok response, got %#v", got)
+	}
+	data := got["data"].([]any)
+	if len(data) != 2 {
+		t.Fatalf("expected 2 batch results, got %#v", got["data"])
+	}
+	for _, raw := range data {
+		entry := raw.(map[string]any)
+		if entry["dry_run"] != true {
+			t.Fatalf("expected dry_run result, got %#v", entry)
+		}
+		if entry["item_key"] != "ITEM123" {
+			t.Fatalf("expected inherited item key, got %#v", entry)
+		}
 	}
 }
