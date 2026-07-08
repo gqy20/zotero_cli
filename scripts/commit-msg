@@ -1,0 +1,51 @@
+#!/bin/bash
+# Git commit-msg hook: validate Conventional Commit subject lines.
+# Install: make install-hooks or ln -sf ../../scripts/commit-msg .git/hooks/commit-msg
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+MSG_FILE="${1:-}"
+if [ -z "$MSG_FILE" ] || [ ! -f "$MSG_FILE" ]; then
+  echo -e "${RED}commit-msg: missing commit message file${NC}"
+  exit 1
+fi
+
+SUBJECT="$(sed -n '1p' "$MSG_FILE" | tr -d '\r')"
+
+# Let Git-generated merge/revert commits pass; they are not authored subjects.
+case "$SUBJECT" in
+  Merge\ *|Revert\ \"*|revert:\ *)
+    exit 0
+    ;;
+esac
+
+PATTERN='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\([a-z0-9._-]+\))?!?: .{1,72}$'
+
+if ! printf '%s\n' "$SUBJECT" | grep -Eq "$PATTERN"; then
+  echo -e "${RED}提交信息不符合 Conventional Commits 规范。${NC}"
+  echo ""
+  echo "当前 subject:"
+  echo "  $SUBJECT"
+  echo ""
+  echo "要求:"
+  echo "  type(scope): subject"
+  echo "  type: subject"
+  echo ""
+  echo "type 允许:"
+  echo "  feat, fix, docs, style, refactor, perf, test, build, ci, chore"
+  echo ""
+  echo "示例:"
+  echo "  fix(cli): add extract-text output controls"
+  echo "  test(backend): cover relevance sorting"
+  echo "  chore(hooks): validate commit messages"
+  echo ""
+  echo -e "${YELLOW}subject 内容最长 72 个字符；scope 只允许小写字母、数字、点、下划线和短横线。${NC}"
+  exit 1
+fi
+
+echo -e "${GREEN}提交信息检查通过${NC}"

@@ -1,6 +1,6 @@
 #!/bin/bash
-# Git pre-commit hook: 格式化检查 + 静态分析 + 测试 + YAML 校验
-# 安装: make install-hooks 或 ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
+# Git pre-commit hook: 格式化检查 + 静态分析 + 测试 + YAML 校验 + hook 安装校验
+# 安装: make install-hooks
 #
 # 智能跳过：仅当暂存区包含 .go 文件时才运行 gofmt/vet/test，
 # 纯文档/配置变更会跳过这些耗时步骤。
@@ -13,6 +13,16 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 PASS=true
+
+# commit message 本身只能在 commit-msg hook 中可靠校验；这里检查本地是否已安装。
+HOOKS_DIR=$(git rev-parse --git-path hooks)
+if [ ! -x "$HOOKS_DIR/commit-msg" ]; then
+  echo -e "${RED}commit-msg hook 未安装，无法校验提交信息规范。${NC}"
+  echo -e "${YELLOW}请运行: make install-hooks${NC}"
+  PASS=false
+else
+  echo -e "${GREEN}commit-msg hook 已安装，将校验提交信息规范${NC}"
+fi
 
 # 检测暂存区中的文件类型
 STAGED_GO=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)

@@ -59,6 +59,8 @@ check: fmt-check vet test
 
 install-hooks:
 	@ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
+	@ln -sf ../../scripts/commit-msg .git/hooks/commit-msg
+	@echo "commit-msg hook installed -> .git/hooks/commit-msg"
 	@echo "pre-commit hook 已安装 → .git/hooks/pre-commit"
 
 # --- 清理 ---
