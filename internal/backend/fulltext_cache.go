@@ -92,6 +92,10 @@ func (c fullTextCache) metaPath(attachmentKey string) string {
 	return filepath.Join(c.attachmentDir(attachmentKey), "meta.json")
 }
 
+func (c fullTextCache) chunksPath(attachmentKey string) string {
+	return filepath.Join(c.attachmentDir(attachmentKey), "chunks.json")
+}
+
 func (c fullTextCache) indexPath() string {
 	return filepath.Join(c.rootDir, "index.sqlite")
 }
@@ -122,7 +126,26 @@ func (c fullTextCache) Load(attachment domain.Attachment) (FullTextDocument, boo
 	if !c.IsFresh(meta, attachment) {
 		return FullTextDocument{}, false, nil
 	}
-	return FullTextDocument{Text: string(content), Meta: meta, CacheHit: true}, true, nil
+	chunks, err := c.loadChunks(key)
+	if err != nil {
+		return FullTextDocument{}, false, err
+	}
+	return FullTextDocument{Text: string(content), Chunks: chunks, Meta: meta, CacheHit: true}, true, nil
+}
+
+func (c fullTextCache) loadChunks(attachmentKey string) ([]chunk, error) {
+	content, err := os.ReadFile(c.chunksPath(attachmentKey))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var chunks []chunk
+	if err := json.Unmarshal(content, &chunks); err != nil {
+		return nil, err
+	}
+	return chunks, nil
 }
 
 func (c fullTextCache) HasIndexEntry(attachmentKey string) (bool, error) {
@@ -219,6 +242,17 @@ func (c fullTextCache) Save(doc FullTextDocument) error {
 		doc.Meta.Chars = len([]rune(doc.Text))
 	}
 	if err := os.WriteFile(c.contentPath(key), []byte(doc.Text), 0o600); err != nil {
+		return err
+	}
+	if len(doc.Chunks) > 0 {
+		chunksBytes, err := json.MarshalIndent(doc.Chunks, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(c.chunksPath(key), chunksBytes, 0o600); err != nil {
+			return err
+		}
+	} else if err := os.Remove(c.chunksPath(key)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	metaBytes, err := json.MarshalIndent(doc.Meta, "", "  ")

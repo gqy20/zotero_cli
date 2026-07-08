@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -20,6 +21,24 @@ type ItemFullTextResult struct {
 	Text                 string
 	PrimaryAttachmentKey string
 	Attachments          []AttachmentFullText
+}
+
+type PageText struct {
+	Page int    `json:"page"`
+	Text string `json:"text"`
+}
+
+type AttachmentPageText struct {
+	Attachment domain.Attachment `json:"attachment"`
+	Pages      []PageText        `json:"pages"`
+	Source     string            `json:"source,omitempty"`
+	CacheHit   bool              `json:"cache_hit,omitempty"`
+}
+
+type ItemPageTextResult struct {
+	Text                 string               `json:"text"`
+	PrimaryAttachmentKey string               `json:"primary_attachment_key,omitempty"`
+	Attachments          []AttachmentPageText `json:"attachments,omitempty"`
 }
 
 func (r *LocalReader) ExtractItemFullText(ctx context.Context, item domain.Item) (string, error) {
@@ -97,6 +116,102 @@ func (r *HybridReader) ExtractItemAttachmentTexts(ctx context.Context, item doma
 	}
 	r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, consumeReadMetadata(r.local))
 	return result, nil
+}
+
+func (r *LocalReader) ExtractItemAttachmentPageTexts(ctx context.Context, item domain.Item) (ItemPageTextResult, error) {
+	cache := newFullTextCache(r.FullTextCacheDir)
+	result := ItemPageTextResult{}
+	bestScore := -1 << 30
+	for _, attachment := range item.Attachments {
+		if !strings.EqualFold(strings.TrimSpace(attachment.ContentType), "application/pdf") {
+			continue
+		}
+		doc, ok, err := r.loadFullTextDocumentForAttachment(item, attachment, cache)
+		if err != nil {
+			return ItemPageTextResult{}, err
+		}
+		if !ok || strings.TrimSpace(doc.Text) == "" {
+			continue
+		}
+		pages := chunksToPageTexts(doc.Chunks)
+		if len(pages) == 0 {
+			return ItemPageTextResult{}, fmt.Errorf("page filtering requires page-aware full-text cache for attachment %s; rebuild the full-text cache from the PDF", attachment.Key)
+		}
+		entry := AttachmentPageText{
+			Attachment: attachment,
+			Pages:      pages,
+			Source:     doc.Meta.Extractor,
+			CacheHit:   doc.CacheHit,
+		}
+		result.Attachments = append(result.Attachments, entry)
+		score := primaryFullTextAttachmentScore(item, attachment, doc.Text)
+		if score > bestScore {
+			bestScore = score
+			result.Text = joinPageTexts(pages)
+			result.PrimaryAttachmentKey = attachment.Key
+			r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, ReadMetadata{
+				FullTextSource:        entry.Source,
+				FullTextAttachmentKey: entry.Attachment.Key,
+				FullTextCacheHit:      entry.CacheHit,
+			})
+		}
+	}
+	if result.Text == "" {
+		return ItemPageTextResult{}, fmt.Errorf("no page-aware PDF attachment text available for item %s", item.Key)
+	}
+	return result, nil
+}
+
+func (r *HybridReader) ExtractItemAttachmentPageTexts(ctx context.Context, item domain.Item) (ItemPageTextResult, error) {
+	textReader, ok := r.local.(interface {
+		ExtractItemAttachmentPageTexts(context.Context, domain.Item) (ItemPageTextResult, error)
+	})
+	if !ok {
+		return ItemPageTextResult{}, fmt.Errorf("extract-text --pages requires local full-text extraction support")
+	}
+	result, err := textReader.ExtractItemAttachmentPageTexts(ctx, item)
+	if err != nil {
+		return ItemPageTextResult{}, err
+	}
+	r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, consumeReadMetadata(r.local))
+	return result, nil
+}
+
+func chunksToPageTexts(chunks []chunk) []PageText {
+	if len(chunks) == 0 {
+		return nil
+	}
+	byPage := map[int][]string{}
+	for _, ch := range chunks {
+		if ch.Page <= 0 || strings.TrimSpace(ch.Text) == "" {
+			continue
+		}
+		byPage[ch.Page] = append(byPage[ch.Page], ch.Text)
+	}
+	pages := make([]int, 0, len(byPage))
+	for page := range byPage {
+		pages = append(pages, page)
+	}
+	sort.Ints(pages)
+	out := make([]PageText, 0, len(pages))
+	for _, page := range pages {
+		text := normalizeFullTextText(strings.Join(byPage[page], "\n"))
+		if text == "" {
+			continue
+		}
+		out = append(out, PageText{Page: page, Text: text})
+	}
+	return out
+}
+
+func joinPageTexts(pages []PageText) string {
+	parts := make([]string, 0, len(pages))
+	for _, page := range pages {
+		if strings.TrimSpace(page.Text) != "" {
+			parts = append(parts, page.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 func primaryFullTextAttachmentScore(item domain.Item, attachment domain.Attachment, text string) int {

@@ -54,6 +54,17 @@ func (contentReader) ExtractItemAttachmentTexts(ctx context.Context, item domain
 		}},
 	}, nil
 }
+func (contentReader) ExtractItemAttachmentPageTexts(ctx context.Context, item domain.Item) (backend.ItemPageTextResult, error) {
+	return backend.ItemPageTextResult{
+		Text:                 "page two text",
+		PrimaryAttachmentKey: "ATT1",
+		Attachments: []backend.AttachmentPageText{{
+			Attachment: contentReaderItem().Attachments[0],
+			Pages:      []backend.PageText{{Page: 2, Text: "page two text"}},
+			Source:     "pymupdf",
+		}},
+	}, nil
+}
 func (contentReader) ReadItemAnnotations(ctx context.Context, item domain.Item) (backend.ItemAnnotationsResult, error) {
 	return backend.ItemAnnotationsResult{
 		ItemKey:       item.Key,
@@ -117,6 +128,7 @@ func TestPreviewSnippetTextAndAnnotationsEndpoints(t *testing.T) {
 		"/api/v1/items/ABC123/preview",
 		"/api/v1/items/ABC123/snippet?q=speciation",
 		"/api/v1/items/ABC123/text",
+		"/api/v1/items/ABC123/text?pages=true",
 		"/api/v1/items/ABC123/annotations",
 	}
 	for _, path := range tests {
@@ -139,6 +151,19 @@ func TestPreviewSnippetTextAndAnnotationsEndpoints(t *testing.T) {
 	}
 	if len(textResp.Data.Attachments) != 1 || textResp.Data.Attachments[0].Attachment.ResolvedPath != "" {
 		t.Fatalf("expected sanitized text attachment payload, got %#v", textResp.Data.Attachments)
+	}
+
+	var pageTextResp struct {
+		Data backend.ItemPageTextResult `json:"data"`
+	}
+	pageTextReq := httptest.NewRequest("GET", "/api/v1/items/ABC123/text?pages=true", nil)
+	pageTextRec := httptest.NewRecorder()
+	mux.ServeHTTP(pageTextRec, pageTextReq)
+	if err := json.Unmarshal(pageTextRec.Body.Bytes(), &pageTextResp); err != nil {
+		t.Fatalf("unmarshal page text response: %v", err)
+	}
+	if len(pageTextResp.Data.Attachments) != 1 || pageTextResp.Data.Attachments[0].Attachment.ResolvedPath != "" {
+		t.Fatalf("expected sanitized page text attachment payload, got %#v", pageTextResp.Data.Attachments)
 	}
 
 	var annResp struct {

@@ -50,6 +50,10 @@ type attachmentTextReader interface {
 	ExtractItemAttachmentTexts(context.Context, domain.Item) (backend.ItemFullTextResult, error)
 }
 
+type attachmentPageTextReader interface {
+	ExtractItemAttachmentPageTexts(context.Context, domain.Item) (backend.ItemPageTextResult, error)
+}
+
 type itemAnnotationsReader interface {
 	ReadItemAnnotations(context.Context, domain.Item) (backend.ItemAnnotationsResult, error)
 }
@@ -165,6 +169,23 @@ func (h *Handler) getItemText(w http.ResponseWriter, r *http.Request) {
 	item, err := h.loadItem(r.Context(), r.PathValue("key"))
 	if err != nil {
 		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	if r.URL.Query().Get("pages") == "true" {
+		reader, ok := h.reader.(attachmentPageTextReader)
+		if !ok {
+			writeError(w, http.StatusNotImplemented, fmt.Errorf("page-aware full-text extraction not available on this server"))
+			return
+		}
+		result, err := reader.ExtractItemAttachmentPageTexts(r.Context(), item)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		for i := range result.Attachments {
+			result.Attachments[i].Attachment = sanitizeAttachmentForRemote(result.Attachments[i].Attachment)
+		}
+		writeJSON(w, http.StatusOK, result, Meta{Total: len([]rune(result.Text))})
 		return
 	}
 	reader, ok := h.reader.(attachmentTextReader)

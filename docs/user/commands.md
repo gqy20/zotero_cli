@@ -218,8 +218,29 @@ JSON 字段说明：
 ### 用法
 
 ```
-zot extract-text <item-key> [--json]
+zot extract-text <item-key> [--json] [--pages RANGE] [--max-chars N] [--grep TEXT] [--attachment KEY]
 ```
+
+### 选项
+
+| 选项 | 说明 |
+|------|------|
+| `--json` | 结构化 JSON 输出，推荐给 AI Agent 使用。 |
+| `--pages RANGE` | 只返回指定 PDF 页，例如 `3`、`3-8`、`2,5-7`。 |
+| `--max-chars N` | 限制每个返回 text 字段最多 N 个字符。 |
+| `--grep TEXT` | 只返回包含 TEXT 的行，大小写不敏感。 |
+| `--attachment KEY` | 只返回指定附件 key 的文本。 |
+
+### 示例
+
+```bash
+zot extract-text ABCD --json
+zot extract-text ABCD --json --pages 3-8
+zot extract-text ABCD --json --pages 2,5-7 --grep methods --max-chars 12000
+zot extract-text ABCD --json --attachment ATT123 --pages 4
+```
+
+`--pages` 需要带页码信息的 full-text cache。新的 PyMuPDF/PDFium 提取会写入 `chunks.json`；只有 `content.txt` 的旧缓存会返回明确的重建提示，而不是做不可靠的假页码过滤。
 
 ### 输出
 

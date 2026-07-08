@@ -73,6 +73,7 @@ func (r *LocalReader) extractFullTextWithPDFium(ctx context.Context, attachment 
 	}
 
 	pageTexts := make([]string, 0, pageCount.PageCount)
+	chunks := make([]chunk, 0, pageCount.PageCount)
 	totalChars := 0
 	for pageIndex := 0; pageIndex < pageCount.PageCount; pageIndex++ {
 		pageText, err := instance.GetPageText(&requests.GetPageText{
@@ -89,6 +90,7 @@ func (r *LocalReader) extractFullTextWithPDFium(ctx context.Context, attachment 
 		totalChars += len([]rune(pageText.Text))
 		if strings.TrimSpace(pageText.Text) != "" {
 			pageTexts = append(pageTexts, pageText.Text)
+			chunks = append(chunks, chunk{Page: pageIndex + 1, Text: pageText.Text, BlockCount: 1})
 		}
 	}
 
@@ -103,7 +105,8 @@ func (r *LocalReader) extractFullTextWithPDFium(ctx context.Context, attachment 
 	}
 
 	return FullTextDocument{
-		Text: normalizeFullTextText(text),
+		Text:   normalizeFullTextText(text),
+		Chunks: chunks,
 		Meta: fullTextCacheMeta{
 			AttachmentKey:   attachment.Key,
 			ResolvedPath:    sourcePath,

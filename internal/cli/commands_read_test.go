@@ -70,10 +70,11 @@ type stubLocalExportReader struct {
 }
 
 type stubLocalTextReader struct {
-	item        domain.Item
-	text        string
-	attachments []backend.AttachmentFullText
-	meta        backend.ReadMetadata
+	item            domain.Item
+	text            string
+	attachments     []backend.AttachmentFullText
+	pageAttachments []backend.AttachmentPageText
+	meta            backend.ReadMetadata
 }
 
 func (r stubLocalExportReader) FindItems(context.Context, backend.FindOptions) ([]domain.Item, error) {
@@ -158,6 +159,20 @@ func (r stubLocalTextReader) ExtractItemAttachmentTexts(context.Context, domain.
 		Text:                 r.text,
 		PrimaryAttachmentKey: r.meta.FullTextAttachmentKey,
 		Attachments:          append([]backend.AttachmentFullText(nil), r.attachments...),
+	}, nil
+}
+
+func (r stubLocalTextReader) ExtractItemAttachmentPageTexts(context.Context, domain.Item) (backend.ItemPageTextResult, error) {
+	textParts := []string{}
+	for _, attachment := range r.pageAttachments {
+		for _, page := range attachment.Pages {
+			textParts = append(textParts, page.Text)
+		}
+	}
+	return backend.ItemPageTextResult{
+		Text:                 strings.Join(textParts, "\n"),
+		PrimaryAttachmentKey: r.meta.FullTextAttachmentKey,
+		Attachments:          append([]backend.AttachmentPageText(nil), r.pageAttachments...),
 	}, nil
 }
 

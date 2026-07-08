@@ -134,6 +134,22 @@ func (r *RemoteReader) ExtractItemAttachmentTexts(ctx context.Context, item doma
 	return resp.Data, nil
 }
 
+func (r *RemoteReader) ExtractItemAttachmentPageTexts(ctx context.Context, item domain.Item) (ItemPageTextResult, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/items/"+item.Key+"/text"), nil)
+	if err != nil {
+		return ItemPageTextResult{}, err
+	}
+	values := url.Values{}
+	values.Set("pages", "true")
+	req.URL.RawQuery = values.Encode()
+	var resp apiResponse[ItemPageTextResult]
+	if err := r.doJSON(req, &resp); err != nil {
+		return ItemPageTextResult{}, err
+	}
+	r.markRead()
+	return resp.Data, nil
+}
+
 func (r *RemoteReader) ReadItemAnnotations(ctx context.Context, item domain.Item) (ItemAnnotationsResult, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/items/"+item.Key+"/annotations"), nil)
 	if err != nil {

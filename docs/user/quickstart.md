@@ -126,6 +126,7 @@ go run .\cmd\zot config validate
 ```powershell
 # 提取文本（PyMuPDF → ft-cache → pdfium WASM）
 .\zot.exe extract-text ITEMKEY --json
+.\zot.exe extract-text ITEMKEY --json --pages 3-8 --grep methods --max-chars 12000
 
 # 双源读取标注（DB + PDF 文件内）
 .\zot.exe annotations ITEMKEY --json

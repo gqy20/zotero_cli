@@ -263,6 +263,7 @@ zot find "同源多倍体" --snippet --limit 200 --json
 ```bash
 # 提取 PDF 正文供 AI 分析（PyMuPDF 优先 → ft-cache 回退 → pdfium WASM 兜底）
 zot extract-text KEY --json
+zot extract-text KEY --json --pages 3-8 --grep methods --max-chars 12000
 
 # 提取论文图表（支持缓存、多 PDF 附件、低质量误检过滤和每页上限）
 zot extract-figures KEY --json

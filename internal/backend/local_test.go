@@ -1015,6 +1015,161 @@ func TestLocalExtractItemAttachmentTextsIncludesAllPDFAttachments(t *testing.T) 
 	}
 }
 
+func TestFullTextCacheSaveLoadPreservesChunks(t *testing.T) {
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	resolvedPath := filepath.Join(storageDir, "ATT123", "paper.pdf")
+	if err := os.MkdirAll(filepath.Dir(resolvedPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(resolvedPath, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(resolvedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache := newFullTextCache(filepath.Join(dataDir, ".zotero_cli", "fulltext"))
+	doc := FullTextDocument{
+		Text: "page one\npage two",
+		Chunks: []chunk{
+			{Page: 1, Text: "page one", BlockCount: 1},
+			{Page: 2, Text: "page two", BlockCount: 1},
+		},
+		Meta: fullTextCacheMeta{
+			AttachmentKey:   "ATT123",
+			ResolvedPath:    resolvedPath,
+			ContentType:     "application/pdf",
+			Extractor:       "pymupdf",
+			SourceMtimeUnix: info.ModTime().Unix(),
+			SourceSize:      info.Size(),
+		},
+	}
+	if err := cache.Save(doc); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	loaded, ok, err := cache.Load(domain.Attachment{Key: "ATT123", ContentType: "application/pdf", ResolvedPath: resolvedPath, Resolved: true})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Load() missed fresh cache")
+	}
+	if len(loaded.Chunks) != 2 || loaded.Chunks[1].Page != 2 || loaded.Chunks[1].Text != "page two" {
+		t.Fatalf("Load() chunks = %#v", loaded.Chunks)
+	}
+}
+
+func TestLocalExtractItemAttachmentPageTextsUsesChunks(t *testing.T) {
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	resolvedPath := filepath.Join(storageDir, "ATT123", "paper.pdf")
+	if err := os.MkdirAll(filepath.Dir(resolvedPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(resolvedPath, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	previous := extractFullTextWithPDFiumFunc
+	t.Cleanup(func() { extractFullTextWithPDFiumFunc = previous })
+	extractFullTextWithPDFiumFunc = func(_ context.Context, _ *LocalReader, attachment domain.Attachment) (FullTextDocument, bool, error) {
+		sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
+		if !ok {
+			return FullTextDocument{}, false, nil
+		}
+		return FullTextDocument{
+			Text: "page one text\npage two methods\npage two results",
+			Chunks: []chunk{
+				{Page: 1, Text: "page one text", BlockCount: 1},
+				{Page: 2, Text: "page two methods", BlockCount: 1},
+				{Page: 2, Text: "page two results", BlockCount: 1},
+			},
+			Meta: fullTextCacheMeta{
+				AttachmentKey:   attachment.Key,
+				ResolvedPath:    sourcePath,
+				ContentType:     attachment.ContentType,
+				Extractor:       "pdfium",
+				SourceMtimeUnix: info.ModTime().Unix(),
+				SourceSize:      info.Size(),
+			},
+		}, true, nil
+	}
+
+	reader := &LocalReader{
+		DataDir:          dataDir,
+		StorageDir:       storageDir,
+		FullTextCacheDir: filepath.Join(dataDir, ".zotero_cli", "fulltext"),
+	}
+	item := domain.Item{
+		Key: "ITEM123",
+		Attachments: []domain.Attachment{
+			{Key: "ATT123", Title: "Paper PDF", ContentType: "application/pdf", ResolvedPath: resolvedPath, Resolved: true},
+		},
+	}
+	result, err := reader.ExtractItemAttachmentPageTexts(context.Background(), item)
+	if err != nil {
+		t.Fatalf("ExtractItemAttachmentPageTexts() error = %v", err)
+	}
+	if result.PrimaryAttachmentKey != "ATT123" || len(result.Attachments) != 1 {
+		t.Fatalf("unexpected result metadata: %#v", result)
+	}
+	pages := result.Attachments[0].Pages
+	if len(pages) != 2 || pages[0].Page != 1 || pages[1].Page != 2 {
+		t.Fatalf("unexpected pages: %#v", pages)
+	}
+	if !strings.Contains(pages[1].Text, "page two methods") || !strings.Contains(pages[1].Text, "page two results") {
+		t.Fatalf("page 2 text did not combine chunks: %#v", pages[1])
+	}
+}
+
+func TestLocalExtractItemAttachmentPageTextsRejectsLegacyCacheWithoutChunks(t *testing.T) {
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	resolvedPath := filepath.Join(storageDir, "ATT123", "paper.pdf")
+	if err := os.MkdirAll(filepath.Dir(resolvedPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(resolvedPath, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(resolvedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cacheDir := filepath.Join(dataDir, ".zotero_cli", "fulltext")
+	cache := newFullTextCache(cacheDir)
+	if err := cache.Save(FullTextDocument{
+		Text: "legacy cache text without page chunks",
+		Meta: fullTextCacheMeta{
+			AttachmentKey:   "ATT123",
+			ResolvedPath:    resolvedPath,
+			ContentType:     "application/pdf",
+			Extractor:       "zotero_ft_cache",
+			SourceMtimeUnix: info.ModTime().Unix(),
+			SourceSize:      info.Size(),
+		},
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	reader := &LocalReader{
+		DataDir:          dataDir,
+		StorageDir:       storageDir,
+		FullTextCacheDir: cacheDir,
+	}
+	item := domain.Item{
+		Key: "ITEM123",
+		Attachments: []domain.Attachment{
+			{Key: "ATT123", Title: "Paper PDF", ContentType: "application/pdf", ResolvedPath: resolvedPath, Resolved: true},
+		},
+	}
+	_, err = reader.ExtractItemAttachmentPageTexts(context.Background(), item)
+	if err == nil || !strings.Contains(err.Error(), "page-aware full-text cache") {
+		t.Fatalf("expected page-aware cache error, got %v", err)
+	}
+}
+
 func TestLocalExtractItemAttachmentTextsPrefersMainPDFOverSupplement(t *testing.T) {
 	dataDir := t.TempDir()
 	storageDir := filepath.Join(dataDir, "storage")

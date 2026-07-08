@@ -522,6 +522,70 @@ func TestRunExtractTextLocalJSONOutputControls(t *testing.T) {
 	}
 }
 
+func TestRunExtractTextLocalJSONPagesOutputControls(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	previousLocalReader := testCLI.newLocalReader
+	t.Cleanup(func() {
+		testCLI.newLocalReader = previousLocalReader
+	})
+	testCLI.newLocalReader = func(config.Config) (backend.Reader, error) {
+		return stubLocalTextReader{
+			item: domain.Item{
+				Key: "ITEM123",
+				Attachments: []domain.Attachment{
+					{Key: "ATT123", Title: "Paper PDF", ContentType: "application/pdf", ResolvedPath: "D:/paper.pdf", Resolved: true},
+				},
+			},
+			pageAttachments: []backend.AttachmentPageText{
+				{
+					Attachment: domain.Attachment{Key: "ATT123", Title: "Paper PDF", ContentType: "application/pdf", ResolvedPath: "D:/paper.pdf", Resolved: true},
+					Pages: []backend.PageText{
+						{Page: 1, Text: "abstract text"},
+						{Page: 2, Text: "methods page two contains sampling and analysis"},
+						{Page: 3, Text: "results text"},
+					},
+					Source: "pymupdf",
+				},
+			},
+			meta: backend.ReadMetadata{ReadSource: "live", FullTextSource: "pymupdf", FullTextAttachmentKey: "ATT123"},
+		}, nil
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"extract-text", "ITEM123", "--json", "--pages", "2", "--grep", "methods", "--max-chars", "14"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	meta := got["meta"].(map[string]any)
+	filters := meta["filters"].(map[string]any)
+	if filters["pages"] != "2" || filters["grep"] != "methods" || filters["max_chars"] != float64(14) {
+		t.Fatalf("unexpected filters: %#v", filters)
+	}
+	returnedPages := meta["returned_pages"].([]any)
+	if len(returnedPages) != 1 || returnedPages[0] != float64(2) {
+		t.Fatalf("unexpected returned_pages: %#v", meta["returned_pages"])
+	}
+	data := got["data"].(map[string]any)
+	if data["text"] != "methods page t" {
+		t.Fatalf("unexpected data text: %#v", data["text"])
+	}
+	attachments := data["attachments"].([]any)
+	attachment := attachments[0].(map[string]any)
+	pages := attachment["pages"].([]any)
+	if len(pages) != 1 || pages[0].(map[string]any)["page"] != float64(2) {
+		t.Fatalf("unexpected pages payload: %#v", pages)
+	}
+}
+
 func TestRunShowTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

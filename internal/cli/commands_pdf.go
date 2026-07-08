@@ -17,13 +17,14 @@ import (
 )
 
 const (
-	usageExtractText = `usage: zot extract-text <item-key> [--json] [--max-chars N] [--grep TEXT] [--attachment KEY]
+	usageExtractText = `usage: zot extract-text <item-key> [--json] [--pages RANGE] [--max-chars N] [--grep TEXT] [--attachment KEY]
 
 What: Extract plain text from a PDF attachment. Returns the concatenated text
 content of all pages. Results are cached to disk (keyed by item key + file
 mtime), so repeat calls are near-instant.
 
 Output controls:
+  --pages RANGE      Return only selected PDF pages, e.g. 3 or 2,5-7.
   --max-chars N      Return at most N characters of text (applies per field).
   --grep TEXT        Return only lines containing TEXT (case-insensitive).
   --attachment KEY   Return text for one attachment key.
@@ -35,6 +36,7 @@ Modes:
 
 Examples:
   zot extract-text ABCD --json
+  zot extract-text ABCD --json --pages 3-8
   zot extract-text ABCD --json --max-chars 12000
   zot extract-text ABCD --json --grep methods --attachment ATT123
 
@@ -78,6 +80,13 @@ type extractTextArgs struct {
 	MaxChars      int
 	Grep          string
 	AttachmentKey string
+	PagesRaw      string
+	PageRanges    []pageRange
+}
+
+type pageRange struct {
+	Start int
+	End   int
 }
 
 type textFieldView struct {
@@ -124,6 +133,18 @@ func (c *CLI) runExtractText(args []string) int {
 			result backend.ItemFullTextResult
 			err    error
 		)
+		if parsed.PagesRaw != "" {
+			pageReader, ok := reader.(attachmentPageTextReader)
+			if !ok {
+				return c.printErr(fmt.Errorf("extract-text --pages requires page-aware full-text extraction support"))
+			}
+			pageResult, err := pageReader.ExtractItemAttachmentPageTexts(context.Background(), item)
+			if err != nil {
+				return c.printErr(err)
+			}
+			readMeta := c.consumeReaderReadMetadata(reader)
+			return c.writeExtractTextPagesJSON(item, pageResult, parsed, readMeta)
+		}
 		if attachmentReader, ok := reader.(attachmentTextReader); ok {
 			result, err = attachmentReader.ExtractItemAttachmentTexts(context.Background(), item)
 		} else {
@@ -216,6 +237,9 @@ func (c *CLI) runExtractText(args []string) int {
 	if parsed.AttachmentKey != "" {
 		return c.printErr(fmt.Errorf("--attachment requires --json"))
 	}
+	if parsed.PagesRaw != "" {
+		return c.printErr(fmt.Errorf("--pages requires --json"))
+	}
 	textReader, ok := reader.(fullTextReader)
 	if !ok {
 		return c.printErr(fmt.Errorf("extract-text requires local full-text extraction support"))
@@ -272,6 +296,20 @@ func (c *CLI) parseExtractTextArgs(args []string) (extractTextArgs, bool) {
 				fmt.Fprintln(c.stderr, usageExtractText)
 				return extractTextArgs{}, false
 			}
+		case "--pages":
+			if i+1 >= len(args) {
+				fmt.Fprintln(c.stderr, usageExtractText)
+				return extractTextArgs{}, false
+			}
+			i++
+			ranges, err := parsePageRanges(args[i])
+			if err != nil {
+				fmt.Fprintln(c.stderr, "error:", err)
+				fmt.Fprintln(c.stderr, usageExtractText)
+				return extractTextArgs{}, false
+			}
+			parsed.PagesRaw = strings.TrimSpace(args[i])
+			parsed.PageRanges = ranges
 		default:
 			if strings.HasPrefix(arg, "--") || parsed.ItemKey != "" {
 				fmt.Fprintln(c.stderr, usageExtractText)
@@ -299,9 +337,82 @@ func appendExtractTextFilterMeta(meta map[string]any, args extractTextArgs) {
 	if args.AttachmentKey != "" {
 		filters["attachment_key"] = args.AttachmentKey
 	}
+	if args.PagesRaw != "" {
+		filters["pages"] = args.PagesRaw
+	}
 	if len(filters) > 0 {
 		meta["filters"] = filters
 	}
+}
+
+func (c *CLI) writeExtractTextPagesJSON(item domain.Item, result backend.ItemPageTextResult, args extractTextArgs, readMeta backend.ReadMetadata) int {
+	filtered := filterItemPageTextResult(result, args)
+	if args.AttachmentKey != "" && len(filtered.Attachments) == 0 {
+		return c.printErr(fmt.Errorf("attachment %s not found on item %s", args.AttachmentKey, item.Key))
+	}
+	dataTextView := formatExtractedText(filtered.Text, args)
+	meta := map[string]any{
+		"total":          dataTextView.Total,
+		"returned_chars": dataTextView.ReturnedChars,
+	}
+	if dataTextView.Truncated {
+		meta["truncated"] = true
+	}
+	appendExtractTextFilterMeta(meta, args)
+	returnedPages := returnedPageNumbers(filtered.Attachments)
+	if len(returnedPages) > 0 {
+		meta["returned_pages"] = returnedPages
+	}
+	c.appendExplicitReadMetadata(meta, readMeta)
+
+	attachments := make([]map[string]any, 0, len(filtered.Attachments))
+	for _, attachment := range filtered.Attachments {
+		text := joinCLIPageTexts(attachment.Pages)
+		textView := formatExtractedText(text, args)
+		entry := map[string]any{
+			"attachment_key": attachment.Attachment.Key,
+			"text":           textView.Text,
+			"total":          textView.Total,
+			"returned_chars": textView.ReturnedChars,
+			"pages":          pageTextsToJSON(attachment.Pages),
+		}
+		if textView.Truncated {
+			entry["truncated"] = true
+		}
+		if attachment.Attachment.Title != "" {
+			entry["title"] = attachment.Attachment.Title
+		}
+		if attachment.Attachment.Filename != "" {
+			entry["filename"] = attachment.Attachment.Filename
+		}
+		if attachment.Attachment.ResolvedPath != "" {
+			entry["resolved_path"] = attachment.Attachment.ResolvedPath
+		}
+		if attachment.Source != "" {
+			entry["full_text_source"] = attachment.Source
+		}
+		if attachment.CacheHit {
+			entry["full_text_cache_hit"] = true
+		}
+		attachments = append(attachments, entry)
+	}
+
+	data := map[string]any{
+		"item_key": item.Key,
+		"text":     dataTextView.Text,
+	}
+	if filtered.PrimaryAttachmentKey != "" {
+		data["primary_attachment_key"] = filtered.PrimaryAttachmentKey
+	}
+	if len(attachments) > 0 {
+		data["attachments"] = attachments
+	}
+	return c.writeJSON(jsonResponse{
+		OK:      true,
+		Command: "extract-text",
+		Data:    data,
+		Meta:    meta,
+	})
 }
 
 func formatExtractedText(text string, args extractTextArgs) textFieldView {
@@ -334,6 +445,121 @@ func grepTextLines(text string, needle string) string {
 		}
 	}
 	return strings.Join(matches, "\n")
+}
+
+func parsePageRanges(value string) ([]pageRange, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, fmt.Errorf("missing value for --pages")
+	}
+	parts := strings.Split(value, ",")
+	ranges := make([]pageRange, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return nil, fmt.Errorf("invalid value for --pages")
+		}
+		if strings.Contains(part, "-") {
+			ends := strings.Split(part, "-")
+			if len(ends) != 2 {
+				return nil, fmt.Errorf("invalid page range %q", part)
+			}
+			start, err := strconv.Atoi(strings.TrimSpace(ends[0]))
+			if err != nil || start <= 0 {
+				return nil, fmt.Errorf("invalid page range %q", part)
+			}
+			end, err := strconv.Atoi(strings.TrimSpace(ends[1]))
+			if err != nil || end <= 0 || end < start {
+				return nil, fmt.Errorf("invalid page range %q", part)
+			}
+			ranges = append(ranges, pageRange{Start: start, End: end})
+			continue
+		}
+		page, err := strconv.Atoi(part)
+		if err != nil || page <= 0 {
+			return nil, fmt.Errorf("invalid page %q", part)
+		}
+		ranges = append(ranges, pageRange{Start: page, End: page})
+	}
+	return ranges, nil
+}
+
+func pageInRanges(page int, ranges []pageRange) bool {
+	if len(ranges) == 0 {
+		return true
+	}
+	for _, r := range ranges {
+		if page >= r.Start && page <= r.End {
+			return true
+		}
+	}
+	return false
+}
+
+func filterItemPageTextResult(result backend.ItemPageTextResult, args extractTextArgs) backend.ItemPageTextResult {
+	filtered := backend.ItemPageTextResult{PrimaryAttachmentKey: result.PrimaryAttachmentKey}
+	textParts := []string{}
+	for _, attachment := range result.Attachments {
+		if args.AttachmentKey != "" && !strings.EqualFold(attachment.Attachment.Key, args.AttachmentKey) {
+			continue
+		}
+		pages := make([]backend.PageText, 0, len(attachment.Pages))
+		for _, page := range attachment.Pages {
+			if pageInRanges(page.Page, args.PageRanges) {
+				pages = append(pages, page)
+			}
+		}
+		if len(pages) == 0 {
+			continue
+		}
+		attachment.Pages = pages
+		filtered.Attachments = append(filtered.Attachments, attachment)
+		textParts = append(textParts, joinCLIPageTexts(pages))
+		if args.AttachmentKey != "" {
+			filtered.PrimaryAttachmentKey = attachment.Attachment.Key
+		}
+	}
+	filtered.Text = strings.Join(textParts, "\n")
+	if filtered.PrimaryAttachmentKey == "" && len(filtered.Attachments) > 0 {
+		filtered.PrimaryAttachmentKey = filtered.Attachments[0].Attachment.Key
+	}
+	return filtered
+}
+
+func joinCLIPageTexts(pages []backend.PageText) string {
+	parts := make([]string, 0, len(pages))
+	for _, page := range pages {
+		if strings.TrimSpace(page.Text) != "" {
+			parts = append(parts, page.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func pageTextsToJSON(pages []backend.PageText) []map[string]any {
+	out := make([]map[string]any, 0, len(pages))
+	for _, page := range pages {
+		out = append(out, map[string]any{
+			"page": page.Page,
+			"text": page.Text,
+		})
+	}
+	return out
+}
+
+func returnedPageNumbers(attachments []backend.AttachmentPageText) []int {
+	seen := map[int]struct{}{}
+	for _, attachment := range attachments {
+		for _, page := range attachment.Pages {
+			seen[page.Page] = struct{}{}
+		}
+	}
+	out := make([]int, 0, len(seen))
+	for page := range seen {
+		out = append(out, page)
+	}
+	sort.Ints(out)
+	return out
 }
 
 func filterPDFAttachments(attachments []domain.Attachment) []domain.Attachment {

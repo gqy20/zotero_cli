@@ -79,6 +79,38 @@ func TestRemoteReader_ExtractItemAttachmentTexts(t *testing.T) {
 	}
 }
 
+func TestRemoteReader_ExtractItemAttachmentPageTexts(t *testing.T) {
+	expected := ItemPageTextResult{
+		Text:                 "page two text",
+		PrimaryAttachmentKey: "ATT1",
+		Attachments: []AttachmentPageText{{
+			Attachment: domain.Attachment{Key: "ATT1", Title: "paper.pdf"},
+			Pages:      []PageText{{Page: 2, Text: "page two text"}},
+			Source:     "pymupdf",
+			CacheHit:   true,
+		}},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/items/ABC123/text" {
+			t.Fatalf("expected text path, got %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("pages"); got != "true" {
+			t.Fatalf("expected pages=true, got %q", got)
+		}
+		writeOK(w, expected)
+	}))
+	defer srv.Close()
+
+	r := NewRemoteReader(srv.URL, srv.Client())
+	got, err := r.ExtractItemAttachmentPageTexts(context.Background(), domain.Item{Key: "ABC123"})
+	if err != nil {
+		t.Fatalf("ExtractItemAttachmentPageTexts: %v", err)
+	}
+	if got.Text != expected.Text || got.PrimaryAttachmentKey != expected.PrimaryAttachmentKey || len(got.Attachments) != 1 {
+		t.Fatalf("unexpected page text result: %#v", got)
+	}
+}
+
 func TestRemoteReader_ReadItemAnnotations(t *testing.T) {
 	expected := ItemAnnotationsResult{
 		ItemKey:       "ABC123",

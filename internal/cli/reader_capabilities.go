@@ -23,6 +23,10 @@ type attachmentTextReader interface {
 	ExtractItemAttachmentTexts(context.Context, domain.Item) (backend.ItemFullTextResult, error)
 }
 
+type attachmentPageTextReader interface {
+	ExtractItemAttachmentPageTexts(context.Context, domain.Item) (backend.ItemPageTextResult, error)
+}
+
 type itemAnnotationsReader interface {
 	ReadItemAnnotations(context.Context, domain.Item) (backend.ItemAnnotationsResult, error)
 }
