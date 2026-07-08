@@ -178,6 +178,45 @@ func TestRunExportCSLJSONLocalByItemKey(t *testing.T) {
 	}
 }
 
+func TestRunExportCSLJSONLocalFromFindUsesFindFilters(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"export", "--from-find", "--attachment-name", "mixed", "--limit", "1", "--format", "csljson", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok || meta["read_source"] != "live" {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
+	data := got["data"].(map[string]any)
+	payload := data["data"].([]any)
+	if len(payload) != 1 {
+		t.Fatalf("expected one exported item, got %#v", payload)
+	}
+	item := payload[0].(map[string]any)
+	if item["id"] != "ART67890" {
+		t.Fatalf("unexpected from-find csljson payload: %#v", item)
+	}
+}
+
 func TestRunExportCSLJSONHybridPrefersLocalByItemKey(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

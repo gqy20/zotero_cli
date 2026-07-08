@@ -222,13 +222,13 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			name:       "export conflicting args",
 			args:       []string{"export", "mixed", "--item-key", "X42A7DEE"},
 			wantUsage:  usageExport,
-			wantStderr: "error: cannot combine query, --item-key, and --collection",
+			wantStderr: "error: cannot combine query, --item-key, --collection, and --from-find",
 		},
 		{
 			name:       "export conflicting collection args",
 			args:       []string{"export", "--collection", "COLL1234", "--item-key", "X42A7DEE"},
 			wantUsage:  usageExport,
-			wantStderr: "error: cannot combine query, --item-key, and --collection",
+			wantStderr: "error: cannot combine query, --item-key, --collection, and --from-find",
 		},
 		{
 			name:       "export invalid format",

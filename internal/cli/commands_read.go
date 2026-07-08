@@ -121,6 +121,7 @@ Notes:
 	usageExport = `usage: zot export <query> [--limit N] [--format FMT] [--json]
        | zot export --item-key KEY [--format FMT] [--json]
        | zot export --collection KEY [--format FMT] [--json]
+       | zot export --from-find <find-args...> [--format FMT] [--json]
        | zot export --all [--format FMT] [--json]
 
 What: Export bibliographic entries in the chosen format. By default emits the
@@ -131,6 +132,7 @@ Source (pick exactly one):
   <query>                 Reuse 'zot find' query syntax — same filters apply.
   --item-key KEY          Single item.
   --collection KEY        All items in a collection.
+  --from-find ...         Resolve keys using the full zot find parser first.
   --all                   Entire library.
 
 Format (--format / -f):
@@ -143,10 +145,12 @@ Examples:
   zot export "CRISPR" --format bibtex                         # stdout text
   zot export --item-key ABCD --format csljson --json          # JSON envelope
   zot export --collection COLL1 --format ris > refs.ris
+  zot export --from-find "CRISPR" --tag review --format bibtex
+  zot export --from-find --has-pdf --limit 20 --format csljson --json
   zot export --all --format csljson --json | jq '.data[]'     # Pipeline to jq
 
 Notes:
-  - Exactly one source mode: query, --item-key, --collection, or --all.
+  - Exactly one source mode: query, --item-key, --collection, --from-find, or --all.
     Combining any two is rejected.
   - --json wraps the formatted text in the agent envelope; the text itself
     stays plain (decodable by the matching importer).
@@ -1189,6 +1193,8 @@ func (c *CLI) runExport(args []string) int {
 	itemKey := exportParsed.ItemKey
 	collectionKey := exportParsed.CollectionKey
 	findOpts := exportParsed.FindOpts
+	fromFind := exportParsed.FromFind
+	findBackendOpts := exportParsed.FindBackend
 	format := exportParsed.Format
 	jsonOutput := exportParsed.JSONOutput
 
@@ -1198,7 +1204,39 @@ func (c *CLI) runExport(args []string) int {
 	}
 
 	keys := make([]string, 0, 8)
-	if format == "csljson" && cfg.Mode != "web" {
+	if fromFind {
+		var err error
+		keys, _, err = c.exportKeysFromFind(context.Background(), cfg, findBackendOpts)
+		if err != nil {
+			return c.printErr(err)
+		}
+		if len(keys) == 0 {
+			return c.printErr(fmt.Errorf("no items matched --from-find"))
+		}
+		if format == "csljson" && cfg.Mode != "web" {
+			result, localMeta, handled, err := c.tryLocalCSLJSONExportKeys(context.Background(), cfg, keys)
+			if handled {
+				if err != nil {
+					return c.printErr(err)
+				}
+				if jsonOutput {
+					meta := map[string]any{
+						"total": len(keys),
+					}
+					c.appendExplicitReadMetadata(meta, localMeta)
+					return c.writeJSON(jsonResponse{
+						OK:      true,
+						Command: "export",
+						Data:    result,
+						Meta:    meta,
+					})
+				}
+				c.warnIfSnapshotRead(localMeta)
+				return c.writeJSON(jsonResponse{OK: true, Command: "export", Data: result.Data})
+			}
+		}
+	}
+	if !fromFind && format == "csljson" && cfg.Mode != "web" {
 		result, readMeta, handled, err := c.tryLocalCSLJSONExport(context.Background(), cfg, itemKey, collectionKey, findOpts)
 		if handled {
 			if err != nil {
@@ -1226,7 +1264,9 @@ func (c *CLI) runExport(args []string) int {
 		return exitCode
 	}
 
-	if itemKey != "" {
+	if fromFind {
+		// keys already resolved through the selected Reader.
+	} else if itemKey != "" {
 		keys = append(keys, itemKey)
 	} else if collectionKey != "" {
 		items, err := client.ListCollectionItems(context.Background(), collectionKey, findOpts)
@@ -1277,6 +1317,25 @@ func (c *CLI) runExport(args []string) int {
 	return c.writeJSON(jsonResponse{OK: true, Command: "export", Data: result.Data})
 }
 
+func (c *CLI) exportKeysFromFind(ctx context.Context, cfg config.Config, opts backend.FindOptions) ([]string, backend.ReadMetadata, error) {
+	reader, err := c.backendNewReader(cfg, nil)
+	if err != nil {
+		return nil, backend.ReadMetadata{}, err
+	}
+	items, err := reader.FindItems(ctx, opts)
+	if err != nil {
+		return nil, c.consumeReaderReadMetadata(reader), err
+	}
+	items = filterDefaultFindItems(items, opts)
+	keys := make([]string, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item.Key) != "" {
+			keys = append(keys, item.Key)
+		}
+	}
+	return keys, c.consumeReaderReadMetadata(reader), nil
+}
+
 func (c *CLI) tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, itemKey string, collectionKey string, findOpts zoteroapi.FindOptions) (zoteroapi.ExportResult, backend.ReadMetadata, bool, error) {
 	localReader, err := c.newLocalReader(cfg)
 	if err != nil {
@@ -1324,6 +1383,34 @@ func (c *CLI) tryLocalCSLJSONExport(ctx context.Context, cfg config.Config, item
 		}
 	}
 
+	exporter, ok := localReader.(cslJSONExporter)
+	if !ok {
+		if cfg.Mode == "hybrid" {
+			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
+		}
+		return zoteroapi.ExportResult{}, backend.ReadMetadata{}, true, fmt.Errorf("local export requires CSL JSON export support")
+	}
+	payload, err := exporter.ExportItemsCSLJSON(ctx, keys)
+	if err != nil {
+		if cfg.Mode == "hybrid" && shouldFallbackLocalCSLJSONExport(err) {
+			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
+		}
+		return zoteroapi.ExportResult{}, backend.ReadMetadata{}, true, err
+	}
+	return zoteroapi.ExportResult{
+		Format: "csljson",
+		Data:   payload,
+	}, c.consumeReaderReadMetadata(localReader), true, nil
+}
+
+func (c *CLI) tryLocalCSLJSONExportKeys(ctx context.Context, cfg config.Config, keys []string) (zoteroapi.ExportResult, backend.ReadMetadata, bool, error) {
+	localReader, err := c.newLocalReader(cfg)
+	if err != nil {
+		if cfg.Mode == "hybrid" {
+			return zoteroapi.ExportResult{}, backend.ReadMetadata{}, false, nil
+		}
+		return zoteroapi.ExportResult{}, backend.ReadMetadata{}, true, err
+	}
 	exporter, ok := localReader.(cslJSONExporter)
 	if !ok {
 		if cfg.Mode == "hybrid" {

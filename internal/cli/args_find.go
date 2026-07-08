@@ -244,6 +244,8 @@ type exportParsedArgs struct {
 	ItemKey       string
 	CollectionKey string
 	FindOpts      zoteroapi.FindOptions
+	FromFind      bool
+	FindBackend   backend.FindOptions
 	Format        string
 	JSONOutput    bool
 }
@@ -251,15 +253,36 @@ type exportParsedArgs struct {
 func parseExportArgs(args []string) (exportParsedArgs, error) {
 	var itemKey string
 	var collectionKey string
+	var fromFind bool
 	var format string
 	var jsonOutput bool
 	findOpts := zoteroapi.FindOptions{}
 	queryParts := make([]string, 0, len(args))
+	findArgs := make([]string, 0, len(args))
 
 	for i := 0; i < len(args); i++ {
-		switch args[i] {
+		arg := args[i]
+		if fromFind {
+			switch arg {
+			case "--json":
+				jsonOutput = true
+			case "--format", "-f":
+				if i+1 >= len(args) {
+					return exportParsedArgs{}, fmt.Errorf("missing value for --format")
+				}
+				i++
+				format = args[i]
+			default:
+				findArgs = append(findArgs, arg)
+			}
+			continue
+		}
+
+		switch arg {
 		case "--json":
 			jsonOutput = true
+		case "--from-find":
+			fromFind = true
 		case "--item-key":
 			if i+1 >= len(args) {
 				return exportParsedArgs{}, fmt.Errorf("missing value for --item-key")
@@ -272,7 +295,7 @@ func parseExportArgs(args []string) (exportParsedArgs, error) {
 			}
 			i++
 			collectionKey = args[i]
-		case "--format":
+		case "--format", "-f":
 			if i+1 >= len(args) {
 				return exportParsedArgs{}, fmt.Errorf("missing value for --format")
 			}
@@ -300,17 +323,30 @@ func parseExportArgs(args []string) (exportParsedArgs, error) {
 	if collectionKey != "" {
 		sourceCount++
 	}
+	if fromFind {
+		sourceCount++
+	}
 	if len(queryParts) > 0 {
 		sourceCount++
 	}
 	if sourceCount > 1 {
-		return exportParsedArgs{}, fmt.Errorf("cannot combine query, --item-key, and --collection")
+		return exportParsedArgs{}, fmt.Errorf("cannot combine query, --item-key, --collection, and --from-find")
 	}
 
-	if itemKey == "" && collectionKey == "" {
+	var backendFindOpts backend.FindOptions
+	if fromFind {
+		parsedFind, err := parseFindArgs(findArgs)
+		if err != nil {
+			return exportParsedArgs{}, err
+		}
+		backendFindOpts = backend.NormalizeFindOptions(parsedFind.Opts)
+		if !backendFindOpts.All && strings.TrimSpace(backendFindOpts.Query) == "" && !hasSubstantiveFilters(backendFindOpts) {
+			return exportParsedArgs{}, fmt.Errorf("missing find query or filter after --from-find")
+		}
+	} else if itemKey == "" && collectionKey == "" {
 		findOpts.Query = strings.TrimSpace(strings.Join(queryParts, " "))
 		if findOpts.Query == "" {
-			return exportParsedArgs{}, fmt.Errorf("missing query, --item-key, or --collection")
+			return exportParsedArgs{}, fmt.Errorf("missing query, --item-key, --collection, or --from-find")
 		}
 	}
 
@@ -318,7 +354,15 @@ func parseExportArgs(args []string) (exportParsedArgs, error) {
 		return exportParsedArgs{}, fmt.Errorf("unsupported format")
 	}
 
-	return exportParsedArgs{ItemKey: itemKey, CollectionKey: collectionKey, FindOpts: findOpts, Format: format, JSONOutput: jsonOutput}, nil
+	return exportParsedArgs{
+		ItemKey:       itemKey,
+		CollectionKey: collectionKey,
+		FindOpts:      findOpts,
+		FromFind:      fromFind,
+		FindBackend:   backendFindOpts,
+		Format:        format,
+		JSONOutput:    jsonOutput,
+	}, nil
 }
 
 func (c *CLI) parseJSONOnlyArgs(args []string, usage string) (bool, bool, bool) {
