@@ -108,6 +108,18 @@ Subcommands:
 		Long:     usageShow,
 	},
 	{
+		Name:     "supplements",
+		Category: CatRead,
+		Short:    "Find local supplementary/data attachments",
+		Long:     usageSupplements,
+	},
+	{
+		Name:     "inspect-attachment",
+		Category: CatRead,
+		Short:    "Preview local spreadsheet attachments",
+		Long:     usageInspectAttachment,
+	},
+	{
 		Name:     "extract-text",
 		Category: CatRead,
 		Short:    "Extract text from local PDF attachments",

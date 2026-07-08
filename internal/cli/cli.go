@@ -96,6 +96,10 @@ func (c *CLI) dispatch(name string, args []string) int {
 		return c.runFind(args)
 	case "show":
 		return c.runShow(args)
+	case "supplements":
+		return c.runSupplements(args)
+	case "inspect-attachment":
+		return c.runInspectAttachment(args)
 	case "extract-text":
 		return c.runExtractText(args)
 	case "extract-figures":
@@ -215,9 +219,10 @@ func (c *CLI) printUsage() {
   hybrid  Local-first with Web API fallback for unsupported features (default)
   remote  Read from a running 'zot server' over HTTP (requires ZOT_SERVER_ADDR)
 
-Web-mode limits: PDF-text commands need a local PDF and are unavailable in web
-mode — extract-text, extract-figures, 'find --fulltext/--snippet', and
-'relate --aggregate'. Switch to local/hybrid (or remote) to use them.
+Web-mode limits: local attachment/PDF commands are unavailable in web mode:
+supplements, inspect-attachment, extract-text, extract-figures,
+'find --fulltext/--snippet', and 'relate --aggregate'. Switch to local/hybrid
+(or remote) to use them.
 
 Environment (run 'zot config show' for full list):
   ZOT_MODE         Operating mode: web | local | hybrid | remote   (default: hybrid)

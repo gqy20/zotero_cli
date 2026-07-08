@@ -199,6 +199,7 @@ curl -fsSL ${_RAW}/.claude/skills/zotero-cli/examples/show-output.md \
 "看这篇的 PDF 标注"                       → zot annotations KEY --json
 "导出这篇为 BibTeX"                       → zot export --item-key KEY --format bibtex --json
 "把这两篇关联起来"                         → zot relate KEY_A --add KEY_B --dry-run
+"找这篇的补充表格/数据附件"                → zot supplements KEY --json
 "提取论文图表"                            → zot extract-figures KEY -o ./figures --json
 ```
 
@@ -264,6 +265,12 @@ zot find "同源多倍体" --snippet --limit 200 --json
 # 提取 PDF 正文供 AI 分析（PyMuPDF 优先 → ft-cache 回退 → pdfium WASM 兜底）
 zot extract-text KEY --json
 zot extract-text KEY --json --pages 3-8 --grep methods --max-chars 12000
+
+# 查找本地 Zotero 已保存的 Supplementary / Source data / 表格数据附件
+zot supplements KEY --json
+zot supplements --all --json --limit 50
+zot inspect-attachment ATTKEY --json
+zot inspect-attachment --item KEY --json
 
 # 提取论文图表（支持缓存、多 PDF 附件、低质量误检过滤和每页上限）
 zot extract-figures KEY --json
@@ -399,6 +406,8 @@ zot index build --data-dir ~/.zot/sync  # 可选，建全文索引
 | **摘要** | `abstract` | 查看条目摘要（支持批量 key + `--json`） |
 | **关系** | `relate` | 条目间显式关系查询 |
 | **PDF** | `extract-text` | 提取 PDF 正文 |
+| **PDF** | `supplements` | 查找本地已保存的补充材料、Source data、表格/数据附件 |
+| **PDF** | `inspect-attachment` | 预览本地 `.xlsx` 附件的 sheet、表头和前几行 |
 | **PDF** | `extract-figures` | 提取论文图表（缓存、多 PDF 附件、低质量误检过滤） |
 | **PDF** | `annotate` | 写入高亮/下划线/笔记标注（3 种定位模式，推荐 Mode 1.5） |
 | **PDF** | `annotations` | 读取/删除 PDF 标注（双源 + 双层清除） |

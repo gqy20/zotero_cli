@@ -17,6 +17,8 @@
 - [标注读取 (`annotations`)](#标注读取-annotations)
 - [标注写入 (`annotate`)](#标注写入-annotate)
 - [创建条目 (`create-item`)](#创建条目-create-item)
+- [补充材料 (`supplements`)](#补充材料-supplements)
+- [附件表格预览 (`inspect-attachment`)](#附件表格预览-inspect-attachment)
 - [文本提取 (`extract-text`)](#文本提取-extract-text)
 - [图片提取 (`extract-figures`)](#图片提取-extract-figures)
 - [其他命令索引](#其他命令索引)
@@ -211,6 +213,79 @@ JSON 字段说明：
 
 ---
 
+## 补充材料 (`supplements`)
+
+扫描 Zotero 本地库里已经保存的附件，识别 Supplementary tables、Source data、Reporting summary、`MOESM` / `mmc` / 表格数据文件等候选。
+
+### 用法
+
+```bash
+zot supplements <item-key> [--json]
+zot supplements --all [--json] [--limit N]
+```
+
+### 选项
+
+| 选项 | 说明 |
+|------|------|
+| `--json` | JSON 格式输出 |
+| `--all` | 扫描整个本地库 |
+| `--limit N` | 扫描后限制输出的候选附件数量 |
+
+### 示例
+
+```bash
+zot supplements ABCD --json
+zot supplements --all --json --limit 50
+```
+
+### 说明
+
+- 需要 `local` / `hybrid` 模式和本地 Zotero 数据。
+- 第一版只分析本地附件，不联网抓 DOI、publisher 页面或 Zenodo/Figshare。
+- 识别依据来自附件标题、文件名、路径、content type 和扩展名；不会因为父文献标题里有 "supplement" 就把普通 PDF 误判成补充材料。
+- JSON 输出包含 `kind`、`confidence`、`evidence`、`resolution_status`、`local_path` 等字段。
+
+---
+
+## 附件表格预览 (`inspect-attachment`)
+
+预览本地 `.xlsx` / `.xlsm` 附件，返回 sheet 名、行列数、前几行内容、简单表头行猜测，以及 `legend` / `index` / `table` 标记。适合在 `supplements` 找到表格附件后快速判断该看哪个 sheet。
+
+### 用法
+
+```bash
+zot inspect-attachment <attachment-key> [--sheet NAME] [--head N] [--max-sheets N] [--max-columns N] [--json]
+zot inspect-attachment --item <item-key> [--head N] [--max-sheets N] [--max-columns N] [--json]
+```
+
+### 选项
+
+| 选项 | 说明 |
+|------|------|
+| `--json` | JSON 格式输出 |
+| `--sheet NAME` | 只预览指定 sheet |
+| `--head N` | 每个 sheet 返回 N 行非空预览，默认 5 |
+| `--max-sheets N` | 未指定 sheet 时最多预览 N 个 sheet，默认 5 |
+| `--max-columns N` | 每行最多预览 N 列，默认 12；真实列数仍保留在 `columns` |
+| `--item KEY` | 扫描一篇文献下所有已解析的本地 `.xlsx` 附件 |
+
+### 示例
+
+```bash
+zot inspect-attachment ATT123 --json
+zot inspect-attachment ATT123 --sheet "Supplementary Table 1" --head 20 --json
+zot inspect-attachment --item ABCD --json
+```
+
+### 说明
+
+- 使用 streaming/read-only 读取，不修改附件文件。
+- 多个 `.xlsx` 不合并；`--item` 模式会按附件分别返回 workbook。
+- `header_row` 是启发式猜测，用于帮助 agent 快速定位，不保证一定正确。
+
+---
+
 ## 文本提取 (`extract-text`)
 
 从 PDF 附件中提取全文内容。
@@ -336,7 +411,7 @@ zot extract-figures <item-key> [...] [--output-dir DIR] [--json] [--workers N]
 
 ## 其他命令索引
 
-上方 8 个章节覆盖了最常用的命令。`zot` 还有以下命令，每个命令的完整 `-h` 是最权威的参考（参见 `internal/cli/commandRegistry` 单源）。
+上方 10 个章节覆盖了最常用的命令。`zot` 还有以下命令，每个命令的完整 `-h` 是最权威的参考（参见 `internal/cli/commandRegistry` 单源）。
 
 ### Setup（初始化与配置）
 
@@ -354,6 +429,8 @@ zot extract-figures <item-key> [...] [--output-dir DIR] [--json] [--workers N]
 |------|------|----------|
 | `find` | 主检索命令（详见上文） | `--all` / `--tag` / `--date-after` / `--snippet` |
 | `show` | 单条目详情（详见上文） | `--full` / `--snippet` |
+| `supplements` | 查找本地补充材料/数据附件（详见上文） | `--all` / `--json` / `--limit` |
+| `inspect-attachment` | 预览本地 `.xlsx` 附件（详见上文） | `--item` / `--sheet` / `--head` / `--json` |
 | `abstract` | 条目摘要，支持 **多 key 批量** | `--json` |
 | `relate` | 关系查询（详见上文） | `--aggregate` / `--dot` |
 | `export` | 导出引文（csljson/bibtex/biblatex/ris） | `--format` / `--collection` |

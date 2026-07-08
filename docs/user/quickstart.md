@@ -128,6 +128,12 @@ go run .\cmd\zot config validate
 .\zot.exe extract-text ITEMKEY --json
 .\zot.exe extract-text ITEMKEY --json --pages 3-8 --grep methods --max-chars 12000
 
+# 查找本地已保存的 Supplementary / Source data / 表格数据附件
+.\zot.exe supplements ITEMKEY --json
+.\zot.exe supplements --all --json --limit 50
+.\zot.exe inspect-attachment ATTKEY --json
+.\zot.exe inspect-attachment --item ITEMKEY --json
+
 # 双源读取标注（DB + PDF 文件内）
 .\zot.exe annotations ITEMKEY --json
 
