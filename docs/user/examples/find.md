@@ -140,6 +140,11 @@ zot find --all --sort dateAdded --direction desc --limit 10 --json
 # 最近 7 天入库
 zot find --all --added-since 7d --sort dateAdded --direction desc --json
 
+# 批量定位本地附件异常
+zot find --missing-attachment --json
+zot find --bad-attachment-name --json
+zot find --attachment-health warning --json
+
 # 某个月发表的文献
 zot find --all --date-after 2026-03 --date-before 2026-03 --sort date --direction desc --json
 
@@ -153,3 +158,5 @@ zot find "speciation" --full --json
 `--date-after` / `--date-before` 过滤发表日期，支持 `YYYY` / `YYYY-MM` / `YYYY-MM-DD`。local/hybrid 会兼容 Zotero 常见的部分日期字符串，如 `YYYY-MM-00 YYYY-MM` 和 `MM/YYYY`。
 
 `dateAdded` / `--added-since` 表示加入 Zotero 的时间；它和发表日期不是同一个字段。`--include-fields` 主要用于文本输出，JSON 模式默认返回完整 Item。
+
+附件健康筛选需要 local/hybrid/remote 服务端具备本地附件访问能力。`--missing-attachment` 会匹配路径未解析或文件缺失的附件；`--bad-attachment-name` 会匹配泛化或不安全文件名；`--attachment-health critical|error|warning|info` 按严重度筛选存在问题的附件。

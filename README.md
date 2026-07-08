@@ -252,6 +252,10 @@ zot find "基因编辑" --tag "高引用" --tag-any --json
 # 高级过滤：收藏夹、排除标签、附件名、最近修改
 zot find "CRISPR" --collection ABC123 --exclude-tag "已读" --attachment-name PDF --modified-within 30d --json
 
+# 批量定位本地附件异常
+zot find --missing-attachment --json
+zot find --bad-attachment-name --json
+
 # 全文搜索 PDF 内容（local / hybrid）
 # 注意：有 query 且 FTS 索引有数据时会自动启用全文检索；--all 不会自动走全文
 zot find "同源多倍体" --fulltext --snippet --json
@@ -272,6 +276,7 @@ zot supplements KEY --online --json
 zot supplements --all --json --limit 50
 zot inspect-attachment ATTKEY --json
 zot inspect-attachment --item KEY --json
+zot inspect-attachment --item KEY --health --json
 
 # 提取论文图表（支持缓存、多 PDF 附件、低质量误检过滤和每页上限）
 zot extract-figures KEY --json
@@ -408,7 +413,7 @@ zot index build --data-dir ~/.zot/sync  # 可选，建全文索引
 | **关系** | `relate` | 条目间显式关系查询 |
 | **PDF** | `extract-text` | 提取 PDF 正文 |
 | **PDF** | `supplements` | 查找本地已保存的补充材料、Source data、表格/数据附件 |
-| **PDF** | `inspect-attachment` | 预览本地 `.xlsx` 附件的 sheet、表头和前几行 |
+| **PDF** | `inspect-attachment` | 检查本地附件健康状态，并预览 `.xlsx` 附件的 sheet、表头和前几行 |
 | **PDF** | `extract-figures` | 提取论文图表（缓存、多 PDF 附件、低质量误检过滤） |
 | **PDF** | `annotate` | 写入高亮/下划线/笔记标注（3 种定位模式，推荐 Mode 1.5） |
 | **PDF** | `annotations` | 读取/删除 PDF 标注（双源 + 双层清除） |

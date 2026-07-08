@@ -134,6 +134,8 @@ go run .\cmd\zot config validate
 .\zot.exe supplements --all --json --limit 50
 .\zot.exe inspect-attachment ATTKEY --json
 .\zot.exe inspect-attachment --item ITEMKEY --json
+.\zot.exe inspect-attachment --item ITEMKEY --health --json
+.\zot.exe find --missing-attachment --json
 
 # 双源读取标注（DB + PDF 文件内）
 .\zot.exe annotations ITEMKEY --json

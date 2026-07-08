@@ -22,8 +22,8 @@ zotero_cli/
 │   │   ├── local_fulltext.go      # FTS5 全文检索
 │   │   ├── local_export.go        # 本地 CSL-JSON 导出
 │   │   ├── pdf_extract_text.go    # PDF 文本提取（PyMuPDF / pdfium）
-│   ├── pdf_read_annotations.go # PDF 标注读取/删除（PyMuPDF）
-│   ├── pdf_write_annotation.go # PDF 标注写入（PyMuPDF）
+│   │   ├── pdf_read_annotations.go # PDF 标注读取/删除（PyMuPDF）
+│   │   ├── pdf_write_annotation.go # PDF 标注写入（PyMuPDF）
 │   │   ├── errors.go              # 后端错误类型
 │   │   └── open_select.go         # zotero:// 协议调用
 │   ├── cli/                       # 命令层
@@ -45,8 +45,8 @@ zotero_cli/
 │       ├── client_collections.go  # 收藏夹 CRUD
 │       ├── client_tags.go         # 标签操作
 │       ├── client_searches.go     # 已保存搜索
-│       ├── client_cite.go         # 引文生成
-│       ├── client_export.go       # 导出
+│       ├── client_read.go         # 读接口：条目、集合、标签、搜索等
+│       ├── client_write.go        # 写接口：条目、集合、标签等
 │       ├── client_full.go         # 完整条目查询
 │       ├── client_map.go          # domain ↔ API 映射
 │       └── errors.go              # API 错误处理
@@ -110,7 +110,7 @@ type Reader interface {
 |------|----------|------|
 | 条目检索 | SQLite JOIN 查询 | 支持 title/creator/date/tag 过滤 |
 | 全文检索 | FTS5 虚拟表 | `--fulltext` / `--fulltext-any` / `--snippet` |
-| 附件感知 | `storage/` 目录扫描 | `--has-pdf` / `--attachment-type` / resolved path |
+| 附件感知 | `storage/` 目录扫描 + 附件健康检查 | `--has-pdf` / `--attachment-type` / resolved path / `--missing-attachment` / `--attachment-health` |
 | 标注读取（DB） | `itemAnnotations` 表 JOIN | 含 dateAdded 时间戳 |
 | 标注读取（PDF） | PyMuPDF `page.annots()` | 扫描 PDF 文件内嵌入标注 |
 | 标注写入 | PyMuPDF `add_*_annot()` | highlight / underline / note 三种模式 |

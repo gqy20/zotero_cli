@@ -18,7 +18,7 @@
 - [标注写入 (`annotate`)](#标注写入-annotate)
 - [创建条目 (`create-item`)](#创建条目-create-item)
 - [补充材料 (`supplements`)](#补充材料-supplements)
-- [附件表格预览 (`inspect-attachment`)](#附件表格预览-inspect-attachment)
+- [附件检查与表格预览 (`inspect-attachment`)](#附件检查与表格预览-inspect-attachment)
 - [文本提取 (`extract-text`)](#文本提取-extract-text)
 - [图片提取 (`extract-figures`)](#图片提取-extract-figures)
 - [其他命令索引](#其他命令索引)
@@ -253,15 +253,15 @@ zot supplements --all --json --limit 50
 
 ---
 
-## 附件表格预览 (`inspect-attachment`)
+## 附件检查与表格预览 (`inspect-attachment`)
 
-预览本地 `.xlsx` / `.xlsm` 附件，返回 sheet 名、行列数、前几行内容、简单表头行猜测，以及 `legend` / `index` / `table` 标记。适合在 `supplements` 找到表格附件后快速判断该看哪个 sheet。
+检查本地附件路径和文件名健康状态，并预览 `.xlsx` / `.xlsm` 表格附件。表格预览会返回 sheet 名、行列数、前几行内容、简单表头行猜测，以及 `legend` / `index` / `table` 标记。适合在 `supplements` 找到表格附件后快速判断该看哪个 sheet，也适合排查“找不到 PDF / 附件无法提取”的问题。
 
 ### 用法
 
 ```bash
-zot inspect-attachment <attachment-key> [--sheet NAME] [--head N] [--max-sheets N] [--max-columns N] [--json]
-zot inspect-attachment --item <item-key> [--head N] [--max-sheets N] [--max-columns N] [--json]
+zot inspect-attachment <attachment-key> [--health] [--sheet NAME] [--head N] [--max-sheets N] [--max-columns N] [--json]
+zot inspect-attachment --item <item-key> [--health] [--head N] [--max-sheets N] [--max-columns N] [--json]
 ```
 
 ### 选项
@@ -274,6 +274,7 @@ zot inspect-attachment --item <item-key> [--head N] [--max-sheets N] [--max-colu
 | `--max-sheets N` | 未指定 sheet 时最多预览 N 个 sheet，默认 5 |
 | `--max-columns N` | 每行最多预览 N 列，默认 12；真实列数仍保留在 `columns` |
 | `--item KEY` | 扫描一篇文献下所有已解析的本地 `.xlsx` 附件 |
+| `--health` | 输出附件健康诊断；与 `--item` 一起使用时扫描该条目下所有附件 |
 
 ### 示例
 
@@ -281,12 +282,15 @@ zot inspect-attachment --item <item-key> [--head N] [--max-sheets N] [--max-colu
 zot inspect-attachment ATT123 --json
 zot inspect-attachment ATT123 --sheet "Supplementary Table 1" --head 20 --json
 zot inspect-attachment --item ABCD --json
+zot inspect-attachment --item ABCD --health --json
 ```
 
 ### 说明
 
 - 使用 streaming/read-only 读取，不修改附件文件。
 - 多个 `.xlsx` 不合并；`--item` 模式会按附件分别返回 workbook。
+- 不加 `--health` 时，`--item` 仍只预览已解析的本地表格附件；加 `--health` 时会扫描该条目下全部附件，并对非表格附件只输出健康诊断。
+- 健康诊断覆盖本地路径未解析、文件缺失、路径是目录、文件名过长、非法字符、异常空格、PDF 缺 `.pdf` 后缀、`download.pdf` / `Copy of ...` / 纯数字等泛化命名。
 - `header_row` 是启发式猜测，用于帮助 agent 快速定位，不保证一定正确。
 
 ---
@@ -432,10 +436,10 @@ zot extract-figures <item-key> [...] [--output-dir DIR] [--json] [--workers N]
 
 | 命令 | 用途 | 关键标志 |
 |------|------|----------|
-| `find` | 主检索命令（详见上文） | `--all` / `--tag` / `--date-after` / `--snippet` |
+| `find` | 主检索命令（详见上文） | `--all` / `--tag` / `--date-after` / `--snippet` / `--missing-attachment` |
 | `show` | 单条目详情（详见上文） | `--full` / `--snippet` |
 | `supplements` | 查找本地补充材料/数据附件（详见上文） | `--all` / `--json` / `--limit` |
-| `inspect-attachment` | 预览本地 `.xlsx` 附件（详见上文） | `--item` / `--sheet` / `--head` / `--json` |
+| `inspect-attachment` | 检查附件健康状态并预览本地 `.xlsx` 附件（详见上文） | `--item` / `--health` / `--sheet` / `--head` / `--json` |
 | `abstract` | 条目摘要，支持 **多 key 批量** | `--json` |
 | `relate` | 关系查询（详见上文） | `--aggregate` / `--dot` |
 | `export` | 导出引文（csljson/bibtex/biblatex/ris） | `--format` / `--collection` |
@@ -453,7 +457,7 @@ zot extract-figures <item-key> [...] [--output-dir DIR] [--json] [--workers N]
 | `overview` | 一站式库概览（**Agent 入口**）：stats + Top 收藏夹 + Top 标签 + 最近条目 + FTS 状态 | `--json` |
 | `key-info [KEY]` | API key 权限与所属用户查询 | `--json` |
 | `schema <sub>` | 元数据 schema 自省（`types` / `fields` / `creator-types` / `fields-for` / `creator-types-for` / `template`） | `--json` |
-| `extract-text` | 从 PDF 提取全文（详见上文） | `--json` |
+| `extract-text` | 从 PDF 提取全文（详见上文） | `--json` / `--pages` / `--grep` / `--max-chars` / `--attachment` |
 | `extract-figures` | 从 PDF 提取科学插图（详见上文） | `--output-dir` / `--workers` / `--max-per-page` / `--json` |
 | `open` | 在系统默认 PDF 阅读器中打开条目附件 | — |
 | `select` | 在 Zotero UI 中定位条目 | — |

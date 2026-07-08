@@ -20,7 +20,7 @@
 | 10 | `stats` | **6.0s** | Reader → hybrid (versions×3) |
 | 11 | `changes items-top --since 0` | **5.8s** | Web API (versions + collections + searches) |
 | 12 | `collections` | **3.3s** | **Web API** (Reader 无此方法前) |
-| 13 | `cite ITEMKEY` | **4.9s** | Web API |
+| 13 | `export --item-key ITEMKEY --format bibtex` | **4.9s** | Web API |
 | 14 | `deleted` | **1.7s** | Web API |
 | 15 | `schema types` | **1.6s** | Web API |
 

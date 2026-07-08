@@ -7,12 +7,14 @@ timeline
     title zot CLI 发展路线图
 
     section v0.0.x 当前焦点
-        已完成 : remote 模式 + zot-server + remote+web 双通道
+        已完成 : remote 模式 + zot server + remote+web 双通道
         已完成 : Web 前端（无障碍/移动端/PDF 查看器/收藏夹筛选）
+        已完成 : supplements + inspect-attachment + online providers
+        已完成 : extract-text 分页/grep/max-chars/附件过滤
         阶段 1 : 标注 dry-run + comment 截断修复
         阶段 2 : 批量标注 from-file
         阶段 3 : find → export 管道连接
-        阶段 4 : PDF 健康检查 pdf-health
+        已完成 : 附件健康检查 inspect-attachment + find filters
 
     section A : Zotero 原生能力深化
         P0 : 条件请求缓存 / 批量写入 / 格式透传
@@ -40,14 +42,25 @@ timeline
 
 不大幅扩张命令面，聚焦三件事：**写操作安全性**、**多模态能力**、**体验打磨**。
 
+#### 已完成
+
+| 内容 | 状态 |
+|------|------|
+| remote 模式 + `zot server` + remote+web 双通道 | 已完成 |
+| Web 前端无障碍、移动端、PDF 查看器、收藏夹筛选 | 已完成 |
+| `supplements` 本地/在线补充材料发现（Zenodo、Figshare、Nature best-effort） | 已完成 |
+| `inspect-attachment` 本地 `.xlsx` / `.xlsm` 附件预览 | 已完成 |
+| `extract-text` 分页、grep、max-chars、指定附件过滤 | 已完成 |
+| 附件健康检查并入 `inspect-attachment --health` 和 `find` 附件健康筛选 | 已完成 |
+
 #### 执行顺序
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|
-| 1 | 标注 `--dry-run` 预览模式 + comment 截断修复 | 待开始 |
-| 2 | 批量标注（`--from-file` JSON 驱动） | 待开始 |
-| 3 | `find` → `export` 管道连接（`--from-find`） | 待开始 |
-| 4 | PDF 健康检查（`pdf-health`） | 待开始 |
+| 1 | 标注 `--dry-run` 预览模式 + comment 截断修复 | 已完成 |
+| 2 | 批量标注（`--from-file` JSON 驱动） | 已完成 |
+| 3 | `find` → `export` 管道连接（`--from-find`） | 已完成 |
+| 4 | 附件健康检查（`inspect-attachment --health` / `find` filters） | 已完成 |
 
 > **本版不做**：local FTS 增强 / MCP server / 大规模命令扩张 / 非笔记非关联类型的本地写入
 
@@ -61,9 +74,9 @@ timeline
 | **P2** | 标注前 PDF 快照 | `--clear` 前自动备份 | 阶段 3+ |
 | **P2** | 匹配上下文展示 | 返回匹配文本前后 N 字符 | 阶段 2 |
 
-#### PDF 健康检查（`pdf-health`）
+#### 附件健康检查（已并入现有命令）
 
-扫描 storage/ PDF 文件名，检测命名问题并给出修复建议。详见 [optimizations/pdf-health.md](./optimizations/pdf-health.md)。
+不新增独立 `pdf-health` 命令；健康检查能力并入 `inspect-attachment --health` 做单条/单文献诊断，并通过 `find --missing-attachment`、`find --bad-attachment-name`、`find --attachment-health LEVEL` 做批量定位。
 
 | 检查项 | 规则 | 严重度 |
 |--------|------|--------|
@@ -72,7 +85,7 @@ timeline
 | 连续空格 / 首尾空格 | 2+ 空格或首尾空白 | Warning |
 | 无 `.pdf` 扩展名 | 缺少后缀 | Warning |
 | 无意义命名 | `download(`、`Copy of`、纯数字等 | Info |
-| 重复文件名 / 文件缺失 | 同 key 目录同名或 DB 指向不存在 | Error |
+| 文件缺失 / 路径未解析 / 路径是目录 | DB 指向不存在或本地不可访问 | Error |
 
 ---
 

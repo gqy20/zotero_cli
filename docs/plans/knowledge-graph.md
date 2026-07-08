@@ -16,7 +16,7 @@ zot 当前已具备完整的数据访问能力：
 | PDF 全文读取 | `extract-text` | PyMuPDF / pdfium / ft-cache |
 | 标注双源读写 | `annotations` / `annotate` | SQLite + PyMuPDF |
 | 元数据管理 | `add-tag` / `create-collection` / `relate` | Zotero API |
-| 引文导出 | `cite` / `export` | Zotero API |
+| 引文导出 | `export --item-key ... --format ...` | Zotero API |
 
 但**缺少一个层**来持久化 AI 从这些数据中提取的知识。每次 AI（或用户）需要理解库中的内容时，都要重新：
 

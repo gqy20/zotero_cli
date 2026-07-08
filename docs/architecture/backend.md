@@ -17,7 +17,7 @@ local backend 不再是单个 `local.go`，而是按职责拆分：
 | `local.go` | `LocalReader` 生命周期、高层编排、public 方法（FindItems/GetItem/GetRelated/GetLibraryStats） |
 | `local_db.go` | SQLite 连接设置、busy/locked 重试检测、snapshot 回退 |
 | `local_find.go` | local `find` SQL 构建、后处理过滤/排序/分页、attachment-aware 过滤、matched_on 推导 |
-| `local_loaders.py` | item loaders / relation loaders / creators + tags + collections + attachments + notes 并行加载、attachment path resolution |
+| `local_loaders.go` | item loaders / relation loaders / creators + tags + collections + attachments + notes 并行加载、attachment path resolution |
 | `local_prefs.go` | Zotero `prefs.js` 发现和解析、dataDir → profile 映射 |
 | `local_utils.go` | 本地专用格式化和归一化工具函数 |
 | `remote.go` | `RemoteReader`，HTTP client，remote 模式实现 |
@@ -44,7 +44,7 @@ local backend 不再是单个 `local.go`，而是按职责拆分：
 
 ### Remote API 命令（始终走 Web API）
 
-`cite` / `export` / `collections` / `collections-top` / `notes` / `tags` / `searches` / `deleted` / `stats` / `changes` / `schema *` / `key-info` / `groups` / `trash` / `publications`
+`export` / `collections` / `collections-top` / `notes` / `tags` / `searches` / `deleted` / `stats` / `changes` / `schema *` / `key-info` / `groups` / `trash` / `publications`
 
 ### Hybrid 写入命令（自动选择路径）
 

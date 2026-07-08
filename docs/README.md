@@ -20,7 +20,7 @@ AI 原生的 Zotero 命令行工具。为 Claude Code、Codex 等 AI agent 设�
 
 | 文档 | 说明 |
 |------|------|
-| [架构概览](architecture/overview.md) | 目录结构、三层架构（CLI/Backend/Domain）、三种运行模式 |
+| [架构概览](architecture/overview.md) | 目录结构、三层架构（CLI/Backend/Domain）、四种运行模式 |
 | [后端设计](architecture/backend.md) | LocalReader 实现细节、SQLite 查询策略、附件路径解析 |
 | [领域模型](architecture/domain-model.md) | 核心数据结构：Item / Annotation / Attachment / FindOptions |
 | [设计决策](architecture/decisions.md) | 关键技术决策及其理由 |
