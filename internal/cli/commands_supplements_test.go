@@ -177,6 +177,59 @@ func TestRunInspectAttachmentItemJSON(t *testing.T) {
 	}
 }
 
+func TestRunInspectAttachmentItemHealthJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
+	buildLocalShowFixture(t, sqlitePath, storageDir)
+	addMissingAttachmentFixture(t, sqlitePath)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"inspect-attachment", "--item", "ITEM1234", "--health", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data := got["data"].([]any)
+	if len(data) == 0 {
+		t.Fatalf("expected health results, got %#v", got["data"])
+	}
+	var missing map[string]any
+	for _, raw := range data {
+		result := raw.(map[string]any)
+		if result["attachment_key"] == "MISSPDF1" {
+			missing = result
+			break
+		}
+	}
+	if missing == nil {
+		t.Fatalf("missing health result not found: %#v", data)
+	}
+	health := missing["health"].(map[string]any)
+	if health["ok"] != false || health["status"] != "error" {
+		t.Fatalf("unexpected health payload: %#v", health)
+	}
+	issues := health["issues"].([]any)
+	issue := issues[0].(map[string]any)
+	if issue["code"] != "unresolved_path" {
+		t.Fatalf("unexpected issue payload: %#v", issue)
+	}
+}
+
 func addSupplementFixture(t *testing.T, sqlitePath string, storageDir string) {
 	t.Helper()
 
@@ -204,6 +257,28 @@ func addSupplementFixture(t *testing.T, sqlitePath string, storageDir string) {
 	}
 	if err := writeXLSXFixture(filepath.Join(attachmentDir, "41588_2024_1715_MOESM4_ESM.xlsx")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func addMissingAttachmentFixture(t *testing.T, sqlitePath string) {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", sqlitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	statements := []string{
+		`INSERT INTO items(itemID, key, version, itemTypeID) VALUES (20, 'MISSPDF1', 1, 3);`,
+		`INSERT INTO itemDataValues(valueID, value) VALUES (30, 'download.pdf'), (31, 'Missing PDF');`,
+		`INSERT INTO itemData(itemID, fieldID, valueID) VALUES (20, 1, 31), (20, 6, 30);`,
+		`INSERT INTO itemAttachments(itemID, parentItemID, contentType, linkMode, path) VALUES (20, 1, 'application/pdf', 0, 'storage:download.pdf');`,
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("exec %q: %v", statement, err)
+		}
 	}
 }
 

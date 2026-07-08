@@ -35,6 +35,10 @@ Filters (AND across categories, OR within --tag-any):
   --modified-within / --added-since   Duration: 24h | 7d | 30d.
   --has-pdf              Only items with PDF attachments.
   --attachment-name / --attachment-path / --attachment-type   Attachment match.
+  --missing-attachment   Items whose attachment files are unresolved or missing.
+  --bad-attachment-name  Items with generic/unsafe attachment filenames.
+  --attachment-health LEVEL   Items with attachment issues at LEVEL or worse
+                          (critical | error | warning | info).
   --include-trashed      Include items in trash.
 
 Output:
@@ -53,6 +57,7 @@ Examples:
   zot find --tag ai --tag ml --json                     # AND-tag filter
   zot find "attention" --fulltext --snippet --limit 20 --json  # FTS5 over PDF text
   zot find --all --has-pdf --json                       # All PDFs
+  zot find --missing-attachment --json                  # Broken local attachments
 
 Notes:
   - FTS5 is automatic in local/hybrid when the index exists (run 'zot index build' first).
@@ -169,9 +174,12 @@ func hasSubstantiveFilters(opts backend.FindOptions) bool {
 		opts.ItemType != "" ||
 		opts.ExcludeItemType != "" ||
 		opts.HasPDF ||
+		opts.MissingAttachment ||
+		opts.BadAttachmentName ||
 		opts.AttachmentName != "" ||
 		opts.AttachmentPath != "" ||
 		opts.AttachmentType != "" ||
+		opts.AttachmentHealth != "" ||
 		opts.DateModifiedAfter != "" ||
 		opts.DateAddedAfter != ""
 }

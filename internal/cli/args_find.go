@@ -138,6 +138,20 @@ func parseFindArgs(args []string) (findParsedArgs, error) {
 			}
 			i++
 			opts.AttachmentType = strings.TrimSpace(args[i])
+		case "--missing-attachment":
+			opts.MissingAttachment = true
+		case "--bad-attachment-name":
+			opts.BadAttachmentName = true
+		case "--attachment-health":
+			if i+1 >= len(args) {
+				return findParsedArgs{}, fmt.Errorf("missing value for --attachment-health")
+			}
+			i++
+			value := strings.TrimSpace(strings.ToLower(args[i]))
+			if value != "critical" && value != "error" && value != "warning" && value != "info" {
+				return findParsedArgs{}, fmt.Errorf("invalid value for --attachment-health")
+			}
+			opts.AttachmentHealth = value
 		case "--collection":
 			if i+1 >= len(args) {
 				return findParsedArgs{}, fmt.Errorf("missing value for --collection")

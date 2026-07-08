@@ -288,14 +288,24 @@ func localFilterAndOrderItems(items []domain.Item, opts FindOptions) []domain.It
 }
 
 func matchesAttachmentFilters(attachments []domain.Attachment, opts FindOptions) bool {
-	if !opts.HasPDF && strings.TrimSpace(opts.AttachmentName) == "" && strings.TrimSpace(opts.AttachmentPath) == "" && strings.TrimSpace(opts.AttachmentType) == "" {
+	if !opts.HasPDF && !opts.MissingAttachment && !opts.BadAttachmentName && strings.TrimSpace(opts.AttachmentName) == "" && strings.TrimSpace(opts.AttachmentPath) == "" && strings.TrimSpace(opts.AttachmentType) == "" && strings.TrimSpace(opts.AttachmentHealth) == "" {
 		return true
 	}
 	nameNeedle := strings.ToLower(strings.TrimSpace(opts.AttachmentName))
 	pathNeedle := strings.ToLower(strings.TrimSpace(opts.AttachmentPath))
 	typeNeedle := strings.ToLower(strings.TrimSpace(opts.AttachmentType))
+	healthNeedle := strings.ToLower(strings.TrimSpace(opts.AttachmentHealth))
 	for _, attachment := range attachments {
 		if opts.HasPDF && attachment.ContentType != "application/pdf" {
+			continue
+		}
+		if opts.MissingAttachment && !AttachmentHasMissingFile(attachment) {
+			continue
+		}
+		if opts.BadAttachmentName && !AttachmentHasBadName(attachment) {
+			continue
+		}
+		if healthNeedle != "" && !AttachmentHealthMatches(attachment, healthNeedle) {
 			continue
 		}
 		if nameNeedle != "" {

@@ -31,6 +31,7 @@ func NormalizeFindOptions(opts FindOptions) FindOptions {
 	opts.AttachmentName = strings.TrimSpace(opts.AttachmentName)
 	opts.AttachmentPath = strings.TrimSpace(opts.AttachmentPath)
 	opts.AttachmentType = strings.TrimSpace(opts.AttachmentType)
+	opts.AttachmentHealth = strings.TrimSpace(strings.ToLower(opts.AttachmentHealth))
 	opts.ExcludeItemType = strings.TrimSpace(opts.ExcludeItemType)
 	opts.DateModifiedAfter = strings.TrimSpace(opts.DateModifiedAfter)
 	opts.DateAddedAfter = strings.TrimSpace(opts.DateAddedAfter)
@@ -94,9 +95,12 @@ func requiresLocalFindSupport(opts FindOptions) bool {
 
 func hasAttachmentFindFilters(opts FindOptions) bool {
 	return opts.HasPDF ||
+		opts.MissingAttachment ||
+		opts.BadAttachmentName ||
 		strings.TrimSpace(opts.AttachmentName) != "" ||
 		strings.TrimSpace(opts.AttachmentPath) != "" ||
-		strings.TrimSpace(opts.AttachmentType) != ""
+		strings.TrimSpace(opts.AttachmentType) != "" ||
+		strings.TrimSpace(opts.AttachmentHealth) != ""
 }
 
 func normalizeFindTags(tags []string) []string {

@@ -11,12 +11,13 @@ import (
 	"zotero_cli/internal/domain"
 )
 
-const usageInspectAttachment = `usage: zot inspect-attachment <attachment-key> [--sheet NAME] [--head N] [--max-sheets N] [--max-columns N] [--json]
-       zot inspect-attachment --item <item-key> [--head N] [--max-sheets N] [--max-columns N] [--json]
+const usageInspectAttachment = `usage: zot inspect-attachment <attachment-key> [--health] [--sheet NAME] [--head N] [--max-sheets N] [--max-columns N] [--json]
+       zot inspect-attachment --item <item-key> [--health] [--head N] [--max-sheets N] [--max-columns N] [--json]
 
 What: Preview local spreadsheet attachments. The command reads local .xlsx files
 in streaming mode and returns sheet names, dimensions, likely header rows, and
-small row previews. It does not modify files.
+small row previews. With --health, it also reports local attachment path/name
+issues and can inspect non-spreadsheet attachments. It does not modify files.
 
 Output:
   --json          Structured output for agents.
@@ -27,11 +28,14 @@ Output:
   --max-columns N Preview at most N cells from each row while keeping the real
                   column count in metadata (default 12).
   --item KEY      Inspect all local .xlsx attachments under one Zotero item.
+  --health        Include attachment health diagnostics. With --item, scans all
+                  attachments under the item instead of only spreadsheets.
 
 Examples:
   zot inspect-attachment ATT123 --json
   zot inspect-attachment ATT123 --sheet "Table S1" --head 20 --json
   zot inspect-attachment --item ITEM123 --json
+  zot inspect-attachment --item ITEM123 --health --json
 
 Notes:
   - Requires local/hybrid mode with resolved local attachment files.
@@ -46,15 +50,17 @@ type inspectAttachmentArgs struct {
 	maxSheets     int
 	maxColumns    int
 	jsonOutput    bool
+	health        bool
 }
 
 type inspectAttachmentResult struct {
-	AttachmentKey string                `json:"attachment_key"`
-	ItemKey       string                `json:"item_key,omitempty"`
-	Label         string                `json:"label,omitempty"`
-	ContentType   string                `json:"content_type,omitempty"`
-	LocalPath     string                `json:"local_path"`
-	Workbook      backend.TableWorkbook `json:"workbook"`
+	AttachmentKey string                    `json:"attachment_key"`
+	ItemKey       string                    `json:"item_key,omitempty"`
+	Label         string                    `json:"label,omitempty"`
+	ContentType   string                    `json:"content_type,omitempty"`
+	LocalPath     string                    `json:"local_path"`
+	Health        *backend.AttachmentHealth `json:"health,omitempty"`
+	Workbook      *backend.TableWorkbook    `json:"workbook,omitempty"`
 }
 
 func (c *CLI) runInspectAttachment(args []string) int {
@@ -142,6 +148,8 @@ func parseInspectAttachmentArgs(args []string) (inspectAttachmentArgs, bool) {
 		switch arg {
 		case "--json":
 			parsed.jsonOutput = true
+		case "--health":
+			parsed.health = true
 		case "--sheet":
 			nextFlag = "sheet"
 		case "--head":
@@ -189,16 +197,29 @@ func inspectAttachments(ctx context.Context, reader backend.Reader, parsed inspe
 		if err != nil {
 			return nil, err
 		}
-		workbook, err := backend.InspectTableFile(path, opts)
-		if err != nil {
-			return nil, err
+		attachment := domain.Attachment{
+			Key:          parsed.attachmentKey,
+			ContentType:  contentType,
+			ResolvedPath: path,
+			Resolved:     true,
 		}
-		return []inspectAttachmentResult{{
+		result := inspectAttachmentResult{
 			AttachmentKey: parsed.attachmentKey,
 			ContentType:   contentType,
 			LocalPath:     path,
-			Workbook:      workbook,
-		}}, nil
+		}
+		if parsed.health {
+			health := backend.InspectAttachmentHealth(attachment)
+			result.Health = &health
+		}
+		if !parsed.health || isTableAttachmentPath(path) {
+			workbook, err := backend.InspectTableFile(path, opts)
+			if err != nil {
+				return nil, err
+			}
+			result.Workbook = &workbook
+		}
+		return []inspectAttachmentResult{result}, nil
 	}
 
 	item, err := reader.GetItem(ctx, parsed.itemKey)
@@ -206,24 +227,40 @@ func inspectAttachments(ctx context.Context, reader backend.Reader, parsed inspe
 		return nil, err
 	}
 	results := make([]inspectAttachmentResult, 0)
-	for _, attachment := range tableAttachments(item.Attachments) {
+	attachments := tableAttachments(item.Attachments)
+	if parsed.health {
+		attachments = item.Attachments
+	}
+	for _, attachment := range attachments {
 		if !attachment.Resolved {
-			continue
+			if !parsed.health {
+				continue
+			}
 		}
-		workbook, err := backend.InspectTableFile(attachment.ResolvedPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", attachment.Key, err)
-		}
-		results = append(results, inspectAttachmentResult{
+		result := inspectAttachmentResult{
 			AttachmentKey: attachment.Key,
 			ItemKey:       item.Key,
 			Label:         attachmentLabelForInspect(attachment),
 			ContentType:   attachment.ContentType,
 			LocalPath:     attachment.ResolvedPath,
-			Workbook:      workbook,
-		})
+		}
+		if parsed.health {
+			health := backend.InspectAttachmentHealth(attachment)
+			result.Health = &health
+		}
+		if attachment.Resolved && isTableAttachmentPath(firstNonEmptyInspectString(attachment.Filename, attachment.ZoteroPath, attachment.ResolvedPath, attachment.Title)) {
+			workbook, err := backend.InspectTableFile(attachment.ResolvedPath, opts)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", attachment.Key, err)
+			}
+			result.Workbook = &workbook
+		}
+		results = append(results, result)
 	}
 	if len(results) == 0 {
+		if parsed.health {
+			return nil, fmt.Errorf("no attachments found for item: %s", parsed.itemKey)
+		}
 		return nil, fmt.Errorf("no resolved local .xlsx attachments found for item: %s", parsed.itemKey)
 	}
 	return results, nil
@@ -238,6 +275,11 @@ func tableAttachments(attachments []domain.Attachment) []domain.Attachment {
 		}
 	}
 	return out
+}
+
+func isTableAttachmentPath(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".xlsx" || ext == ".xlsm" || ext == ".xltx" || ext == ".xltm"
 }
 
 func attachmentLabelForInspect(attachment domain.Attachment) string {
@@ -281,6 +323,18 @@ func (c *CLI) renderInspectAttachmentResult(result inspectAttachmentResult) {
 	}
 	fmt.Fprintf(c.stdout, "Attachment: %s\n", title)
 	fmt.Fprintf(c.stdout, "Path: %s\n", result.LocalPath)
+	if result.Health != nil {
+		fmt.Fprintf(c.stdout, "Health: %s\n", result.Health.Status)
+		for _, issue := range result.Health.Issues {
+			fmt.Fprintf(c.stdout, "  - %s %s: %s\n", issue.Severity, issue.Code, issue.Message)
+			if issue.SuggestedName != "" {
+				fmt.Fprintf(c.stdout, "    suggested_name: %s\n", issue.SuggestedName)
+			}
+		}
+	}
+	if result.Workbook == nil {
+		return
+	}
 	fmt.Fprintf(c.stdout, "Workbook: %s, sheets=%d\n", result.Workbook.FileType, result.Workbook.SheetCount)
 	for _, sheet := range result.Workbook.Sheets {
 		fmt.Fprintf(c.stdout, "  - %s rows=%d cols=%d", sheet.Name, sheet.Rows, sheet.Columns)

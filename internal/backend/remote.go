@@ -424,6 +424,7 @@ func EncodeFindOptions(opts FindOptions) url.Values {
 	setString(q, "attachment_name", opts.AttachmentName)
 	setString(q, "attachment_path", opts.AttachmentPath)
 	setString(q, "attachment_type", opts.AttachmentType)
+	setString(q, "attachment_health", opts.AttachmentHealth)
 	setString(q, "exclude_item_type", opts.ExcludeItemType)
 	setString(q, "date_modified_after", opts.DateModifiedAfter)
 	setString(q, "date_added_after", opts.DateAddedAfter)
@@ -434,6 +435,8 @@ func EncodeFindOptions(opts FindOptions) url.Values {
 	setBool(q, "tag_any", opts.TagAny)
 	setBool(q, "include_trashed", opts.IncludeTrashed)
 	setBool(q, "has_pdf", opts.HasPDF)
+	setBool(q, "missing_attachment", opts.MissingAttachment)
+	setBool(q, "bad_attachment_name", opts.BadAttachmentName)
 	if opts.Limit > 0 {
 		q.Set("limit", strconv.Itoa(opts.Limit))
 	}
@@ -466,6 +469,7 @@ func ParseFindOptionsFromQuery(q url.Values) FindOptions {
 	opts.AttachmentName = q.Get("attachment_name")
 	opts.AttachmentPath = q.Get("attachment_path")
 	opts.AttachmentType = q.Get("attachment_type")
+	opts.AttachmentHealth = q.Get("attachment_health")
 	opts.ExcludeItemType = q.Get("exclude_item_type")
 	opts.DateModifiedAfter = q.Get("date_modified_after")
 	opts.DateAddedAfter = q.Get("date_added_after")
@@ -476,6 +480,8 @@ func ParseFindOptionsFromQuery(q url.Values) FindOptions {
 	opts.TagAny = q.Get("tag_any") == "true"
 	opts.IncludeTrashed = q.Get("include_trashed") == "true"
 	opts.HasPDF = q.Get("has_pdf") == "true"
+	opts.MissingAttachment = q.Get("missing_attachment") == "true"
+	opts.BadAttachmentName = q.Get("bad_attachment_name") == "true"
 	if v := q.Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			opts.Limit = n

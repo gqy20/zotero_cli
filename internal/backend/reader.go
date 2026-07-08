@@ -36,6 +36,9 @@ type FindOptions struct {
 	AttachmentName    string
 	AttachmentPath    string
 	AttachmentType    string
+	MissingAttachment bool
+	BadAttachmentName bool
+	AttachmentHealth  string
 	Collection        []string
 	NoCollection      []string
 	TagContains       []string

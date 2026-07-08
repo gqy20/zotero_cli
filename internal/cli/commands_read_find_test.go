@@ -436,6 +436,48 @@ func TestRunFindLocalJSONSupportsAttachmentPathFilterFromPrefs(t *testing.T) {
 	}
 }
 
+func TestRunFindLocalJSONSupportsAttachmentHealthFilters(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
+	buildLocalFindFixture(t, dataDir, sqlitePath, storageDir)
+	addMissingAttachmentFixture(t, sqlitePath)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	for _, args := range [][]string{
+		{"find", "--missing-attachment", "--json"},
+		{"find", "--bad-attachment-name", "--json"},
+		{"find", "--attachment-health", "error", "--json"},
+	} {
+		stdout, stderr := captureOutput(t)
+		exitCode := Run(args)
+		if exitCode != 0 {
+			t.Fatalf("%v: expected exit code 0, got %d; stderr=%q", args, exitCode, stderr.String())
+		}
+
+		var got map[string]any
+		if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+			t.Fatalf("%v: stdout is not valid json: %v\n%s", args, err, stdout.String())
+		}
+		data, ok := got["data"].([]any)
+		if !ok || len(data) != 1 {
+			t.Fatalf("%v: unexpected data payload: %#v", args, got["data"])
+		}
+		item := data[0].(map[string]any)
+		if item["key"] != "ITEM1234" {
+			t.Fatalf("%v: unexpected item payload: %#v", args, item)
+		}
+	}
+}
+
 func TestRunFindLocalAllJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
