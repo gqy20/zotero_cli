@@ -17,13 +17,15 @@ import (
 )
 
 const (
-	usageExtractText = `usage: zot extract-text <item-key> [--json] [--pages RANGE] [--max-chars N] [--grep TEXT] [--attachment KEY]
+	usageExtractText = `usage: zot extract-text <item-key>|--all [--json] [--output-dir DIR] [--pages RANGE] [--max-chars N] [--grep TEXT] [--attachment KEY]
 
 What: Extract plain text from a PDF attachment. Returns the concatenated text
 content of all pages. Results are cached to disk (keyed by item key + file
 mtime), so repeat calls are near-instant.
 
 Output controls:
+  --output-dir DIR Write Markdown files to DIR instead of printing text.
+  --all            Extract all local items with PDF attachments to Markdown files.
   --pages RANGE      Return only selected PDF pages, e.g. 3 or 2,5-7.
   --max-chars N      Return at most N characters of text (applies per field).
   --grep TEXT        Return only lines containing TEXT (case-insensitive).
@@ -39,23 +41,28 @@ Examples:
   zot extract-text ABCD --json --pages 3-8
   zot extract-text ABCD --json --max-chars 12000
   zot extract-text ABCD --json --grep methods --attachment ATT123
+  zot extract-text ABCD -o ./markdown
+  zot extract-text --all -o ./markdown --json
 
 Notes:
   - Requires PyMuPDF; install via 'zot init --pdf' or 'pip install pymupdf'.
   - For snippet-level search use 'zot find ... --fulltext --snippet N'.
   - See also: extract-figures, find --has-pdf, annotations.`
 
-	usageExtractFigures = `usage: zot extract-figures <item-key> [...] [--output-dir DIR] [--json] [--workers N] [--max-per-page N]
+	usageExtractFigures = `usage: zot extract-figures <item-key> [...]|--all [--output-dir DIR] [--json] [--workers N]
 
 What: Extract scientific figures (charts, plots, diagrams) from PDF attachments
 as PNG files. Filters cover pages, logos, and author headshots by default.
 
 Options:
+  --all                Extract all local items with PDF attachments.
   --output-dir DIR      Where to write PNGs. Default: {ZOT_DATA_DIR}/.zotero_cli/figures
                         (auto-created). Override with this flag.
   --workers N           Parallel workers. Default: CPU count (min 2, max 8).
-  --max-per-page N      Stop after N figures per page to bound output (default 25).
   --json                Return JSON {key, page, file, ...} instead of writing.
+
+Advanced:
+  --max-per-page N      Stop after N figures per page to bound output (default 25).
 
 Modes:
   local/hybrid    Reads from local Zotero storage. Requires PyMuPDF.
@@ -65,7 +72,7 @@ Modes:
 Examples:
   zot extract-figures ABCD --json
   zot extract-figures ABC1 ABC2 -o ./figs --workers 8 --json
-  zot extract-figures ABCD --max-per-page 5 --json
+  zot extract-figures --all -o ./figs --workers 8 --json
 
 Notes:
   - Results are cached on disk; rerun skips already-extracted pages.
@@ -76,7 +83,10 @@ Notes:
 
 type extractTextArgs struct {
 	ItemKey       string
+	All           bool
 	JSONOutput    bool
+	FileOutput    bool
+	OutputDir     string
 	MaxChars      int
 	Grep          string
 	AttachmentKey string
@@ -94,6 +104,24 @@ type textFieldView struct {
 	Total         int
 	ReturnedChars int
 	Truncated     bool
+}
+
+type markdownTextResult struct {
+	ItemKey     string `json:"item_key"`
+	Title       string `json:"title,omitempty"`
+	File        string `json:"file,omitempty"`
+	Attachments int    `json:"attachments,omitempty"`
+	Chars       int    `json:"chars,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
+type extractFiguresArgs struct {
+	ItemKeys   []string
+	All        bool
+	OutputDir  string
+	JSONOutput bool
+	Workers    int
+	MaxPerPage int
 }
 
 func (c *CLI) runExtractText(args []string) int {
@@ -122,6 +150,10 @@ func (c *CLI) runExtractText(args []string) int {
 	}
 	if err != nil {
 		return c.printErr(err)
+	}
+
+	if parsed.FileOutput {
+		return c.runExtractTextMarkdown(reader, cfg, parsed)
 	}
 
 	item, err := reader.GetItem(context.Background(), parsed.ItemKey)
@@ -255,13 +287,298 @@ func (c *CLI) runExtractText(args []string) int {
 	return 0
 }
 
+func (c *CLI) runExtractTextMarkdown(reader backend.Reader, cfg config.Config, args extractTextArgs) int {
+	outputDir := args.OutputDir
+	if outputDir == "" {
+		outputDir = filepath.Join(cfg.DataDir, ".zotero_cli", "markdown")
+	}
+	absOutDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		return c.printErr(err)
+	}
+	if err := os.MkdirAll(absOutDir, 0o755); err != nil {
+		return c.printErr(err)
+	}
+
+	ctx := context.Background()
+	if args.All {
+		if cfg.Mode == "remote" {
+			return c.printErr(fmt.Errorf("extract-text --all is supported in local/hybrid mode"))
+		}
+		items, err := reader.FindItems(ctx, backend.FindOptions{All: true, Full: true, HasPDF: true})
+		if err != nil {
+			return c.printErr(err)
+		}
+		items = filterDefaultFindItems(items, backend.FindOptions{All: true, Full: true, HasPDF: true})
+		return c.writeMarkdownForItems(ctx, reader, items, absOutDir, args)
+	}
+
+	item, err := reader.GetItem(ctx, args.ItemKey)
+	if err != nil {
+		return c.printErr(err)
+	}
+	results := []markdownTextResult{c.writeMarkdownForItem(ctx, reader, item, absOutDir, args)}
+	return c.outputMarkdownTextResults(results, args.JSONOutput)
+}
+
+func (c *CLI) writeMarkdownForItems(ctx context.Context, reader backend.Reader, items []domain.Item, outputDir string, args extractTextArgs) int {
+	results := make([]markdownTextResult, 0, len(items))
+	for _, item := range items {
+		results = append(results, c.writeMarkdownForItem(ctx, reader, item, outputDir, args))
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].ItemKey < results[j].ItemKey
+	})
+	return c.outputMarkdownTextResults(results, args.JSONOutput)
+}
+
+func (c *CLI) writeMarkdownForItem(ctx context.Context, reader backend.Reader, item domain.Item, outputDir string, args extractTextArgs) markdownTextResult {
+	result := markdownTextResult{ItemKey: item.Key, Title: item.Title}
+	pageReader, pageAware := reader.(attachmentPageTextReader)
+	if args.PagesRaw != "" {
+		if !pageAware {
+			result.Error = "extract-text --pages requires page-aware full-text extraction support"
+			return result
+		}
+		pageResult, err := pageReader.ExtractItemAttachmentPageTexts(ctx, item)
+		if err != nil {
+			result.Error = err.Error()
+			return result
+		}
+		filtered := filterItemPageTextResult(pageResult, args)
+		if args.AttachmentKey != "" && len(filtered.Attachments) == 0 {
+			result.Error = fmt.Sprintf("attachment %s not found on item %s", args.AttachmentKey, item.Key)
+			return result
+		}
+		content := markdownForPageTextItem(item, filtered, args)
+		return writeMarkdownTextFile(outputDir, item, content, len(filtered.Attachments), result)
+	}
+
+	attachmentReader, ok := reader.(attachmentTextReader)
+	if !ok {
+		result.Error = "extract-text requires local full-text extraction support"
+		return result
+	}
+	fullResult, err := attachmentReader.ExtractItemAttachmentTexts(ctx, item)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	filtered := filterItemFullTextResult(fullResult, args)
+	if args.AttachmentKey != "" && len(filtered.Attachments) == 0 {
+		result.Error = fmt.Sprintf("attachment %s not found on item %s", args.AttachmentKey, item.Key)
+		return result
+	}
+	content := markdownForFullTextItem(item, filtered, args)
+	return writeMarkdownTextFile(outputDir, item, content, len(filtered.Attachments), result)
+}
+
+func writeMarkdownTextFile(outputDir string, item domain.Item, content string, attachments int, result markdownTextResult) markdownTextResult {
+	filename := markdownFilename(item)
+	path := filepath.Join(outputDir, filename)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	result.File = path
+	result.Attachments = attachments
+	result.Chars = len([]rune(content))
+	return result
+}
+
+func markdownForFullTextItem(item domain.Item, result backend.ItemFullTextResult, args extractTextArgs) string {
+	var b strings.Builder
+	writeMarkdownItemHeader(&b, item)
+	for _, attachment := range result.Attachments {
+		text := formatExtractedText(attachment.Text, args).Text
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		writeMarkdownAttachmentHeader(&b, attachment.Attachment)
+		b.WriteString(text)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func markdownForPageTextItem(item domain.Item, result backend.ItemPageTextResult, args extractTextArgs) string {
+	var b strings.Builder
+	writeMarkdownItemHeader(&b, item)
+	for _, attachment := range result.Attachments {
+		writeMarkdownAttachmentHeader(&b, attachment.Attachment)
+		for _, page := range attachment.Pages {
+			text := formatExtractedText(page.Text, args).Text
+			if strings.TrimSpace(text) == "" {
+				continue
+			}
+			fmt.Fprintf(&b, "### Page %d\n\n", page.Page)
+			b.WriteString(text)
+			b.WriteString("\n\n")
+		}
+	}
+	return b.String()
+}
+
+func writeMarkdownItemHeader(b *strings.Builder, item domain.Item) {
+	title := strings.TrimSpace(item.Title)
+	if title == "" {
+		title = item.Key
+	}
+	fmt.Fprintf(b, "# %s\n\n", title)
+	fmt.Fprintf(b, "- Key: `%s`\n", item.Key)
+	if strings.TrimSpace(item.Date) != "" {
+		fmt.Fprintf(b, "- Date: %s\n", strings.TrimSpace(item.Date))
+	}
+	if strings.TrimSpace(item.DOI) != "" {
+		fmt.Fprintf(b, "- DOI: %s\n", strings.TrimSpace(item.DOI))
+	}
+	if strings.TrimSpace(item.URL) != "" {
+		fmt.Fprintf(b, "- URL: %s\n", strings.TrimSpace(item.URL))
+	}
+	b.WriteString("\n")
+}
+
+func writeMarkdownAttachmentHeader(b *strings.Builder, attachment domain.Attachment) {
+	label := firstNonEmptyPDFString(attachment.Title, attachment.Filename, attachment.Key)
+	fmt.Fprintf(b, "## %s\n\n", label)
+	fmt.Fprintf(b, "- Attachment key: `%s`\n", attachment.Key)
+	if strings.TrimSpace(attachment.Filename) != "" {
+		fmt.Fprintf(b, "- Filename: %s\n", strings.TrimSpace(attachment.Filename))
+	}
+	b.WriteString("\n")
+}
+
+func (c *CLI) outputMarkdownTextResults(results []markdownTextResult, jsonOutput bool) int {
+	errors := make([]string, 0)
+	written := 0
+	for _, result := range results {
+		if result.Error != "" {
+			errors = append(errors, fmt.Sprintf("%s: %s", result.ItemKey, result.Error))
+			continue
+		}
+		written++
+	}
+	if jsonOutput {
+		return c.writeJSON(jsonResponse{
+			OK:      len(errors) == 0,
+			Command: "extract-text",
+			Data:    results,
+			Meta: map[string]any{
+				"format":      "markdown",
+				"total_items": len(results),
+				"written":     written,
+				"errors":      errors,
+			},
+		})
+	}
+	for _, result := range results {
+		if result.Error != "" {
+			fmt.Fprintf(c.stderr, "[%s] error: %s\n", result.ItemKey, result.Error)
+			continue
+		}
+		fmt.Fprintf(c.stdout, "[%s] wrote %s\n", result.ItemKey, result.File)
+	}
+	if len(errors) > 0 {
+		return ExitError
+	}
+	return ExitOK
+}
+
+func defaultPDFWorkers() int {
+	workers := runtime.NumCPU()
+	if workers > 8 {
+		workers = 8
+	}
+	if workers < 2 {
+		workers = 2
+	}
+	return workers
+}
+
+func markdownFilename(item domain.Item) string {
+	title := strings.TrimSpace(item.Title)
+	if title == "" {
+		title = "untitled"
+	}
+	title = sanitizeMarkdownFilename(title)
+	if len([]rune(title)) > 90 {
+		title = string([]rune(title)[:90])
+	}
+	return sanitizeMarkdownFilename(strings.TrimSpace(item.Key) + "-" + title + ".md")
+}
+
+func sanitizeMarkdownFilename(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "untitled"
+	}
+	var b strings.Builder
+	lastUnderscore := false
+	for _, r := range value {
+		switch r {
+		case '\\', '/', ':', '*', '?', '"', '<', '>', '|', '\r', '\n', '\t':
+			if !lastUnderscore {
+				b.WriteByte('_')
+				lastUnderscore = true
+			}
+		default:
+			b.WriteRune(r)
+			lastUnderscore = false
+		}
+	}
+	cleaned := strings.Trim(b.String(), " ._")
+	if cleaned == "" {
+		return "untitled"
+	}
+	return cleaned
+}
+
+func firstNonEmptyPDFString(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func filterItemFullTextResult(result backend.ItemFullTextResult, args extractTextArgs) backend.ItemFullTextResult {
+	if args.AttachmentKey == "" {
+		return result
+	}
+	filtered := backend.ItemFullTextResult{}
+	for _, attachment := range result.Attachments {
+		if !strings.EqualFold(attachment.Attachment.Key, args.AttachmentKey) {
+			continue
+		}
+		filtered.Attachments = append(filtered.Attachments, attachment)
+		filtered.Text = attachment.Text
+		filtered.PrimaryAttachmentKey = attachment.Attachment.Key
+	}
+	return filtered
+}
+
 func (c *CLI) parseExtractTextArgs(args []string) (extractTextArgs, bool) {
 	parsed := extractTextArgs{}
 
 	for i := 0; i < len(args); i++ {
 		switch arg := args[i]; arg {
+		case "--all":
+			parsed.All = true
 		case "--json":
 			parsed.JSONOutput = true
+		case "--output-dir", "-o":
+			if i+1 >= len(args) {
+				fmt.Fprintln(c.stderr, usageExtractText)
+				return extractTextArgs{}, false
+			}
+			i++
+			parsed.OutputDir = strings.TrimSpace(args[i])
+			if parsed.OutputDir == "" {
+				fmt.Fprintln(c.stderr, usageExtractText)
+				return extractTextArgs{}, false
+			}
 		case "--max-chars":
 			if i+1 >= len(args) {
 				fmt.Fprintln(c.stderr, usageExtractText)
@@ -319,7 +636,14 @@ func (c *CLI) parseExtractTextArgs(args []string) (extractTextArgs, bool) {
 		}
 	}
 
-	if strings.TrimSpace(parsed.ItemKey) == "" {
+	if parsed.All && strings.TrimSpace(parsed.ItemKey) != "" {
+		fmt.Fprintln(c.stderr, usageExtractText)
+		return extractTextArgs{}, false
+	}
+	if parsed.All || parsed.OutputDir != "" {
+		parsed.FileOutput = true
+	}
+	if !parsed.All && strings.TrimSpace(parsed.ItemKey) == "" {
 		fmt.Fprintln(c.stderr, usageExtractText)
 		return extractTextArgs{}, false
 	}
@@ -621,8 +945,17 @@ func capFiguresPerPage(result *backend.ExtractFiguresResult, outputDir string, m
 
 	var kept []backend.FigureInfo
 	var trimmed int
-	for _, pg := range pages {
+	pageNums := make([]int, 0, len(pages))
+	for page := range pages {
+		pageNums = append(pageNums, page)
+	}
+	sort.Ints(pageNums)
+	for _, page := range pageNums {
+		pg := pages[page]
 		if len(pg.figs) <= maxPerPage {
+			sort.Slice(pg.figs, func(i, j int) bool {
+				return pg.figs[i].ID < pg.figs[j].ID
+			})
 			for _, f := range pg.figs {
 				kept = append(kept, *f)
 			}
@@ -663,7 +996,7 @@ func (c *CLI) runExtractFigures(args []string) int {
 		return c.printCommandUsage(usageExtractFigures)
 	}
 
-	itemKeys, outputDir, jsonOutput, workers, maxPerPage, ok := c.parseExtractFiguresArgs(args)
+	parsed, ok := c.parseExtractFiguresArgs(args)
 	if !ok {
 		return 2
 	}
@@ -675,7 +1008,10 @@ func (c *CLI) runExtractFigures(args []string) int {
 
 	// Remote mode: delegate to server API
 	if cfg.Mode == "remote" {
-		return c.runExtractFiguresRemote(cfg, itemKeys, outputDir, jsonOutput)
+		if parsed.All {
+			return c.printErr(fmt.Errorf("extract-figures --all is supported in local/hybrid mode"))
+		}
+		return c.runExtractFiguresRemote(cfg, parsed.ItemKeys, parsed.OutputDir, parsed.JSONOutput)
 	}
 
 	localReader, err := c.newLocalReader(cfg)
@@ -691,6 +1027,7 @@ func (c *CLI) runExtractFigures(args []string) int {
 	}
 
 	// Resolve output directory
+	outputDir := parsed.OutputDir
 	if outputDir == "" {
 		outputDir = filepath.Join(cfg.DataDir, ".zotero_cli", "figures")
 	}
@@ -700,21 +1037,17 @@ func (c *CLI) runExtractFigures(args []string) int {
 	}
 
 	// Default workers: CPU count, min 2, max 8
+	workers := parsed.Workers
 	if workers <= 0 {
-		workers = runtime.NumCPU()
-		if workers > 8 {
-			workers = 8
-		}
-		if workers < 2 {
-			workers = 2
-		}
+		workers = defaultPDFWorkers()
 	}
+	maxPerPage := parsed.MaxPerPage
 
 	ctx := context.Background()
 
 	// Single item: run directly (no goroutine overhead)
-	if len(itemKeys) == 1 {
-		item, err := localReader.GetItem(ctx, itemKeys[0])
+	if !parsed.All && len(parsed.ItemKeys) == 1 {
+		item, err := localReader.GetItem(ctx, parsed.ItemKeys[0])
 		if err != nil {
 			return c.printErr(err)
 		}
@@ -723,7 +1056,7 @@ func (c *CLI) runExtractFigures(args []string) int {
 			res.Error = err.Error()
 		}
 		capFiguresPerPage(&res, absOutDir, maxPerPage)
-		return c.outputFiguresResults([]figureTaskResult{{itemKey: itemKeys[0], result: res, err: err}}, jsonOutput)
+		return c.outputFiguresResults([]figureTaskResult{{itemKey: parsed.ItemKeys[0], result: res, err: err}}, parsed.JSONOutput)
 	}
 
 	// Multiple items: pre-fetch → filter PDF items → sort by page count (LPT) → parallel
@@ -733,14 +1066,27 @@ func (c *CLI) runExtractFigures(args []string) int {
 		item domain.Item
 		err  error
 	}
-	preloads := make([]preloadResult, len(itemKeys))
-	for i, key := range itemKeys {
-		item, err := localReader.GetItem(ctx, key)
-		preloads[i] = preloadResult{key: key, item: item, err: err}
+	var preloads []preloadResult
+	if parsed.All {
+		items, err := localReader.FindItems(ctx, backend.FindOptions{All: true, Full: true, HasPDF: true})
+		if err != nil {
+			return c.printErr(err)
+		}
+		items = filterDefaultFindItems(items, backend.FindOptions{All: true, Full: true, HasPDF: true})
+		preloads = make([]preloadResult, 0, len(items))
+		for _, item := range items {
+			preloads = append(preloads, preloadResult{key: item.Key, item: item})
+		}
+	} else {
+		preloads = make([]preloadResult, len(parsed.ItemKeys))
+		for i, key := range parsed.ItemKeys {
+			item, err := localReader.GetItem(ctx, key)
+			preloads[i] = preloadResult{key: key, item: item, err: err}
+		}
 	}
 
 	// Phase 2: build job list — only items with resolvable PDF attachments
-	jobs := make([]pdfJob, 0, len(itemKeys))
+	jobs := make([]pdfJob, 0, len(preloads))
 	skipResults := make([]figureTaskResult, 0)
 	for _, p := range preloads {
 		if p.err != nil {
@@ -827,7 +1173,7 @@ func (c *CLI) runExtractFigures(args []string) int {
 		capFiguresPerPage(&results[i].result, absOutDir, maxPerPage)
 	}
 
-	return c.outputFiguresResults(results, jsonOutput)
+	return c.outputFiguresResults(results, parsed.JSONOutput)
 }
 
 func (c *CLI) outputFiguresResults(results []figureTaskResult, jsonOutput bool) int {
@@ -914,43 +1260,41 @@ func (c *CLI) outputFiguresResults(results []figureTaskResult, jsonOutput bool) 
 	return 0
 }
 
-func (c *CLI) parseExtractFiguresArgs(args []string) ([]string, string, bool, int, int, bool) {
-	var itemKeys []string
-	outputDir := ""
-	jsonOutput := false
-	workers := 0
-	maxPerPage := 25
+func (c *CLI) parseExtractFiguresArgs(args []string) (extractFiguresArgs, bool) {
+	parsed := extractFiguresArgs{MaxPerPage: 25}
 	expectOutputDir := false
 	expectWorkers := false
 	expectMaxPerPage := false
 
 	for _, arg := range args {
 		if expectOutputDir {
-			outputDir = arg
+			parsed.OutputDir = arg
 			expectOutputDir = false
 			continue
 		}
 		if expectWorkers {
-			_, err := fmt.Sscanf(arg, "%d", &workers)
-			if err != nil || workers <= 0 {
+			_, err := fmt.Sscanf(arg, "%d", &parsed.Workers)
+			if err != nil || parsed.Workers <= 0 {
 				fmt.Fprintf(c.stderr, "%s\ninvalid --workers value: %s\n", usageExtractFigures, arg)
-				return nil, "", false, 0, 0, false
+				return extractFiguresArgs{}, false
 			}
 			expectWorkers = false
 			continue
 		}
 		if expectMaxPerPage {
-			_, err := fmt.Sscanf(arg, "%d", &maxPerPage)
-			if err != nil || maxPerPage < 1 {
+			_, err := fmt.Sscanf(arg, "%d", &parsed.MaxPerPage)
+			if err != nil || parsed.MaxPerPage < 1 {
 				fmt.Fprintf(c.stderr, "%s\ninvalid --max-per-page value: %s\n", usageExtractFigures, arg)
-				return nil, "", false, 0, 0, false
+				return extractFiguresArgs{}, false
 			}
 			expectMaxPerPage = false
 			continue
 		}
 		switch arg {
+		case "--all":
+			parsed.All = true
 		case "--json", "-j":
-			jsonOutput = true
+			parsed.JSONOutput = true
 		case "--output-dir", "-o":
 			expectOutputDir = true
 		case "--workers", "-w":
@@ -960,17 +1304,25 @@ func (c *CLI) parseExtractFiguresArgs(args []string) ([]string, string, bool, in
 		default:
 			if strings.HasPrefix(arg, "-") {
 				fmt.Fprintln(c.stderr, usageExtractFigures)
-				return nil, "", false, 0, 0, false
+				return extractFiguresArgs{}, false
 			}
-			itemKeys = append(itemKeys, arg)
+			parsed.ItemKeys = append(parsed.ItemKeys, arg)
 		}
 	}
 
-	if len(itemKeys) == 0 {
+	if expectOutputDir || expectWorkers || expectMaxPerPage {
 		fmt.Fprintln(c.stderr, usageExtractFigures)
-		return nil, "", false, 0, 0, false
+		return extractFiguresArgs{}, false
 	}
-	return itemKeys, outputDir, jsonOutput, workers, maxPerPage, true
+	if parsed.All && len(parsed.ItemKeys) > 0 {
+		fmt.Fprintln(c.stderr, usageExtractFigures)
+		return extractFiguresArgs{}, false
+	}
+	if !parsed.All && len(parsed.ItemKeys) == 0 {
+		fmt.Fprintln(c.stderr, usageExtractFigures)
+		return extractFiguresArgs{}, false
+	}
+	return parsed, true
 }
 
 func (c *CLI) runExtractFiguresRemote(cfg config.Config, itemKeys []string, outputDir string, jsonOutput bool) int {

@@ -47,7 +47,7 @@ type ExtractFiguresResult struct {
 }
 
 // figureScriptVersion is bumped when the Python script changes, invalidating old caches.
-const figureScriptVersion = "v13"
+const figureScriptVersion = "v14"
 
 // figureCacheMeta is the persisted manifest for one attachment's extracted figures.
 type figureCacheMeta struct {
@@ -336,13 +336,13 @@ def calc_text_density(page, rect):
     tr = ta / max(rect.width * rect.height, 1)
     ft = "".join(parts).strip()
     norm = re.sub(r"\s+", " ", ft)
-    cp = re.compile(r"^(?:F\s*I\s*G\s*U\s*R\s*E|图)\s+\.?\s*\d", re.I)
+    cp = re.compile(r"^(?:F\s*I\s*G\s*U\s*R\s*E|F\s*I\s*G|Fig\.?|Figure|图)\s*\.?\s*\d", re.I)
     return {"text_ratio": round(tr,3), "char_count": cc,
             "is_text_heavy": tr > DEFAULTS["max_text_ratio"],
             "is_caption": bool(cp.match(norm))}
 
 def attach_caption(page, rect):
-    cr = re.compile(r"^(?:F\s*I\s*G\s*U\s*R\s*E|图)\s+\.?\s*\d", re.I)
+    cr = re.compile(r"^(?:F\s*I\s*G\s*U\s*R\s*E|F\s*I\s*G|Fig\.?|Figure|图)\s*\.?\s*\d", re.I)
     margin, ext = 200, 120
     sr = fitz.Rect(rect.x0-margin, rect.y0, rect.x1+margin, rect.y1+ext) & page.rect
     best, bd = None, float("inf")
@@ -419,6 +419,18 @@ def is_low_quality_raster_candidate(src, pp, pg, n_pages, aspect):
         return True
     return False
 
+def should_crosspage_dedup(page, rect, pct_page, has_caption):
+    if has_caption:
+        return False
+    if pct_page >= DEFAULTS["min_pct_page"]:
+        content = page_content_rect(page)
+        center = fitz.Point((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2)
+        if content.contains(center):
+            return False
+    edge = page.rect.height * 0.12
+    near_edge = rect.y0 <= page.rect.y0 + edge or rect.y1 >= page.rect.y1 - edge
+    return pct_page < 5 or near_edge
+
 def main():
     pdf_path, out_dir = sys.argv[1], sys.argv[2]
     os.makedirs(out_dir, exist_ok=True)
@@ -436,7 +448,8 @@ def main():
           "raster_only_pages":0,"filt_low_quality_raster":0}
     t0, fi = time.perf_counter(), 0
 
-    # V3: cross-page dedup — shared across all pages to catch repeating headers/footers
+    # V14: cross-page dedup is only for small/edge, captionless repeats.
+    # Main figures often share publisher layout sizes across pages.
     global_seen = []
 
     for pg in range(n_pages):
@@ -549,12 +562,16 @@ def main():
             if any((rc&s).width>50 and (rc&s).height>50 for s in seen): continue
             seen.append(rc)
 
-            # V4: cross-page dedup (P3) — skip if similar size already kept on another page
-            if any(similar_size(rc, gs) for gs in global_seen):
+            rc2, hc = attach_caption(p, rc)
+            has_caption = hc or td["is_caption"]
+
+            # V14: skip cross-page dedup for captioned or in-content figures.
+            # Size alone is not enough: BMC/Nature-style articles reuse the same figure width.
+            crosspage_dedup = should_crosspage_dedup(p, rc, pp, has_caption)
+            if crosspage_dedup and any(similar_size(rc, gs) for gs in global_seen):
                 sk["filt_crosspage_dup"] += 1
                 continue
 
-            rc2, hc = attach_caption(p, rc)
             render_dpi = DEFAULTS["render_dpi"]
             if src == "raster" and pp >= DEFAULTS["large_raster_low_dpi_pct"]:
                 render_dpi = DEFAULTS["raster_render_dpi"]
@@ -565,15 +582,16 @@ def main():
             if kb<eff_kb: sk["filt_tiny"]+=1; continue
 
             # V4: confidence score (P1)
-            conf = calc_confidence(kb, na, hc or td["is_caption"], td["text_ratio"], pp, ar)
+            conf = calc_confidence(kb, na, has_caption, td["text_ratio"], pp, ar)
 
             sk["kept"]+=1; page_kept+=1; fi+=1
-            global_seen.append(rc)  # register for cross-page dedup
+            if crosspage_dedup:
+                global_seen.append(rc)
             fn=f"p{pg+1}_fig{fi}.png"
             with open(os.path.join(out_dir,fn),"wb") as f: f.write(ib)
             figures.append({"id":fi,"file":fn,"page":pg+1,"source":src,
                 "size_px":f"{pix.width}x{pix.height}","size_pt":f"{rc2.width:.0f}x{rc2.height:.0f}",
-                "kb":round(kb,1),"anchors":na,"has_caption":hc or td["is_caption"],
+                "kb":round(kb,1),"anchors":na,"has_caption":has_caption,
                 "text_ratio":td["text_ratio"],"pct_page":round(pp,1),
                 "confidence":conf})
 
@@ -636,7 +654,7 @@ if __name__ == "__main__": main()
 func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outputDir string) (ExtractFiguresResult, error) {
 	result := ExtractFiguresResult{
 		ItemKey: item.Key,
-		Method:  "cluster_drawings_v13",
+		Method:  "cluster_drawings_v14",
 	}
 
 	var pdfs []domain.Attachment

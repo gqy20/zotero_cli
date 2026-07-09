@@ -269,6 +269,8 @@ zot find "同源多倍体" --snippet --limit 200 --json
 # 提取 PDF 正文供 AI 分析（PyMuPDF 优先 → ft-cache 回退 → pdfium WASM 兜底）
 zot extract-text KEY --json
 zot extract-text KEY --json --pages 3-8 --grep methods --max-chars 12000
+zot extract-text KEY -o ./markdown
+zot extract-text --all -o ./markdown --json
 
 # 查找本地 Zotero 已保存的 Supplementary / Source data / 表格数据附件
 zot supplements KEY --json
@@ -280,7 +282,8 @@ zot inspect-attachment --item KEY --health --json
 
 # 提取论文图表（支持缓存、多 PDF 附件、低质量误检过滤和每页上限）
 zot extract-figures KEY --json
-zot extract-figures KEY1 KEY2 --workers 8 --max-per-page 25 --output-dir ./figures --json
+zot extract-figures KEY1 KEY2 --workers 8 --output-dir ./figures --json
+zot extract-figures --all --workers 8 --output-dir ./figures --json
 
 # 查看 PDF 标注（双源：Zotero 阅读器 DB 标注 + PDF 文件内标注）
 zot annotations KEY --json

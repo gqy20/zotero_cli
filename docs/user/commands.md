@@ -302,7 +302,7 @@ zot inspect-attachment --item ABCD --health --json
 ### 用法
 
 ```
-zot extract-text <item-key> [--json] [--pages RANGE] [--max-chars N] [--grep TEXT] [--attachment KEY]
+zot extract-text <item-key>|--all [--json] [--output-dir DIR] [--pages RANGE] [--max-chars N] [--grep TEXT] [--attachment KEY]
 ```
 
 ### 选项
@@ -310,6 +310,8 @@ zot extract-text <item-key> [--json] [--pages RANGE] [--max-chars N] [--grep TEX
 | 选项 | 说明 |
 |------|------|
 | `--json` | 结构化 JSON 输出，推荐给 AI Agent 使用。 |
+| `--output-dir DIR` / `-o DIR` | 写出 Markdown 文件到指定目录；单篇无 `-o` 时默认输出文本。 |
+| `--all` | 批量处理本地所有带 PDF 的条目，默认写 Markdown 文件。 |
 | `--pages RANGE` | 只返回指定 PDF 页，例如 `3`、`3-8`、`2,5-7`。 |
 | `--max-chars N` | 限制每个返回 text 字段最多 N 个字符。 |
 | `--grep TEXT` | 只返回包含 TEXT 的行，大小写不敏感。 |
@@ -322,6 +324,8 @@ zot extract-text ABCD --json
 zot extract-text ABCD --json --pages 3-8
 zot extract-text ABCD --json --pages 2,5-7 --grep methods --max-chars 12000
 zot extract-text ABCD --json --attachment ATT123 --pages 4
+zot extract-text ABCD -o ./markdown
+zot extract-text --all -o ./markdown --json
 ```
 
 `--pages` 需要带页码信息的 full-text cache。新的 PyMuPDF/PDFium 提取会写入 `chunks.json`；只有 `content.txt` 的旧缓存会返回明确的重建提示，而不是做不可靠的假页码过滤。
@@ -332,6 +336,7 @@ zot extract-text ABCD --json --attachment ATT123 --pages 4
 |------|------|
 | 文本模式 | 直接输出纯文本到 stdout |
 | JSON 模式 | 返回结构化数据：`text`、`attachments[]`（含 `attachment_key`、`text`、`resolved_path` 等） |
+| Markdown 模式 | 写出 `.md` 文件；配合 `--json` 时返回 manifest（文件路径、字符数、错误），不返回全文正文 |
 
 ### 依赖
 
@@ -346,7 +351,7 @@ zot extract-text ABCD --json --attachment ATT123 --pages 4
 ### 用法
 
 ```
-zot extract-figures <item-key> [...] [--output-dir DIR] [--json] [--workers N]
+zot extract-figures <item-key> [...]|--all [--output-dir DIR] [--json] [--workers N]
 ```
 
 ### 选项
@@ -354,9 +359,16 @@ zot extract-figures <item-key> [...] [--output-dir DIR] [--json] [--workers N]
 | 选项 | 说明 | 默认值 |
 |------|------|--------|
 | `<item-key>` [...] | 一个或多个条目 key（多篇自动并行） | — |
+| `--all` | 批量处理本地所有带 PDF 的条目 | 关闭 |
 | `--output-dir`, `-o` | 输出目录 | `./figures` |
 | `--json`, `-j` | JSON 格式输出 | 文本模式 |
 | `--workers`, `-w` | 并行 worker 数 | CPU 核数（min 2, max 8） |
+
+### 高级选项
+
+| 选项 | 说明 | 默认值 |
+|------|------|--------|
+| `--max-per-page`, `-m` | 每页最多保留的图数，用于限制异常碎片页输出。 | 25 |
 
 ### 提取算法（v5b）
 
@@ -457,8 +469,8 @@ zot extract-figures <item-key> [...] [--output-dir DIR] [--json] [--workers N]
 | `overview` | 一站式库概览（**Agent 入口**）：stats + Top 收藏夹 + Top 标签 + 最近条目 + FTS 状态 | `--json` |
 | `key-info [KEY]` | API key 权限与所属用户查询 | `--json` |
 | `schema <sub>` | 元数据 schema 自省（`types` / `fields` / `creator-types` / `fields-for` / `creator-types-for` / `template`） | `--json` |
-| `extract-text` | 从 PDF 提取全文（详见上文） | `--json` / `--pages` / `--grep` / `--max-chars` / `--attachment` |
-| `extract-figures` | 从 PDF 提取科学插图（详见上文） | `--output-dir` / `--workers` / `--max-per-page` / `--json` |
+| `extract-text` | 从 PDF 提取全文（详见上文） | `--json` / `--all` / `--output-dir` / `--pages` / `--grep` / `--max-chars` / `--attachment` |
+| `extract-figures` | 从 PDF 提取科学插图（详见上文） | `--all` / `--output-dir` / `--workers` / `--json` |
 | `open` | 在系统默认 PDF 阅读器中打开条目附件 | — |
 | `select` | 在 Zotero UI 中定位条目 | — |
 

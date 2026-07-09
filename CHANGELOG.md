@@ -7,11 +7,15 @@
 ## [Unreleased]
 
 ### 新增
+- **`extract-text` 文件输出与全库批量**：`-o/--output-dir` 可把单篇 PDF 全文写成 Markdown；`--all` 支持批量导出本地所有带 PDF 的条目，默认落盘为 Markdown，JSON 模式返回 manifest，避免把全文正文塞进响应。
+- **`extract-figures --all`**：支持直接批量处理本地所有带 PDF 的条目，复用现有 worker pool、页数排序和缓存路径。
 - **附件健康检查**：`inspect-attachment` 新增 `--health`，可诊断本地附件路径未解析、文件缺失、路径是目录、文件名过长、非法字符、异常空格、PDF 缺 `.pdf` 后缀和泛化命名等问题；`find` 新增 `--missing-attachment`、`--bad-attachment-name`、`--attachment-health critical|error|warning|info` 用于批量定位异常附件。
 
 ### 修复
+- **`extract-figures` 跨页同尺寸误去重**：跨页 dedup 仅用于小面积/页边且无 caption 的重复元素，避免 BMC/Nature 风格正文大图因宽高相近被当作页眉页脚重复图过滤。
 
 ### 变更
+- **PDF 提取参数收敛**：移除 `extract-text --markdown/--md` 兼容入口，文件输出统一由 `-o/--output-dir` 或 `--all` 触发；`extract-figures --max-per-page` 保留为高级调参项，不再出现在主用法路径中。
 
 ### 性能
 
