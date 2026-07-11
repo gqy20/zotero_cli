@@ -65,11 +65,16 @@ zot ref build --workers 3 --json
 zot ref status --json
 zot ref failed --json
 zot ref retry --workers 2 --json
+zot ref resolve --json
+zot ref cited-by ITEMKEY --json
+zot ref contexts ITEMKEY --json
 ```
 
 `ref ITEMKEY` 从 DOI、PubMed URL 和摘要中识别 PMID/PMCID，优先读取 PMC JATS XML 的完整 `<ref-list>`；没有 PMC 时，通过 PubMed ELink 获取可映射到 PMID 的引用，并批量 EFetch 结构化元数据。
 
 `ref build` 默认扫描所有符合条件的顶层文献并执行增量构建。索引按条目版本和标识符指纹跳过未变化条目；失败状态可用 `ref failed` 查看并通过 `ref retry` 重试。结构化索引位于 `.zotero_cli/ref/index.sqlite`，NCBI 原始响应缓存在 `.zotero_cli/ref/ncbi/`。
+
+`ref resolve` 使用 DOI、PMID、规范化标题和保守的模糊标题匹配，将参考文献解析回本地 Zotero 条目。`ref cited-by` 提供反向引用查询；`ref contexts` 返回 PMC JATS 正文中引用标记所在的章节和完整段落。PubMed 只提供参考文献关系，不提供正文上下文，因此其 `contexts` 为空。
 
 环境变量：`ZOT_NCBI_API_KEY`、`ZOT_NCBI_EMAIL`、`ZOT_NCBI_RATE_MS`。`--refresh` 会绕过缓存。
 

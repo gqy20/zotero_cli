@@ -22,6 +22,9 @@ const usageRef = `usage: zot ref <item-key> [--source auto|pmc|pubmed] [--refres
        zot ref status [--json]
        zot ref failed [--json]
        zot ref retry [--workers N] [--json]
+       zot ref resolve [--json]
+       zot ref cited-by <item-key> [--json]
+       zot ref contexts <item-key> [--json]
 
 What: Manage the local structured-reference index. A direct item key is short
 for 'ref show'. NCBI routing prefers complete PMC JATS and otherwise uses
@@ -33,6 +36,9 @@ Subcommands:
   status        Show index coverage and reference counts.
   failed        List failed items and their last errors.
   retry         Retry all currently failed items.
+  resolve       Match indexed references back to local Zotero items.
+  cited-by      List indexed library items that cite one local item.
+  contexts      Show PMC JATS paragraphs containing citation markers.
 
 Options:
   --source auto|pmc|pubmed  Select NCBI routing (default auto).
@@ -74,6 +80,12 @@ func (c *CLI) runRef(args []string) int {
 		return c.runRefFailed(args[1:])
 	case "retry":
 		return c.runRefBuild(args[1:], true)
+	case "resolve":
+		return c.runRefResolve(args[1:])
+	case "cited-by":
+		return c.runRefCitedBy(args[1:])
+	case "contexts":
+		return c.runRefContexts(args[1:])
 	default:
 		if strings.HasPrefix(args[0], "-") {
 			return c.refUsageError("missing item key or subcommand")
@@ -251,7 +263,7 @@ func (c *CLI) runRefStatus(args []string) int {
 	if jsonOutput {
 		return c.writeJSON(jsonResponse{OK: true, Command: "ref-status", Data: status, Meta: map[string]any{"index_path": store.Path()}})
 	}
-	fmt.Fprintf(c.stdout, "Reference index: %d items (%d successful, %d failed), %d references\nPMC: %d  PubMed: %d\nLast indexed: %s\nPath: %s\n", status.IndexedItems, status.SuccessfulItems, status.FailedItems, status.TotalReferences, status.PMCItems, status.PubMedItems, status.LastIndexedAt, store.Path())
+	fmt.Fprintf(c.stdout, "Reference index: %d items (%d successful, %d failed), %d references\nResolved: %d  Unresolved: %d  Contexts: %d\nPMC: %d  PubMed: %d\nLast indexed: %s\nPath: %s\n", status.IndexedItems, status.SuccessfulItems, status.FailedItems, status.TotalReferences, status.ResolvedReferences, status.UnresolvedReferences, status.CitationContexts, status.PMCItems, status.PubMedItems, status.LastIndexedAt, store.Path())
 	return ExitOK
 }
 
@@ -282,6 +294,91 @@ func (c *CLI) runRefFailed(args []string) int {
 	return ExitOK
 }
 
+func (c *CLI) runRefResolve(args []string) int {
+	jsonOutput, ok := parseRefJSONOnly(args)
+	if !ok {
+		return c.refUsageError("resolve accepts only --json")
+	}
+	cfg, reader, code := c.loadReader()
+	if code != 0 {
+		return code
+	}
+	items, err := reader.FindItems(context.Background(), backend.FindOptions{All: true, Full: true})
+	if err != nil {
+		return c.printErr(err)
+	}
+	store, err := openReferenceStore(cfg)
+	if err != nil {
+		return c.printErr(err)
+	}
+	defer store.Close()
+	report, err := store.Resolve(context.Background(), references.NewResolver(items))
+	if err != nil {
+		return c.printErr(err)
+	}
+	if jsonOutput {
+		return c.writeJSON(jsonResponse{OK: true, Command: "ref-resolve", Data: report, Meta: map[string]any{"library_items": len(items), "elapsed_ms": report.ElapsedMS}})
+	}
+	fmt.Fprintf(c.stdout, "Resolved %d/%d references in %s (DOI %d, PMID %d, exact title %d, fuzzy title %d)\n", report.Resolved, report.Total, time.Duration(report.ElapsedMS)*time.Millisecond, report.DOI, report.PMID, report.ExactTitle, report.FuzzyTitle)
+	return ExitOK
+}
+
+func (c *CLI) runRefCitedBy(args []string) int {
+	key, jsonOutput, ok := parseRefKeyJSON(args)
+	if !ok {
+		return c.refUsageError("cited-by requires one item key and optional --json")
+	}
+	cfg, code := c.loadConfig()
+	if code != 0 {
+		return code
+	}
+	store, err := openReferenceStore(cfg)
+	if err != nil {
+		return c.printErr(err)
+	}
+	defer store.Close()
+	rows, err := store.CitedBy(context.Background(), key)
+	if err != nil {
+		return c.printErr(err)
+	}
+	if jsonOutput {
+		return c.writeJSON(jsonResponse{OK: true, Command: "ref-cited-by", Data: rows, Meta: map[string]any{"target_item_key": key, "total": len(rows)}})
+	}
+	fmt.Fprintf(c.stdout, "Cited by %d indexed item(s):\n", len(rows))
+	for _, row := range rows {
+		fmt.Fprintf(c.stdout, "%-10s  ref %d  %s (%d contexts)\n", row.SourceItemKey, row.Reference.Index, row.SourceTitle, len(row.Contexts))
+	}
+	return ExitOK
+}
+
+func (c *CLI) runRefContexts(args []string) int {
+	key, jsonOutput, ok := parseRefKeyJSON(args)
+	if !ok {
+		return c.refUsageError("contexts requires one item key and optional --json")
+	}
+	cfg, code := c.loadConfig()
+	if code != 0 {
+		return code
+	}
+	store, err := openReferenceStore(cfg)
+	if err != nil {
+		return c.printErr(err)
+	}
+	defer store.Close()
+	rows, err := store.Contexts(context.Background(), key)
+	if err != nil {
+		return c.printErr(err)
+	}
+	if jsonOutput {
+		return c.writeJSON(jsonResponse{OK: true, Command: "ref-contexts", Data: rows, Meta: map[string]any{"item_key": key, "total": len(rows)}})
+	}
+	fmt.Fprintf(c.stdout, "Citation contexts for %s: %d\n", key, len(rows))
+	for _, row := range rows {
+		fmt.Fprintf(c.stdout, "ref %d %-12s  [%s] %s\n", row.ReferenceIndex, row.TargetItemKey, row.Section, row.Paragraph)
+	}
+	return ExitOK
+}
+
 func (c *CLI) renderRefResult(result references.Result, jsonOutput, indexHit bool) int {
 	if jsonOutput {
 		return c.writeJSON(jsonResponse{OK: true, Command: "ref", Data: result, Meta: map[string]any{"total": len(result.References), "strategy": result.Strategy, "index_hit": indexHit, "cache_hits": result.CacheHits, "network_calls": result.NetworkCalls, "elapsed_ms": result.ElapsedMS}})
@@ -292,7 +389,14 @@ func (c *CLI) renderRefResult(result references.Result, jsonOutput, indexHit boo
 		if id == "" {
 			id = ref.PMID
 		}
-		fmt.Fprintf(c.stdout, "%3d  %-18s  %s\n", ref.Index, id, ref.Title)
+		target := ""
+		if ref.TargetItemKey != "" {
+			target = " -> " + ref.TargetItemKey
+		}
+		fmt.Fprintf(c.stdout, "%3d  %-18s  %s%s\n", ref.Index, id, ref.Title, target)
+	}
+	if len(result.Contexts) > 0 {
+		fmt.Fprintf(c.stdout, "Citation contexts: %d\n", len(result.Contexts))
 	}
 	return ExitOK
 }
@@ -338,6 +442,20 @@ func parseRefJSONOnly(args []string) (bool, bool) {
 		jsonOutput = true
 	}
 	return jsonOutput, true
+}
+func parseRefKeyJSON(args []string) (string, bool, bool) {
+	key := ""
+	jsonOutput := false
+	for _, arg := range args {
+		if arg == "--json" {
+			jsonOutput = true
+		} else if strings.HasPrefix(arg, "-") || key != "" {
+			return "", false, false
+		} else {
+			key = arg
+		}
+	}
+	return key, jsonOutput, key != ""
 }
 func (c *CLI) refUsageError(message string) int {
 	fmt.Fprintln(c.stderr, "error:", message)

@@ -26,6 +26,9 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 .\zot.exe show ITEMKEY --json
 .\zot.exe ref ITEMKEY --json                   # NCBI/PMC 结构化参考文献
 .\zot.exe ref build --workers 3 --json         # 全库增量参考文献索引
+.\zot.exe ref resolve --json                    # 将参考文献匹配回本地条目
+.\zot.exe ref cited-by ITEMKEY --json            # 查询哪些已索引条目引用该文献
+.\zot.exe ref contexts ITEMKEY --json            # 查询 PMC 正文引用语境
 .\zot.exe export --collection COLLKEY --format csljson --json
 .\zot.exe annotations ITEMKEY --json          # 读取 PDF 标注（双源）
 .\zot.exe select ITEMKEY                     # 跳转到 Zotero UI 选中条目

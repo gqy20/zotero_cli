@@ -123,13 +123,13 @@ func (c *Client) FetchPubMedReferences(ctx context.Context, pmid string, refresh
 	return refs, nil
 }
 
-func (c *Client) FetchPMCReferences(ctx context.Context, pmcid string, refresh bool) ([]Reference, error) {
+func (c *Client) FetchPMCDocument(ctx context.Context, pmcid string, refresh bool) ([]Reference, []Context, error) {
 	values := url.Values{"db": {"pmc"}, "id": {normalizePMCID(pmcid)}, "retmode": {"xml"}}
 	data, err := c.get(ctx, "efetch.fcgi", values, refresh)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return parseJATSReferences(data)
+	return parseJATSDocument(data)
 }
 
 func (c *Client) fetchPubMedRecords(ctx context.Context, ids []string, refresh bool) ([]pubmedRecord, error) {

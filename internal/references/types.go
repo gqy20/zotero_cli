@@ -14,20 +14,34 @@ type Author struct {
 }
 
 type Reference struct {
-	Index     int      `json:"index"`
-	ID        string   `json:"id,omitempty"`
-	Raw       string   `json:"raw,omitempty"`
-	Title     string   `json:"title,omitempty"`
-	Authors   []Author `json:"authors,omitempty"`
-	Container string   `json:"container,omitempty"`
-	Year      string   `json:"year,omitempty"`
-	Volume    string   `json:"volume,omitempty"`
-	Issue     string   `json:"issue,omitempty"`
-	Pages     string   `json:"pages,omitempty"`
-	DOI       string   `json:"doi,omitempty"`
-	PMID      string   `json:"pmid,omitempty"`
-	PMCID     string   `json:"pmcid,omitempty"`
-	Source    Source   `json:"source"`
+	Index         int      `json:"index"`
+	ID            string   `json:"id,omitempty"`
+	Raw           string   `json:"raw,omitempty"`
+	Title         string   `json:"title,omitempty"`
+	Authors       []Author `json:"authors,omitempty"`
+	Container     string   `json:"container,omitempty"`
+	Year          string   `json:"year,omitempty"`
+	Volume        string   `json:"volume,omitempty"`
+	Issue         string   `json:"issue,omitempty"`
+	Pages         string   `json:"pages,omitempty"`
+	DOI           string   `json:"doi,omitempty"`
+	PMID          string   `json:"pmid,omitempty"`
+	PMCID         string   `json:"pmcid,omitempty"`
+	Source        Source   `json:"source"`
+	TargetItemKey string   `json:"target_item_key,omitempty"`
+	MatchMethod   string   `json:"match_method,omitempty"`
+	MatchScore    float64  `json:"match_score,omitempty"`
+	MatchStatus   string   `json:"match_status,omitempty"`
+}
+
+type Context struct {
+	ReferenceID    string `json:"reference_id"`
+	ReferenceIndex int    `json:"reference_index,omitempty"`
+	Marker         string `json:"marker,omitempty"`
+	Section        string `json:"section,omitempty"`
+	Paragraph      string `json:"paragraph"`
+	TargetItemKey  string `json:"target_item_key,omitempty"`
+	Source         Source `json:"source"`
 }
 
 type Identifiers struct {
@@ -42,6 +56,7 @@ type Result struct {
 	Identifiers  Identifiers `json:"identifiers"`
 	Strategy     string      `json:"strategy"`
 	References   []Reference `json:"references"`
+	Contexts     []Context   `json:"contexts,omitempty"`
 	CacheHits    int         `json:"cache_hits,omitempty"`
 	NetworkCalls int         `json:"network_calls,omitempty"`
 	ElapsedMS    int64       `json:"elapsed_ms"`

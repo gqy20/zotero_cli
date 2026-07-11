@@ -56,7 +56,7 @@ func (s *Service) References(ctx context.Context, item domain.Item, opts Options
 	var err error
 	if result.Identifiers.PMCID != "" && source != "pubmed" {
 		result.Strategy = string(SourcePMC)
-		result.References, err = s.client.FetchPMCReferences(ctx, result.Identifiers.PMCID, opts.Refresh)
+		result.References, result.Contexts, err = s.client.FetchPMCDocument(ctx, result.Identifiers.PMCID, opts.Refresh)
 	} else if result.Identifiers.PMID != "" {
 		result.Strategy = string(SourcePubMed)
 		result.References, err = s.client.FetchPubMedReferences(ctx, result.Identifiers.PMID, opts.Refresh)
