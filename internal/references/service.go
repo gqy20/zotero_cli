@@ -54,7 +54,67 @@ func (s *Service) Links(ctx context.Context, item domain.Item, refresh bool) ([]
 		return nil, ids, err
 	}
 	rows, err := s.client.FetchResourceLinks(ctx, ids.PMID, refresh)
+	if err != nil {
+		return nil, ids, err
+	}
+	if extra, europeErr := s.client.FetchEuropeDataLinks(ctx, ids.PMID, refresh); europeErr == nil {
+		rows = mergeResourceLinks(rows, extra)
+	}
+	return rows, ids, nil
+}
+
+func (s *Service) ExternalCitations(ctx context.Context, item domain.Item, limit int, refresh bool) ([]EuropeCitation, int, Identifiers, error) {
+	ids, err := s.ResolveItem(ctx, item, refresh)
+	if err != nil {
+		return nil, 0, ids, err
+	}
+	rows, total, err := s.client.FetchEuropeCitations(ctx, ids.PMID, limit, refresh)
+	return rows, total, ids, err
+}
+
+func (s *Service) Annotations(ctx context.Context, item domain.Item, refresh bool) ([]Annotation, Identifiers, error) {
+	ids, err := s.ResolveItem(ctx, item, refresh)
+	if err != nil {
+		return nil, ids, err
+	}
+	rows, err := s.client.FetchEuropeAnnotations(ctx, ids.PMID, refresh)
 	return rows, ids, err
+}
+
+func (s *Service) Profile(ctx context.Context, item domain.Item, refresh bool) (EuropeProfile, error) {
+	ids := identifiersFromItem(item)
+	if ids.PMID == "" && ids.DOI != "" {
+		if pmid, err := s.client.ResolveDOI(ctx, ids.DOI, refresh); err == nil {
+			ids.PMID = pmid
+		}
+	}
+	return s.client.FetchEuropeProfile(ctx, ids, refresh)
+}
+
+func mergeResourceLinks(a, b []ResourceLink) []ResourceLink {
+	out := append([]ResourceLink(nil), a...)
+	index := map[string]int{}
+	for i, x := range out {
+		index[strings.ToLower(x.Database)] = i
+	}
+	for _, x := range b {
+		key := strings.ToLower(x.Database)
+		if i, ok := index[key]; ok {
+			seen := map[string]bool{}
+			for _, id := range out[i].IDs {
+				seen[id] = true
+			}
+			for _, id := range x.IDs {
+				if !seen[id] {
+					out[i].IDs = append(out[i].IDs, id)
+				}
+			}
+		} else {
+			index[key] = len(out)
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 func (s *Service) References(ctx context.Context, item domain.Item, opts Options) (Result, error) {
@@ -105,6 +165,11 @@ func (s *Service) References(ctx context.Context, item domain.Item, opts Options
 	} else if result.Identifiers.PMID != "" {
 		result.Strategy = string(SourcePubMed)
 		result.References, err = s.client.FetchPubMedReferences(ctx, result.Identifiers.PMID, opts.Refresh)
+		if err == nil {
+			if extra, europeErr := s.client.FetchEuropeReferences(ctx, result.Identifiers.PMID, opts.Refresh); europeErr == nil {
+				result.References = MergeReferences(result.References, extra)
+			}
+		}
 	} else {
 		err = &UnsupportedError{ItemKey: item.Key, Reason: "no DOI, PMID, or PMCID usable by NCBI"}
 	}

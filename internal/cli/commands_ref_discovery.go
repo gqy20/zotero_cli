@@ -118,3 +118,102 @@ func (c *CLI) runRefLinks(args []string) int {
 	}
 	return ExitOK
 }
+
+func (c *CLI) runRefAnnotations(args []string) int {
+	key, refresh, jsonOutput := "", false, false
+	for _, arg := range args {
+		switch arg {
+		case "--json":
+			jsonOutput = true
+		case "--refresh":
+			refresh = true
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return c.refUsageError("unknown flag: " + arg)
+			}
+			if key != "" {
+				return c.refUsageError("annotations accepts exactly one item key")
+			}
+			key = arg
+		}
+	}
+	if key == "" {
+		return c.refUsageError("annotations requires one item key")
+	}
+	cfg, reader, code := c.loadReader()
+	if code != 0 {
+		return code
+	}
+	item, err := reader.GetItem(context.Background(), key)
+	if err != nil {
+		return c.printErr(err)
+	}
+	rows, ids, err := references.NewService(newNCBIClient(cfg)).Annotations(context.Background(), item, refresh)
+	if err != nil {
+		return c.printErr(err)
+	}
+	store, err := openReferenceStore(cfg)
+	if err != nil {
+		return c.printErr(err)
+	}
+	defer store.Close()
+	if err := store.SaveAnnotations(context.Background(), key, rows); err != nil {
+		return c.printErr(err)
+	}
+	if jsonOutput {
+		return c.writeJSON(jsonResponse{OK: true, Command: "ref-annotations", Data: rows, Meta: map[string]any{"item_key": key, "pmid": ids.PMID, "total": len(rows), "source": "europe_pmc"}})
+	}
+	fmt.Fprintf(c.stdout, "Europe PMC annotations for %s: %d\n", key, len(rows))
+	for i, row := range rows {
+		if i >= 50 {
+			fmt.Fprintf(c.stdout, "... (%d total)\n", len(rows))
+			break
+		}
+		fmt.Fprintf(c.stdout, "%-24s %-20s %s\n", row.Type, row.Label, row.Exact)
+	}
+	return ExitOK
+}
+
+func (c *CLI) runRefProfile(args []string) int {
+	key, refresh, jsonOutput := "", false, false
+	for _, arg := range args {
+		switch arg {
+		case "--json":
+			jsonOutput = true
+		case "--refresh":
+			refresh = true
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return c.refUsageError("unknown flag: " + arg)
+			}
+			if key != "" {
+				return c.refUsageError("profile accepts exactly one item key")
+			}
+			key = arg
+		}
+	}
+	if key == "" {
+		return c.refUsageError("profile requires one item key")
+	}
+	cfg, reader, code := c.loadReader()
+	if code != 0 {
+		return code
+	}
+	item, err := reader.GetItem(context.Background(), key)
+	if err != nil {
+		return c.printErr(err)
+	}
+	profile, err := references.NewService(newNCBIClient(cfg)).Profile(context.Background(), item, refresh)
+	if err != nil {
+		return c.printErr(err)
+	}
+	if jsonOutput {
+		return c.writeJSON(jsonResponse{OK: true, Command: "ref-profile", Data: profile, Meta: map[string]any{"item_key": key, "source": "europe_pmc"}})
+	}
+	fmt.Fprintf(c.stdout, "Europe PMC profile for %s: %s/%s, cited by %d, OA %v (%s)\n", key, profile.Source, profile.ID, profile.CitedByCount, profile.OpenAccess, profile.License)
+	for _, v := range profile.Versions {
+		fmt.Fprintf(c.stdout, "%-12s %-12s %s\n", v.Type, v.Source+"/"+v.ID, v.Reference)
+	}
+	fmt.Fprintf(c.stdout, "Funding: %d grant(s); evaluations: %d\n", len(profile.Grants), len(profile.Evaluations))
+	return ExitOK
+}

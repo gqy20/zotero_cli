@@ -117,10 +117,16 @@ CREATE TABLE IF NOT EXISTS ref_contexts (
   PRIMARY KEY(source_item_key, ordinal),
   FOREIGN KEY(source_item_key) REFERENCES ref_items(item_key) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS ref_annotations (
+  item_key TEXT NOT NULL, ordinal INTEGER NOT NULL, provider TEXT, annotation_type TEXT,
+  entity TEXT, label TEXT, section TEXT, exact_text TEXT, prefix TEXT, suffix TEXT,
+  PRIMARY KEY(item_key,ordinal)
+);
 CREATE TABLE IF NOT EXISTS ref_meta (key TEXT PRIMARY KEY,value TEXT NOT NULL);
 CREATE VIRTUAL TABLE IF NOT EXISTS ref_entries_fts USING fts5(source_item_key UNINDEXED,ref_index UNINDEXED,title,authors,container,doi,pmid,raw);
 CREATE VIRTUAL TABLE IF NOT EXISTS ref_contexts_fts USING fts5(source_item_key UNINDEXED,ordinal UNINDEXED,reference_index UNINDEXED,section,marker,paragraph);
 CREATE VIRTUAL TABLE IF NOT EXISTS ref_metadata_fts USING fts5(item_key UNINDEXED,mesh,publication_types,keywords,chemicals,grants,corrections);
+CREATE VIRTUAL TABLE IF NOT EXISTS ref_annotations_fts USING fts5(item_key UNINDEXED,ordinal UNINDEXED,provider,annotation_type,entity,label,section,exact_text);
 CREATE INDEX IF NOT EXISTS idx_ref_entries_doi ON ref_entries(doi);
 CREATE INDEX IF NOT EXISTS idx_ref_entries_pmid ON ref_entries(pmid);
 CREATE INDEX IF NOT EXISTS idx_ref_items_status ON ref_items(status);
@@ -267,7 +273,7 @@ func (s *Store) IsFresh(ctx context.Context, itemKey, fingerprint string) (bool,
 	if err != nil {
 		return false, err
 	}
-	return stored == fingerprint && (status == "unsupported" || (status == "success" && metadataVersion >= 1)), nil
+	return stored == fingerprint && (status == "unsupported" || (status == "success" && metadataVersion >= 2)), nil
 }
 
 func (s *Store) SaveResult(ctx context.Context, result Result, fingerprint string) error {
@@ -284,7 +290,7 @@ func (s *Store) SaveResult(ctx context.Context, result Result, fingerprint strin
 	AnnotateReferenceContexts(result.References, result.Contexts, result.ContextSummary.Status)
 	metadataJSON, _ := json.Marshal(result.Metadata)
 	_, err = tx.ExecContext(ctx, `INSERT INTO ref_items(item_key,title,fingerprint,doi,pmid,pmcid,pubmed_metadata_json,metadata_version,strategy,status,reference_count,context_status,context_count,references_with_context,references_without_context,context_coverage,error,attempts,updated_at)
-VALUES(?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,'',1,?) ON CONFLICT(item_key) DO UPDATE SET title=excluded.title,fingerprint=excluded.fingerprint,doi=excluded.doi,pmid=excluded.pmid,pmcid=excluded.pmcid,pubmed_metadata_json=excluded.pubmed_metadata_json,metadata_version=1,strategy=excluded.strategy,status='success',reference_count=excluded.reference_count,context_status=excluded.context_status,context_count=excluded.context_count,references_with_context=excluded.references_with_context,references_without_context=excluded.references_without_context,context_coverage=excluded.context_coverage,error='',attempts=ref_items.attempts+1,updated_at=excluded.updated_at`,
+VALUES(?,?,?,?,?,?,?,2,?,?,?,?,?,?,?,?,'',1,?) ON CONFLICT(item_key) DO UPDATE SET title=excluded.title,fingerprint=excluded.fingerprint,doi=excluded.doi,pmid=excluded.pmid,pmcid=excluded.pmcid,pubmed_metadata_json=excluded.pubmed_metadata_json,metadata_version=2,strategy=excluded.strategy,status='success',reference_count=excluded.reference_count,context_status=excluded.context_status,context_count=excluded.context_count,references_with_context=excluded.references_with_context,references_without_context=excluded.references_without_context,context_coverage=excluded.context_coverage,error='',attempts=ref_items.attempts+1,updated_at=excluded.updated_at`,
 		result.ItemKey, result.ItemTitle, fingerprint, result.Identifiers.DOI, result.Identifiers.PMID, result.Identifiers.PMCID, string(metadataJSON), result.Strategy, "success", len(result.References), result.ContextSummary.Status, result.ContextSummary.ContextCount, result.ContextSummary.ReferencesWithContext, result.ContextSummary.ReferencesWithoutContext, result.ContextSummary.Coverage, now)
 	if err != nil {
 		return err
@@ -462,7 +468,7 @@ func (s *Store) LoadResult(ctx context.Context, itemKey string) (Result, bool, e
 	if err != nil {
 		return Result{}, false, err
 	}
-	if status != "success" || metadataVersion < 1 {
+	if status != "success" || metadataVersion < 2 {
 		return Result{}, false, nil
 	}
 	_ = json.Unmarshal([]byte(metadataJSON), &result.Metadata)
@@ -615,6 +621,39 @@ func (s *Store) Contexts(ctx context.Context, itemKey string) ([]Context, error)
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+func (s *Store) SaveAnnotations(ctx context.Context, itemKey string, rows []Annotation) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `DELETE FROM ref_annotations WHERE item_key=?`, itemKey); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM ref_annotations_fts WHERE item_key=?`, itemKey); err != nil {
+		return err
+	}
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO ref_annotations(item_key,ordinal,provider,annotation_type,entity,label,section,exact_text,prefix,suffix) VALUES(?,?,?,?,?,?,?,?,?,?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	fts, err := tx.PrepareContext(ctx, `INSERT INTO ref_annotations_fts(item_key,ordinal,provider,annotation_type,entity,label,section,exact_text) VALUES(?,?,?,?,?,?,?,?)`)
+	if err != nil {
+		return err
+	}
+	defer fts.Close()
+	for i, row := range rows {
+		if _, err = stmt.ExecContext(ctx, itemKey, i+1, row.Provider, row.Type, row.Entity, row.Label, row.Section, row.Exact, row.Prefix, row.Suffix); err != nil {
+			return err
+		}
+		if _, err = fts.ExecContext(ctx, itemKey, i+1, row.Provider, row.Type, row.Entity, row.Label, row.Section, row.Exact); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *Store) ContextSummary(ctx context.Context, itemKey string) (ContextSummary, bool, error) {

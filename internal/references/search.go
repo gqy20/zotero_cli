@@ -22,6 +22,7 @@ type SearchHit struct {
 	MatchedOn     []string       `json:"matched_on"`
 	Score         float64        `json:"score"`
 	Metadata      PubMedMetadata `json:"metadata,omitempty"`
+	Annotation    *Annotation    `json:"annotation,omitempty"`
 }
 
 var ftsSearchWords = regexp.MustCompile(`[\p{L}\p{N}]+`)
@@ -87,13 +88,22 @@ func (s *Store) Search(ctx context.Context, opts SearchOptions) ([]SearchHit, er
 			add(h, "context")
 		}
 	}
-	if opts.In == "all" || opts.In == "metadata" {
+	if (opts.In == "all" || opts.In == "metadata") && opts.Field != "annotations" {
 		rows, err := s.searchMetadataRows(ctx, q, opts)
 		if err != nil {
 			return nil, err
 		}
 		for _, h := range rows {
 			add(h, "metadata")
+		}
+	}
+	if opts.Field == "annotations" {
+		rows, err := s.searchAnnotationRows(ctx, q, opts)
+		if err != nil {
+			return nil, err
+		}
+		for _, h := range rows {
+			add(h, "annotation")
 		}
 	}
 	out := make([]SearchHit, 0, len(order))
@@ -105,6 +115,26 @@ func (s *Store) Search(ctx context.Context, opts SearchOptions) ([]SearchHit, er
 		out = out[:opts.Limit]
 	}
 	return out, nil
+}
+
+func (s *Store) searchAnnotationRows(ctx context.Context, q string, o SearchOptions) ([]SearchHit, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT a.item_key,COALESCE(i.title,''),a.provider,a.annotation_type,a.entity,a.label,a.section,a.exact_text,bm25(ref_annotations_fts) FROM ref_annotations_fts JOIN ref_annotations a ON a.item_key=ref_annotations_fts.item_key AND a.ordinal=ref_annotations_fts.ordinal LEFT JOIN ref_items i ON i.item_key=a.item_key WHERE ref_annotations_fts MATCH ? ORDER BY bm25(ref_annotations_fts) LIMIT ?`, q, o.Limit*3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []SearchHit{}
+	for rows.Next() {
+		var h SearchHit
+		var a Annotation
+		if err := rows.Scan(&h.SourceItemKey, &h.SourceTitle, &a.Provider, &a.Type, &a.Entity, &a.Label, &a.Section, &a.Exact, &h.Score); err != nil {
+			return nil, err
+		}
+		h.Reference = Reference{Title: h.SourceTitle}
+		h.Annotation = &a
+		out = append(out, h)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) searchMetadataRows(ctx context.Context, q string, o SearchOptions) ([]SearchHit, error) {

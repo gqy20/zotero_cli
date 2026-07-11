@@ -79,6 +79,10 @@ zot ref search "genome assembly" --field mesh --json
 zot ref related ITEMKEY --limit 20 --json
 zot ref related ITEMKEY --also-viewed --json
 zot ref links ITEMKEY --json
+zot ref cited-by ITEMKEY --external --limit 100 --json
+zot ref annotations ITEMKEY --json
+zot ref search "BRCA1" --field annotations --json
+zot ref profile ITEMKEY --json
 ```
 
 `ref ITEMKEY` 从 DOI、PubMed URL 和摘要中识别 PMID/PMCID，优先读取 PMC JATS XML 的完整 `<ref-list>`；没有 PMC 时，通过 PubMed ELink 获取可映射到 PMID 的引用，并批量 EFetch 结构化元数据。
@@ -92,6 +96,10 @@ PMC/PubMed（NCBI）是 `ref` 的正式支持核心流程，也是 `ref build` �
 `ref search QUERY` 默认使用 FTS5 同时检索结构化参考文献、正文引用上下文和 PubMed 元数据。需要限制范围时使用 `--contexts`、`--references` 或 `--metadata`；`--field mesh|publication_types|keywords|chemicals|grants|corrections` 可精确限定元数据字段。指定 `--section` 会自动限定到上下文。还可按 `--source pmc|pubmed|grobid`、`--target ITEMKEY` 和 `--limit` 过滤。
 
 成功的 PubMed 解析会随 `ref build` 保存 MeSH（包括 Major Topic 与 qualifier）、publication types、作者关键词、化学物质、基金和勘误/撤稿关系，不产生额外 EFetch 请求。`ref related` 使用 PubMed Similar Articles 官方顺序并排除原文；`ref links` 并行查询 PMC、Gene、GEO、SRA、BioProject、BioSample、ClinVar 和 Assembly，仍由统一 NCBI 限速器控制请求速率。
+
+Europe PMC 是自动增强层而不是并列的核心来源。PubMed fallback 条目会合并 Europe PMC 的开放参考文献并按 PMID、DOI、PMCID、标题去重；PMC JATS 成功时不重复请求。`ref cited-by --external` 按需读取 Europe PMC 外部引用网络（包括预印本），`ref links` 自动合并 Europe PMC database links。`ref annotations` 获取并保存文本挖掘实体/关系，之后可通过 `ref search --field annotations` 本地检索；annotations 不纳入默认全库构建。
+
+`ref profile` 汇总 Europe PMC 的开放获取状态、许可证、被引数、数据/参考文献/文本挖掘可用性、基金列表、预印本与正式发表版本关系，以及存在时的评价记录。它会优先使用 PMID，非 PubMed 预印本则可通过 DOI 在 Europe PMC 中解析，不要求先进入 NCBI。
 
 每个成功索引条目同时记录引用上下文完整性：`available`、`not_supported`、`not_found`、`parse_failed` 或 `not_indexed`，以及有/无上下文的参考文献数量和覆盖率。`ref contexts --json` 在 `meta.context_summary` 中返回这些指标。
 

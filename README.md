@@ -34,6 +34,8 @@
 | 搜索引用、语境与 PubMed 主题 | `zot ref search "query" --json`；用 `--contexts`、`--references`、`--metadata` 或 `--field mesh` 限定 |
 | 发现 PubMed 相关文献 | `zot ref related ITEMKEY --limit 20 --json` |
 | 查看关联 NCBI 资源 | `zot ref links ITEMKEY --json`（PMC、Gene、GEO、SRA、BioProject 等） |
+| Europe PMC 增强 | `zot ref cited-by ITEMKEY --external`；`zot ref annotations ITEMKEY`；`ref links` 自动合并两套资源 |
+| 开放科学画像 | `zot ref profile ITEMKEY --json` 查看预印本/正式版本、评价、基金、OA 和许可证 |
 
 > `ref` 的正式支持核心是 PMC/PubMed（NCBI）。`ref grobid` 仅为实验性、显式调用的 PDF 后备，不属于默认构建流程；公共演示端点不提供稳定性或配额保证。
 | 复制粘贴 BibTeX / RIS | `zot export --item-key KEY --format bibtex` → AI 直接消费标准导出 |

@@ -5,9 +5,10 @@ import "fmt"
 type Source string
 
 const (
-	SourcePMC    Source = "pmc_jats"
-	SourcePubMed Source = "pubmed"
-	SourceGROBID Source = "grobid"
+	SourcePMC       Source = "pmc_jats"
+	SourcePubMed    Source = "pubmed"
+	SourceGROBID    Source = "grobid"
+	SourceEuropePMC Source = "europe_pmc"
 )
 
 type Author struct {

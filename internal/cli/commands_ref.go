@@ -25,13 +25,15 @@ const usageRef = `usage: zot ref <item-key> [--source auto|pmc|pubmed] [--refres
        zot ref unsupported [--json]
        zot ref retry [--workers N] [--json]
        zot ref resolve [--workers N] [--json]
-       zot ref cited-by <item-key> [--json]
+	   zot ref cited-by <item-key> [--external] [--limit N] [--json]
        zot ref contexts <item-key> [--json]
        zot ref contexts build [--workers N] [--limit N] [--refresh] [--json]
        zot ref grobid <status|build> [options]
 	   zot ref search <query> [--contexts|--references|--metadata] [--field FIELD] [filters]
 	   zot ref related <item-key> [--limit N] [--also-viewed] [--refresh] [--json]
 	   zot ref links <item-key> [--refresh] [--json]
+	   zot ref annotations <item-key> [--refresh] [--json]
+	   zot ref profile <item-key> [--refresh] [--json]
 
 What: Manage the local structured-reference index. The officially supported
 core is NCBI: prefer complete PMC JATS, otherwise use PubMed reference links
@@ -52,6 +54,8 @@ Subcommands:
   search        Search structured references and citation contexts.
   related       List PubMed Similar Articles in official rank order.
   links         List linked NCBI resources (PMC, Gene, GEO, SRA, and more).
+  annotations   Show Europe PMC text-mined entities and relationships.
+  profile       Show Europe PMC versions, evaluations, funding, and OA status.
 
 Options:
   --source auto|pmc|pubmed  Select NCBI routing (default auto).
@@ -109,6 +113,10 @@ func (c *CLI) runRef(args []string) int {
 		return c.runRefRelated(args[1:])
 	case "links":
 		return c.runRefLinks(args[1:])
+	case "annotations":
+		return c.runRefAnnotations(args[1:])
+	case "profile":
+		return c.runRefProfile(args[1:])
 	default:
 		if strings.HasPrefix(args[0], "-") {
 			return c.refUsageError("missing item key or subcommand")
@@ -391,9 +399,59 @@ func (c *CLI) runRefResolve(args []string) int {
 }
 
 func (c *CLI) runRefCitedBy(args []string) int {
-	key, jsonOutput, ok := parseRefKeyJSON(args)
-	if !ok {
-		return c.refUsageError("cited-by requires one item key and optional --json")
+	key, jsonOutput, external, refresh, limit := "", false, false, false, 100
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonOutput = true
+		case "--external":
+			external = true
+		case "--refresh":
+			refresh = true
+		case "--limit":
+			if i+1 >= len(args) {
+				return c.refUsageError("missing value for --limit")
+			}
+			i++
+			n, e := strconv.Atoi(args[i])
+			if e != nil || n < 1 || n > 1000 {
+				return c.refUsageError("invalid value for --limit")
+			}
+			limit = n
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return c.refUsageError("unknown flag: " + args[i])
+			}
+			if key != "" {
+				return c.refUsageError("cited-by accepts exactly one item key")
+			}
+			key = args[i]
+		}
+	}
+	if key == "" {
+		return c.refUsageError("cited-by requires one item key")
+	}
+	if external {
+		cfg, reader, code := c.loadReader()
+		if code != 0 {
+			return code
+		}
+		item, err := reader.GetItem(context.Background(), key)
+		if err != nil {
+			return c.printErr(err)
+		}
+		rows, total, ids, err := references.NewService(newNCBIClient(cfg)).ExternalCitations(context.Background(), item, limit, refresh)
+		if err != nil {
+			return c.printErr(err)
+		}
+		if jsonOutput {
+			return c.writeJSON(jsonResponse{OK: true, Command: "ref-cited-by-external", Data: rows, Meta: map[string]any{"target_item_key": key, "pmid": ids.PMID, "returned": len(rows), "total": total, "source": "europe_pmc"}})
+		}
+		fmt.Fprintf(c.stdout, "Cited by %d external Europe PMC item(s), showing %d:\n", total, len(rows))
+		for _, row := range rows {
+			fmt.Fprintf(c.stdout, "%-10s %-8s %s\n", row.ID, row.Source, row.Title)
+		}
+		return ExitOK
 	}
 	cfg, code := c.loadConfig()
 	if code != 0 {

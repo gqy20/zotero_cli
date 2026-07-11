@@ -31,6 +31,9 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 .\zot.exe ref search "query" --field mesh --json # 精确搜索 PubMed MeSH
 .\zot.exe ref related ITEMKEY --limit 20 --json   # PubMed 官方相似文献
 .\zot.exe ref links ITEMKEY --json                # 关联的 NCBI 生物医学资源
+.\zot.exe ref cited-by ITEMKEY --external --json  # Europe PMC 外部被引网络
+.\zot.exe ref annotations ITEMKEY --json          # Europe PMC 实体/关系并写入按需索引
+.\zot.exe ref profile ITEMKEY --json              # 版本、评价、基金与开放获取画像
 .\zot.exe ref unsupported --json                # 查看 NCBI 不支持、待 GROBID 的条目
 .\zot.exe ref cited-by ITEMKEY --json            # 查询哪些已索引条目引用该文献
 .\zot.exe ref contexts ITEMKEY --json            # 查询 PMC 正文引用语境

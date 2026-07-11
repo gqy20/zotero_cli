@@ -44,6 +44,8 @@ func (c *CLI) runRefSearch(args []string) int {
 			opts.Source = strings.ToLower(args[i])
 			if opts.Source == "pmc" {
 				opts.Source = string(references.SourcePMC)
+			} else if opts.Source == "europepmc" || opts.Source == "europe-pmc" {
+				opts.Source = string(references.SourceEuropePMC)
 			}
 		case "--target":
 			if i+1 >= len(args) {
@@ -85,11 +87,11 @@ func (c *CLI) runRefSearch(args []string) int {
 	} else if metadataOnly || opts.Field != "" {
 		opts.In = "metadata"
 	}
-	validFields := map[string]bool{"": true, "mesh": true, "publication_types": true, "keywords": true, "chemicals": true, "grants": true, "corrections": true}
+	validFields := map[string]bool{"": true, "mesh": true, "publication_types": true, "keywords": true, "chemicals": true, "grants": true, "corrections": true, "annotations": true}
 	if !validFields[opts.Field] {
 		return c.refUsageError("invalid value for --field")
 	}
-	if opts.Source != "" && opts.Source != string(references.SourcePMC) && opts.Source != string(references.SourcePubMed) && opts.Source != string(references.SourceGROBID) {
+	if opts.Source != "" && opts.Source != string(references.SourcePMC) && opts.Source != string(references.SourcePubMed) && opts.Source != string(references.SourceGROBID) && opts.Source != string(references.SourceEuropePMC) {
 		return c.refUsageError("invalid value for --source")
 	}
 	cfg, code := c.loadConfig()

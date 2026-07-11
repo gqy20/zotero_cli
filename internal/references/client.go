@@ -20,14 +20,16 @@ import (
 )
 
 type ClientConfig struct {
-	BaseURL     string
-	APIKey      string
-	Email       string
-	Tool        string
-	CacheDir    string
-	MinInterval time.Duration
-	MaxAttempts int
-	HTTPClient  *http.Client
+	BaseURL                     string
+	APIKey                      string
+	Email                       string
+	Tool                        string
+	CacheDir                    string
+	MinInterval                 time.Duration
+	MaxAttempts                 int
+	HTTPClient                  *http.Client
+	EuropePMCBaseURL            string
+	EuropePMCAnnotationsBaseURL string
 }
 
 type Client struct {
@@ -41,6 +43,12 @@ type Client struct {
 func NewClient(cfg ClientConfig) *Client {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+	}
+	if cfg.EuropePMCBaseURL == "" {
+		cfg.EuropePMCBaseURL = europePMCBaseURL
+	}
+	if cfg.EuropePMCAnnotationsBaseURL == "" {
+		cfg.EuropePMCAnnotationsBaseURL = europePMCAnnotationsBaseURL
 	}
 	if cfg.Tool == "" {
 		cfg.Tool = "zotero_cli"
@@ -251,6 +259,10 @@ func (c *Client) fetchPubMedRecords(ctx context.Context, ids []string, refresh b
 }
 
 func (c *Client) get(ctx context.Context, endpoint string, values url.Values, refresh bool) ([]byte, error) {
+	return c.getFrom(ctx, c.cfg.BaseURL, endpoint, values, refresh)
+}
+
+func (c *Client) getFrom(ctx context.Context, baseURL, endpoint string, values url.Values, refresh bool) ([]byte, error) {
 	values.Set("tool", c.cfg.Tool)
 	if c.cfg.Email != "" {
 		values.Set("email", c.cfg.Email)
@@ -258,8 +270,13 @@ func (c *Client) get(ctx context.Context, endpoint string, values url.Values, re
 	if c.cfg.APIKey != "" {
 		values.Set("api_key", c.cfg.APIKey)
 	}
-	rawURL := strings.TrimRight(c.cfg.BaseURL, "/") + "/" + endpoint + "?" + values.Encode()
-	cachePath := c.cachePath(endpoint, values)
+	rawURL := strings.TrimRight(baseURL, "/") + "/" + endpoint + "?" + values.Encode()
+	cacheEndpoint := endpoint
+	if strings.TrimRight(baseURL, "/") != strings.TrimRight(c.cfg.BaseURL, "/") {
+		baseHash := sha256.Sum256([]byte(baseURL))
+		cacheEndpoint = hex.EncodeToString(baseHash[:4]) + "_" + endpoint
+	}
+	cachePath := c.cachePath(cacheEndpoint, values)
 	if !refresh && cachePath != "" {
 		if data, err := os.ReadFile(cachePath); err == nil {
 			c.cacheHits.Add(1)
