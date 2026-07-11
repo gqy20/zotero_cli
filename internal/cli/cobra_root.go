@@ -41,8 +41,38 @@ func translateStageOneArgs(args []string) ([]string, bool) {
 	switch args[0] {
 	case "version":
 		return args, true
+	case "lib", "item", "coll", "tag", "note", "search", "group":
+		return args, true
 	case "init":
 		return append([]string{"config", "init"}, args[1:]...), true
+	case "overview":
+		return append([]string{"lib", "show"}, args[1:]...), true
+	case "stats":
+		return append([]string{"lib", "stats"}, args[1:]...), true
+	case "deleted":
+		return append([]string{"lib", "log", "--deleted"}, args[1:]...), true
+	case "changes":
+		if len(args) < 2 {
+			return []string{"lib", "log"}, true
+		}
+		translated := []string{"lib", "log", "--kind", args[1]}
+		return append(translated, args[2:]...), true
+	case "collections":
+		return append([]string{"coll", "list"}, args[1:]...), true
+	case "collections-top":
+		return append([]string{"coll", "list", "--top"}, args[1:]...), true
+	case "tags":
+		return append([]string{"tag", "list"}, args[1:]...), true
+	case "notes":
+		return append([]string{"note", "list"}, args[1:]...), true
+	case "searches":
+		return append([]string{"search", "list"}, args[1:]...), true
+	case "groups":
+		return append([]string{"group", "list"}, args[1:]...), true
+	case "trash":
+		return append([]string{"item", "list", "--scope", "trash"}, args[1:]...), true
+	case "publications":
+		return append([]string{"item", "list", "--scope", "pubs"}, args[1:]...), true
 	case "config":
 		if len(args) < 2 {
 			return args, true
@@ -114,6 +144,7 @@ func (c *CLI) newRootCommand() *cobra.Command {
 	flags.StringVar(&opts.timeout, "timeout", "", "override timeout for this invocation")
 
 	root.AddCommand(c.newVersionCommand(opts), c.newConfigCommand(opts))
+	c.addReadCommands(root, opts)
 	return root
 }
 
