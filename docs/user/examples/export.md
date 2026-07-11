@@ -3,7 +3,7 @@
 ## 命令
 
 ```bash
-zot export --item-key ABC123DE --format csljson --json
+zot item export ABC123DE --as csljson --json
 ```
 
 ## CSL-JSON 输出
@@ -25,7 +25,7 @@ zot export --item-key ABC123DE --format csljson --json
 ## BibTeX 导出
 
 ```bash
-zot export --item-key ABC123DE --format bibtex
+zot item export ABC123DE --as bibtex
 ```
 
 ```
@@ -44,7 +44,7 @@ zot export --item-key ABC123DE --format bibtex
 ## RIS 导出
 
 ```bash
-zot export --item-key ABC123DE --format ris
+zot item export ABC123DE --as ris
 ```
 
 ```
@@ -74,8 +74,8 @@ ER  -
 
 ```bash
 # 按关键词检索后导出
-zot export "hybrid speciation" --format csljson --json
+zot item export --query "hybrid speciation" --as csljson --json
 
 # 按收藏夹导出
-zot export --collection COLL1234 --format bibtex --json
+zot item export --collection COLL1234 --as bibtex --json
 ```

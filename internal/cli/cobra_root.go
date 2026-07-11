@@ -36,12 +36,24 @@ func (e *exitError) Unwrap() error { return e.err }
 
 func translateStageOneArgs(args []string) ([]string, bool) {
 	if len(args) == 0 {
-		return nil, false
+		return args, true
+	}
+	if args[0] == "help" {
+		if len(args) == 1 {
+			return []string{"--help"}, true
+		}
+		target := append(append([]string{}, args[1:]...), "--help")
+		translated, _ := translateStageOneArgs(target)
+		return translated, true
 	}
 	switch args[0] {
+	case "-h", "--help":
+		return args, true
 	case "version":
 		return args, true
 	case "completion":
+		return args, true
+	case "setup", "select", "abstract", "relate", "key-info":
 		return args, true
 	case "lib", "item", "coll", "tag", "note", "search", "group", "file", "pdf", "ann", "index":
 		return args, true
@@ -451,6 +463,7 @@ func (c *CLI) newRootCommand() *cobra.Command {
 		Short:         "Work with a Zotero library",
 		SilenceErrors: true,
 		SilenceUsage:  true,
+		RunE:          func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
 	root.SetIn(c.stdin)
 	root.SetOut(c.stdout)
@@ -473,6 +486,7 @@ func (c *CLI) newRootCommand() *cobra.Command {
 	root.AddCommand(c.newServerCommand(opts))
 	root.AddCommand(c.newSyncCommand(opts))
 	root.AddCommand(c.newCompletionCommand())
+	c.addLegacyOnlyCommands(root)
 	return root
 }
 

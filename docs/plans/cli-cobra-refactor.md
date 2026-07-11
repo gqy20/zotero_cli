@@ -828,7 +828,7 @@ ReferenceService 统一持有 reader、store、NCBI/Europe PMC client、builder 
 
 退出条件：所有公开命令已进入 Cobra tree 或被明确列为 legacy-only；PowerShell/bash/zsh/fish completion 可生成。
 
-### 阶段 7：删除旧 CLI 内核并完成迁移
+### 阶段 7：删除旧 CLI 内核并完成迁移（已完成）
 
 删除：
 

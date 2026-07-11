@@ -27,11 +27,11 @@ Zotero item
 ### 查看和构建引用
 
 ```powershell
-zot ref ITEMKEY --json
+zot ref show ITEMKEY --json
 zot ref build --workers 3 --json
 zot ref status --json
-zot ref failed --json
-zot ref retry --workers 2 --json
+zot ref status --failed --json
+zot ref build --failed --workers 2 --json
 ```
 
 `ref ITEMKEY` 等同于 `ref show ITEMKEY`。`ref build` 扫描符合条件的顶层条目，按 Zotero 指纹和索引数据版本增量跳过。索引格式升级时，即使 Zotero 条目没有变化，旧成功记录也会自动补建一次。
@@ -39,15 +39,15 @@ zot ref retry --workers 2 --json
 确定缺少 DOI、PMID 和 PMCID、无法进入 NCBI 的条目记录为 `unsupported`，不会被 `retry` 反复请求：
 
 ```powershell
-zot ref unsupported --json
+zot ref status --unsupported --json
 ```
 
 ### 解析本地引用图
 
 ```powershell
 zot ref resolve --workers 8 --json
-zot ref cited-by ITEMKEY --json
-zot ref contexts ITEMKEY --json
+zot ref cited ITEMKEY --json
+zot ref ctx ITEMKEY --json
 ```
 
 `resolve` 依次使用 DOI、PMID、规范化标题和保守模糊标题匹配，将引用链接回本地 Zotero item key。默认 `cited-by` 只查询本地索引，因此能返回引用来源条目和正文引用上下文。
@@ -55,7 +55,7 @@ zot ref contexts ITEMKEY --json
 Europe PMC 外部被引网络按需查询：
 
 ```powershell
-zot ref cited-by ITEMKEY --external --limit 100 --json
+zot ref cited ITEMKEY --external --limit 100 --json
 ```
 
 外部结果可能包含 `MED`（PubMed）和 `PPR`（预印本）记录。Europe PMC 的总被引数与当前页可返回数量可能不同；JSON 的 `meta.total` 和 `meta.returned` 分别表示两者。
@@ -63,12 +63,12 @@ zot ref cited-by ITEMKEY --external --limit 100 --json
 ### 搜索参考文献、上下文和主题
 
 ```powershell
-zot ref search "genome assembly" --json
-zot ref search "we used" --contexts --section methods --json
-zot ref search "genome assembly" --references --json
-zot ref search "Hendra Virus" --field mesh --json
-zot ref search "Review" --field publication_types --json
-zot ref search "BRCA1" --field annotations --json
+zot ref find "genome assembly" --json
+zot ref find "we used" --contexts --section methods --json
+zot ref find "genome assembly" --references --json
+zot ref find "Hendra Virus" --field mesh --json
+zot ref find "Review" --field publication_types --json
+zot ref find "BRCA1" --field annotations --json
 ```
 
 默认 FTS5 搜索覆盖结构化参考文献、引用上下文和 PubMed 元数据。可用范围与字段：
@@ -108,19 +108,19 @@ zot ref links ITEMKEY --json
 ### Europe PMC annotations
 
 ```powershell
-zot ref annotations ITEMKEY --json
-zot ref search "GCA_009914755" --field annotations --json
+zot ref entities ITEMKEY --json
+zot ref find "GCA_009914755" --field annotations --json
 ```
 
 annotations 可能包括基因/蛋白、疾病、化学物质、物种、GO、实验方法、突变、基因—疾病关系、蛋白互作、细胞系、数据 accession 和研究资源。每次获取会写入本地 `ref_annotations` 与 FTS 表；重复获取替换该条目的旧 annotations，不会重复累积。
 
-annotations 属于文本挖掘结果，可能存在误报。为控制数据量，它不参加默认全库 `ref build`，只在显式运行 `ref annotations` 时抓取。
+annotations 属于文本挖掘结果，可能存在误报。为控制数据量，它不参加默认全库 `ref build`，只在显式运行 `ref entities` 时抓取。
 
 注意不要把它和顶层的 PDF 标注命令混淆：
 
 ```powershell
-zot annotations ITEMKEY       # Zotero/PDF 人工标注
-zot ref annotations ITEMKEY   # Europe PMC 文本挖掘实体
+zot ann list ITEMKEY       # Zotero/PDF 人工标注
+zot ref entities ITEMKEY   # Europe PMC 文本挖掘实体
 ```
 
 ### Europe PMC 开放科学画像
@@ -170,7 +170,7 @@ zot ref profile ITEMKEY --json
 同时保存上下文总数、有/无上下文的参考文献数量和覆盖率。历史 PMC 条目可单独补建：
 
 ```powershell
-zot ref contexts build --workers 3 --json
+zot ref build --contexts --workers 3 --json
 ```
 
 默认复用缓存；只有 `--refresh` 才重新请求网络。
@@ -206,8 +206,8 @@ NCBI 默认请求间隔为 400 ms；设置 `ZOT_NCBI_API_KEY` 后为 125 ms。�
 ## GROBID 的边界
 
 ```powershell
-zot ref grobid status --json
-zot ref grobid build --limit 5 --workers 1 --json
+zot ref status --grobid --json
+zot ref build --grobid --limit 5 --workers 1 --json
 ```
 
 GROBID 不属于默认构建路线。公共演示服务不保证配额、稳定性、隐私或完成时间；敏感 PDF 应使用本地 GROBID。`--all` 才允许显式全量运行。

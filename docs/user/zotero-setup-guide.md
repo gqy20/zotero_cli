@@ -47,7 +47,7 @@ https://www.zotero.org/settings/security
 获取到 API Key 和 User ID 后，运行初始化命令即可自动填入：
 
 ```powershell
-.\zot.exe init
+.\zot.exe config init
 ```
 
 按提示输入模式、API Key 和 Library ID 即可完成配置。也可以手动编辑生成的配置文件或设置环境变量：
@@ -60,8 +60,8 @@ https://www.zotero.org/settings/security
 验证配置是否正确：
 
 ```powershell
-.\zot.exe config validate
-.\zot.exe stats --json
+.\zot.exe config check
+.\zot.exe lib stats --json
 ```
 
 ### 1.5 配置文件自动重命名（Zotero 内置功能）
@@ -162,7 +162,7 @@ Green Frog 安装后会生成一个 **`zoterostyle.json`** 数据文件，存储
 
 ```powershell
 $env:ZOT_JOURNAL_RANK_PATH = "D:\zotero\zotero_file\zoterostyle.json"
-.\zot.exe stats --json    # 验证是否加载成功
+.\zot.exe lib stats --json    # 验证是否加载成功
 ```
 
 **`zoterostyle.json` 数据结构：**
@@ -245,7 +245,7 @@ Better Notes 是 Zotero 最强大的笔记管理插件，提供完整的笔记�
 `zot` 的 **`relate`** 命令会读取 Zotero 原生的笔记关联关系（`itemRelations` 表），而 Better Notes 在此基础上进一步增强了笔记间的链接能力。两者配合使用的效果：
 
 - **Better Notes 负责创建和维护** — 通过插件在 Zotero 内建立笔记之间的双向链接和层级关系
-- **`zot relate` 负责查询和分析** — 从外部读取这些关系，支持聚合模式（`--aggregate`）展示条目及其所有子笔记的完整关联网络
+- CLI v2 不再提供实验性的 `zot relate` 关系图读写；使用 `zot item show KEY --json` 查看 Zotero 条目保留的关系元数据，复杂关系分析应在导出后完成。
 
 ```powershell
 # 查看某篇文献及其笔记的所有关联（含笔记间的关系）

@@ -135,10 +135,10 @@ zot find "CRISPR gene editing" --fulltext --snippet --json
 zot find "evolution" --date-after 2023 --tag "review" --json
 
 # 最近入库：按 Zotero dateAdded 排序
-zot find --all --sort dateAdded --direction desc --limit 10 --json
+zot find --all --sort dateAdded --order desc --limit 10 --json
 
 # 最近 7 天入库
-zot find --all --added-since 7d --sort dateAdded --direction desc --json
+zot find --all --added-since 7d --sort dateAdded --order desc --json
 
 # 批量定位本地附件异常
 zot find --missing-attachment --json
@@ -146,10 +146,10 @@ zot find --bad-attachment-name --json
 zot find --attachment-health warning --json
 
 # 某个月发表的文献
-zot find --all --date-after 2026-03 --date-before 2026-03 --sort date --direction desc --json
+zot find --all --date-after 2026-03 --date-before 2026-03 --sort date --order desc --json
 
 # 快速人工浏览最近入库标题（文本模式）
-zot find --all --sort dateAdded --direction desc --limit 10 --include-fields title,date_added,container
+zot find --all --sort dateAdded --order desc --limit 10 --include-fields title,date_added,container
 
 # 返回完整字段
 zot find "speciation" --full --json

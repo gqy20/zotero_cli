@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestCobraHelpDoesNotLoadConfig(t *testing.T) {
@@ -334,4 +336,57 @@ func TestCompletionGeneratesAllSupportedShellsWithoutConfig(t *testing.T) {
 			t.Fatalf("completion %s produced no output", shell)
 		}
 	}
+}
+
+func TestStageSevenRootUsesOnlyCobraHelp(t *testing.T) {
+	stdout, stderr := captureOutput(t)
+	if code := Run(nil); code != ExitOK {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+	for _, want := range []string{"Usage:", "item", "ref", "completion"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("root help missing %q: %q", want, stdout.String())
+		}
+	}
+	for name := range legacyOnlyCommands {
+		if strings.Contains(stdout.String(), "  "+name+" ") {
+			t.Fatalf("legacy-only command %q leaked into root help", name)
+		}
+	}
+}
+
+func TestStageSevenRedirectOnlyCommandsDoNotExecuteLegacyBusiness(t *testing.T) {
+	for name, replacement := range legacyOnlyCommands {
+		stdout, stderr := captureOutput(t)
+		if code := Run([]string{name, "ignored", "--json"}); code != ExitUsage {
+			t.Fatalf("%s code=%d stderr=%q", name, code, stderr.String())
+		}
+		if stdout.Len() != 0 || !strings.Contains(stderr.String(), replacement) {
+			t.Fatalf("%s stdout=%q stderr=%q", name, stdout.String(), stderr.String())
+		}
+	}
+}
+
+func TestStageSevenLegacyWarningPathDoesNotEchoArguments(t *testing.T) {
+	translated, ok := translateStageOneArgs([]string{"init", "--api-key", "TOP-SECRET", "--mode", "web"})
+	if !ok {
+		t.Fatal("expected legacy translation")
+	}
+	if got := canonicalPath(translated); got != "config init" || strings.Contains(got, "TOP-SECRET") {
+		t.Fatalf("unsafe warning path %q", got)
+	}
+}
+
+func TestCanonicalCommandTreeHasAtMostResourceAndActionDepth(t *testing.T) {
+	root := testCLI.newRootCommand()
+	var walk func(*cobra.Command, int)
+	walk = func(cmd *cobra.Command, depth int) {
+		if !cmd.Hidden && depth > 2 {
+			t.Fatalf("canonical command %q exceeds resource/action depth", cmd.CommandPath())
+		}
+		for _, child := range cmd.Commands() {
+			walk(child, depth+1)
+		}
+	}
+	walk(root, 0)
 }

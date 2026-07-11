@@ -11,8 +11,6 @@ import (
 	"zotero_cli/internal/app"
 )
 
-const usageServer = "usage: zot server start [--port PORT]"
-
 func (c *CLI) newServerCommand(opts *globalOptions) *cobra.Command {
 	serverCmd := &cobra.Command{Use: "server", Short: "Run the remote-mode HTTP server"}
 	var req app.ServerStartRequest

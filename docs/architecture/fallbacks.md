@@ -116,13 +116,28 @@ PMC JATS 成功时不会重复请求 Europe PMC references。GROBID 是显式、
 
 ### CLI 入口
 
-| 旧入口 | 当前行为 | 当前替代 | 状态 |
-|---|---|---|---|
-| `zot setup pdf-extract --check` | 隐藏于顶层帮助之外，但仍执行 PyMuPDF 状态检查 | `zot init --check-pdf` | deprecated，保留兼容 |
-| `zot setup pdf-extract` | 不再安装，返回迁移提示 | `zot init --pdf` | redirect-only |
-| `zot config init` | 不再运行旧的交互配置流程，返回迁移提示 | `zot init` | redirect-only |
+所有可执行兼容入口先转换成 canonical argv，再由同一棵 Cobra tree、typed request、应用服务和 renderer 处理。兼容层不会调用旧 handler，warning 只写 stderr，不污染 JSON stdout。
 
-已移除且直接报 unknown command 的旧 schema 内省命令不属于当前兼容面；统一使用 `zot schema <sub>`。
+| 旧入口 | canonical 替代 | 状态 |
+|---|---|---|
+| `overview` / `stats` / `changes` / `deleted` | `lib show` / `lib stats` / `lib log` | deprecated alias |
+| `collections` / `tags` / `notes` / `searches` / `groups` | `coll list` / `tag list` / `note list` / `search list` / `group list` | deprecated alias |
+| `trash` / `publications` | `item list --scope trash|pubs` | deprecated alias |
+| `find` / `show` / `export` | `item find` / `item show` / `item export` | 正式高频快捷入口 |
+| `supplements` / `inspect-attachment` | `item supp` / `file show|check` | deprecated alias |
+| `extract-text` / `extract-figures` / `open` | `pdf text` / `pdf figs` / `pdf open` | deprecated alias |
+| `annotations` / `annotate` | `ann list|new|delete` | deprecated alias；旧 `--clear` 翻译成显式 delete |
+| `create-*` / `update-*` / `delete-*` / `add-tag` / `remove-tag` | 对应资源的 `new|edit|delete|tag|untag` | deprecated alias |
+| `ref KEY`、`ref search`、`ref cited-by`、`ref contexts`、`ref retry` | `ref show|find|cited|ctx|build --failed` | deprecated alias |
+| `schema types|fields|creator-types|*-for|template` | `schema list|show` | deprecated alias |
+| 裸 `server` / 裸 `sync` | `server start` / `sync pull` | deprecated alias |
+| `setup` | `config init` | redirect-only |
+| `abstract` | `item show` | redirect-only |
+| `key-info` | `config check` | redirect-only |
+| `select` | 无稳定替代 | redirect-only；平台特定 Desktop bridge |
+| `relate` | 无稳定替代 | redirect-only；实验性关系图语法 |
+
+translator 位于 `internal/cli/cobra_root.go`；redirect-only adapter 位于 `internal/cli/cobra_legacy.go`。`commandRegistry`、手写 `dispatch` 和旧业务 handler 已删除。
 
 ### 持久化数据
 

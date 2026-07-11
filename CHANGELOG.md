@@ -21,11 +21,13 @@
 - **`extract-figures` 跨页同尺寸误去重**：跨页 dedup 仅用于小面积/页边且无 caption 的重复元素，避免 BMC/Nature 风格正文大图因宽高相近被当作页眉页脚重复图过滤。
 
 ### 变更
+- **CLI v2 阶段 7 完成**：Cobra tree 成为唯一执行内核；旧命令只在纯 argv translator 中映射到 canonical invocation，`setup/select/abstract/relate/key-info` 收敛为隐藏的 redirect-only adapter，主帮助、completion、JSON command 和用户文档统一使用 v2 语法。
 - **PDF 提取参数收敛**：移除 `extract-text --markdown/--md` 兼容入口，文件输出统一由 `-o/--output-dir` 或 `--all` 触发；`extract-figures --max-per-page` 保留为高级调参项，不再出现在主用法路径中。
 
 ### 性能
 
 ### 移除
+- 删除 `commandRegistry`、手写 `dispatch`、旧 usage 常量、通用旧参数解析器、CLI 内重复 JSON/text renderer，以及已迁移或退出稳定语法的旧业务 handler。
 - 删除阶段 5 的 reference/index 旧业务 handler，以及阶段 6 的 server/sync 手写参数解析与 CLI 内业务编排。
 - 删除阶段 2 对应的旧只读 handler、旧 dispatch 分支与 `changes` 手写参数解析器，避免新旧两套业务逻辑并存。
 - 删除阶段 3 对应的 find/show/export/supplements/写操作旧 handler 与手写参数解析器；高频旧入口统一翻译到 canonical invocation。

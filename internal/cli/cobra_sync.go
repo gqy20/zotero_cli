@@ -9,8 +9,6 @@ import (
 	"zotero_cli/internal/app"
 )
 
-const usageSync = "usage: zot sync pull [--server-addr URL] [--data-dir DIR] [--force] [--concurrency N] [--no-storage]"
-
 func (c *CLI) newSyncCommand(opts *globalOptions) *cobra.Command {
 	syncCmd := &cobra.Command{Use: "sync", Short: "Synchronize a remote library for offline use"}
 	req := app.SyncPullRequest{Concurrency: 8}

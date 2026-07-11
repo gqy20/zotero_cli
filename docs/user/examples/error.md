@@ -35,7 +35,7 @@ error: zotero api not found (404): no such item: ABCD1234
 | `unauthorized` | HTTP 401 |
 | `forbidden` | HTTP 403（API key 无权限） |
 | `conflict` | HTTP 409（key 冲突） |
-| `precondition_failed` | HTTP 412（`--if-unmodified-since-version` 不满足） |
+| `precondition_failed` | HTTP 412（`--if-version` 不满足） |
 | `rate_limited` | HTTP 429（带 Retry-After） |
 | `unsupported_feature` | 当前 mode 不支持该能力 |
 | `temporarily_unavailable` | SQLite 被锁 / 模式降级 |
@@ -50,7 +50,7 @@ error: zotero api not found (404): no such item: ABCD1234
 | **0** | 成功 | 正常消费 data |
 | **1** | 运行时错误 | 向用户报告 error 内容；按 `type` 决定是否重试 |
 | **2** | 参数/用法错误 | 显示 usage 信息，提示正确参数 |
-| **3** | 配置错误 | 引导用户运行 `zot init` 或检查环境变量 |
+| **3** | 配置错误 | 引导用户运行 `zot config init` 或检查环境变量 |
 
 ## AI Agent 错误处理建议
 

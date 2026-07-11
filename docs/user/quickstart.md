@@ -11,15 +11,15 @@
 ## 首次使用（三步走）
 
 ```powershell
-.\zot.exe init                 # 一键初始化（交互式：模式、API key、库 ID，可选 PyMuPDF）
-.\zot.exe config validate     # 校验配置
-.\zot.exe stats --json          # 验证连通性
+.\zot.exe config init                 # 一键初始化（交互式：模式、API key、库 ID，可选 PyMuPDF）
+.\zot.exe config check     # 校验配置
+.\zot.exe lib stats --json          # 验证连通性
 ```
 
 如果在仓库里开发：
 
 ```powershell
-go run .\cmd\zot config validate
+go run .\cmd\zot config check
 ```
 
 ## 推荐调用习惯
@@ -29,7 +29,7 @@ go run .\cmd\zot config validate
 ```powershell
 .\zot.exe find "hybrid speciation" --json
 .\zot.exe show SA6DHVIM --json
-.\zot.exe stats --json
+.\zot.exe lib stats --json
 ```
 
 ### 2. 检索尽量一次拿够字段
@@ -61,19 +61,19 @@ go run .\cmd\zot config validate
 
 ```powershell
 # 最近加入 Zotero 的条目
-.\zot.exe find --all --sort dateAdded --direction desc --limit 10 --json
+.\zot.exe find --all --sort dateAdded --order desc --limit 10 --json
 
 # 只看最近 7 天入库
-.\zot.exe find --all --added-since 7d --sort dateAdded --direction desc --json
+.\zot.exe find --all --added-since 7d --sort dateAdded --order desc --json
 
 # 最近修改元数据的条目
-.\zot.exe find --all --modified-within 7d --sort dateModified --direction desc --json
+.\zot.exe find --all --modified-within 7d --sort dateModified --order desc --json
 ```
 
 快速人工浏览标题时，可用文本模式控制字段：
 
 ```powershell
-.\zot.exe find --all --sort dateAdded --direction desc --limit 10 --include-fields title,date_added,container
+.\zot.exe find --all --sort dateAdded --order desc --limit 10 --include-fields title,date_added,container
 ```
 
 ### 6. 运行模式选择
@@ -85,14 +85,14 @@ go run .\cmd\zot config validate
 - `hybrid`：优先本地，Web 仅在能承接时回退
 - `remote`：通过 HTTP 连接远程 `zot server`，适合无本地 Zotero 的设备
 
-`relate` / `extract-text` 在 hybrid 下仍是本地能力。remote 模式通过服务器代理访问数据；其中 `annotations` / `annotate` 走服务器端 PDF 能力，其他普通写操作仍需额外配置 `ZOT_API_KEY`。
+`relate` / `pdf text` 在 hybrid 下仍是本地能力。remote 模式通过服务器代理访问数据；其中 `annotations` / `annotate` 走服务器端 PDF 能力，其他普通写操作仍需额外配置 `ZOT_API_KEY`。
 
 结构化参考文献、PubMed 主题和 Europe PMC 文献发现使用 `zot ref`。第一次使用建议先运行小批量增量构建：
 
 ```powershell
 .\zot.exe ref build --workers 3 --limit 20 --json
 .\zot.exe ref status --json
-.\zot.exe ref search "genome assembly" --json
+.\zot.exe ref find "genome assembly" --json
 ```
 
 完整说明见 [引用索引与文献发现](./references.md)。
@@ -104,7 +104,7 @@ go run .\cmd\zot config validate
 | 规则 | 说明 |
 |------|------|
 | **删除默认禁止** | `ZOT_ALLOW_DELETE=0` 时所有 delete 命令失败，这是预期行为 |
-| **写操作前确认** | 先 `config validate`，再检查权限开关和用户意图 |
+| **写操作前确认** | 先 `config check`，再检查权限开关和用户意图 |
 | **删除需谨慎** | `delete-item` / `delete-collection` / `delete-search` 属高风险操作 |
 
 执行写操作前建议：
@@ -118,7 +118,7 @@ go run .\cmd\zot config validate
 ### Agent 入口：一站式库概览
 
 ```powershell
-.\zot.exe overview --json   # 统计 + 收藏夹 + 标签 + 最近条目 + 索引状态
+.\zot.exe lib show --json   # 统计 + 收藏夹 + 标签 + 最近条目 + 索引状态
 ```
 
 返回 `data.stats` / `data.collections` / `data.tags` / `data.recent_items`，适合作为首次连接时的发现命令。
@@ -128,42 +128,42 @@ go run .\cmd\zot config validate
 ```powershell
 .\zot.exe find "attention is all you need" --json
 .\zot.exe show X42A7DEE --json
-.\zot.exe relate X42A7DEE --json
+.\zot.exe item show X42A7DEE --json
 ```
 
 ### PDF 操作
 
 ```powershell
 # 提取文本（PyMuPDF → ft-cache → pdfium WASM）
-.\zot.exe extract-text ITEMKEY --json
-.\zot.exe extract-text ITEMKEY --json --pages 3-8 --grep methods --max-chars 12000
+.\zot.exe pdf text ITEMKEY --json
+.\zot.exe pdf text ITEMKEY --json --pages 3-8 --grep methods --max-chars 12000
 
 # 查找本地已保存的 Supplementary / Source data / 表格数据附件
-.\zot.exe supplements ITEMKEY --json
-.\zot.exe supplements ITEMKEY --online --json
-.\zot.exe supplements --all --json --limit 50
-.\zot.exe inspect-attachment ATTKEY --json
-.\zot.exe inspect-attachment --item ITEMKEY --json
-.\zot.exe inspect-attachment --item ITEMKEY --health --json
+.\zot.exe item supp ITEMKEY --json
+.\zot.exe item supp ITEMKEY --online --json
+.\zot.exe item supp --all --json --limit 50
+.\zot.exe file show ATTKEY --json
+.\zot.exe file show --item ITEMKEY --json
+.\zot.exe file show --item ITEMKEY --health --json
 .\zot.exe find --missing-attachment --json
 
 # 双源读取标注（DB + PDF 文件内）
-.\zot.exe annotations ITEMKEY --json
+.\zot.exe ann list ITEMKEY --json
 
 # 写入标注到 PDF
-.\zot.exe annotate ITEMKEY --text "关键概念" --color red --comment "重要"
+.\zot.exe ann new ITEMKEY --text "关键概念" --color red --comment "重要"
 
 # remote 模式下以上两条也可用，但实际执行发生在 zot server 所在机器
 
 # 在 Zotero 阅读器中打开
-.\zot.exe open ITEMKEY --page 5
+.\zot.exe pdf open ITEMKEY --page 5
 ```
 
 ### 批量操作
 
 ```powershell
-.\zot.exe add-tag --items KEY1,KEY2 --tag "to-read" --json
-.\zot.exe export --collection COLL1234 --format csljson --json
+.\zot.exe item tag KEY1 KEY2 --tag "to-read" --json
+.\zot.exe item export --collection COLL1234 --as csljson --json
 ```
 
 ### 全文检索最佳实践
@@ -200,11 +200,11 @@ go run .\cmd\zot config validate
 
 | 错误 | 处理方式 |
 |------|----------|
-| `401` / `403` | 检查 api_key / library_type / library_id，跑 `config validate` |
+| `401` / `403` | 检查 api_key / library_type / library_id，跑 `config check` |
 | `412` | 库版本已变化，刷新后重试 |
 | `429` | CLI 已重试，高频脚本应降速 |
 | local temporary unavailable | 保留本地错误，不要强行改走 Web |
-| 配置缺失 | 运行 `zot init` |
+| 配置缺失 | 运行 `zot config init` |
 
 ### 结构化错误输出
 
@@ -222,7 +222,7 @@ go run .\cmd\zot config validate
 
 1. **发现**：`overview --json`（一站式快照）
 2. **读优先**：`find` / `show` / `relate` / `stats` / `notes`
-3. **PDF 读取**：`extract-text` / `annotations` / `open`
-4. **导出**：`export --collection` 或 `export --item-key`
+3. **PDF 读取**：`pdf text` / `annotations` / `open`
+4. **导出**：`item export --collection COLLKEY` 或 `item export ITEMKEY`
 5. **变更次之**：`create-*` / `update-*` / `add-tag` / `remove-tag` / `annotate`
 6. **删除最后**：仅在用户明确要求时考虑

@@ -5,10 +5,57 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
 
 	"zotero_cli/internal/config"
 )
+
+func discoverDataDir() string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+	prefsDir := os.Getenv("APPDATA")
+	if prefsDir == "" {
+		return ""
+	}
+	matches, err := filepath.Glob(filepath.Join(prefsDir, "Zotero", "Zotero", "Profiles", "*", "prefs.js"))
+	if err != nil {
+		return ""
+	}
+	re := regexp.MustCompile(`^user_pref\("extensions\.zotero\.dataDir",\s*(.+)\);$`)
+	for _, path := range matches {
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			match := re.FindStringSubmatch(strings.TrimSpace(line))
+			if len(match) != 2 {
+				continue
+			}
+			value, unquoteErr := strconv.Unquote(strings.TrimSpace(match[1]))
+			if unquoteErr == nil && value != "" {
+				if _, statErr := os.Stat(filepath.Join(value, "zotero.sqlite")); statErr == nil {
+					return value
+				}
+			}
+		}
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	defaultDir := filepath.Join(home, "Zotero")
+	if _, err := os.Stat(filepath.Join(defaultDir, "zotero.sqlite")); err == nil {
+		return defaultDir
+	}
+	return ""
+}
 
 func (c *CLI) promptInitSetup(cfg config.Config, provided map[string]bool, reader *bufio.Reader) (config.Config, error) {
 

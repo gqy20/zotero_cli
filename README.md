@@ -30,15 +30,15 @@
 | 手动在 Zotero UI 里翻找文献 | `zot find "关键词" --json` → AI 直接消费结构化结果 |
 | 逐篇打开 PDF 找内容 | `zot find "概念" --fulltext --snippet` → 全库全文检索 |
 | 查看论文参考文献 | `zot ref ITEMKEY --json` → 优先 PMC JATS，否则 PubMed + Europe PMC 补全 |
-| 解析本地引用关系 | `zot ref resolve`，再用 `ref cited-by ITEMKEY` / `ref contexts ITEMKEY` 查询 |
-| 搜索引用、语境与 PubMed 主题 | `zot ref search "query" --json`；用 `--contexts`、`--references`、`--metadata` 或 `--field mesh` 限定 |
+| 解析本地引用关系 | `zot ref resolve`，再用 `ref cited ITEMKEY` / `ref ctx ITEMKEY` 查询 |
+| 搜索引用、语境与 PubMed 主题 | `zot ref find "query" --json`；用 `--contexts`、`--references`、`--metadata` 或 `--field mesh` 限定 |
 | 发现 PubMed 相关文献 | `zot ref related ITEMKEY --limit 20 --json` |
 | 查看关联生物医学资源 | `zot ref links ITEMKEY --json`（合并 NCBI 与 Europe PMC） |
-| Europe PMC 增强 | `zot ref cited-by ITEMKEY --external`；`zot ref annotations ITEMKEY`；`ref links` 自动合并两套资源 |
+| Europe PMC 增强 | `zot ref cited ITEMKEY --external`；`zot ref entities ITEMKEY`；`ref links` 自动合并两套资源 |
 | 开放科学画像 | `zot ref profile ITEMKEY --json` 查看预印本/正式版本、评价、基金、OA 和许可证 |
-| 复制粘贴 BibTeX / RIS | `zot export --item-key KEY --format bibtex` → AI 直接消费标准导出 |
-| 标注散落在各处无法汇总 | `zot annotations KEY --json` → 双源（DB+PDF）统一输出，支持按类型/页码/作者过滤，双层清除 |
-| 批量打标签靠手点 | `zot add-tag --items K1,K2,K3 --tag "to-read"` | 一条命令 |
+| 复制粘贴 BibTeX / RIS | `zot item export KEY --as bibtex` → AI 直接消费标准导出 |
+| 标注散落在各处无法汇总 | `zot ann list KEY --json` → 双源（DB+PDF）统一输出，支持按类型/页码/作者过滤，双层清除 |
+| 批量打标签靠手点 | `zot item tag --items K1,K2,K3 --tag "to-read"` | 一条命令 |
 
 > `ref` 的正式支持核心是 PMC/PubMed（NCBI）。`ref grobid` 仅为实验性、显式调用的 PDF 后备，不属于默认构建流程；公共演示端点不提供稳定性或配额保证。
 
@@ -72,11 +72,11 @@
 
 3. 运行 zot version 验证安装成功后，向我索取 Zotero API Key 和 Library ID，
    然后初始化（mode=hybrid）并安装 PyMuPDF：
-   zot init --mode hybrid --library-type user --library-id <ID> --api-key <KEY> --pdf
+   zot config init --mode hybrid --library-type user --library-id <ID> --api-key <KEY> --pdf
    如果需要完全非交互，请同时传入 Zotero 数据目录：
-   zot init --mode hybrid --library-type user --library-id <ID> --api-key <KEY> --data-dir <ZOTERO_DATA_DIR> --pdf
+   zot config init --mode hybrid --library-type user --library-id <ID> --api-key <KEY> --data-dir <ZOTERO_DATA_DIR> --pdf
 
-4. 运行 zot config validate 和 zot overview --json 验证全部就绪。
+4. 运行 zot config check 和 zot lib show --json 验证全部就绪。
 ```
 
 **你只需要做一件事**：在第 3 步时提供你的 Zotero API Key 和 Library ID。其余全部由 AI 自动完成。
@@ -120,16 +120,16 @@ brew install gqy20/tap/zotcli
 
 ```bash
 zot version              # 验证安装
-zot init                 # 交互式配置（mode 选 hybrid）
+zot config init                 # 交互式配置（mode 选 hybrid）
 
 # 远程模式初始化（连接局域网内一台运行 `zot server` 的机器）
-zot init --mode remote --server-addr http://192.168.1.100:8021
-zot init --mode remote --server-addr http://host:8021 --library-id ID --api-key KEY
-zot config validate       # 校验配置
-zot overview --json        # 一站式库概览
+zot config init --mode remote --server-addr http://192.168.1.100:8021
+zot config init --mode remote --server-addr http://host:8021 --library-id ID --api-key KEY
+zot config check       # 校验配置
+zot lib show --json        # 一站式库概览
 ```
 
-`zot init` 配置项说明：
+`zot config init` 配置项说明：
 
 | 配置项 | 获取方式 |
 |--------|----------|
@@ -139,7 +139,7 @@ zot overview --json        # 一站式库概览
 | `ZOT_MODE` | 推荐 `hybrid`（本地优先 + Web 回退） |
 | `ZOT_SERVER_ADDR` | 远程模式需要，运行 `zot server` 的地址（如 `http://192.168.1.100:8021`） |
 
-> local/hybrid 下 `zot init` 会询问是否安装 PyMuPDF，也可事后 `zot init --pdf` 安装或 `zot init --check-pdf` 诊断。
+> local/hybrid 下 `zot config init` 会询问是否安装 PyMuPDF，也可事后 `zot config init --pdf` 安装或 `zot config init --check-pdf` 诊断。
 >
 > 完整配置指南（含 API Key 获取、文件重命名模板、推荐插件）：见 [配置指南](docs/user/zotero-setup-guide.md)。
 
@@ -149,7 +149,7 @@ zot overview --json        # 一站式库概览
 git clone https://github.com/gqy20/zotero_cli.git && cd zotero_cli
 go build -o zot.exe ./cmd/zot     # Go 1.26+，无 CGO 依赖
 # 远程模式服务端就是同一个二进制的子命令：
-#   zot server                    # 起服务端（默认 :8021）
+#   zot server start              # 起服务端（默认 :8021）
 # 想要带 Web UI 的版本（需先在 web/ 下 npm run build）：
 #   go build -tags embed -o zot.exe ./cmd/zot
 ```
@@ -174,7 +174,7 @@ AI 加载后自动知道：该用什么命令、哪些参数必填、`--json` �
 
 **推荐：让 AI 助手帮你装**
 
-在 Claude Code / Codex 中运行 `zot init`，初始化完成后会自动提示安装 skill，直接复制执行即可。
+在 Claude Code / Codex 中运行 `zot config init`，初始化完成后会自动提示安装 skill，直接复制执行即可。
 
 **手动安装**
 
@@ -200,7 +200,7 @@ curl -fsSL ${_RAW}/.claude/skills/zotero-cli/examples/show-output.md \
 
 也可在浏览器打开 [skill 目录](https://github.com/gqy20/zotero_cli/tree/master/.claude/skills/zotero-cli)（或 [Gitee 镜像](https://gitee.com/gqy20/zotero_cli/tree/master/.claude/skills/zotero-cli)），逐个文件点 **Raw** 后另存为。4 个文件建议全部下载。
 
-**前提：** 确保已安装 `zot` 并完成 `zot init` 配置（见上方[快速开始](#快速开始)）。Skill 只是指令文件，实际执行依赖 `zot` 二进制。
+**前提：** 确保已安装 `zot` 并完成 `zot config init` 配置（见上方[快速开始](#快速开始)）。Skill 只是指令文件，实际执行依赖 `zot` 二进制。
 
 验证：在 Claude Code 中说"搜一下我的文献"，AI 应自动调用 `zot find ... --json`。
 
@@ -210,12 +210,12 @@ curl -fsSL ${_RAW}/.claude/skills/zotero-cli/examples/show-output.md \
 你说的                                    → AI 调用的命令
 ─────────────────────────────────────────────────────────────
 "搜 CRISPR 基因编辑相关文献"              → zot find "CRISPR gene editing" --tag 基因编辑 --json
-"导出最近半年为 bibtex"                   → zot export --date-after 2025-10 --format bibtex --json
-"看这篇的 PDF 标注"                       → zot annotations KEY --json
-"导出这篇为 BibTeX"                       → zot export --item-key KEY --format bibtex --json
-"把这两篇关联起来"                         → zot relate KEY_A --add KEY_B --dry-run
-"找这篇的补充表格/数据附件"                → zot supplements KEY --json
-"提取论文图表"                            → zot extract-figures KEY -o ./figures --json
+"导出最近半年为 bibtex"                   → zot item export --all --date-after 2025-10 --as bibtex --json
+"看这篇的 PDF 标注"                       → zot ann list KEY --json
+"导出这篇为 BibTeX"                       → zot item export KEY --as bibtex --json
+"查看条目元数据中的关系字段"               → zot item show KEY_A --json
+"找这篇的补充表格/数据附件"                → zot item supp KEY --json
+"提取论文图表"                            → zot pdf figs KEY -o ./figures --json
 ```
 
 AI 自动处理：追加 `--json`、省略冗余 `--all`、写前检查权限、删除前确认、标注优先 Mode 1.5。
@@ -255,10 +255,10 @@ zot find "hybrid speciation" --json
 zot find "CRISPR" --date-after 2023 --date-before 2025 --json
 
 # 最近入库（按 Zotero dateAdded，而不是发表日期）
-zot find --all --sort dateAdded --direction desc --limit 10 --json
+zot find --all --sort dateAdded --order desc --limit 10 --json
 
 # 某个月发表的文献
-zot find --all --date-after 2026-03 --date-before 2026-03 --sort date --direction desc --json
+zot find --all --date-after 2026-03 --date-before 2026-03 --sort date --order desc --json
 
 # 按标签过滤（AND / OR）
 zot find "基因编辑" --tag "高引用" --tag "综述" --json
@@ -284,44 +284,44 @@ zot find "同源多倍体" --snippet --limit 200 --json
 
 ```bash
 # 提取 PDF 正文供 AI 分析（PyMuPDF 优先 → ft-cache 回退 → pdfium WASM 兜底）
-zot extract-text KEY --json
-zot extract-text KEY --json --pages 3-8 --grep methods --max-chars 12000
-zot extract-text KEY -o ./markdown
-zot extract-text --all -o ./markdown --json
+zot pdf text KEY --json
+zot pdf text KEY --json --pages 3-8 --grep methods --max-chars 12000
+zot pdf text KEY -o ./markdown
+zot pdf text --all -o ./markdown --json
 
 # 查找本地 Zotero 已保存的 Supplementary / Source data / 表格数据附件
-zot supplements KEY --json
-zot supplements KEY --online --json
-zot supplements --all --json --limit 50
-zot inspect-attachment ATTKEY --json
-zot inspect-attachment --item KEY --json
-zot inspect-attachment --item KEY --health --json
+zot item supp KEY --json
+zot item supp KEY --online --json
+zot item supp --all --json --limit 50
+zot file show ATTKEY --json
+zot file show --item KEY --json
+zot file show --item KEY --health --json
 
 # 提取论文图表（支持缓存、多 PDF 附件、低质量误检过滤和每页上限）
-zot extract-figures KEY --json
-zot extract-figures KEY1 KEY2 --workers 8 --output-dir ./figures --json
-zot extract-figures --all --workers 8 --output-dir ./figures --json
+zot pdf figs KEY --json
+zot pdf figs KEY1 KEY2 --workers 8 --output-dir ./figures --json
+zot pdf figs --all --workers 8 --output-dir ./figures --json
 
 # 查看 PDF 标注（双源：Zotero 阅读器 DB 标注 + PDF 文件内标注）
-zot annotations KEY --json
-zot annotations KEY --type highlight --page 3 --json   # 按类型/页码过滤
-zot annotations KEY --author "User" --json              # 按作者过滤
+zot ann list KEY --json
+zot ann list KEY --type highlight --page 3 --json   # 按类型/页码过滤
+zot ann list KEY --author "User" --json              # 按作者过滤
 
 # 写入标注到 PDF（推荐 Mode 1.5：单页搜索，精准定位）
-zot annotate KEY --page 4 --text "GATK" --color red --comment "关键方法"
-zot annotate KEY --text "speciation" --type underline     # 下划线
-zot annotate KEY --page 3 --rect 100,200,350,220         # Mode 2: 精确坐标
+zot ann new KEY --page 4 --text "GATK" --color red --comment "关键方法"
+zot ann new KEY --text "speciation" --type underline     # 下划线
+zot ann new KEY --page 3 --rect 100,200,350,220         # Mode 2: 精确坐标
 
 # 清除标注（双层删除：PDF 文件 + Zotero DB，DB 删除非阻断）
-zot annotations KEY --clear                              # 删除全部
-zot annotate KEY --clear --type highlight                # 按类型删
-zot annotations KEY --clear --page 5 --author "User"     # 组合条件删
+zot ann delete KEY --yes                              # 删除全部
+zot ann delete KEY --type highlight --yes             # 按类型删
+zot ann delete KEY --page 5 --author "User" --yes     # 组合条件删
 
 # 在 Zotero 阅读器中打开 PDF（跳转到指定页）
-zot open KEY --page 5
+zot pdf open KEY --page 5
 
 # 在 Zotero 主界面选中该条目
-zot select KEY
+# `select` 是已退出稳定 CLI 的桌面端专用入口；请在 Zotero Desktop 中定位条目
 ```
 
 #### 与 Zotero 桌面端联动
@@ -330,12 +330,12 @@ zot 不是独立工具，它直接读写你的 **Zotero 本地数据目录**，�
 
 | 命令 | 联动方式 | 效果 |
 |------|----------|------|
-| `zot open KEY` | `zotero://open-pdf` 协议 | 在已运行的 Zotero **阅读器**中打开 PDF，支持页码跳转 |
-| `zot select KEY` | `zotero://select` 协议 | 在已运行的 Zotero **主界面**中选中该条目 |
-| `zot annotations KEY` | SQLite + PyMuPDF 双源读取 | 同时获取 DB 层标注 **和** PDF 文件内嵌入的标注，支持 `--clear` 双层清除 |
-| `zot annotate KEY` | PyMuPDF 直接写入 PDF | 3 种定位模式写入标注，支持 `--clear` 双层删除（DB 删除非阻断） |
+| `zot pdf open KEY` | `zotero://open-pdf` 协议 | 在已运行的 Zotero **阅读器**中打开 PDF，支持页码跳转 |
+| `zot ann list KEY` | SQLite + PyMuPDF 双源读取 | 同时获取 DB 层标注 **和** PDF 文件内嵌入的标注 |
+| `zot ann new KEY` | PyMuPDF 直接写入 PDF | 3 种定位模式写入标注 |
+| `zot ann delete KEY --yes` | 双层删除 | 显式 destructive action，受删除门控和确认保护 |
 
-在 `remote` 模式下，`annotations` / `annotate` 会通过远端 `zot server` 在服务器侧读取或修改 PDF；服务端必须以 `local` / `hybrid` / `web` 等非 `remote` 模式运行，并按 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 控制写入和清除。普通 Zotero Web API 写操作（如 `create-item`、标签、集合等）在 remote 客户端仍需额外配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID`。
+在 `remote` 模式下，`ann list/new/delete` 会通过远端 `zot server` 在服务器侧读取或修改 PDF；服务端必须以 `local` / `hybrid` / `web` 等非 `remote` 模式运行，并按 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 控制写入和清除。普通 Zotero Web API 写操作（如 `item new`、标签、集合等）在 remote 客户端仍需额外配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID`。
 
 数据来源：
 
@@ -351,27 +351,27 @@ zot show KEY --json
 
 # 创建子笔记（hybrid 自动选择路径）
 echo '{"itemType":"note","parentItem":"KEY","note":"<p>我的笔记</p>"}' > note.json
-zot create-item --from-file note.json --if-unmodified-since-version N --json
+zot item new --from note.json --if-version N --json
 
 # 查询文献间的显式关系
-zot relate KEY --json
+zot item show KEY --json
 
 # 按收藏夹批量导出
-zot export --collection COLLKEY --format csljson --json
+zot item export --collection COLLKEY --as csljson --json
 
 # 导出标准格式，供论文写作工具或 AI 后处理
-zot export --item-key KEY --format bibtex --json
-zot export --collection COLLKEY --format ris --json
-zot export --item-key KEY --format csljson --json
+zot item export KEY --as bibtex --json
+zot item export --collection COLLKEY --as ris --json
+zot item export KEY --as csljson --json
 ```
 
 ### 库管理
 
 ```bash
-zot collections --json         # 收藏夹列表
-zot tags --json                # 所有标签
-zot stats --json               # 库统计
-zot changes items --since 0 --json  # 版本变更记录
+zot coll list --json         # 收藏夹列表
+zot tag list --json                # 所有标签
+zot lib stats --json               # 库统计
+zot lib log --kind items --since 0 --json  # 版本变更记录
 ```
 
 ## 安装方式
@@ -399,7 +399,7 @@ zot changes items --since 0 --json  # 版本变更记录
 | `hybrid`（推荐） | 本地优先，Web 回退 | 两者都要 | 日常使用，兼顾速度与完整性 |
 | `remote` | HTTP → 远端 `zot server` (port 8021) | ZOT_SERVER_ADDR | 同服务器端模式，局域网访问；PDF 标注读写走服务器 |
 
-通过 `ZOT_MODE` 环境变量或 `zot init` 设置。hybrid 模式下：
+通过 `ZOT_MODE` 环境变量或 `zot config init` 设置。hybrid 模式下：
 - **读操作**：本地优先（全文检索、PDF 标注读取）不误回退 Web
 - **写操作**（笔记）：Zotero 未运行时走 SQLite 直写（~50ms），运行时自动 fallback Web API
 
@@ -407,20 +407,20 @@ remote 模式下：
 - **读操作**：经由远端 `zot server` 代理
 - **PDF 标注读写**：经由 `zot server` 在服务端执行
 
-不想让远程服务一直开着？用 `zot sync` 把整库一次性同步到本地，之后断网用 `local` 模式工作：
+不想让远程服务一直开着？用 `zot sync pull` 把整库一次性同步到本地，之后断网用 `local` 模式工作：
 
 ```bash
 # 服务端：在有 Zotero 数据的机器上起服务
-zot server                              # 默认 :8021
+zot server start                        # 默认 :8021
 
 # 客户端：同步到 ~/.zot/sync/（sqlite + 所有附件，增量、并发）
-zot sync --server-addr http://192.168.1.50:8021
+zot sync pull --server-addr http://192.168.1.50:8021
 # 之后离线使用
 ZOT_MODE=local ZOT_DATA_DIR=~/.zot/sync zot find ...
 zot index build --data-dir ~/.zot/sync  # 可选，建全文索引
 ```
 
-`zot sync` 拉取原始 `zotero.sqlite`（数据库）+ `storage/`（PDF/附件）+ `.zotero_cli/fulltext/`（FTS5 全文索引），落到与 Zotero 原生数据隔离的专门目录，同步后 `local` 模式零改动直接可用、`find --fulltext` 立即可用（无需本地 `zot index build`）。再次运行只下载变化的文件。注意：仅同步 `storage/` 下的 imported 附件，`linked_file`（外部路径）附件不同步。
+`zot sync pull` 拉取原始 `zotero.sqlite`（数据库）+ `storage/`（PDF/附件）+ `.zotero_cli/fulltext/`（FTS5 全文索引），落到与 Zotero 原生数据隔离的专门目录，同步后 `local` 模式零改动直接可用、`find --fulltext` 立即可用（无需本地 `zot index build`）。再次运行只下载变化的文件。注意：仅同步 `storage/` 下的 imported 附件，`linked_file`（外部路径）附件不同步。
 - **普通 Web API 写操作**：仍需 remote+web 配置（`ZOT_API_KEY` + `ZOT_LIBRARY_ID`）
 
 ## 命令速查
@@ -431,10 +431,10 @@ zot index build --data-dir ~/.zot/sync  # 可选，建全文索引
 | **查看** | `show` | 条目详情（含标注/附件/笔记/摘要） |
 | **摘要** | `abstract` | 查看条目摘要（支持批量 key + `--json`） |
 | **关系** | `relate` | 条目间显式关系查询 |
-| **PDF** | `extract-text` | 提取 PDF 正文 |
-| **PDF** | `supplements` | 查找本地已保存的补充材料、Source data、表格/数据附件 |
-| **PDF** | `inspect-attachment` | 检查本地附件健康状态，并预览 `.xlsx` 附件的 sheet、表头和前几行 |
-| **PDF** | `extract-figures` | 提取论文图表（缓存、多 PDF 附件、低质量误检过滤） |
+| **PDF** | `pdf text` | 提取 PDF 正文 |
+| **PDF** | `item supp` | 查找本地已保存的补充材料、Source data、表格/数据附件 |
+| **PDF** | `file show` | 检查本地附件健康状态，并预览 `.xlsx` 附件的 sheet、表头和前几行 |
+| **PDF** | `pdf figs` | 提取论文图表（缓存、多 PDF 附件、低质量误检过滤） |
 | **PDF** | `annotate` | 写入高亮/下划线/笔记标注（3 种定位模式，推荐 Mode 1.5） |
 | **PDF** | `annotations` | 读取/删除 PDF 标注（双源 + 双层清除） |
 | **PDF** | `open` | 在 Zotero 阅读器中打开 |

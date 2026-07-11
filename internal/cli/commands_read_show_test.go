@@ -325,76 +325,17 @@ func TestRunShowLocalAutoDetectsPrefsAndResolvesLinkedAttachmentPaths(t *testing
 }
 
 func TestRunRelateLocalJSONShowsExplicitRelations(t *testing.T) {
-	configRoot := t.TempDir()
-	setTestConfigDir(t, configRoot)
-	writeTestConfig(t, configRoot)
-	t.Setenv("ZOT_MODE", "local")
-
-	dataDir := t.TempDir()
-	storageDir := filepath.Join(dataDir, "storage")
-	if err := os.Mkdir(storageDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
-	buildLocalRelateFixture(t, sqlitePath, storageDir)
-	t.Setenv("ZOT_DATA_DIR", dataDir)
-
 	stdout, stderr := captureOutput(t)
 	exitCode := Run([]string{"relate", "ITEM1234", "--json"})
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
-	}
-
-	var got map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
-		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
-	}
-	meta, ok := got["meta"].(map[string]any)
-	if !ok || meta["read_source"] != "live" {
-		t.Fatalf("unexpected meta payload: %#v", got["meta"])
-	}
-	data, ok := got["data"].([]any)
-	if !ok || len(data) != 2 {
-		t.Fatalf("unexpected relate payload: %#v", got["data"])
-	}
-	first := data[0].(map[string]any)
-	if first["predicate"] != "dc:relation" {
-		t.Fatalf("unexpected first relation: %#v", first)
+	if exitCode != ExitUsage || stdout.Len() != 0 || !strings.Contains(stderr.String(), "experimental relation-graph") {
+		t.Fatalf("unexpected redirect output: code=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
 	}
 }
 
 func TestRunRelateLocalTextOutputShowsDirectionAndTarget(t *testing.T) {
-	configRoot := t.TempDir()
-	setTestConfigDir(t, configRoot)
-	writeTestConfig(t, configRoot)
-	t.Setenv("ZOT_MODE", "local")
-
-	dataDir := t.TempDir()
-	storageDir := filepath.Join(dataDir, "storage")
-	if err := os.Mkdir(storageDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
-	buildLocalRelateFixture(t, sqlitePath, storageDir)
-	t.Setenv("ZOT_DATA_DIR", dataDir)
-
 	stdout, stderr := captureOutput(t)
 	exitCode := Run([]string{"relate", "ITEM1234"})
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
-	}
-
-	got := stdout.String()
-	for _, want := range []string{
-		"Item: ITEM1234",
-		"Explicit Relations: 2",
-		"[dc:relation][incoming] RELA1111  journalArticle  Related Incoming",
-		"[dc:relation][outgoing] RELB2222  journalArticle  Related Outgoing",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("expected %q in output %q", want, got)
-		}
+	if exitCode != ExitUsage || stdout.Len() != 0 || !strings.Contains(stderr.String(), "experimental relation-graph") {
+		t.Fatalf("unexpected redirect output: code=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
 	}
 }

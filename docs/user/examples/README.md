@@ -24,10 +24,9 @@
 |------|------|------|
 | [find.md](find.md) | `zot find "query" --json` | 文献检索结果 |
 | [show.md](show.md) | `zot show KEY --json` | 单条目详情（含标注/附件） |
-| [stats.md](stats.md) | `zot stats --json` | 库统计 |
-| [export.md](export.md) | `zot export --item-key KEY --format csljson --json` | CSL-JSON 导出 |
-| [relate.md](relate.md) | `zot relate KEY --json` | 条目关系 |
-| [annotations.md](annotations.md) | `zot annotations KEY --json` | PDF 标注（双源） |
+| [stats.md](stats.md) | `zot lib stats --json` | 库统计 |
+| [export.md](export.md) | `zot item export KEY --as csljson --json` | CSL-JSON 导出 |
+| [annotations.md](annotations.md) | `zot ann list KEY --json` | PDF 标注（双源） |
 | [error.md](error.md) | 各类错误场景 | 错误响应格式 |
 
 > 示例中的数据为虚构值，仅展示字段结构和类型。

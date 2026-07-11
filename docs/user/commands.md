@@ -1,577 +1,173 @@
 # 命令参考
 
-完整用法、选项说明、模式边界和输出示例。
+CLI v2 使用稳定的“资源 + 动作”语法。`zot <resource> --help` 和 `zot <resource> <action> --help` 是参数细节的权威来源。
 
-> **模式说明**：支持 `web`、`local`、`hybrid`、`remote` 四种运行模式。`remote` 模式通过 HTTP 连接 `zot server`（端口 8021），reader 路径命令（find/show/stats/tags/notes/overview 等）经由服务器代理；`annotations` / `annotate` 也会经由服务器执行。其余普通写操作和 web-only 命令仍需额外配置 `ZOT_API_KEY` 后可用。详见 [架构文档](../architecture/overview.md)。
+## 全局选项
 
-> AI Agent 使用规范见 [AI Agent 指南](./quickstart.md)，技术架构见 [架构文档](../architecture/overview.md)。
-> 标注操作详细文档见 [annotations 示例](./examples/annotations.md)。
-> 引用索引、PubMed/PMC 与 Europe PMC 的完整说明见 [引用索引与文献发现](./references.md)。
+```text
+--format text|json
+--json
+--quiet, -q
+--verbose, -v
+--no-color
+--mode web|local|hybrid|remote
+--timeout DURATION
+```
 
----
+JSON 响应统一使用 `{ok, command, data, meta}`；`command` 始终是 canonical path，例如 `item find`、`schema list`。
 
-## 目录
+## 命令树
 
-- [检索 (`find`)](#检索-find)
-- [JSON 输出总览](#json-输出总览)
-- [关系 (`relate`)](#关系-relate)
-- [标注读取 (`annotations`)](#标注读取-annotations)
-- [标注写入 (`annotate`)](#标注写入-annotate)
-- [创建条目 (`create-item`)](#创建条目-create-item)
-- [补充材料 (`supplements`)](#补充材料-supplements)
-- [附件检查与表格预览 (`inspect-attachment`)](#附件检查与表格预览-inspect-attachment)
-- [文本提取 (`extract-text`)](#文本提取-extract-text)
-- [图片提取 (`extract-figures`)](#图片提取-extract-figures)
-- [其他命令索引](#其他命令索引)
+```text
+zot
+├── lib show|stats|log
+├── item list|find|show|new|edit|delete|tag|untag|supp|export
+├── coll list|show|new|edit|delete|add|remove
+├── note list|show|find|new|edit|delete
+├── tag list
+├── search list|show|new|edit|delete
+├── group list
+├── file show|check
+├── pdf text|figs|open
+├── ann list|new|delete
+├── ref show|find|related|cited|ctx|links|entities|profile|build|resolve|status
+├── index build|status
+├── schema list|show
+├── config init|show|check
+├── server start
+├── sync pull
+├── completion
+└── version
+```
 
----
+高频快捷入口 `find`、`show`、`export` 分别等价于 `item find`、`item show`、`item export`，但没有独立实现。
 
-## 检索 (`find`)
+## Library 与只读资源
 
-用法和示例见 [find 示例](./examples/find.md)。
+```powershell
+zot lib show --json
+zot lib stats --json
+zot lib log --deleted --json
+zot lib log --kind items --since 120 --json
 
-时间字段提示：`--date-after` / `--date-before` 过滤 **加入 Zotero 的时间（`dateAdded`）**，不是发表日期。发表日期过滤请用 `--sort dateAdded` 配合 `--direction desc`，或先用 `zot find --all --json | jq` 后处理。最近入库列表建议显式使用 `find --all --sort dateAdded --direction desc`。
+zot item list --limit 20 --json
+zot item list --scope trash --json
+zot item list --scope pubs --json
+zot item find "CRISPR" --type article --limit 20 --json
+zot item show ITEMKEY --json
 
-## JSON 输出总览
+zot coll list --json
+zot note list --json
+zot note find "methods" --json
+zot tag list --json
+zot search list --json
+zot group list --json
+```
 
-所有 `read` 路径命令（`find` / `show` / `abstract` / `relate` / `notes` / `tags` / `stats` / `overview` 等）支持 `--json`，统一信封为 `{ok, command, data, meta, code}`。
+统一分页参数是 `--limit`、`--offset`、`--sort`、`--order asc|desc`。旧 `--start`、`--direction` 仅由兼容翻译器接受。
 
-**默认走 lean 模式**（`LeanItem`，蛇形字段，约原始 1/5 体积，详见 [`internal/cli/lean.go`](../../internal/cli/lean.go)）。要原始 `domain.Item` 完整字段加 `--full`：
+常用 item type 短名会在输入层归一化：`article` → `journalArticle`、`chapter` → `bookSection`、`conf` → `conferencePaper`、`web` → `webpage`、`blog` → `blogPost`。JSON 和持久化数据始终使用 Zotero 官方值。
 
-| 命令 | lean 默认 | full 切换 |
-|------|----------|----------|
-| `find` | ✅ | `--full` |
-| `show` | ✅ | `--full` |
-| `abstract` | ✅ | `--full` |
-| `relate` | ❌（直接 `AggregatedRelations`） | — |
-| `notes` / `tags` / `stats` / `overview` | 不涉及（结构本身小） | — |
+## 写入与安全
 
-完整字段表见：
-- lean：`internal/cli/lean.go` 的 `LeanItem` 定义
-- full：`internal/domain/types.go` 的 `Item` 定义
-- 错误信封：`internal/cli/types.go` 的 `errorData` 定义
+```powershell
+zot item new --set itemType=article --set title="Example" --dry-run --json
+zot item edit ITEMKEY --set title="New title" --if-version 42 --json
+zot item delete ITEMKEY --yes --if-version 42 --json
+zot item tag KEY1 KEY2 --tag review --json
+zot item untag KEY1 KEY2 --tag review --json
 
-完整 JSON 示例：
-- [find-output.md](https://github.com/gqy20/zotero_cli/blob/master/.claude/skills/zotero-cli/examples/find-output.md) / [Gitee](https://gitee.com/gqy20/zotero_cli/blob/master/.claude/skills/zotero-cli/examples/find-output.md)
-- [show-output.md](https://github.com/gqy20/zotero_cli/blob/master/.claude/skills/zotero-cli/examples/show-output.md) / [Gitee](https://gitee.com/gqy20/zotero_cli/blob/master/.claude/skills/zotero-cli/examples/show-output.md)
-- [error.md](./examples/error.md)
+zot coll new --name "Reviews" --json
+zot coll add COLLKEY ITEM1 ITEM2 --json
+zot coll remove COLLKEY ITEM1 --json
+zot note new --parent ITEMKEY --text "Reading note" --json
+zot search new --data '{"name":"Recent","conditions":[]}' --json
+```
 
----
+写入统一接受 `--set FIELD=VALUE`、`--data JSON`、`--from PATH`；`--from -` 表示 stdin。安全选项统一为 `--dry-run`、`--yes/-y`、`--if-version`。
 
-## 结构化参考文献 (`ref`)
+- `ZOT_ALLOW_WRITE=1` 控制创建和修改。
+- `ZOT_ALLOW_DELETE=1` 控制删除，默认关闭。
+- destructive action 不会因旧命令兼容而绕过确认、权限或版本前置条件。
 
-```bash
-zot ref ITEMKEY --json
-zot ref build --workers 3 --json
-zot ref status --json
-zot ref failed --json
-zot ref unsupported --json
-zot ref retry --workers 2 --json
-zot ref resolve --workers 8 --json
-zot ref cited-by ITEMKEY --json
-zot ref contexts ITEMKEY --json
-zot ref contexts build --workers 3 --json
-zot ref grobid status --json
-zot ref grobid build --limit 5 --workers 1 --json
-zot ref search "genome assembly" --json
-zot ref search "we used" --section methods --limit 20 --json
-zot ref search "genome assembly" --references --json
-zot ref search "genome assembly" --field mesh --json
+## 附件、PDF 与标注
+
+```powershell
+zot item supp ITEMKEY --json
+zot file show ATTACHKEY --json
+zot file check ATTACHKEY --json
+
+zot pdf text ITEMKEY --pages 3-8 --grep methods --max-chars 12000 --json
+zot pdf text ITEM1 ITEM2 --workers 4 --output-dir ./markdown --json
+zot pdf figs ITEMKEY --output-dir ./figures --json
+zot pdf open ITEMKEY --page 5
+
+zot ann list ITEMKEY --type highlight --page 3 --json
+zot ann new ITEMKEY --text "target phrase" --color yellow --json
+zot ann delete ITEMKEY --type highlight --yes --json
+```
+
+`ann list`、`ann new`、`ann delete` 明确区分读取、创建和删除。canonical 语法不接受 `annotations --clear` 或 `annotate --clear`。
+
+## Reference 与全文索引
+
+```powershell
+zot ref show ITEMKEY --json
+zot ref find "genome assembly" --field mesh --json
 zot ref related ITEMKEY --limit 20 --json
-zot ref related ITEMKEY --also-viewed --json
+zot ref cited ITEMKEY --external --json
+zot ref ctx ITEMKEY --json
 zot ref links ITEMKEY --json
-zot ref cited-by ITEMKEY --external --limit 100 --json
-zot ref annotations ITEMKEY --json
-zot ref search "BRCA1" --field annotations --json
+zot ref entities ITEMKEY --json
 zot ref profile ITEMKEY --json
+
+zot ref build --workers 3 --json
+zot ref build --failed --workers 2 --json
+zot ref build --contexts --workers 3 --json
+zot ref build --grobid --limit 5 --json
+zot ref resolve --workers 8 --json
+zot ref status --json
+zot ref status --failed --json
+zot ref status --unsupported --json
+zot ref status --grobid --json
+
+zot index build --workers 4 --json
+zot index status --json
 ```
 
-`ref ITEMKEY` 从 DOI、PubMed URL 和摘要中识别 PMID/PMCID，优先读取 PMC JATS XML 的完整 `<ref-list>`；没有 PMC 时，通过 PubMed ELink 获取可映射到 PMID 的引用、批量 EFetch 结构化元数据，再由 Europe PMC references 补充 DOI、预印本和非 PubMed 引用。
+`ref build --failed` 与 `ref build --contexts` 是互斥范围；GROBID 仅在显式 `--grobid` 时启用。完整来源和 fallback 语义见 [引用索引与文献发现](./references.md)。
 
-PMC/PubMed（NCBI）是 `ref` 的正式支持核心流程；Europe PMC 是自动或按需的增强层。默认构建不会调用 GROBID，PMC JATS 成功时也不会重复请求 Europe PMC references。
+## Schema、配置与运行时
 
-`ref build` 默认扫描所有符合条件的顶层文献并执行增量构建。索引按条目版本和标识符指纹跳过未变化条目；网络或解析失败可用 `ref failed` 查看并通过 `ref retry` 重试。NCBI 确定无法处理的条目归入 `unsupported`，可用 `ref unsupported` 查看，不会被 `retry` 重复请求。结构化索引位于 `.zotero_cli/ref/index.sqlite`，NCBI 原始响应缓存在 `.zotero_cli/ref/ncbi/`。
+```powershell
+zot schema list types --json
+zot schema list fields --json
+zot schema list fields article --json
+zot schema list roles article --json
+zot schema show article --json
 
-`ref resolve` 使用 DOI、PMID、规范化标题和保守的模糊标题匹配，将参考文献解析回本地 Zotero 条目。`ref cited-by` 提供反向引用查询；`ref contexts` 返回 PMC JATS 正文中引用标记所在的章节和完整段落。PubMed 只提供参考文献关系，不提供正文上下文，因此其 `contexts` 为空。
+zot config init
+zot config show --json
+zot config show --path
+zot config check --json
 
-`ref search QUERY` 默认使用 FTS5 同时检索结构化参考文献、正文引用上下文和 PubMed 元数据。需要限制范围时使用 `--contexts`、`--references` 或 `--metadata`；`--field mesh|publication_types|keywords|chemicals|grants|corrections|annotations` 可精确限定字段。指定 `--section` 会自动限定到上下文。还可按 `--source pmc|pubmed|europepmc|grobid`、`--target ITEMKEY` 和 `--limit` 过滤。
-
-成功的 PubMed 解析会随 `ref build` 保存 MeSH（包括 Major Topic 与 qualifier）、publication types、作者关键词、化学物质、基金和勘误/撤稿关系，不产生额外 EFetch 请求。`ref related` 使用 PubMed Similar Articles 官方顺序并排除原文；`ref links` 并行查询 PMC、Gene、GEO、SRA、BioProject、BioSample、ClinVar 和 Assembly，再合并 Europe PMC database links。
-
-Europe PMC 是自动增强层而不是并列的核心来源。PubMed fallback 条目会合并 Europe PMC 的开放参考文献并按 PMID、DOI、PMCID、标题去重；PMC JATS 成功时不重复请求。`ref cited-by --external` 按需读取 Europe PMC 外部引用网络（包括预印本），`ref links` 自动合并 Europe PMC database links。`ref annotations` 获取并保存文本挖掘实体/关系，之后可通过 `ref search --field annotations` 本地检索；annotations 不纳入默认全库构建。
-
-`ref profile` 汇总 Europe PMC 的开放获取状态、许可证、被引数、数据/参考文献/文本挖掘可用性、基金列表、预印本与正式发表版本关系，以及存在时的评价记录。它会优先使用 PMID，非 PubMed 预印本则可通过 DOI 在 Europe PMC 中解析，不要求先进入 NCBI。
-
-每个成功索引条目同时记录引用上下文完整性：`available`、`not_supported`、`not_found`、`parse_failed` 或 `not_indexed`，以及有/无上下文的参考文献数量和覆盖率。`ref contexts --json` 在 `meta.context_summary` 中返回这些指标。
-
-`ref contexts build` 只补建成功 PMC 条目中状态为 `not_indexed` 的历史记录，默认复用 NCBI XML 缓存；使用 `--refresh` 才会重新请求网络。重复运行在没有待处理条目时是空操作。
-
-`ref grobid` 是**实验性、可选的 PDF 后备功能**，不承诺公共演示服务的稳定性、配额、结果一致性或完成时间。它使用原生 Go HTTP 客户端把本地 PDF 发送到可配置的 GROBID 服务并解析 TEI XML；默认公共演示端点、1 worker、最多5篇，`--all` 才允许全量。用 `ZOT_GROBID_URL` 切换本地服务，`ZOT_GROBID_TIMEOUT_SECONDS` 调整超时，`HF_TOKEN` 可用于公共 Hugging Face Space 认证。涉及未公开或敏感 PDF 时应使用本地服务。
-
-环境变量：`ZOT_NCBI_API_KEY`、`ZOT_NCBI_EMAIL`、`ZOT_NCBI_RATE_MS`。`--refresh` 会绕过缓存。
-
-## 关系 (`relate`)
-
-查询和管理条目之间的显式关联、笔记内嵌引用，支持关系网络可视化。
-
-详细用法和示例见 [relate 示例](./examples/relate.md)。
-
-### 用法
-
-```
-zot relate <item-key> [--json] [--aggregate] [--dot] [--predicate PRED]
-         [--add TARGET] [--remove TARGET] [--dry-run] [--from-file PATH]
+zot server start --port 8021
+zot sync pull --server-addr http://host:8021 --data-dir ~/.zot/sync
+zot completion powershell
+zot completion bash
+zot version
 ```
 
-### 核心能力
+completion 支持 `bash`、`zsh`、`fish`、`powershell`，生成过程不会加载配置或访问网络。
 
-| 功能 | 选项 | 说明 |
-|------|------|------|
-| 查询显式关系 | （默认） | 从 `itemRelations` 表读取 outgoing + incoming |
-| 三层聚合 | `--aggregate` | 自身关系 + 子笔记关系 + 内嵌 citation |
-| 可视化 | `--dot` | 输出 Graphviz DOT 格式关系网络图 |
-| 写入 | `--add` / `--remove` | 添加/删除显式关系（需 `ZOT_ALLOW_WRITE=1`） |
-| 批量操作 | `--from-file PATH` | JSON 文件驱动批量 add/remove |
-| 预览 | `--dry-run` / `-n` | 不执行写入，仅展示将做的变更 |
-| 过滤 | `--predicate PRED` | 按谓词类型筛选（如 `dc:relation`） |
+## 兼容入口
 
----
+旧命令会在执行前被翻译成 canonical invocation，并向 stderr 输出一次迁移 warning；JSON stdout 不受污染。详细清单见 [回退与历史兼容](../architecture/fallbacks.md)。
 
-## 标注读取 (`annotations`)
+以下入口已是 redirect-only，不再执行旧业务：
 
-读取 PDF 标注（双源：PDF 文件层 + Zotero DB 层），支持过滤和删除。
-
-在 `remote` 模式下，本命令通过 `zot server` 在服务端读取/清除标注；清除是否允许由服务端 `ZOT_ALLOW_DELETE` 控制。
-
-### 用法
-
-```
-zot annotations <item-key> [--json] [--clear] [--page N] [--type TYPE] [--author AUTHOR]
-```
-
-### 选项
-
-| 选项 | 说明 |
-|------|------|
-| `--json` | JSON 格式输出 |
-| `--clear` | **删除**标注（双层：PDF + DB） |
-| `--page N` | 仅显示/删除第 N 页 |
-| `--type TYPE` | 按类型过滤/删除（highlight / note / image 等） |
-| `--author AUTHOR` | 按作者过滤/删除（DB 层有效） |
-
-### 输出
-
-文本模式按源分组展示；JSON 模式返回结构化数据含 `pdf_annotations` 和 `db_annotations` 两个数组。
-
-### `--clear` 行为
-
-- 始终尝试**双层删除**
-- PDF 层（PyMuPDF）：随时可用
-- DB 层（SQLite）：需要 Zotero 关闭，否则输出 warning 不阻断
-
-详细示例见 [annotations 示例](./examples/annotations.md)。
-
----
-
-## 标注写入 (`annotate`)
-
-向 PDF 文件写入高亮、下划线或便签笔记。
-
-在 `remote` 模式下，本命令通过 `zot server` 在服务端写入 PDF 标注；是否允许写入由服务端 `ZOT_ALLOW_WRITE` 控制，不依赖客户端 `ZOT_API_KEY`。
-
-### 用法
-
-```
-zot annotate <item-key> (--text TEXT | --page N (--rect x0,y0,x1,y2 | --point x,y)) \
-  [--color COLOR] [--comment TEXT] [--type TYPE] [--clear] [--author AUTHOR] [--json]
-```
-
-### 三种标注模式
-
-| 模式 | 触发条件 | 说明 |
-|------|----------|------|
-| Mode 1: 全文搜索 | `--text` （无 `--page`） | 所有页面匹配，每处创建标注 |
-| **Mode 1.5: 单页搜索** | **`--page N --text`** | **仅指定页搜索（推荐）** |
-| Mode 2: 精确坐标 | `--page N --rect ...` 或 `--point ...` | 矩形区域或坐标点 |
-
-### 选项
-
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `--text TEXT` | 要搜索的文本 | — |
-| `--page N` | 目标页码 | — |
-| `--rect x0,y0,x1,y2` | 高亮矩形区域 (PDF 坐标) | — |
-| `--point x,y` | 便签位置 (逗号分隔!) | — |
-| `--color COLOR` | 颜色（名称或 #hex） | `yellow` |
-| `--type TYPE` | highlight / underline / text | `highlight` |
-| `--comment TEXT` | 便签内容（point 模式默认 "Note"） | — |
-| `--clear` | 删除而非创建 | — |
-| `--author AUTHOR` | 删除时按作者过滤 | — |
-| `--json` | JSON 输出 | — |
-
-### 最佳实践
-
-1. **优先用 Mode 1.5**（`--page N --text "keyword"`）— 精准定位，避免全文误匹配
-2. 详细说明放 `--comment`，`--text` 只用短唯一关键词
-3. 先用 `extract-text` 确认该页实际文本再选关键词
-4. 清理旧标注用 `--clear`，Zotero 关闭后执行可彻底清除双层
-
-详细案例见 [annotations 示例](./examples/annotations.md)。
-
----
-
-## 创建条目 (`create-item`)
-
-通过 JSON 数据创建新条目（笔记、文献等）。支持 **hybrid write routing**：Zotero 未运行时自动走本地 SQLite 直写。
-
-### 用法
-
-```
-zot create-item (--data JSON | --from-file PATH) --if-unmodified-since-version N [--json]
-```
-
-### Hybrid write routing
-
-| 条件 | 路径 | 输出标识 |
-|------|------|----------|
-| mode = `local`/`hybrid` + Zotero **未运行** + itemType = `note` | local SQLite direct write (~50ms) | `"write_source": "local"` |
-| 其他情况 | Web API POST (~2s) | 正常 API 响应 |
-
-> 自动检测通过 `isZoteroRunning()` 检查进程状态，无需手动指定路径。
-
-### 创建笔记示例
-
-```bash
-# 准备笔记 JSON
-cat > note.json << 'EOF'
-{
-  "itemType": "note",
-  "parentItem": "SXJ9FYTK",
-  "note": "<h1>阅读总结</h1><p>这是我的笔记内容</p>"
-}
-EOF
-
-# 创建（自动选择 local 或 web 路径）
-zot create-item --from-file note.json --if-unmodified-since-version 59156 --json
-```
-
-JSON 字段说明：
-
-| 字段 | 必填 | 说明 |
-|------|------|------|
-| `itemType` | 是 | `"note"` （当前仅笔记支持 local 写入） |
-| `parentItem` | 是 (local) | 父条目 key，local 模式下用于关联 |
-| `note` | 是 (local) | HTML 格式笔记内容 |
-| `--if-unmodified-since-version N` | 是 | 库版本号（乐观锁，防止并发冲突） |
-
----
-
-## 补充材料 (`supplements`)
-
-扫描 Zotero 本地库里已经保存的附件，识别 Supplementary tables、Source data、Reporting summary、`MOESM` / `mmc` / 表格数据文件等候选。加 `--online` 时，会额外查询公开的 Zenodo、Figshare 和 Nature/Springer metadata/页面链接。
-
-### 用法
-
-```bash
-zot supplements <item-key> [--json] [--online]
-zot supplements --all [--json] [--limit N]
-```
-
-### 选项
-
-| 选项 | 说明 |
-|------|------|
-| `--json` | JSON 格式输出 |
-| `--all` | 扫描整个本地库 |
-| `--limit N` | 扫描后限制输出的候选附件数量 |
-| `--online` | 对单个条目查询公开在线 provider；不登录、不下载文件 |
-
-### 示例
-
-```bash
-zot supplements ABCD --json
-zot supplements ABCD --online --json
-zot supplements --all --json --limit 50
-```
-
-### 说明
-
-- 本地发现需要 `local` / `hybrid` 模式和本地 Zotero 数据。
-- 在线发现可在单个条目上使用公开 DOI/URL metadata；第一版 provider 为 Zenodo、Figshare、Nature/Springer。
-- Nature/Springer 会解析 `static-content.springer.com` 附件链接；如果页面只给出 `#MOESM` 锚点，会用轻量 HEAD 请求探测对应静态附件候选，但仍不下载文件内容。
-- `--online` 不支持 `--all`，避免一次性批量请求 publisher/API。
-- 在线发现只返回 metadata/link，不自动下载；私有或登录门槛内容会标成 `blocked` / `partial`。
-- 识别依据来自附件标题、文件名、路径、content type 和扩展名；不会因为父文献标题里有 "supplement" 就把普通 PDF 误判成补充材料。
-- JSON 输出包含 `kind`、`confidence`、`evidence`、`resolution_status`、`local_path`、`download_url`、`link_type` 等字段。
-
----
-
-## 附件检查与表格预览 (`inspect-attachment`)
-
-检查本地附件路径和文件名健康状态，并预览 `.xlsx` / `.xlsm` 表格附件。表格预览会返回 sheet 名、行列数、前几行内容、简单表头行猜测，以及 `legend` / `index` / `table` 标记。适合在 `supplements` 找到表格附件后快速判断该看哪个 sheet，也适合排查“找不到 PDF / 附件无法提取”的问题。
-
-### 用法
-
-```bash
-zot inspect-attachment <attachment-key> [--health] [--sheet NAME] [--head N] [--max-sheets N] [--max-columns N] [--json]
-zot inspect-attachment --item <item-key> [--health] [--head N] [--max-sheets N] [--max-columns N] [--json]
-```
-
-### 选项
-
-| 选项 | 说明 |
-|------|------|
-| `--json` | JSON 格式输出 |
-| `--sheet NAME` | 只预览指定 sheet |
-| `--head N` | 每个 sheet 返回 N 行非空预览，默认 5 |
-| `--max-sheets N` | 未指定 sheet 时最多预览 N 个 sheet，默认 5 |
-| `--max-columns N` | 每行最多预览 N 列，默认 12；真实列数仍保留在 `columns` |
-| `--item KEY` | 扫描一篇文献下所有已解析的本地 `.xlsx` 附件 |
-| `--health` | 输出附件健康诊断；与 `--item` 一起使用时扫描该条目下所有附件 |
-
-### 示例
-
-```bash
-zot inspect-attachment ATT123 --json
-zot inspect-attachment ATT123 --sheet "Supplementary Table 1" --head 20 --json
-zot inspect-attachment --item ABCD --json
-zot inspect-attachment --item ABCD --health --json
-```
-
-### 说明
-
-- 使用 streaming/read-only 读取，不修改附件文件。
-- 多个 `.xlsx` 不合并；`--item` 模式会按附件分别返回 workbook。
-- 不加 `--health` 时，`--item` 仍只预览已解析的本地表格附件；加 `--health` 时会扫描该条目下全部附件，并对非表格附件只输出健康诊断。
-- 健康诊断覆盖本地路径未解析、文件缺失、路径是目录、文件名过长、非法字符、异常空格、PDF 缺 `.pdf` 后缀、`download.pdf` / `Copy of ...` / 纯数字等泛化命名。
-- `header_row` 是启发式猜测，用于帮助 agent 快速定位，不保证一定正确。
-
----
-
-## 文本提取 (`extract-text`)
-
-从 PDF 附件中提取全文内容。
-
-### 用法
-
-```
-zot extract-text <item-key>|--all [--json] [--output-dir DIR] [--pages RANGE] [--max-chars N] [--grep TEXT] [--attachment KEY]
-```
-
-### 选项
-
-| 选项 | 说明 |
-|------|------|
-| `--json` | 结构化 JSON 输出，推荐给 AI Agent 使用。 |
-| `--output-dir DIR` / `-o DIR` | 写出 Markdown 文件到指定目录；单篇无 `-o` 时默认输出文本。 |
-| `--all` | 批量处理本地所有带 PDF 的条目，默认写 Markdown 文件。 |
-| `--pages RANGE` | 只返回指定 PDF 页，例如 `3`、`3-8`、`2,5-7`。 |
-| `--max-chars N` | 限制每个返回 text 字段最多 N 个字符。 |
-| `--grep TEXT` | 只返回包含 TEXT 的行，大小写不敏感。 |
-| `--attachment KEY` | 只返回指定附件 key 的文本。 |
-
-### 示例
-
-```bash
-zot extract-text ABCD --json
-zot extract-text ABCD --json --pages 3-8
-zot extract-text ABCD --json --pages 2,5-7 --grep methods --max-chars 12000
-zot extract-text ABCD --json --attachment ATT123 --pages 4
-zot extract-text ABCD -o ./markdown
-zot extract-text --all -o ./markdown --json
-```
-
-`--pages` 需要带页码信息的 full-text cache。新的 PyMuPDF/PDFium 提取会写入 `chunks.json`；只有 `content.txt` 的旧缓存会返回明确的重建提示，而不是做不可靠的假页码过滤。
-
-### 输出
-
-| 模式 | 说明 |
-|------|------|
-| 文本模式 | 直接输出纯文本到 stdout |
-| JSON 模式 | 返回结构化数据：`text`、`attachments[]`（含 `attachment_key`、`text`、`resolved_path` 等） |
-| Markdown 模式 | 写出 `.md` 文件；配合 `--json` 时返回 manifest（文件路径、字符数、错误），不返回全文正文 |
-
-### 依赖
-
-需要 Python + PyMuPDF（通过 `findPythonCommandFunc` 自动检测）。
-
----
-
-## 图片提取 (`extract-figures`)
-
-从 PDF 附件中提取科学插图（Figure），基于 PyMuPDF `cluster_drawings()` 矢量聚类 + 位图锚点回退。
-
-### 用法
-
-```
-zot extract-figures <item-key> [...]|--all [--output-dir DIR] [--json] [--workers N]
-```
-
-### 选项
-
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `<item-key>` [...] | 一个或多个条目 key（多篇自动并行） | — |
-| `--all` | 批量处理本地所有带 PDF 的条目 | 关闭 |
-| `--output-dir`, `-o` | 输出目录 | `./figures` |
-| `--json`, `-j` | JSON 格式输出 | 文本模式 |
-| `--workers`, `-w` | 并行 worker 数 | CPU 核数（min 2, max 8） |
-
-### 高级选项
-
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `--max-per-page`, `-m` | 每页最多保留的图数，用于限制异常碎片页输出。 | 25 |
-
-### 提取算法（v5b）
-
-**双路径策略**：
-
-| 路径 | 方法 | 适用场景 |
-|------|------|----------|
-| Path A（矢量） | `cluster_drawings()` 聚类矢量图形 | 矢量 PDF（LaTeX/Word 生成） |
-| Path B（位图回退） | 大尺寸图片锚点，未被 Path A 覆盖的独立大图 | 扫描件 / 含嵌入图片的 PDF |
-
-**过滤链**：
-
-1. 面积/尺寸过滤（< 5000pt² 或 < 120×100px）
-2. 锚点检测（大面积无锚点 = Abstract 等非 Figure 区域）
-3. 文字密度检测（文字占比 > 35% = 纯文本区）
-4. Caption 模式检测（"FIGURE N" 无锚点的 caption 块）
-5. 全页扫描跳过（> 90% 页面面积）
-6. 去重（重叠 > 50px）
-7. **Caption 吸附**：自动搜索周围 "FIGURE N" 文本并扩展包含
-
-### 文本输出示例
-
-```
-[AB123CD] 2 figure(s) in 1.6s
-  p1_fig1.png  p.1 V1292x238  23.0kB anchors=0
-  p1_fig2.png  p.1 V1292x1287  540.6kB anchors=1 +caption
-```
-
-列含义：`文件名 页码 来源(V=矢量/R=位图) 尺寸 大小 锚点数 [+caption]`
-
-### JSON 输出字段
-
-```json
-{
-  "item_key": "AB123CD",
-  "pdf": "paper.pdf",
-  "total_pages": -1,
-  "figures": [
-    {
-      "id": 1, "file": "p1_fig1.png", "page": 1,
-      "source": "cluster", "size_px": "1292x238",
-      "size_pt": "465x85", "kb": 23.0, "anchors": 0,
-      "has_caption": false, "text_ratio": 0.0, "pct_page": 8.5
-    }
-  ],
-  "elapsed_sec": 1.6, "method": "cluster_drawings_v5b"
-}
-```
-
-### 多篇并行
-
-传入多个 item-key 时自动并行处理（WaitGroup + semaphore），单篇时直接执行避免 goroutine 开销。
-
-### 依赖
-
-- mode 必须为 `local` 或 `hybrid`
-- 需要 Python + PyMuPDF
-- 仅处理第一个 PDF 附件
-
----
-
-## 其他命令索引
-
-上方 10 个章节覆盖了最常用的命令。`zot` 还有以下命令，每个命令的完整 `-h` 是最权威的参考（参见 `internal/cli/commandRegistry` 单源）。
-
-### Setup（初始化与配置）
-
-| 命令 | 用途 |
-|------|------|
-| `init` | 交互式初始化 `~/.zot/.env`（mode 选择、API key、library id、PyMuPDF 一站式） |
-| `config <sub>` | `path` / `show` / `validate` 三个子命令，校验当前凭据 |
-| `index build` | 构建 FTS5 全文索引（合并检索、`find --fulltext-only` / `show --snippet` 的前置） |
-| `setup pdf-extract` | **旧命令**，已被 `zot init --pdf` 替代（保留兼容） |
-| `version [--check]` | 显示当前版本；`--check` 查 GitHub 最新 release 并给出升级提示 |
-
-### Read（只读）
-
-| 命令 | 用途 | 关键标志 |
-|------|------|----------|
-| `find` | 主检索命令（详见上文） | `--all` / `--tag` / `--date-after` / `--snippet` / `--missing-attachment` |
-| `show` | 单条目详情（详见上文） | `--full` / `--snippet` |
-| `supplements` | 查找本地补充材料/数据附件（详见上文） | `--all` / `--json` / `--limit` |
-| `inspect-attachment` | 检查附件健康状态并预览本地 `.xlsx` 附件（详见上文） | `--item` / `--health` / `--sheet` / `--head` / `--json` |
-| `abstract` | 条目摘要，支持 **多 key 批量** | `--json` |
-| `relate` | 关系查询（详见上文） | `--aggregate` / `--dot` |
-| `export` | 导出引文（csljson/bibtex/biblatex/ris） | `--format` / `--collection` |
-| `collections` | 列出全部收藏夹（含嵌套） | `--json` |
-| `collections-top` | 仅顶级收藏夹 | `--json` |
-| `notes` | 列出笔记（可 `--query` 过滤） | `--query` / `--json` |
-| `tags` | 列出所有标签 | `--json` |
-| `searches` | 列出已保存的搜索 | `--json` |
-| `groups` | 列出可访问的群组 | `--json` |
-| `publications` | 列出 "My Publications" | `--json` |
-| `trash` | 列出回收站条目 | `--json` |
-| `deleted` | 已删除 key（Zotero API 软删除） | `--json` |
-| `changes <type> --since N` | 自版本 N 以来的变更（`items` / `items-top` / `collections` / `searches`） | `--since` / `--if-modified-since-version` |
-| `stats` | 库内条目/收藏夹/搜索/附件/笔记计数 | `--json` |
-| `overview` | 一站式库概览（**Agent 入口**）：stats + Top 收藏夹 + Top 标签 + 最近条目 + FTS 状态 | `--json` |
-| `key-info [KEY]` | API key 权限与所属用户查询 | `--json` |
-| `schema <sub>` | 元数据 schema 自省（`types` / `fields` / `creator-types` / `fields-for` / `creator-types-for` / `template`） | `--json` |
-| `extract-text` | 从 PDF 提取全文（详见上文） | `--json` / `--all` / `--output-dir` / `--pages` / `--grep` / `--max-chars` / `--attachment` |
-| `extract-figures` | 从 PDF 提取科学插图（详见上文） | `--all` / `--output-dir` / `--workers` / `--json` |
-| `open` | 在系统默认 PDF 阅读器中打开条目附件 | — |
-| `select` | 在 Zotero UI 中定位条目 | — |
-
-### Annotate（标注操作）
-
-| 命令 | 用途 |
-|------|------|
-| `annotations` | 读取/清除 PDF 标注（详见上文；`--clear` 双层删除） |
-| `annotate` | 写入 PDF 标注（详见上文；Mode 1 / 1.5 / 2） |
-
-### Write（写操作 — 需 `ZOT_ALLOW_WRITE=1`）
-
-所有写命令接受 `--data <json>` / `--from-file <path>` 之一，并通过 `--if-unmodified-since-version N` 做乐观锁。
-
-| 命令 | 用途 |
-|------|------|
-| `create-item` | 创建条目（笔记 / 普通条目）。hybrid 模式下 Zotero 关闭 + itemType=note 走 SQLite 直写 |
-| `update-item` | 局部更新条目（patch 语义） |
-| `add-tag` | 批量给条目打标签 |
-| `remove-tag` | 批量移除标签 |
-| `create-collection` | 创建收藏夹 |
-| `update-collection` | 局部更新收藏夹 |
-| `create-search` | 创建已保存搜索 |
-| `update-search` | 局部更新已保存搜索 |
-
-### Destructive（不可逆 — 需 `ZOT_ALLOW_WRITE=1` + `--if-unmodified-since-version`）
-
-| 命令 | 用途 |
-|------|------|
-| `delete-item` | 删除条目 |
-| `delete-collection` | 删除收藏夹 |
-| `delete-search` | 删除已保存搜索 |
-
-> 删除前必须 `get-show` 复述目标 key → 无歧义确认 → 有不确定先询问。`--json` 模式自动跳过确认提示。
-
----
-
-## 输出 JSON 字段出处速查
-
-为方便 agent 写解析逻辑，所有 JSON 字段定义都集中在三个 Go 结构体里（不要在文档里逐字段列）：
-
-| 命令 | lean 模式 | full 模式 / 原始结构 |
-|------|----------|-------------------|
-| `find` / `show` / `abstract` | `internal/cli/lean.go:8` (`LeanItem`) | `internal/domain/types.go:3` (`Item`) |
-| `relate --aggregate` | — | `internal/domain/types.go:97` (`AggregatedRelations`) |
-| 错误信封 | `internal/cli/types.go:35` (`errorData`) | — |
-
-任何字段名疑问，去看 struct tag，不要凭记忆。
-
-
----
+- `setup` → `config init`
+- `abstract` → `item show`
+- `key-info` → `config check`
+- `select`：平台特定 Zotero Desktop bridge，不属于 CLI v2
+- `relate`：实验性关系图语法，没有稳定 v2 替代

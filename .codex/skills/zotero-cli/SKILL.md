@@ -13,43 +13,42 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 2. 优先使用 `.\zot.exe`（如果二进制文件存在且版本足够）。
 3. 验证源码变更或二进制缺失时回退到 `go run .\cmd\zot ...`。
 4. Agent 工作流优先使用 `--json`。
-5. 假设凭据可用前先运行 `config validate`。
+5. 假设凭据可用前先运行 `config check`。
 
 ## 读优先默认命令
 
 ```powershell
-.\zot.exe overview --json                   # 一站式库概览（Agent 入口推荐）
-.\zot.exe stats --json
+.\zot.exe lib show --json                   # 一站式库概览（Agent 入口推荐）
+.\zot.exe lib stats --json
 .\zot.exe find --all --json
-.\zot.exe find --all --sort dateAdded --direction desc --limit 10 --json  # 最近入库
+.\zot.exe find --all --sort dateAdded --order desc --limit 10 --json  # 最近入库
 .\zot.exe find "query" --json
 .\zot.exe show ITEMKEY --json
-.\zot.exe ref ITEMKEY --json                   # PMC/PubMed 核心 + Europe PMC 自动补全
+.\zot.exe ref show ITEMKEY --json              # PMC/PubMed 核心 + Europe PMC 自动补全
 .\zot.exe ref build --workers 3 --json         # 全库增量参考文献索引
 .\zot.exe ref resolve --workers 8 --json        # 并行将参考文献匹配回本地条目
-.\zot.exe ref search "query" --json             # 搜索参考文献与引用上下文
-.\zot.exe ref search "query" --field mesh --json # 精确搜索 PubMed MeSH
+.\zot.exe ref find "query" --json             # 搜索参考文献与引用上下文
+.\zot.exe ref find "query" --field mesh --json # 精确搜索 PubMed MeSH
 .\zot.exe ref related ITEMKEY --limit 20 --json   # PubMed 官方相似文献
 .\zot.exe ref links ITEMKEY --json                # 合并 NCBI 与 Europe PMC 生物医学资源
-.\zot.exe ref cited-by ITEMKEY --external --json  # Europe PMC 外部被引网络
-.\zot.exe ref annotations ITEMKEY --json          # Europe PMC 实体/关系并写入按需索引
+.\zot.exe ref cited ITEMKEY --external --json  # Europe PMC 外部被引网络
+.\zot.exe ref entities ITEMKEY --json          # Europe PMC 实体/关系并写入按需索引
 .\zot.exe ref profile ITEMKEY --json              # 版本、评价、基金与开放获取画像
-.\zot.exe ref unsupported --json                # 查看 NCBI 不支持、待 GROBID 的条目
-.\zot.exe ref cited-by ITEMKEY --json            # 查询哪些已索引条目引用该文献
-.\zot.exe ref contexts ITEMKEY --json            # 查询 PMC 正文引用语境
-.\zot.exe ref contexts build --workers 3 --json # 补建历史 PMC 引用语境
-.\zot.exe ref grobid status --json              # 实验性：检查可选 PDF 后备
-.\zot.exe ref grobid build --limit 5 --json     # 实验性：显式小批量解析
-.\zot.exe export --collection COLLKEY --format csljson --json
-.\zot.exe annotations ITEMKEY --json          # 读取 PDF 标注（双源）
-.\zot.exe select ITEMKEY                     # 跳转到 Zotero UI 选中条目
+.\zot.exe ref status --unsupported --json                # 查看 NCBI 不支持、待 GROBID 的条目
+.\zot.exe ref cited ITEMKEY --json            # 查询哪些已索引条目引用该文献
+.\zot.exe ref ctx ITEMKEY --json            # 查询 PMC 正文引用语境
+.\zot.exe ref build --contexts --workers 3 --json # 补建历史 PMC 引用语境
+.\zot.exe ref status --grobid --json              # 实验性：检查可选 PDF 后备
+.\zot.exe ref build --grobid --limit 5 --json     # 实验性：显式小批量解析
+.\zot.exe item export --collection COLLKEY --as csljson --json
+.\zot.exe ann list ITEMKEY --json          # 读取 PDF 标注（双源）
 ```
 
-`ref` 路由规则：PMC JATS 优先；没有 PMC 时使用 PubMed ELink，并以 Europe PMC references 补充非 PMID 引用。Europe PMC 失败不得阻断 NCBI 核心结果。`ref annotations` 是 Europe PMC 文本挖掘实体，顶层 `annotations` 才是 Zotero/PDF 人工标注。完整说明见 `docs/user/references.md`。
+`ref` 路由规则：PMC JATS 优先；没有 PMC 时使用 PubMed ELink，并以 Europe PMC references 补充非 PMID 引用。Europe PMC 失败不得阻断 NCBI 核心结果。`ref entities` 是 Europe PMC 文本挖掘实体，顶层 `annotations` 才是 Zotero/PDF 人工标注。完整说明见 `docs/user/references.md`。
 
 ## 全文相关决策规则
 
-对“全文”请求，优先区分 **检索**、**预览**、**整篇读取** 三种意图，不要默认直接跑 `extract-text`。
+对“全文”请求，优先区分 **检索**、**预览**、**整篇读取** 三种意图，不要默认直接跑 `pdf text`。
 
 ### 1. 基于全文检索
 
@@ -68,7 +67,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 默认规则：
 
 - local / hybrid 下优先走这条路径
-- 已有 snippet 足够回答时，不再升级到 `extract-text`
+- 已有 snippet 足够回答时，不再升级到 `pdf text`
 - 需要更多结果时再显式增加 `--limit`
 
 ### 2. 单篇正文预览
@@ -87,7 +86,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 
 默认规则：
 
-- 能用 `show --snippet` 回答时，不直接跑 `extract-text`
+- 能用 `show --snippet` 回答时，不直接跑 `pdf text`
 - 需要时可先配合 `show ITEMKEY --json` 看摘要、附件、标签、元数据
 
 ### 3. 整篇正文读取
@@ -95,7 +94,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 只有在用户明确需要整篇正文，或 snippet / abstract 不足以完成任务时，才使用：
 
 ```powershell
-.\zot.exe extract-text ITEMKEY --json
+.\zot.exe pdf text ITEMKEY --json
 ```
 
 适用场景：
@@ -106,7 +105,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 
 默认规则：
 
-- `extract-text` 是重操作，不要把它当作全文检索的默认入口
+- `pdf text` 是重操作，不要把它当作全文检索的默认入口
 - 它会优先读取 `.zotero_cli/fulltext` 缓存；只有缓存 miss 时才重新提取
 - 除非用户明确要整篇，或轻量路径不够，否则不要直接调用
 
@@ -116,7 +115,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 
 1. `find --fulltext --snippet`
 2. `show ITEMKEY --snippet`
-3. `extract-text ITEMKEY`
+3. `pdf text ITEMKEY`
 
 如果用户需求仍然模糊，默认先走更轻的路径，而不是先拿整篇正文。
 
@@ -127,14 +126,14 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 用户问“最近入库”“今天刚添加”“最新加入 Zotero 的文献”时，用 `dateAdded`，不要用发表日期 `date`：
 
 ```powershell
-.\zot.exe find --all --sort dateAdded --direction desc --limit 10 --json
-.\zot.exe find --all --added-since 7d --sort dateAdded --direction desc --json
+.\zot.exe find --all --sort dateAdded --order desc --limit 10 --json
+.\zot.exe find --all --added-since 7d --sort dateAdded --order desc --json
 ```
 
 如果只是快速人工扫标题，优先用文本模式的轻量字段：
 
 ```powershell
-.\zot.exe find --all --sort dateAdded --direction desc --limit 10 --include-fields title,date_added,container
+.\zot.exe find --all --sort dateAdded --order desc --limit 10 --include-fields title,date_added,container
 ```
 
 注意：`--include-fields` 主要影响文本模式；`--json` 默认返回完整 Item 结构。
@@ -144,7 +143,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 用户问“某个时间范围内发表的文献”时，用发表日期过滤：
 
 ```powershell
-.\zot.exe find --all --date-after 2026-03 --date-before 2026-03 --sort date --direction desc --json
+.\zot.exe find --all --date-after 2026-03 --date-before 2026-03 --sort date --order desc --json
 ```
 
 日期输入支持 `YYYY` / `YYYY-MM` / `YYYY-MM-DD`。local/hybrid 会兼容 Zotero 常见的部分日期字符串，如 `YYYY-MM-00 YYYY-MM` 和 `MM/YYYY`。
@@ -154,7 +153,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 用户问“最近修改/最近更新过元数据”时，用：
 
 ```powershell
-.\zot.exe find --all --modified-within 7d --sort dateModified --direction desc --json
+.\zot.exe find --all --modified-within 7d --sort dateModified --order desc --json
 ```
 
 利用 `find` 的过滤能力减少额外请求：
@@ -181,8 +180,8 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 **输出控制：**
 - `--include-fields url,doi,version` — 文本模式指定额外字段；JSON 默认返回完整 Item
 - `--full` — 完整字段 + 附件详情
-- `--sort FIELD` + `--direction asc|desc` — 排序
-- `--start N` + `--limit N` — 分页
+- `--sort FIELD` + `--order asc|desc` — 排序
+- `--offset N` + `--limit N` — 分页
 
 **全文检索：**
 - `--fulltext` — 合并元数据与 FTS5 全文结果；local/hybrid 下有 query 且非 `--all` 时可自动启用
@@ -200,45 +199,43 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 
 ```powershell
 # 提取 PDF 正文（重操作；先读缓存，miss 时才重新提取）
-.\zot.exe extract-text ITEMKEY --json
+.\zot.exe pdf text ITEMKEY --json
 
 # 双源读取标注
-.\zot.exe annotations ITEMKEY --json
-.\zot.exe annotations ITEMKEY --type highlight --page 3 --json
+.\zot.exe ann list ITEMKEY --json
+.\zot.exe ann list ITEMKEY --type highlight --page 3 --json
 # 删除 PDF 文件内标注
-.\zot.exe annotations ITEMKEY --clear --type highlight
+.\zot.exe ann delete ITEMKEY --type highlight --yes
 
 # 写入标注到 PDF
-.\zot.exe annotate ITEMKEY --text "关键概念" --color red --comment "重要"
-.\zot.exe annotate ITEMKEY --text "speciation" --type underline --color blue
+.\zot.exe ann new ITEMKEY --text "关键概念" --color red --comment "重要"
+.\zot.exe ann new ITEMKEY --text "speciation" --type underline --color blue
 
 # 与 Zotero 桌面端联动
-.\zot.exe open ITEMKEY --page 5        # 阅读器中打开 PDF
-.\zot.exe select ITEMKEY               # 主界面选中条目
+.\zot.exe pdf open ITEMKEY --page 5        # 阅读器中打开 PDF
 ```
 
 ## 笔记查询
 
 ```powershell
-.\zot.exe notes --json
-.\zot.exe notes --query "CRISPR" --limit 20 --json
+.\zot.exe note list --json
+.\zot.exe note find "CRISPR" --limit 20 --json
 ```
 
 ## 写操作安全
 
 以下命令属于**写操作**：
 
-- `create-item` / `update-item`
-- `create-items` / `update-items`
-- `add-tag` / `remove-tag`
-- `create-collection` / `update-collection`
-- `create-search` / `update-search`
-- `annotate`（向 PDF 文件写入高亮/笔记）
+- `item new` / `item edit` / `item tag` / `item untag`
+- `coll new` / `coll edit` / `coll add` / `coll remove`
+- `note new` / `note edit`
+- `search new` / `search edit`
+- `ann new`（向 PDF 文件写入高亮/笔记）
 
 以下命令属于**破坏性操作**：
 
-- `delete-item` / `delete-items`
-- `delete-collection` / `delete-search`
+- `item delete` / `coll delete` / `note delete` / `search delete`
+- `ann delete`
 
 执行任何写操作前：
 
@@ -248,7 +245,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 
 > **remote 模式**：当配置了 `ZOT_API_KEY` 时，remote 模式（remote+web）同样支持写操作，遵循与 web 模式相同的写/删安全规范。
 
-> **补充**：`annotations` / `annotate` 属于例外。它们在 pure remote 下也可通过远端 `zot server` 执行，不要求客户端配置 `ZOT_API_KEY`；是否允许写入/清除由服务端 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 控制。
+> **补充**：`ann list/new/delete` 属于例外。它们在 pure remote 下也可通过远端 `zot server` 执行，不要求客户端配置 `ZOT_API_KEY`；是否允许写入/删除由服务端 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 控制。
 
 执行任何删除操作前：
 
@@ -263,12 +260,12 @@ CLI 配置存储在 `~/.zot/.env`。
 常用命令：
 
 ```powershell
-.\zot.exe init                    # 一键初始化（推荐，含模式选择和可选 PyMuPDF 安装）
-.\zot.exe init --mode hybrid --api-key ...  # 非交互模式
-.\zot.exe init --mode remote --server-addr http://192.168.1.100:8021
-.\zot.exe sync --server-addr http://host:8021   # 整库一次性同步到本地 ~/.zot/sync/，之后 ZOT_MODE=local 离线用
+.\zot.exe config init                    # 一键初始化（推荐，含模式选择和可选 PyMuPDF 安装）
+.\zot.exe config init --mode hybrid --api-key ...  # 非交互模式
+.\zot.exe config init --mode remote --server-addr http://192.168.1.100:8021
+.\zot.exe sync pull --server-addr http://host:8021 # 整库同步到本地 ~/.zot/sync/，之后 ZOT_MODE=local 离线用
 .\zot.exe config show       # 查看当前配置
-.\zot.exe config validate   # 校验配置有效性
+.\zot.exe config check   # 校验配置有效性
 ```
 
 配置缺失时，主动初始化而不是绕过错误。
@@ -294,7 +291,7 @@ CLI 配置存储在 `~/.zot/.env`。
 
 - `--snippet` 是布尔开关（启用片段预览）；未指定 `--limit` 时回退 50 条
 - local/hybrid 下有 query 且 FTS 有数据时自动启用全文检索；`--all` / 纯过滤列表不会自动走全文索引
-- `extract-text` 结果有缓存，重复提取同一 PDF 直接命中
+- `pdf text` 结果有缓存，重复提取同一 PDF 直接命中
 - 高频脚本遇 `429` 会自动退避+抖动，但仍应主动降速
 
 ## 参考文档

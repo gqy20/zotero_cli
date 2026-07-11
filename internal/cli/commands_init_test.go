@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"zotero_cli/internal/config"
 )
 
 func TestRunInitInteractiveWebMode(t *testing.T) {
@@ -356,50 +354,5 @@ func TestRunInitRemoteWithoutWebAPIInteractive(t *testing.T) {
 				t.Fatalf("did not expect non-empty ZOT_API_KEY in pure remote config, got %q", val)
 			}
 		}
-	}
-}
-
-func TestRemoteClientConfig_RemoteWithAPIKey(t *testing.T) {
-	cfg := config.Config{
-		Mode:       "remote",
-		ServerAddr: "http://localhost:8021",
-		APIKey:     "mykey",
-		LibraryID:  "12345",
-	}
-	result, err := testCLI.remoteClientConfig(cfg)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if result.Mode != "web" {
-		t.Fatalf("expected mode to be normalized to web, got %q", result.Mode)
-	}
-	if result.APIKey != "mykey" {
-		t.Fatalf("expected API key preserved, got %q", result.APIKey)
-	}
-}
-
-func TestRemoteClientConfig_RemoteWithoutAPIKey(t *testing.T) {
-	cfg := config.Config{
-		Mode:       "remote",
-		ServerAddr: "http://localhost:8021",
-	}
-	_, err := testCLI.remoteClientConfig(cfg)
-	if err == nil {
-		t.Fatal("expected error for remote mode without API key")
-	}
-	if !strings.Contains(err.Error(), "without API key") {
-		t.Fatalf("expected API key hint in error, got %q", err.Error())
-	}
-}
-
-func TestRemoteClientConfig_RemoteWithOnlyAPIKey(t *testing.T) {
-	cfg := config.Config{
-		Mode:       "remote",
-		ServerAddr: "http://localhost:8021",
-		APIKey:     "mykey",
-	}
-	_, err := testCLI.remoteClientConfig(cfg)
-	if err == nil {
-		t.Fatal("expected error when library_id is missing")
 	}
 }

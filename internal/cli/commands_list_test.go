@@ -515,26 +515,13 @@ func TestRunVersionsTextShowsNotModifiedMessageOn304(t *testing.T) {
 }
 
 func TestRunKeyInfoJSON(t *testing.T) {
-	configRoot := t.TempDir()
-	setTestConfigDir(t, configRoot)
-	writeTestConfig(t, configRoot)
-
-	serverURL, cleanup := newTestAPI(t)
-	defer cleanup()
-	t.Setenv("ZOT_BASE_URL", serverURL)
-
 	stdout, stderr := captureOutput(t)
 	exitCode := Run([]string{"key-info", "secret", "--json"})
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	if exitCode != ExitUsage {
+		t.Fatalf("expected exit code %d, got %d; stderr=%q", ExitUsage, exitCode, stderr.String())
 	}
-
-	var got map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
-		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
-	}
-	if got["command"] != "key-info" {
-		t.Fatalf("unexpected command: %#v", got["command"])
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "config check") {
+		t.Fatalf("unexpected redirect output: stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
 

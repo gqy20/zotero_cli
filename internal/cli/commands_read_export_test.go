@@ -684,31 +684,10 @@ func TestRunStatsTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
 }
 
 func TestRunRelateTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
-	configRoot := t.TempDir()
-	setTestConfigDir(t, configRoot)
-	writeTestConfig(t, configRoot)
-
-	previousNewReader := testCLI.backendNewReader
-	t.Cleanup(func() {
-		testCLI.backendNewReader = previousNewReader
-	})
-	testCLI.backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
-		return stubMetadataReader{
-			relations: []domain.Relation{{Predicate: "dc:relation", Direction: "outgoing", Target: domain.ItemRef{Key: "SNAP2"}}},
-			meta:      backend.ReadMetadata{ReadSource: "snapshot", SQLiteFallback: true},
-		}, nil
-	}
-
 	stdout, stderr := captureOutput(t)
 	exitCode := Run([]string{"relate", "SNAP1"})
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
-	}
-	if !strings.Contains(stderr.String(), "using snapshot fallback") {
-		t.Fatalf("expected snapshot warning in stderr, got %q", stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "Explicit Relations: 1") {
-		t.Fatalf("expected relate output to include relation count, got %q", stdout.String())
+	if exitCode != ExitUsage || stdout.Len() != 0 || !strings.Contains(stderr.String(), "experimental relation-graph") {
+		t.Fatalf("unexpected redirect output: code=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
 	}
 }
 

@@ -33,26 +33,26 @@ Zotero CLI 的标注系统操作 **两层** 独立数据源：
 
 ```bash
 # 查看某文献的所有标注（双源）
-zot annotations ABC123DE
+zot ann list ABC123DE
 
 # JSON 输出（推荐 Agent 使用）
-zot annotations ABC123DE --json
+zot ann list ABC123DE --json
 ```
 
 ### 过滤选项
 
 ```bash
 # 仅查看高亮
-zot annotations KEY --type highlight
+zot ann list KEY --type highlight
 
 # 仅查看第 3 页的标注
-zot annotations KEY --page 3
+zot ann list KEY --page 3
 
 # 按作者过滤（DB 层有效）
-zot annotations KEY --author "Zotero User"
+zot ann list KEY --author "Zotero User"
 
 # 组合过滤
-zot annotations KEY --type highlight --page 5
+zot ann list KEY --type highlight --page 5
 ```
 
 ### 输出示例（JSON）
@@ -115,7 +115,7 @@ zot annotations KEY --type highlight --page 5
 
 ```bash
 # 在整篇 PDF 中搜索文本并高亮（每处匹配都创建标注）
-zot annotate KEY --text "hybrid speciation" --color yellow
+zot ann new KEY --text "hybrid speciation" --color yellow
 ```
 
 > **注意**：会匹配文档中**所有出现位置**。如需精确定位到某一页，使用 Mode 1.5。
@@ -124,7 +124,7 @@ zot annotate KEY --text "hybrid speciation" --color yellow
 
 ```bash
 # 仅在第 4 页搜索关键词并高亮，详细说明写在 comment 中
-zot annotate KEY --page 4 --text "GATK VariantFiltration" \
+zot ann new KEY --page 4 --text "GATK VariantFiltration" \
   --color yellow \
   --comment "HHS步骤1: SNP calling质控管线 — 6步硬过滤..."
 ```
@@ -138,10 +138,10 @@ zot annotate KEY --page 4 --text "GATK VariantFiltration" \
 
 ```bash
 # 在指定页面的精确矩形区域创建高亮
-zot annotate KEY --page 3 --rect 100,200,350,220 --color red
+zot ann new KEY --page 3 --rect 100,200,350,220 --color red
 
 # 在指定位置创建便签笔记（point 模式自动填充默认 comment）
-zot annotate KEY --page 5 --point 300,400 --comment "重要发现"
+zot ann new KEY --page 5 --point 300,400 --comment "重要发现"
 ```
 
 ### 样式选项
@@ -166,22 +166,22 @@ zot annotate KEY --page 5 --point 300,400 --comment "重要发现"
 
 ```bash
 # P4: SNP 质控管线
-zot annotate SXJ9FYTK --page 4 --text "GATK VariantFiltration" \
+zot ann new SXJ9FYTK --page 4 --text "GATK VariantFiltration" \
   --color yellow \
   --comment "HHS步骤1: SNP calling质控管线"
 
 # P5: 渗入检测套件
-zot annotate SXJ9FYTK --page 5 --text "QuIBL Analysis" \
+zot ann new SXJ9FYTK --page 5 --text "QuIBL Analysis" \
   --color orange \
   --comment "HHS步骤2: QuIBL/D-statistic/HyDe/LOTER"
 
 # P6: 核心方法 - HKA test
-zot annotate SXJ9FYTK --page 6 --text "HKA test" \
+zot ann new SXJ9FYTK --page 6 --text "HKA test" \
   --color red \
   --comment "HHS核心: 交替继承等位基因鉴定"
 
 # P8: 全基因组冲突信号
-zot annotate SXJ9FYTK --page 8 --text "phylogenetic conflict" \
+zot ann new SXJ9FYTK --page 8 --text "phylogenetic conflict" \
   --color cyan \
   --comment "HHS步骤4: 多证据收敛排除纯ILS"
 ```
@@ -196,16 +196,16 @@ zot annotate SXJ9FYTK --page 8 --text "phylogenetic conflict" \
 
 ```bash
 # 删除所有标注（PDF + DB）
-zot annotations KEY --clear
+zot ann delete KEY --yes
 
 # 通过 annotate 命令也可清除
-zot annotate KEY --clear
+zot ann delete KEY --yes
 
 # 按条件删除
-zot annotations KEY --clear --type highlight    # 仅删高亮
-zot annotations KEY --clear --page 5           # 仅删第5页
-zot annotations KEY --clear --author "User"    # 按作者删除
-zot annotations KEY --clear --type note --page 3  # 组合条件
+zot ann delete KEY --type highlight --yes    # 仅删高亮
+zot ann delete KEY --page 5 --yes            # 仅删第5页
+zot ann delete KEY --author "User" --yes     # 按作者删除
+zot ann delete KEY --type note --page 3 --yes  # 组合条件
 ```
 
 ### 执行结果示例
@@ -259,7 +259,7 @@ PDF: D:\zotero\...\paper.pdf
 
 PDF 文本层与显示文本可能不一致（CJK 字体子集、连字、特殊编码）。建议：
 1. 使用**短且唯一**的关键词（英文优先）
-2. 先用 `extract-text` 确认该页实际文本内容
+2. 先用 `pdf text` 确认该页实际文本内容
 3. 用 `--page N` 缩小搜索范围减少误匹配
 
 ### Q: `--point x,y` 和 `--rect x0,y0,x1,y2` 的区别？
@@ -271,11 +271,11 @@ PDF 文本层与显示文本可能不一致（CJK 字体子集、连字、特殊
 
 > **注意**：`--point` 创建的是**浮动便签**，不会附着在具体文本上。如需在特定句子旁标注，优先用 `--page N --text "keyword"`。
 
-### Q: `annotate --clear` 和 `annotations --clear` 有区别吗？
+### Q: 如何删除标注？
 
 功能完全相同，都会执行双层删除。选择哪个取决于使用习惯：
-- `annotate --clear` — 如果正在做标注工作流
-- `annotations --clear` — 如果正在查看/管理标注
+- 统一使用显式的 `zot ann delete KEY [filters] --yes`。
+- `ann list` 只读，`ann new` 只创建，不再用 `--clear` 混合读写语义。
 
 ### Q: DB 层的 30 条旧标注怎么来的？如何彻底清除？
 
@@ -284,10 +284,10 @@ PDF 文本层与显示文本可能不一致（CJK 字体子集、连字、特殊
 ```bash
 # 1. 关闭 Zotero
 # 2. 执行清除（此时双层均可删除）
-zot annotate KEY --clear
+zot ann delete KEY --yes
 
 # 3. 验证清空
-zot annotations KEY --json | python -c "import sys,json; d=json.load(sys.stdin); print(f'PDF:{d[\"data\"][\"total_pdf\"]} DB:{d[\"data\"][\"total_db\"]}')"
+zot ann list KEY --json | python -c "import sys,json; d=json.load(sys.stdin); print(f'PDF:{d[\"data\"][\"total_pdf\"]} DB:{d[\"data\"][\"total_db\"]}')"
 ```
 
 预期输出：`PDF:0 DB:0`

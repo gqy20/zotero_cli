@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -74,5 +75,9 @@ func (s SchemaService) Show(ctx context.Context, itemType string) (Result, error
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Data: template, Meta: map[string]any{"item_type": itemType}}, nil
+	formatted, err := json.MarshalIndent(template, "", "  ")
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{Data: template, Meta: map[string]any{"item_type": itemType}, Text: string(formatted)}, nil
 }

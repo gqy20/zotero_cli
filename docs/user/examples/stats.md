@@ -3,7 +3,7 @@
 ## 命令
 
 ```bash
-zot stats --json
+zot lib stats --json
 ```
 
 ## 输出
