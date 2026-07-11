@@ -91,18 +91,8 @@ func (c *CLI) dispatch(name string, args []string) int {
 		return c.runSync(args)
 	case "ref":
 		return c.runRef(args)
-	case "inspect-attachment":
-		return c.runInspectAttachment(args)
-	case "extract-text":
-		return c.runExtractText(args)
-	case "extract-figures":
-		return c.runExtractFigures(args)
-	case "open":
-		return c.runOpen(args)
 	case "select":
 		return c.runSelect(args)
-	case "annotations":
-		return c.runAnnotations(args)
 	case "abstract":
 		return c.runAbstract(args)
 	case "relate":
@@ -111,8 +101,6 @@ func (c *CLI) dispatch(name string, args []string) int {
 		return c.runSchema(args)
 	case "key-info":
 		return c.runKeyInfo(args)
-	case "annotate":
-		return c.runAnnotate(args)
 	}
 	fmt.Fprintf(c.stderr, "unknown command: %s\n\n", name)
 	c.printUsage()

@@ -57,6 +57,36 @@ func TestStageThreeCanonicalCommandsExist(t *testing.T) {
 	}
 }
 
+func TestStageFourCanonicalCommandsExist(t *testing.T) {
+	root := testCLI.newRootCommand()
+	for _, path := range [][]string{{"file", "show"}, {"file", "check"}, {"pdf", "text"}, {"pdf", "figs"}, {"pdf", "open"}, {"ann", "list"}, {"ann", "new"}, {"ann", "delete"}} {
+		cmd, remaining, err := root.Find(path)
+		if err != nil || len(remaining) != 0 || cmd.Name() != path[len(path)-1] {
+			t.Fatalf("find %v = %q remaining=%v err=%v", path, cmd.CommandPath(), remaining, err)
+		}
+	}
+}
+
+func TestStageFourLegacyTranslation(t *testing.T) {
+	tests := []struct{ legacy, canonical []string }{
+		{[]string{"inspect-attachment", "ATT1"}, []string{"file", "show", "ATT1"}},
+		{[]string{"inspect-attachment", "--item", "I1", "--health"}, []string{"file", "check", "--item", "I1"}},
+		{[]string{"extract-text", "I1", "--pages", "2"}, []string{"pdf", "text", "I1", "--pages", "2"}},
+		{[]string{"extract-figures", "I1", "--workers", "2"}, []string{"pdf", "figs", "I1", "--workers", "2"}},
+		{[]string{"open", "I1", "--page", "4"}, []string{"pdf", "open", "I1", "--page", "4"}},
+		{[]string{"annotations", "I1", "--type", "note"}, []string{"ann", "list", "I1", "--type", "note"}},
+		{[]string{"annotations", "I1", "--clear", "--page", "2"}, []string{"ann", "delete", "I1", "--page", "2", "--yes"}},
+		{[]string{"annotate", "I1", "--from-file", "ann.json"}, []string{"ann", "new", "I1", "--from", "ann.json"}},
+		{[]string{"annotate", "I1", "--clear", "--type", "highlight"}, []string{"ann", "delete", "I1", "--type", "highlight", "--yes"}},
+	}
+	for _, tt := range tests {
+		got, ok := translateStageOneArgs(tt.legacy)
+		if !ok || !reflect.DeepEqual(got, tt.canonical) {
+			t.Fatalf("translate %v = %v, %t; want %v", tt.legacy, got, ok, tt.canonical)
+		}
+	}
+}
+
 func TestStageThreeLegacyTranslation(t *testing.T) {
 	tests := []struct {
 		legacy, canonical []string

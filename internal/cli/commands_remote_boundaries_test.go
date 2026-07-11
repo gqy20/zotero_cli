@@ -89,7 +89,7 @@ func TestRunAnnotateRemoteUsesServer(t *testing.T) {
 	}
 
 	_, stderr := captureOutput(t)
-	exitCode := Run([]string{"annotate", "ITEM123", "--text", "hello", "--json"})
+	exitCode := Run([]string{"ann", "new", "ITEM123", "--text", "hello", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d, stderr=%q", exitCode, stderr.String())
 	}

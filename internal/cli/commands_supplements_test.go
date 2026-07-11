@@ -124,7 +124,7 @@ func TestRunInspectAttachmentLocalJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
-	if got["command"] != "inspect-attachment" {
+	if got["command"] != "file show" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 	data, ok := got["data"].([]any)
@@ -161,7 +161,7 @@ func TestRunInspectAttachmentItemJSON(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"inspect-attachment", "--item", "ITEM1234", "--json"})
+	exitCode := Run([]string{"file", "show", "--item", "ITEM1234", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

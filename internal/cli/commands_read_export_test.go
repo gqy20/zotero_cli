@@ -459,7 +459,7 @@ func TestRunExtractTextLocalJSON(t *testing.T) {
 	}
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"extract-text", "ITEM123", "--json"})
+	exitCode := Run([]string{"pdf", "text", "ITEM123", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -468,7 +468,7 @@ func TestRunExtractTextLocalJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
-	if got["command"] != "extract-text" {
+	if got["command"] != "pdf text" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 	meta, ok := got["meta"].(map[string]any)

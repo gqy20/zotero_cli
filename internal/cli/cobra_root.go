@@ -41,7 +41,7 @@ func translateStageOneArgs(args []string) ([]string, bool) {
 	switch args[0] {
 	case "version":
 		return args, true
-	case "lib", "item", "coll", "tag", "note", "search", "group":
+	case "lib", "item", "coll", "tag", "note", "search", "group", "file", "pdf", "ann":
 		return args, true
 	case "init":
 		return append([]string{"config", "init"}, args[1:]...), true
@@ -81,6 +81,18 @@ func translateStageOneArgs(args []string) ([]string, bool) {
 		return append([]string{"item", "supp"}, args[1:]...), true
 	case "export":
 		return translateLegacyExport(args[1:]), true
+	case "inspect-attachment":
+		return translateLegacyFile(args[1:]), true
+	case "annotations":
+		return translateLegacyAnnotations(args[1:]), true
+	case "annotate":
+		return translateLegacyAnnotate(args[1:]), true
+	case "extract-text":
+		return append([]string{"pdf", "text"}, args[1:]...), true
+	case "extract-figures":
+		return append([]string{"pdf", "figs"}, args[1:]...), true
+	case "open":
+		return append([]string{"pdf", "open"}, args[1:]...), true
 	case "create-item":
 		return append([]string{"item", "new"}, translateWriteFlags(args[1:])...), true
 	case "update-item":
@@ -119,6 +131,60 @@ func translateStageOneArgs(args []string) ([]string, bool) {
 		}
 	}
 	return nil, false
+}
+
+func translateLegacyFile(args []string) []string {
+	action := "show"
+	rest := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--health" {
+			action = "check"
+			continue
+		}
+		rest = append(rest, arg)
+	}
+	return append([]string{"file", action}, rest...)
+}
+
+func translateLegacyAnnotations(args []string) []string {
+	action := "list"
+	confirmed := false
+	rest := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--clear" {
+			action = "delete"
+			confirmed = true
+			continue
+		}
+		rest = append(rest, arg)
+	}
+	if confirmed {
+		rest = append(rest, "--yes")
+	}
+	return append([]string{"ann", action}, rest...)
+}
+
+func translateLegacyAnnotate(args []string) []string {
+	action := "new"
+	confirmed := false
+	rest := make([]string, 0, len(args))
+	for _, arg := range args {
+		switch {
+		case arg == "--clear":
+			action = "delete"
+			confirmed = true
+		case arg == "--from-file":
+			rest = append(rest, "--from")
+		case strings.HasPrefix(arg, "--from-file="):
+			rest = append(rest, "--from="+strings.TrimPrefix(arg, "--from-file="))
+		default:
+			rest = append(rest, arg)
+		}
+	}
+	if confirmed {
+		rest = append(rest, "--yes")
+	}
+	return append([]string{"ann", action}, rest...)
 }
 
 func translateLegacyExport(args []string) []string {
@@ -306,6 +372,7 @@ func (c *CLI) newRootCommand() *cobra.Command {
 
 	root.AddCommand(c.newVersionCommand(opts), c.newConfigCommand(opts))
 	c.addReadCommands(root, opts)
+	c.addContentCommands(root, opts)
 	return root
 }
 

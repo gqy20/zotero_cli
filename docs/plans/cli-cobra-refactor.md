@@ -755,7 +755,7 @@ Cobra → typed request → app service → Result → renderer
 
 退出条件：不存在 canonical 写操作绕过 `ZOT_ALLOW_WRITE`/`ZOT_ALLOW_DELETE`；冲突测试和确认测试覆盖新旧入口。
 
-### 阶段 4：PDF 与 Annotation
+### 阶段 4：PDF 与 Annotation（已完成）
 
 迁移：
 
