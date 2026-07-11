@@ -29,18 +29,20 @@
 |----------|-------------|
 | 手动在 Zotero UI 里翻找文献 | `zot find "关键词" --json` → AI 直接消费结构化结果 |
 | 逐篇打开 PDF 找内容 | `zot find "概念" --fulltext --snippet` → 全库全文检索 |
-| 查看论文参考文献 | `zot ref ITEMKEY --json` → 优先 PMC JATS，否则 PubMed references |
+| 查看论文参考文献 | `zot ref ITEMKEY --json` → 优先 PMC JATS，否则 PubMed + Europe PMC 补全 |
 | 解析本地引用关系 | `zot ref resolve`，再用 `ref cited-by ITEMKEY` / `ref contexts ITEMKEY` 查询 |
 | 搜索引用、语境与 PubMed 主题 | `zot ref search "query" --json`；用 `--contexts`、`--references`、`--metadata` 或 `--field mesh` 限定 |
 | 发现 PubMed 相关文献 | `zot ref related ITEMKEY --limit 20 --json` |
-| 查看关联 NCBI 资源 | `zot ref links ITEMKEY --json`（PMC、Gene、GEO、SRA、BioProject 等） |
+| 查看关联生物医学资源 | `zot ref links ITEMKEY --json`（合并 NCBI 与 Europe PMC） |
 | Europe PMC 增强 | `zot ref cited-by ITEMKEY --external`；`zot ref annotations ITEMKEY`；`ref links` 自动合并两套资源 |
 | 开放科学画像 | `zot ref profile ITEMKEY --json` 查看预印本/正式版本、评价、基金、OA 和许可证 |
-
-> `ref` 的正式支持核心是 PMC/PubMed（NCBI）。`ref grobid` 仅为实验性、显式调用的 PDF 后备，不属于默认构建流程；公共演示端点不提供稳定性或配额保证。
 | 复制粘贴 BibTeX / RIS | `zot export --item-key KEY --format bibtex` → AI 直接消费标准导出 |
 | 标注散落在各处无法汇总 | `zot annotations KEY --json` → 双源（DB+PDF）统一输出，支持按类型/页码/作者过滤，双层清除 |
 | 批量打标签靠手点 | `zot add-tag --items K1,K2,K3 --tag "to-read"` | 一条命令 |
+
+> `ref` 的正式支持核心是 PMC/PubMed（NCBI）。`ref grobid` 仅为实验性、显式调用的 PDF 后备，不属于默认构建流程；公共演示端点不提供稳定性或配额保证。
+
+完整的数据源优先级、Europe PMC 增强策略、索引字段、缓存和性能说明见 [引用索引与文献发现](docs/user/references.md)。
 
 **核心设计原则：**
 

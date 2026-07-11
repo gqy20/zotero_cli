@@ -37,8 +37,9 @@ const usageRef = `usage: zot ref <item-key> [--source auto|pmc|pubmed] [--refres
 
 What: Manage the local structured-reference index. The officially supported
 core is NCBI: prefer complete PMC JATS, otherwise use PubMed reference links
-plus batched metadata. GROBID is an experimental, opt-in PDF fallback only;
-it is not part of the default build route.
+plus batched metadata and Europe PMC reference supplementation. Europe PMC
+also provides opt-in external citations, annotations, links, and profiles.
+GROBID is an experimental PDF fallback, not part of the default build route.
 
 Subcommands:
   show ITEMKEY  Fetch one item and persist it in the local reference index.
@@ -51,9 +52,9 @@ Subcommands:
   cited-by      List indexed library items that cite one local item.
   contexts      Show or backfill PMC JATS citation contexts.
   grobid        EXPERIMENTAL: check or run the optional PDF fallback.
-  search        Search structured references and citation contexts.
+  search        Search references, contexts, PubMed metadata, and annotations.
   related       List PubMed Similar Articles in official rank order.
-  links         List linked NCBI resources (PMC, Gene, GEO, SRA, and more).
+  links         Merge linked NCBI and Europe PMC biological resources.
   annotations   Show Europe PMC text-mined entities and relationships.
   profile       Show Europe PMC versions, evaluations, funding, and OA status.
 

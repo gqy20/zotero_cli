@@ -97,3 +97,23 @@ time ./zot.exe overview --json # JSON 序列化开销
 
 > 注：所有耗时包含进程启动 + 配置加载 + TLS 连接（~300ms 固定开销）。
 > Agent 场景下若使用 daemon 模式可消除此开销。
+
+## 引用与文献发现补充基线（2026-07-11）
+
+以下数据来自 hybrid 模式的真实文献库，临时编译二进制后测量，不包含 `go run` 编译时间。外部服务状态、单篇关联数量和网络距离都会影响结果。
+
+| 操作 | 首次请求 | 缓存命中 | 说明 |
+|---|---:|---:|---|
+| `ref related ITEMKEY --limit 10` | 约 1.9 s | 约 130 ms | PubMed ELink + 批量 EFetch |
+| `ref links ITEMKEY` | 约 5.8 s | 约 74–113 ms | 8 类 NCBI ELink 并行调度，并合并 Europe PMC |
+| `ref search "Hendra Virus" --field mesh` | 约 256 ms | 同左 | SQLite FTS5 本地检索 |
+
+参考覆盖实测样例：
+
+- PMID `42430468`：解析 10 个 MeSH，包含 major topic 与 qualifier；
+- PMID `35357919`：Similar Articles 和 Also Viewed 均返回结果；
+- Europe PMC external cited-by：总数 2248，结果同时包含 `MED` 和 `PPR`；
+- Europe PMC profile：返回正式论文对应的 `PPR348563`、CC BY、2470 被引和 36 条基金记录；
+- annotations：保存 38 个实体/关系后，accession `GCA_009914755` 可由本地 FTS 命中。
+
+首次全库升级会因引用索引数据版本变化重新处理旧成功记录。之后 `ref build` 恢复按 Zotero 指纹和索引版本增量跳过。建议先用 `--limit` 估算覆盖与耗时，再进行全库构建。

@@ -14,6 +14,7 @@ AI 原生的 Zotero 命令行工具。为 Claude Code、Codex 等 AI agent 设�
 |------|------|
 | [快速上手](user/quickstart.md) | 首次使用、初始化配置、Agent 调用最佳实践 |
 | [命令参考](user/commands.md) | 全部命令的完整用法、选项和输出示例 |
+| [引用索引与文献发现](user/references.md) | PubMed/PMC、Europe PMC、引用图、MeSH、annotations 与 GROBID |
 | [使用示例](user/examples/) | 按场景分类的实际使用案例 |
 
 ### 架构与设计

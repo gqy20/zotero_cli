@@ -87,6 +87,16 @@ go run .\cmd\zot config validate
 
 `relate` / `extract-text` 在 hybrid 下仍是本地能力。remote 模式通过服务器代理访问数据；其中 `annotations` / `annotate` 走服务器端 PDF 能力，其他普通写操作仍需额外配置 `ZOT_API_KEY`。
 
+结构化参考文献、PubMed 主题和 Europe PMC 文献发现使用 `zot ref`。第一次使用建议先运行小批量增量构建：
+
+```powershell
+.\zot.exe ref build --workers 3 --limit 20 --json
+.\zot.exe ref status --json
+.\zot.exe ref search "genome assembly" --json
+```
+
+完整说明见 [引用索引与文献发现](./references.md)。
+
 详见 [架构文档 - 四种模式](../architecture/overview.md#四种模式)。
 
 ## 安全规则

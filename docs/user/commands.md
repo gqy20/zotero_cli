@@ -6,6 +6,7 @@
 
 > AI Agent 使用规范见 [AI Agent 指南](./quickstart.md)，技术架构见 [架构文档](../architecture/overview.md)。
 > 标注操作详细文档见 [annotations 示例](./examples/annotations.md)。
+> 引用索引、PubMed/PMC 与 Europe PMC 的完整说明见 [引用索引与文献发现](./references.md)。
 
 ---
 
@@ -85,17 +86,17 @@ zot ref search "BRCA1" --field annotations --json
 zot ref profile ITEMKEY --json
 ```
 
-`ref ITEMKEY` 从 DOI、PubMed URL 和摘要中识别 PMID/PMCID，优先读取 PMC JATS XML 的完整 `<ref-list>`；没有 PMC 时，通过 PubMed ELink 获取可映射到 PMID 的引用，并批量 EFetch 结构化元数据。
+`ref ITEMKEY` 从 DOI、PubMed URL 和摘要中识别 PMID/PMCID，优先读取 PMC JATS XML 的完整 `<ref-list>`；没有 PMC 时，通过 PubMed ELink 获取可映射到 PMID 的引用、批量 EFetch 结构化元数据，再由 Europe PMC references 补充 DOI、预印本和非 PubMed 引用。
 
-PMC/PubMed（NCBI）是 `ref` 的正式支持核心流程，也是 `ref build` 的唯一默认路由。它已经覆盖结构化参考文献、全文引用上下文、增量索引、重试和本地引用解析。GROBID 不属于核心流程，不会被默认构建自动调用。
+PMC/PubMed（NCBI）是 `ref` 的正式支持核心流程；Europe PMC 是自动或按需的增强层。默认构建不会调用 GROBID，PMC JATS 成功时也不会重复请求 Europe PMC references。
 
 `ref build` 默认扫描所有符合条件的顶层文献并执行增量构建。索引按条目版本和标识符指纹跳过未变化条目；网络或解析失败可用 `ref failed` 查看并通过 `ref retry` 重试。NCBI 确定无法处理的条目归入 `unsupported`，可用 `ref unsupported` 查看，不会被 `retry` 重复请求。结构化索引位于 `.zotero_cli/ref/index.sqlite`，NCBI 原始响应缓存在 `.zotero_cli/ref/ncbi/`。
 
 `ref resolve` 使用 DOI、PMID、规范化标题和保守的模糊标题匹配，将参考文献解析回本地 Zotero 条目。`ref cited-by` 提供反向引用查询；`ref contexts` 返回 PMC JATS 正文中引用标记所在的章节和完整段落。PubMed 只提供参考文献关系，不提供正文上下文，因此其 `contexts` 为空。
 
-`ref search QUERY` 默认使用 FTS5 同时检索结构化参考文献、正文引用上下文和 PubMed 元数据。需要限制范围时使用 `--contexts`、`--references` 或 `--metadata`；`--field mesh|publication_types|keywords|chemicals|grants|corrections` 可精确限定元数据字段。指定 `--section` 会自动限定到上下文。还可按 `--source pmc|pubmed|grobid`、`--target ITEMKEY` 和 `--limit` 过滤。
+`ref search QUERY` 默认使用 FTS5 同时检索结构化参考文献、正文引用上下文和 PubMed 元数据。需要限制范围时使用 `--contexts`、`--references` 或 `--metadata`；`--field mesh|publication_types|keywords|chemicals|grants|corrections|annotations` 可精确限定字段。指定 `--section` 会自动限定到上下文。还可按 `--source pmc|pubmed|europepmc|grobid`、`--target ITEMKEY` 和 `--limit` 过滤。
 
-成功的 PubMed 解析会随 `ref build` 保存 MeSH（包括 Major Topic 与 qualifier）、publication types、作者关键词、化学物质、基金和勘误/撤稿关系，不产生额外 EFetch 请求。`ref related` 使用 PubMed Similar Articles 官方顺序并排除原文；`ref links` 并行查询 PMC、Gene、GEO、SRA、BioProject、BioSample、ClinVar 和 Assembly，仍由统一 NCBI 限速器控制请求速率。
+成功的 PubMed 解析会随 `ref build` 保存 MeSH（包括 Major Topic 与 qualifier）、publication types、作者关键词、化学物质、基金和勘误/撤稿关系，不产生额外 EFetch 请求。`ref related` 使用 PubMed Similar Articles 官方顺序并排除原文；`ref links` 并行查询 PMC、Gene、GEO、SRA、BioProject、BioSample、ClinVar 和 Assembly，再合并 Europe PMC database links。
 
 Europe PMC 是自动增强层而不是并列的核心来源。PubMed fallback 条目会合并 Europe PMC 的开放参考文献并按 PMID、DOI、PMCID、标题去重；PMC JATS 成功时不重复请求。`ref cited-by --external` 按需读取 Europe PMC 外部引用网络（包括预印本），`ref links` 自动合并 Europe PMC database links。`ref annotations` 获取并保存文本挖掘实体/关系，之后可通过 `ref search --field annotations` 本地检索；annotations 不纳入默认全库构建。
 

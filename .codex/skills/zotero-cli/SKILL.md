@@ -24,13 +24,13 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 .\zot.exe find --all --sort dateAdded --direction desc --limit 10 --json  # 最近入库
 .\zot.exe find "query" --json
 .\zot.exe show ITEMKEY --json
-.\zot.exe ref ITEMKEY --json                   # NCBI/PMC 结构化参考文献
+.\zot.exe ref ITEMKEY --json                   # PMC/PubMed 核心 + Europe PMC 自动补全
 .\zot.exe ref build --workers 3 --json         # 全库增量参考文献索引
 .\zot.exe ref resolve --workers 8 --json        # 并行将参考文献匹配回本地条目
 .\zot.exe ref search "query" --json             # 搜索参考文献与引用上下文
 .\zot.exe ref search "query" --field mesh --json # 精确搜索 PubMed MeSH
 .\zot.exe ref related ITEMKEY --limit 20 --json   # PubMed 官方相似文献
-.\zot.exe ref links ITEMKEY --json                # 关联的 NCBI 生物医学资源
+.\zot.exe ref links ITEMKEY --json                # 合并 NCBI 与 Europe PMC 生物医学资源
 .\zot.exe ref cited-by ITEMKEY --external --json  # Europe PMC 外部被引网络
 .\zot.exe ref annotations ITEMKEY --json          # Europe PMC 实体/关系并写入按需索引
 .\zot.exe ref profile ITEMKEY --json              # 版本、评价、基金与开放获取画像
@@ -44,6 +44,8 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 .\zot.exe annotations ITEMKEY --json          # 读取 PDF 标注（双源）
 .\zot.exe select ITEMKEY                     # 跳转到 Zotero UI 选中条目
 ```
+
+`ref` 路由规则：PMC JATS 优先；没有 PMC 时使用 PubMed ELink，并以 Europe PMC references 补充非 PMID 引用。Europe PMC 失败不得阻断 NCBI 核心结果。`ref annotations` 是 Europe PMC 文本挖掘实体，顶层 `annotations` 才是 Zotero/PDF 人工标注。完整说明见 `docs/user/references.md`。
 
 ## 全文相关决策规则
 

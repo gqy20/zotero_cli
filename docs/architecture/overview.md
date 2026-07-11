@@ -125,3 +125,32 @@ type Reader interface {
 Creators、Tags、Attachments 通过 goroutine + WaitGroup 并行加载，减少 SQLite I/O 等待。
 
 详见 [后端设计 - 当前文件布局](./backend.md#当前-backend-file-布局)。
+
+---
+
+## 引用与文献发现子系统
+
+`internal/references/` 是独立于 Zotero `Reader` 的派生索引层，CLI 入口位于 `internal/cli/commands_ref*.go`。它读取 Zotero 条目的 DOI、PMID、PMCID 和附件信息，但不会修改 Zotero 主数据库。
+
+| 组件 | 职责 |
+|---|---|
+| `service.go` | 标识符解析、PMC/PubMed 路由、Europe PMC 增强编排 |
+| `client.go` | NCBI ESearch、EFetch、ELink、PMC XML、共享限速和磁盘缓存 |
+| `pubmed.go` | PubMed XML 与 MeSH、文献类型、基金、corrections 解析 |
+| `jats.go` | PMC JATS 参考文献和正文引用上下文解析 |
+| `europepmc.go` | 开放引用、外部被引、database links、annotations、profile |
+| `grobid_client.go` / `grobid_tei.go` | 实验性 PDF→TEI 后备 |
+| `store.go` | SQLite schema、迁移、结果保存、上下文和 annotations |
+| `search.go` | 参考文献、上下文、PubMed 元数据和 annotations 的 FTS5 查询 |
+| `resolver.go` | DOI、PMID、精确/模糊标题到本地 Zotero item 的解析 |
+| `builder.go` | 有界 worker 并发、增量跳过、失败与 unsupported 分类 |
+
+索引是可重建的派生数据：
+
+```text
+<Zotero data dir>/.zotero_cli/ref/index.sqlite
+```
+
+HTTP 原始响应单独缓存。Europe PMC 共享客户端的重试、超时和请求调度，但使用独立缓存命名空间；NCBI 旧缓存键保持兼容。SQLite 连接限制为单写连接，worker 并行负责网络和解析，结果由 store 串行持久化。
+
+来源优先级、命令和字段说明见 [引用索引与文献发现](../user/references.md)。
