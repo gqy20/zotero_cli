@@ -22,10 +22,12 @@ const usageRef = `usage: zot ref <item-key> [--source auto|pmc|pubmed] [--refres
        zot ref build [--workers N] [--force] [--limit N] [--source SOURCE] [--json]
        zot ref status [--json]
        zot ref failed [--json]
+       zot ref unsupported [--json]
        zot ref retry [--workers N] [--json]
        zot ref resolve [--workers N] [--json]
        zot ref cited-by <item-key> [--json]
        zot ref contexts <item-key> [--json]
+       zot ref contexts build [--workers N] [--limit N] [--refresh] [--json]
 
 What: Manage the local structured-reference index. A direct item key is short
 for 'ref show'. NCBI routing prefers complete PMC JATS and otherwise uses
@@ -36,10 +38,11 @@ Subcommands:
   build         Incrementally index every eligible top-level library item.
   status        Show index coverage and reference counts.
   failed        List failed items and their last errors.
+  unsupported   List items outside NCBI coverage (GROBID candidates).
   retry         Retry all currently failed items.
   resolve       Match indexed references back to local Zotero items.
   cited-by      List indexed library items that cite one local item.
-  contexts      Show PMC JATS paragraphs containing citation markers.
+  contexts      Show or backfill PMC JATS citation contexts.
 
 Options:
   --source auto|pmc|pubmed  Select NCBI routing (default auto).
@@ -79,6 +82,8 @@ func (c *CLI) runRef(args []string) int {
 		return c.runRefStatus(args[1:])
 	case "failed":
 		return c.runRefFailed(args[1:])
+	case "unsupported":
+		return c.runRefUnsupported(args[1:])
 	case "retry":
 		return c.runRefBuild(args[1:], true)
 	case "resolve":
@@ -228,7 +233,7 @@ func (c *CLI) runRefBuild(args []string, retryOnly bool) int {
 			return c.printErr(err)
 		}
 	}
-	report, err := references.NewBuilder(references.NewService(newNCBIClient(cfg)), store).Build(context.Background(), items, references.BuildOptions{Workers: opts.workers, Force: opts.force, Source: opts.source, Limit: opts.limit})
+	report, err := references.NewBuilder(references.NewService(newNCBIClient(cfg)), store).Build(context.Background(), items, references.BuildOptions{Workers: opts.workers, Force: opts.force, Refresh: opts.force, Source: opts.source, Limit: opts.limit})
 	if err != nil {
 		return c.printErr(err)
 	}
@@ -237,9 +242,9 @@ func (c *CLI) runRefBuild(args []string, retryOnly bool) int {
 		command = "ref-retry"
 	}
 	if opts.json {
-		return c.writeJSON(jsonResponse{OK: true, Command: command, Data: report, Meta: map[string]any{"processed": report.Processed, "succeeded": report.Succeeded, "failed": report.Failed, "elapsed_ms": report.ElapsedMS}})
+		return c.writeJSON(jsonResponse{OK: true, Command: command, Data: report, Meta: map[string]any{"processed": report.Processed, "succeeded": report.Succeeded, "unsupported": report.Unsupported, "failed": report.Failed, "elapsed_ms": report.ElapsedMS}})
 	}
-	fmt.Fprintf(c.stdout, "Reference build: %d succeeded, %d failed, %d skipped; %d references (%s)\n", report.Succeeded, report.Failed, report.Skipped, report.References, time.Duration(report.ElapsedMS)*time.Millisecond)
+	fmt.Fprintf(c.stdout, "Reference build: %d succeeded, %d unsupported, %d failed, %d skipped; %d references (%s)\n", report.Succeeded, report.Unsupported, report.Failed, report.Skipped, report.References, time.Duration(report.ElapsedMS)*time.Millisecond)
 	return ExitOK
 }
 
@@ -264,7 +269,8 @@ func (c *CLI) runRefStatus(args []string) int {
 	if jsonOutput {
 		return c.writeJSON(jsonResponse{OK: true, Command: "ref-status", Data: status, Meta: map[string]any{"index_path": store.Path()}})
 	}
-	fmt.Fprintf(c.stdout, "Reference index: %d items (%d successful, %d failed), %d references\nResolved: %d  Unresolved: %d  Contexts: %d\nPMC: %d  PubMed: %d\nLast indexed: %s\nPath: %s\n", status.IndexedItems, status.SuccessfulItems, status.FailedItems, status.TotalReferences, status.ResolvedReferences, status.UnresolvedReferences, status.CitationContexts, status.PMCItems, status.PubMedItems, status.LastIndexedAt, store.Path())
+	fmt.Fprintf(c.stdout, "Reference index: %d items (%d successful, %d unsupported, %d failed), %d references\nResolved: %d  Unresolved: %d  Contexts: %d\nPMC: %d  PubMed: %d\nLast indexed: %s\nPath: %s\n", status.IndexedItems, status.SuccessfulItems, status.UnsupportedItems, status.FailedItems, status.TotalReferences, status.ResolvedReferences, status.UnresolvedReferences, status.CitationContexts, status.PMCItems, status.PubMedItems, status.LastIndexedAt, store.Path())
+	fmt.Fprintf(c.stdout, "Context status: %d available, %d not supported, %d not found, %d parse failed, %d not indexed\nReferences with context: %d  without context: %d\n", status.ContextAvailableItems, status.ContextNotSupportedItems, status.ContextNotFoundItems, status.ContextParseFailedItems, status.ContextNotIndexedItems, status.ReferencesWithContext, status.ReferencesWithoutContext)
 	return ExitOK
 }
 
@@ -290,6 +296,33 @@ func (c *CLI) runRefFailed(args []string) int {
 		return c.writeJSON(jsonResponse{OK: true, Command: "ref-failed", Data: failed, Meta: map[string]any{"total": len(failed)}})
 	}
 	for _, item := range failed {
+		fmt.Fprintf(c.stdout, "%-10s  attempts=%d  %s  %s\n", item.ItemKey, item.Attempts, item.Title, item.Error)
+	}
+	return ExitOK
+}
+
+func (c *CLI) runRefUnsupported(args []string) int {
+	jsonOutput, ok := parseRefJSONOnly(args)
+	if !ok {
+		return c.refUsageError("unsupported accepts only --json")
+	}
+	cfg, code := c.loadConfig()
+	if code != 0 {
+		return code
+	}
+	store, err := openReferenceStore(cfg)
+	if err != nil {
+		return c.printErr(err)
+	}
+	defer store.Close()
+	items, err := store.Unsupported(context.Background())
+	if err != nil {
+		return c.printErr(err)
+	}
+	if jsonOutput {
+		return c.writeJSON(jsonResponse{OK: true, Command: "ref-unsupported", Data: items, Meta: map[string]any{"total": len(items)}})
+	}
+	for _, item := range items {
 		fmt.Fprintf(c.stdout, "%-10s  attempts=%d  %s  %s\n", item.ItemKey, item.Attempts, item.Title, item.Error)
 	}
 	return ExitOK
@@ -369,6 +402,9 @@ func (c *CLI) runRefCitedBy(args []string) int {
 }
 
 func (c *CLI) runRefContexts(args []string) int {
+	if len(args) > 0 && args[0] == "build" {
+		return c.runRefContextsBuild(args[1:])
+	}
 	key, jsonOutput, ok := parseRefKeyJSON(args)
 	if !ok {
 		return c.refUsageError("contexts requires one item key and optional --json")
@@ -386,13 +422,83 @@ func (c *CLI) runRefContexts(args []string) int {
 	if err != nil {
 		return c.printErr(err)
 	}
-	if jsonOutput {
-		return c.writeJSON(jsonResponse{OK: true, Command: "ref-contexts", Data: rows, Meta: map[string]any{"item_key": key, "total": len(rows)}})
+	summary, found, err := store.ContextSummary(context.Background(), key)
+	if err != nil {
+		return c.printErr(err)
 	}
-	fmt.Fprintf(c.stdout, "Citation contexts for %s: %d\n", key, len(rows))
+	if jsonOutput {
+		meta := map[string]any{"item_key": key, "total": len(rows), "context_summary": summary, "summary_found": found}
+		return c.writeJSON(jsonResponse{OK: true, Command: "ref-contexts", Data: rows, Meta: meta})
+	}
+	fmt.Fprintf(c.stdout, "Citation contexts for %s: %d (status %s, coverage %.1f%%, %d references without context)\n", key, len(rows), summary.Status, summary.Coverage*100, summary.ReferencesWithoutContext)
 	for _, row := range rows {
 		fmt.Fprintf(c.stdout, "ref %d %-12s  [%s] %s\n", row.ReferenceIndex, row.TargetItemKey, row.Section, row.Paragraph)
 	}
+	return ExitOK
+}
+
+func (c *CLI) runRefContextsBuild(args []string) int {
+	opts := refCommonOptions{workers: 3}
+	refresh := false
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			opts.json = true
+		case "--refresh":
+			refresh = true
+		case "--workers":
+			if i+1 >= len(args) {
+				return c.refUsageError("missing value for --workers")
+			}
+			i++
+			v, e := strconv.Atoi(args[i])
+			if e != nil || v < 1 || v > 16 {
+				return c.refUsageError("invalid value for --workers")
+			}
+			opts.workers = v
+		case "--limit":
+			if i+1 >= len(args) {
+				return c.refUsageError("missing value for --limit")
+			}
+			i++
+			v, e := strconv.Atoi(args[i])
+			if e != nil || v < 1 {
+				return c.refUsageError("invalid value for --limit")
+			}
+			opts.limit = v
+		default:
+			return c.refUsageError("unknown argument: " + args[i])
+		}
+	}
+	cfg, reader, code := c.loadReader()
+	if code != 0 {
+		return code
+	}
+	store, err := openReferenceStore(cfg)
+	if err != nil {
+		return c.printErr(err)
+	}
+	defer store.Close()
+	pending, err := store.ContextPending(context.Background(), opts.limit)
+	if err != nil {
+		return c.printErr(err)
+	}
+	items := make([]domain.Item, 0, len(pending))
+	for _, p := range pending {
+		item, e := reader.GetItem(context.Background(), p.ItemKey)
+		if e != nil {
+			return c.printErr(e)
+		}
+		items = append(items, item)
+	}
+	report, err := references.NewBuilder(references.NewService(newNCBIClient(cfg)), store).Build(context.Background(), items, references.BuildOptions{Workers: opts.workers, Force: true, Refresh: refresh, Source: "pmc"})
+	if err != nil {
+		return c.printErr(err)
+	}
+	if opts.json {
+		return c.writeJSON(jsonResponse{OK: true, Command: "ref-contexts-build", Data: report, Meta: map[string]any{"pending": len(pending), "workers": opts.workers, "refresh": refresh, "elapsed_ms": report.ElapsedMS}})
+	}
+	fmt.Fprintf(c.stdout, "Context backfill: %d succeeded, %d failed, %d unsupported; %d pending (%s)\n", report.Succeeded, report.Failed, report.Unsupported, len(pending), time.Duration(report.ElapsedMS)*time.Millisecond)
 	return ExitOK
 }
 

@@ -46,9 +46,9 @@ func (s *Service) References(ctx context.Context, item domain.Item, opts Options
 	}
 	switch {
 	case source == "pmc" && result.Identifiers.PMCID == "":
-		return result, fmt.Errorf("item %s has no PMC identifier", item.Key)
+		return result, &UnsupportedError{ItemKey: item.Key, Reason: "no PMC identifier"}
 	case source == "pubmed" && result.Identifiers.PMID == "":
-		return result, fmt.Errorf("item %s could not be resolved to PubMed", item.Key)
+		return result, &UnsupportedError{ItemKey: item.Key, Reason: "could not be resolved to PubMed"}
 	case source != "auto" && source != "pmc" && source != "pubmed":
 		return result, fmt.Errorf("invalid reference source %q", source)
 	}
@@ -56,14 +56,19 @@ func (s *Service) References(ctx context.Context, item domain.Item, opts Options
 	var err error
 	if result.Identifiers.PMCID != "" && source != "pubmed" {
 		result.Strategy = string(SourcePMC)
-		result.References, result.Contexts, err = s.client.FetchPMCDocument(ctx, result.Identifiers.PMCID, opts.Refresh)
+		result.References, result.Contexts, result.ContextError, err = s.client.FetchPMCDocument(ctx, result.Identifiers.PMCID, opts.Refresh)
 	} else if result.Identifiers.PMID != "" {
 		result.Strategy = string(SourcePubMed)
 		result.References, err = s.client.FetchPubMedReferences(ctx, result.Identifiers.PMID, opts.Refresh)
 	} else {
-		err = fmt.Errorf("item %s has no DOI, PMID, or PMCID usable by NCBI", item.Key)
+		err = &UnsupportedError{ItemKey: item.Key, Reason: "no DOI, PMID, or PMCID usable by NCBI"}
 	}
 	result.CacheHits, result.NetworkCalls = s.client.Stats()
+	result.ContextSummary = SummarizeContexts(result.Strategy, result.References, result.Contexts)
+	if result.ContextError != "" {
+		result.ContextSummary.Status = ContextParseFailed
+	}
+	AnnotateReferenceContexts(result.References, result.Contexts, result.ContextSummary.Status)
 	result.ElapsedMS = time.Since(started).Milliseconds()
 	return result, err
 }

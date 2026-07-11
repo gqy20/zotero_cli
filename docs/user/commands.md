@@ -64,17 +64,23 @@ zot ref ITEMKEY --json
 zot ref build --workers 3 --json
 zot ref status --json
 zot ref failed --json
+zot ref unsupported --json
 zot ref retry --workers 2 --json
 zot ref resolve --workers 8 --json
 zot ref cited-by ITEMKEY --json
 zot ref contexts ITEMKEY --json
+zot ref contexts build --workers 3 --json
 ```
 
 `ref ITEMKEY` 从 DOI、PubMed URL 和摘要中识别 PMID/PMCID，优先读取 PMC JATS XML 的完整 `<ref-list>`；没有 PMC 时，通过 PubMed ELink 获取可映射到 PMID 的引用，并批量 EFetch 结构化元数据。
 
-`ref build` 默认扫描所有符合条件的顶层文献并执行增量构建。索引按条目版本和标识符指纹跳过未变化条目；失败状态可用 `ref failed` 查看并通过 `ref retry` 重试。结构化索引位于 `.zotero_cli/ref/index.sqlite`，NCBI 原始响应缓存在 `.zotero_cli/ref/ncbi/`。
+`ref build` 默认扫描所有符合条件的顶层文献并执行增量构建。索引按条目版本和标识符指纹跳过未变化条目；网络或解析失败可用 `ref failed` 查看并通过 `ref retry` 重试。NCBI 确定无法处理的条目归入 `unsupported`，可用 `ref unsupported` 查看，不会被 `retry` 重复请求。结构化索引位于 `.zotero_cli/ref/index.sqlite`，NCBI 原始响应缓存在 `.zotero_cli/ref/ncbi/`。
 
 `ref resolve` 使用 DOI、PMID、规范化标题和保守的模糊标题匹配，将参考文献解析回本地 Zotero 条目。`ref cited-by` 提供反向引用查询；`ref contexts` 返回 PMC JATS 正文中引用标记所在的章节和完整段落。PubMed 只提供参考文献关系，不提供正文上下文，因此其 `contexts` 为空。
+
+每个成功索引条目同时记录引用上下文完整性：`available`、`not_supported`、`not_found`、`parse_failed` 或 `not_indexed`，以及有/无上下文的参考文献数量和覆盖率。`ref contexts --json` 在 `meta.context_summary` 中返回这些指标。
+
+`ref contexts build` 只补建成功 PMC 条目中状态为 `not_indexed` 的历史记录，默认复用 NCBI XML 缓存；使用 `--refresh` 才会重新请求网络。重复运行在没有待处理条目时是空操作。
 
 环境变量：`ZOT_NCBI_API_KEY`、`ZOT_NCBI_EMAIL`、`ZOT_NCBI_RATE_MS`。`--refresh` 会绕过缓存。
 

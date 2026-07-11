@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -14,22 +15,25 @@ import (
 type BuildOptions struct {
 	Workers int
 	Force   bool
+	Refresh bool
 	Source  string
 	Limit   int
 }
 
 type BuildReport struct {
-	Total        int          `json:"total"`
-	Eligible     int          `json:"eligible"`
-	Processed    int          `json:"processed"`
-	Succeeded    int          `json:"succeeded"`
-	Failed       int          `json:"failed"`
-	Skipped      int          `json:"skipped"`
-	References   int          `json:"references"`
-	CacheHits    int          `json:"cache_hits"`
-	NetworkCalls int          `json:"network_calls"`
-	ElapsedMS    int64        `json:"elapsed_ms"`
-	Failures     []FailedItem `json:"failures,omitempty"`
+	Total            int          `json:"total"`
+	Eligible         int          `json:"eligible"`
+	Processed        int          `json:"processed"`
+	Succeeded        int          `json:"succeeded"`
+	Failed           int          `json:"failed"`
+	Unsupported      int          `json:"unsupported"`
+	Skipped          int          `json:"skipped"`
+	References       int          `json:"references"`
+	CacheHits        int          `json:"cache_hits"`
+	NetworkCalls     int          `json:"network_calls"`
+	ElapsedMS        int64        `json:"elapsed_ms"`
+	Failures         []FailedItem `json:"failures,omitempty"`
+	UnsupportedItems []FailedItem `json:"unsupported_items,omitempty"`
 }
 
 type Builder struct {
@@ -92,7 +96,7 @@ func (b *Builder) Build(ctx context.Context, items []domain.Item, opts BuildOpti
 		go func() {
 			defer wg.Done()
 			for job := range jobCh {
-				result, err := b.service.References(ctx, job.item, Options{Source: opts.Source, Refresh: opts.Force})
+				result, err := b.service.References(ctx, job.item, Options{Source: opts.Source, Refresh: opts.Refresh})
 				outCh <- buildOutcome{job: job, result: result, err: err}
 			}
 		}()
@@ -109,6 +113,15 @@ func (b *Builder) Build(ctx context.Context, items []domain.Item, opts BuildOpti
 	for outcome := range outCh {
 		report.Processed++
 		if outcome.err != nil {
+			var unsupported *UnsupportedError
+			if errors.As(outcome.err, &unsupported) {
+				report.Unsupported++
+				if err := b.store.SaveUnsupported(ctx, outcome.job.item.Key, outcome.job.item.Title, outcome.job.fingerprint, outcome.err); err != nil {
+					return report, err
+				}
+				report.UnsupportedItems = append(report.UnsupportedItems, FailedItem{ItemKey: outcome.job.item.Key, Title: outcome.job.item.Title, Error: outcome.err.Error()})
+				continue
+			}
 			report.Failed++
 			if err := b.store.SaveFailure(ctx, outcome.job.item.Key, outcome.job.item.Title, outcome.job.fingerprint, outcome.err); err != nil {
 				return report, err

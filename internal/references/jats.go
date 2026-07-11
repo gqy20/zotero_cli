@@ -60,6 +60,11 @@ func parseJATSDocument(data []byte) ([]Reference, []Context, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	linkContextIndexes(refs, contexts)
+	return refs, contexts, nil
+}
+
+func linkContextIndexes(refs []Reference, contexts []Context) {
 	indexByID := make(map[string]int, len(refs))
 	for _, ref := range refs {
 		indexByID[ref.ID] = ref.Index
@@ -67,7 +72,6 @@ func parseJATSDocument(data []byte) ([]Reference, []Context, error) {
 	for i := range contexts {
 		contexts[i].ReferenceIndex = indexByID[contexts[i].ReferenceID]
 	}
-	return refs, contexts, nil
 }
 
 type paragraphXRef struct{ ID, Marker string }

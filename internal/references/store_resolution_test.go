@@ -40,4 +40,18 @@ func TestStoreResolveCitedByAndContexts(t *testing.T) {
 	if loaded.References[0].TargetItemKey != "TARGET" || len(loaded.Contexts) != 1 {
 		t.Fatalf("loaded = %+v", loaded)
 	}
+	if loaded.ContextSummary.Status != ContextAvailable || loaded.ContextSummary.Coverage != 1 || loaded.ContextSummary.ReferencesWithoutContext != 0 {
+		t.Fatalf("context summary = %+v", loaded.ContextSummary)
+	}
+	// Refreshing the same structured references must preserve resolved links.
+	if err := store.SaveResult(ctx, result, "fp2"); err != nil {
+		t.Fatal(err)
+	}
+	refreshed, ok, err := store.LoadResult(ctx, "SOURCE")
+	if err != nil || !ok {
+		t.Fatalf("refreshed ok=%v err=%v", ok, err)
+	}
+	if refreshed.References[0].TargetItemKey != "TARGET" || refreshed.Contexts[0].TargetItemKey != "TARGET" {
+		t.Fatalf("refresh lost match: %+v", refreshed)
+	}
 }
