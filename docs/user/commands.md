@@ -65,7 +65,7 @@ zot ref build --workers 3 --json
 zot ref status --json
 zot ref failed --json
 zot ref retry --workers 2 --json
-zot ref resolve --json
+zot ref resolve --workers 8 --json
 zot ref cited-by ITEMKEY --json
 zot ref contexts ITEMKEY --json
 ```

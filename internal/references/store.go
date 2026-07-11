@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -228,8 +229,14 @@ func (s *Store) Status(ctx context.Context) (Status, error) {
 	return status, err
 }
 
-func (s *Store) Resolve(ctx context.Context, resolver *Resolver) (ResolveReport, error) {
+func (s *Store) Resolve(ctx context.Context, resolver *Resolver, workers int) (ResolveReport, error) {
 	start := time.Now()
+	if workers < 1 {
+		workers = 1
+	}
+	if workers > 32 {
+		workers = 32
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT source_item_key,ref_index,ref_id,raw,title,authors_json,container,year,volume,issue,pages,doi,pmid,pmcid,source FROM ref_entries`)
 	if err != nil {
 		return ResolveReport{}, err
@@ -265,8 +272,32 @@ func (s *Store) Resolve(ctx context.Context, resolver *Resolver) (ResolveReport,
 		return report, err
 	}
 	defer stmt.Close()
-	for _, e := range entries {
-		ref := resolver.Resolve(e.ref, e.source)
+	type resolvedEntry struct {
+		source string
+		ref    Reference
+	}
+	jobs := make(chan entry)
+	results := make(chan resolvedEntry, workers*2)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for e := range jobs {
+				results <- resolvedEntry{source: e.source, ref: resolver.Resolve(e.ref, e.source)}
+			}
+		}()
+	}
+	go func() {
+		for _, e := range entries {
+			jobs <- e
+		}
+		close(jobs)
+		wg.Wait()
+		close(results)
+	}()
+	for e := range results {
+		ref := e.ref
 		if ref.MatchStatus == "resolved" {
 			report.Resolved++
 			switch ref.MatchMethod {

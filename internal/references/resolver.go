@@ -25,12 +25,13 @@ type Resolver struct {
 	items            map[string]domain.Item
 	doi, pmid, title map[string]string
 	tokens           map[string][]string
+	itemTokens       map[string][]string
 }
 
 var resolverWords = regexp.MustCompile(`[\p{L}\p{N}]+`)
 
 func NewResolver(items []domain.Item) *Resolver {
-	r := &Resolver{items: map[string]domain.Item{}, doi: map[string]string{}, pmid: map[string]string{}, title: map[string]string{}, tokens: map[string][]string{}}
+	r := &Resolver{items: map[string]domain.Item{}, doi: map[string]string{}, pmid: map[string]string{}, title: map[string]string{}, tokens: map[string][]string{}, itemTokens: map[string][]string{}}
 	for _, item := range items {
 		if item.Key == "" || item.Title == "" {
 			continue
@@ -47,7 +48,9 @@ func NewResolver(items []domain.Item) *Resolver {
 		if n != "" {
 			r.title[n] = item.Key
 		}
-		for _, token := range titleTokens(n) {
+		itemTokens := titleTokens(n)
+		r.itemTokens[item.Key] = itemTokens
+		for _, token := range itemTokens {
 			r.tokens[token] = append(r.tokens[token], item.Key)
 		}
 	}
@@ -70,8 +73,19 @@ func (r *Resolver) Resolve(ref Reference, sourceKey string) Reference {
 	if len(query) < 3 {
 		return ref
 	}
+	// A few rare terms identify useful candidates far better than ubiquitous
+	// words such as "the" and "of", whose postings can span the whole library.
+	terms := append([]string(nil), query...)
+	sort.Slice(terms, func(i, j int) bool { return len(r.tokens[terms[i]]) < len(r.tokens[terms[j]]) })
+	termLimit := 3
+	if len(query) <= 5 {
+		termLimit = len(query)
+	}
+	if len(terms) > termLimit {
+		terms = terms[:termLimit]
+	}
 	counts := map[string]int{}
-	for _, token := range query {
+	for _, token := range terms {
 		for _, key := range r.tokens[token] {
 			if key != sourceKey {
 				counts[key]++
@@ -84,7 +98,7 @@ func (r *Resolver) Resolve(ref Reference, sourceKey string) Reference {
 	}
 	cs := make([]candidate, 0, len(counts))
 	for key := range counts {
-		other := titleTokens(normalizeTitle(r.items[key].Title))
+		other := r.itemTokens[key]
 		score := dice(query, other)
 		if score >= .88 {
 			cs = append(cs, candidate{key, score})

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -22,7 +23,7 @@ const usageRef = `usage: zot ref <item-key> [--source auto|pmc|pubmed] [--refres
        zot ref status [--json]
        zot ref failed [--json]
        zot ref retry [--workers N] [--json]
-       zot ref resolve [--json]
+       zot ref resolve [--workers N] [--json]
        zot ref cited-by <item-key> [--json]
        zot ref contexts <item-key> [--json]
 
@@ -295,9 +296,25 @@ func (c *CLI) runRefFailed(args []string) int {
 }
 
 func (c *CLI) runRefResolve(args []string) int {
-	jsonOutput, ok := parseRefJSONOnly(args)
-	if !ok {
-		return c.refUsageError("resolve accepts only --json")
+	jsonOutput := false
+	workers := min(runtime.NumCPU(), 16)
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonOutput = true
+		case "--workers":
+			if i+1 >= len(args) {
+				return c.refUsageError("missing value for --workers")
+			}
+			i++
+			value, err := strconv.Atoi(args[i])
+			if err != nil || value < 1 || value > 32 {
+				return c.refUsageError("invalid value for --workers")
+			}
+			workers = value
+		default:
+			return c.refUsageError("unknown argument: " + args[i])
+		}
 	}
 	cfg, reader, code := c.loadReader()
 	if code != 0 {
@@ -312,12 +329,12 @@ func (c *CLI) runRefResolve(args []string) int {
 		return c.printErr(err)
 	}
 	defer store.Close()
-	report, err := store.Resolve(context.Background(), references.NewResolver(items))
+	report, err := store.Resolve(context.Background(), references.NewResolver(items), workers)
 	if err != nil {
 		return c.printErr(err)
 	}
 	if jsonOutput {
-		return c.writeJSON(jsonResponse{OK: true, Command: "ref-resolve", Data: report, Meta: map[string]any{"library_items": len(items), "elapsed_ms": report.ElapsedMS}})
+		return c.writeJSON(jsonResponse{OK: true, Command: "ref-resolve", Data: report, Meta: map[string]any{"library_items": len(items), "workers": workers, "elapsed_ms": report.ElapsedMS}})
 	}
 	fmt.Fprintf(c.stdout, "Resolved %d/%d references in %s (DOI %d, PMID %d, exact title %d, fuzzy title %d)\n", report.Resolved, report.Total, time.Duration(report.ElapsedMS)*time.Millisecond, report.DOI, report.PMID, report.ExactTitle, report.FuzzyTitle)
 	return ExitOK

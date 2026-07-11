@@ -19,7 +19,7 @@ func TestStoreResolveCitedByAndContexts(t *testing.T) {
 	if err := store.SaveResult(ctx, result, "fp"); err != nil {
 		t.Fatal(err)
 	}
-	report, err := store.Resolve(ctx, NewResolver([]domain.Item{{Key: "TARGET", Title: "Target article", DOI: "10.1000/target"}}))
+	report, err := store.Resolve(ctx, NewResolver([]domain.Item{{Key: "TARGET", Title: "Target article", DOI: "10.1000/target"}}), 2)
 	if err != nil {
 		t.Fatal(err)
 	}
