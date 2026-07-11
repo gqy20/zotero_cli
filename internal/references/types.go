@@ -55,6 +55,58 @@ type Identifiers struct {
 	PMCID string `json:"pmcid,omitempty"`
 }
 
+type MeSHTerm struct {
+	UI         string          `json:"ui,omitempty"`
+	Name       string          `json:"name"`
+	MajorTopic bool            `json:"major_topic"`
+	Qualifiers []MeSHQualifier `json:"qualifiers,omitempty"`
+}
+
+type MeSHQualifier struct {
+	UI         string `json:"ui,omitempty"`
+	Name       string `json:"name"`
+	MajorTopic bool   `json:"major_topic"`
+}
+
+type Chemical struct {
+	UI             string `json:"ui,omitempty"`
+	Name           string `json:"name"`
+	RegistryNumber string `json:"registry_number,omitempty"`
+}
+
+type Grant struct {
+	ID      string `json:"id,omitempty"`
+	Agency  string `json:"agency,omitempty"`
+	Country string `json:"country,omitempty"`
+	Acronym string `json:"acronym,omitempty"`
+}
+
+type Correction struct {
+	Type string `json:"type"`
+	PMID string `json:"pmid,omitempty"`
+	Ref  string `json:"ref,omitempty"`
+}
+
+type PubMedMetadata struct {
+	MeSH             []MeSHTerm   `json:"mesh,omitempty"`
+	PublicationTypes []string     `json:"publication_types,omitempty"`
+	Keywords         []string     `json:"keywords,omitempty"`
+	Chemicals        []Chemical   `json:"chemicals,omitempty"`
+	Grants           []Grant      `json:"grants,omitempty"`
+	Corrections      []Correction `json:"corrections,omitempty"`
+}
+
+type RelatedArticle struct {
+	Rank int `json:"rank"`
+	Reference
+}
+
+type ResourceLink struct {
+	Database string   `json:"database"`
+	LinkName string   `json:"link_name"`
+	IDs      []string `json:"ids"`
+}
+
 const (
 	ContextAvailable    = "available"
 	ContextNotSupported = "not_supported"
@@ -75,6 +127,7 @@ type Result struct {
 	ItemKey        string         `json:"item_key"`
 	ItemTitle      string         `json:"item_title"`
 	Identifiers    Identifiers    `json:"identifiers"`
+	Metadata       PubMedMetadata `json:"metadata,omitempty"`
 	Strategy       string         `json:"strategy"`
 	References     []Reference    `json:"references"`
 	Contexts       []Context      `json:"contexts,omitempty"`

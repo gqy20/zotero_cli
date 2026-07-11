@@ -19,6 +19,44 @@ type Service struct{ client *Client }
 
 func NewService(client *Client) *Service { return &Service{client: client} }
 
+func (s *Service) ResolveItem(ctx context.Context, item domain.Item, refresh bool) (Identifiers, error) {
+	ids := identifiersFromItem(item)
+	if ids.PMID == "" && ids.DOI != "" {
+		pmid, err := s.client.ResolveDOI(ctx, ids.DOI, refresh)
+		if err != nil {
+			return ids, err
+		}
+		ids.PMID = pmid
+	}
+	if ids.PMID == "" {
+		return ids, &UnsupportedError{ItemKey: item.Key, Reason: "could not be resolved to PubMed"}
+	}
+	return ids, nil
+}
+
+func (s *Service) Related(ctx context.Context, item domain.Item, limit int, alsoViewed, refresh bool) ([]RelatedArticle, Identifiers, error) {
+	ids, err := s.ResolveItem(ctx, item, refresh)
+	if err != nil {
+		return nil, ids, err
+	}
+	var rows []RelatedArticle
+	if alsoViewed {
+		rows, err = s.client.FetchAlsoViewedArticles(ctx, ids.PMID, limit, refresh)
+	} else {
+		rows, err = s.client.FetchRelatedArticles(ctx, ids.PMID, limit, refresh)
+	}
+	return rows, ids, err
+}
+
+func (s *Service) Links(ctx context.Context, item domain.Item, refresh bool) ([]ResourceLink, Identifiers, error) {
+	ids, err := s.ResolveItem(ctx, item, refresh)
+	if err != nil {
+		return nil, ids, err
+	}
+	rows, err := s.client.FetchResourceLinks(ctx, ids.PMID, refresh)
+	return rows, ids, err
+}
+
 func (s *Service) References(ctx context.Context, item domain.Item, opts Options) (Result, error) {
 	started := time.Now()
 	result := Result{ItemKey: item.Key, ItemTitle: item.Title, Identifiers: identifiersFromItem(item)}
@@ -38,6 +76,13 @@ func (s *Service) References(ctx context.Context, item domain.Item, opts Options
 		if result.Identifiers.DOI == "" {
 			result.Identifiers.DOI = record.DOI
 		}
+		result.Metadata = record.Metadata
+	} else if result.Identifiers.PMID != "" {
+		record, err := s.client.FetchPubMedArticle(ctx, result.Identifiers.PMID, opts.Refresh)
+		if err != nil {
+			return result, err
+		}
+		result.Metadata = record.Metadata
 	}
 
 	source := strings.ToLower(strings.TrimSpace(opts.Source))

@@ -84,6 +84,8 @@ CREATE TABLE IF NOT EXISTS ref_items (
   title TEXT NOT NULL,
   fingerprint TEXT NOT NULL,
   doi TEXT, pmid TEXT, pmcid TEXT,
+	  pubmed_metadata_json TEXT NOT NULL DEFAULT '{}',
+	  metadata_version INTEGER NOT NULL DEFAULT 0,
   strategy TEXT,
   status TEXT NOT NULL,
   reference_count INTEGER NOT NULL DEFAULT 0,
@@ -118,6 +120,7 @@ CREATE TABLE IF NOT EXISTS ref_contexts (
 CREATE TABLE IF NOT EXISTS ref_meta (key TEXT PRIMARY KEY,value TEXT NOT NULL);
 CREATE VIRTUAL TABLE IF NOT EXISTS ref_entries_fts USING fts5(source_item_key UNINDEXED,ref_index UNINDEXED,title,authors,container,doi,pmid,raw);
 CREATE VIRTUAL TABLE IF NOT EXISTS ref_contexts_fts USING fts5(source_item_key UNINDEXED,ordinal UNINDEXED,reference_index UNINDEXED,section,marker,paragraph);
+CREATE VIRTUAL TABLE IF NOT EXISTS ref_metadata_fts USING fts5(item_key UNINDEXED,mesh,publication_types,keywords,chemicals,grants,corrections);
 CREATE INDEX IF NOT EXISTS idx_ref_entries_doi ON ref_entries(doi);
 CREATE INDEX IF NOT EXISTS idx_ref_entries_pmid ON ref_entries(pmid);
 CREATE INDEX IF NOT EXISTS idx_ref_items_status ON ref_items(status);
@@ -143,6 +146,8 @@ CREATE INDEX IF NOT EXISTS idx_ref_contexts_reference ON ref_contexts(source_ite
 		`ALTER TABLE ref_items ADD COLUMN references_with_context INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE ref_items ADD COLUMN references_without_context INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE ref_items ADD COLUMN context_coverage REAL NOT NULL DEFAULT 0`,
+		`ALTER TABLE ref_items ADD COLUMN pubmed_metadata_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE ref_items ADD COLUMN metadata_version INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, e := s.db.Exec(alter); e != nil && !strings.Contains(strings.ToLower(e.Error()), "duplicate column") {
 			return e
@@ -178,7 +183,7 @@ CREATE INDEX IF NOT EXISTS idx_ref_contexts_reference ON ref_contexts(source_ite
 
 func (s *Store) syncReferenceFTS() error {
 	var version string
-	if err := s.db.QueryRow(`SELECT value FROM ref_meta WHERE key='reference_fts_version'`).Scan(&version); err == nil && version == "1" {
+	if err := s.db.QueryRow(`SELECT value FROM ref_meta WHERE key='reference_fts_version'`).Scan(&version); err == nil && version == "2" {
 		return nil
 	} else if err != nil && err != sql.ErrNoRows {
 		return err
@@ -213,7 +218,40 @@ func (s *Store) syncReferenceFTS() error {
 	if _, err = tx.Exec(`INSERT INTO ref_contexts_fts(source_item_key,ordinal,reference_index,section,marker,paragraph) SELECT source_item_key,ordinal,reference_index,section,marker,paragraph FROM ref_contexts`); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(`INSERT INTO ref_meta(key,value) VALUES('reference_fts_version','1') ON CONFLICT(key) DO UPDATE SET value=excluded.value`); err != nil {
+	if _, err = tx.Exec(`DELETE FROM ref_metadata_fts`); err != nil {
+		return err
+	}
+	rows, err := tx.Query(`SELECT item_key,pubmed_metadata_json FROM ref_items WHERE status='success'`)
+	if err != nil {
+		return err
+	}
+	type metadataRow struct {
+		key      string
+		metadata PubMedMetadata
+	}
+	var metadataRows []metadataRow
+	for rows.Next() {
+		var key, raw string
+		if err := rows.Scan(&key, &raw); err != nil {
+			rows.Close()
+			return err
+		}
+		var m PubMedMetadata
+		_ = json.Unmarshal([]byte(raw), &m)
+		metadataRows = append(metadataRows, metadataRow{key, m})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, row := range metadataRows {
+		mesh, pt, kw, ch, gr, co := metadataSearchText(row.metadata)
+		if _, err = tx.Exec(`INSERT INTO ref_metadata_fts(item_key,mesh,publication_types,keywords,chemicals,grants,corrections) VALUES(?,?,?,?,?,?,?)`, row.key, mesh, pt, kw, ch, gr, co); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec(`INSERT INTO ref_meta(key,value) VALUES('reference_fts_version','2') ON CONFLICT(key) DO UPDATE SET value=excluded.value`); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -221,14 +259,15 @@ func (s *Store) syncReferenceFTS() error {
 
 func (s *Store) IsFresh(ctx context.Context, itemKey, fingerprint string) (bool, error) {
 	var stored, status string
-	err := s.db.QueryRowContext(ctx, `SELECT fingerprint, status FROM ref_items WHERE item_key=?`, itemKey).Scan(&stored, &status)
+	var metadataVersion int
+	err := s.db.QueryRowContext(ctx, `SELECT fingerprint, status, metadata_version FROM ref_items WHERE item_key=?`, itemKey).Scan(&stored, &status, &metadataVersion)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	return stored == fingerprint && (status == "success" || status == "unsupported"), nil
+	return stored == fingerprint && (status == "unsupported" || (status == "success" && metadataVersion >= 1)), nil
 }
 
 func (s *Store) SaveResult(ctx context.Context, result Result, fingerprint string) error {
@@ -243,9 +282,10 @@ func (s *Store) SaveResult(ctx context.Context, result Result, fingerprint strin
 		result.ContextSummary.Status = ContextParseFailed
 	}
 	AnnotateReferenceContexts(result.References, result.Contexts, result.ContextSummary.Status)
-	_, err = tx.ExecContext(ctx, `INSERT INTO ref_items(item_key,title,fingerprint,doi,pmid,pmcid,strategy,status,reference_count,context_status,context_count,references_with_context,references_without_context,context_coverage,error,attempts,updated_at)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'',1,?) ON CONFLICT(item_key) DO UPDATE SET title=excluded.title,fingerprint=excluded.fingerprint,doi=excluded.doi,pmid=excluded.pmid,pmcid=excluded.pmcid,strategy=excluded.strategy,status='success',reference_count=excluded.reference_count,context_status=excluded.context_status,context_count=excluded.context_count,references_with_context=excluded.references_with_context,references_without_context=excluded.references_without_context,context_coverage=excluded.context_coverage,error='',attempts=ref_items.attempts+1,updated_at=excluded.updated_at`,
-		result.ItemKey, result.ItemTitle, fingerprint, result.Identifiers.DOI, result.Identifiers.PMID, result.Identifiers.PMCID, result.Strategy, "success", len(result.References), result.ContextSummary.Status, result.ContextSummary.ContextCount, result.ContextSummary.ReferencesWithContext, result.ContextSummary.ReferencesWithoutContext, result.ContextSummary.Coverage, now)
+	metadataJSON, _ := json.Marshal(result.Metadata)
+	_, err = tx.ExecContext(ctx, `INSERT INTO ref_items(item_key,title,fingerprint,doi,pmid,pmcid,pubmed_metadata_json,metadata_version,strategy,status,reference_count,context_status,context_count,references_with_context,references_without_context,context_coverage,error,attempts,updated_at)
+VALUES(?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,'',1,?) ON CONFLICT(item_key) DO UPDATE SET title=excluded.title,fingerprint=excluded.fingerprint,doi=excluded.doi,pmid=excluded.pmid,pmcid=excluded.pmcid,pubmed_metadata_json=excluded.pubmed_metadata_json,metadata_version=1,strategy=excluded.strategy,status='success',reference_count=excluded.reference_count,context_status=excluded.context_status,context_count=excluded.context_count,references_with_context=excluded.references_with_context,references_without_context=excluded.references_without_context,context_coverage=excluded.context_coverage,error='',attempts=ref_items.attempts+1,updated_at=excluded.updated_at`,
+		result.ItemKey, result.ItemTitle, fingerprint, result.Identifiers.DOI, result.Identifiers.PMID, result.Identifiers.PMCID, string(metadataJSON), result.Strategy, "success", len(result.References), result.ContextSummary.Status, result.ContextSummary.ContextCount, result.ContextSummary.ReferencesWithContext, result.ContextSummary.ReferencesWithoutContext, result.ContextSummary.Coverage, now)
 	if err != nil {
 		return err
 	}
@@ -304,6 +344,13 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'',1,?) ON CONFLICT(item_key) DO UPDATE SET t
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM ref_contexts WHERE source_item_key=?`, result.ItemKey); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM ref_metadata_fts WHERE item_key=?`, result.ItemKey); err != nil {
+		return err
+	}
+	mesh, pubtypes, keywords, chemicals, grants, corrections := metadataSearchText(result.Metadata)
+	if _, err = tx.ExecContext(ctx, `INSERT INTO ref_metadata_fts(item_key,mesh,publication_types,keywords,chemicals,grants,corrections) VALUES(?,?,?,?,?,?,?)`, result.ItemKey, mesh, pubtypes, keywords, chemicals, grants, corrections); err != nil {
 		return err
 	}
 	stmt, err := tx.PrepareContext(ctx, `INSERT INTO ref_entries(source_item_key,ref_index,ref_id,raw,title,authors_json,container,year,volume,issue,pages,doi,pmid,pmcid,source,target_item_key,match_method,match_score,match_status,context_status,context_count) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
@@ -365,6 +412,29 @@ func referenceMatchKeys(ref Reference) []string {
 	return keys
 }
 
+func metadataSearchText(m PubMedMetadata) (string, string, string, string, string, string) {
+	mesh := []string{}
+	for _, x := range m.MeSH {
+		mesh = append(mesh, x.UI, x.Name)
+		for _, q := range x.Qualifiers {
+			mesh = append(mesh, q.UI, q.Name)
+		}
+	}
+	chemicals := []string{}
+	for _, x := range m.Chemicals {
+		chemicals = append(chemicals, x.UI, x.Name, x.RegistryNumber)
+	}
+	grants := []string{}
+	for _, x := range m.Grants {
+		grants = append(grants, x.ID, x.Agency, x.Country, x.Acronym)
+	}
+	corrections := []string{}
+	for _, x := range m.Corrections {
+		corrections = append(corrections, x.Type, x.PMID, x.Ref)
+	}
+	return strings.Join(mesh, " "), strings.Join(m.PublicationTypes, " "), strings.Join(m.Keywords, " "), strings.Join(chemicals, " "), strings.Join(grants, " "), strings.Join(corrections, " ")
+}
+
 func (s *Store) SaveFailure(ctx context.Context, itemKey, title, fingerprint string, cause error) error {
 	return s.saveIssue(ctx, "failed", itemKey, title, fingerprint, cause)
 }
@@ -383,16 +453,19 @@ ON CONFLICT(item_key) DO UPDATE SET title=excluded.title,fingerprint=excluded.fi
 func (s *Store) LoadResult(ctx context.Context, itemKey string) (Result, bool, error) {
 	var result Result
 	var status string
-	err := s.db.QueryRowContext(ctx, `SELECT item_key,title,doi,pmid,pmcid,strategy,status,context_status,context_count,references_with_context,references_without_context,context_coverage FROM ref_items WHERE item_key=?`, itemKey).Scan(&result.ItemKey, &result.ItemTitle, &result.Identifiers.DOI, &result.Identifiers.PMID, &result.Identifiers.PMCID, &result.Strategy, &status, &result.ContextSummary.Status, &result.ContextSummary.ContextCount, &result.ContextSummary.ReferencesWithContext, &result.ContextSummary.ReferencesWithoutContext, &result.ContextSummary.Coverage)
+	var metadataVersion int
+	var metadataJSON string
+	err := s.db.QueryRowContext(ctx, `SELECT item_key,title,doi,pmid,pmcid,pubmed_metadata_json,metadata_version,strategy,status,context_status,context_count,references_with_context,references_without_context,context_coverage FROM ref_items WHERE item_key=?`, itemKey).Scan(&result.ItemKey, &result.ItemTitle, &result.Identifiers.DOI, &result.Identifiers.PMID, &result.Identifiers.PMCID, &metadataJSON, &metadataVersion, &result.Strategy, &status, &result.ContextSummary.Status, &result.ContextSummary.ContextCount, &result.ContextSummary.ReferencesWithContext, &result.ContextSummary.ReferencesWithoutContext, &result.ContextSummary.Coverage)
 	if err == sql.ErrNoRows {
 		return Result{}, false, nil
 	}
 	if err != nil {
 		return Result{}, false, err
 	}
-	if status != "success" {
+	if status != "success" || metadataVersion < 1 {
 		return Result{}, false, nil
 	}
+	_ = json.Unmarshal([]byte(metadataJSON), &result.Metadata)
 	rows, err := s.db.QueryContext(ctx, `SELECT ref_index,ref_id,raw,title,authors_json,container,year,volume,issue,pages,doi,pmid,pmcid,source,target_item_key,match_method,match_score,match_status,context_status,context_count FROM ref_entries WHERE source_item_key=? ORDER BY ref_index`, itemKey)
 	if err != nil {
 		return Result{}, false, err

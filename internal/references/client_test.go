@@ -2,6 +2,7 @@ package references
 
 import (
 	"context"
+	encodingxml "encoding/xml"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -76,6 +77,34 @@ func TestFetchPubMedReferencesUsesELinkAndBatchEFetch(t *testing.T) {
 	}
 	if len(refs) != 2 || refs[0].PMID != "11" || refs[1].PMCID != "PMC22" || refs[1].Title != "Two" {
 		t.Fatalf("refs = %#v", refs)
+	}
+}
+
+func TestPubMedRichMetadata(t *testing.T) {
+	xml := `<PubmedArticleSet><PubmedArticle><MedlineCitation><PMID>7</PMID><Article><ArticleTitle>Rich</ArticleTitle><PublicationTypeList><PublicationType>Review</PublicationType></PublicationTypeList><GrantList><Grant><GrantID>R01</GrantID><Agency>NIH</Agency><Country>United States</Country></Grant></GrantList></Article><MeshHeadingList><MeshHeading><DescriptorName UI="D1" MajorTopicYN="Y">Genomics</DescriptorName><QualifierName UI="Q1" MajorTopicYN="N">methods</QualifierName></MeshHeading></MeshHeadingList><KeywordList><Keyword>long reads</Keyword></KeywordList><ChemicalList><Chemical><RegistryNumber>0</RegistryNumber><NameOfSubstance UI="C1">Water</NameOfSubstance></Chemical></ChemicalList><CommentsCorrectionsList><CommentsCorrections RefType="RetractionIn"><RefSource>Journal</RefSource><PMID>8</PMID></CommentsCorrections></CommentsCorrectionsList></MedlineCitation></PubmedArticle></PubmedArticleSet>`
+	var set pubmedArticleSet
+	if err := encodingxml.Unmarshal([]byte(xml), &set); err != nil {
+		t.Fatal(err)
+	}
+	m := set.Articles[0].record().Metadata
+	if len(m.MeSH) != 1 || !m.MeSH[0].MajorTopic || m.MeSH[0].Qualifiers[0].Name != "methods" || m.PublicationTypes[0] != "Review" || m.Grants[0].ID != "R01" || m.Corrections[0].Type != "RetractionIn" {
+		t.Fatalf("metadata=%#v", m)
+	}
+}
+
+func TestFetchRelatedExcludesSourceAndKeepsRank(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "elink.fcgi") {
+			fmt.Fprint(w, `{"linksets":[{"linksetdbs":[{"links":["99","11","22"]}]}]}`)
+			return
+		}
+		fmt.Fprint(w, `<PubmedArticleSet>`+pubmedXMLArticle("11", "", "", "One")+pubmedXMLArticle("22", "", "", "Two")+`</PubmedArticleSet>`)
+	}))
+	defer server.Close()
+	client := NewClient(ClientConfig{BaseURL: server.URL, MinInterval: time.Nanosecond, HTTPClient: server.Client()})
+	rows, err := client.FetchRelatedArticles(context.Background(), "99", 2, false)
+	if err != nil || len(rows) != 2 || rows[0].PMID != "11" || rows[1].Rank != 2 {
+		t.Fatalf("rows=%#v err=%v", rows, err)
 	}
 }
 

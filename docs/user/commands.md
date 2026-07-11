@@ -75,6 +75,10 @@ zot ref grobid build --limit 5 --workers 1 --json
 zot ref search "genome assembly" --json
 zot ref search "we used" --section methods --limit 20 --json
 zot ref search "genome assembly" --references --json
+zot ref search "genome assembly" --field mesh --json
+zot ref related ITEMKEY --limit 20 --json
+zot ref related ITEMKEY --also-viewed --json
+zot ref links ITEMKEY --json
 ```
 
 `ref ITEMKEY` 从 DOI、PubMed URL 和摘要中识别 PMID/PMCID，优先读取 PMC JATS XML 的完整 `<ref-list>`；没有 PMC 时，通过 PubMed ELink 获取可映射到 PMID 的引用，并批量 EFetch 结构化元数据。
@@ -85,7 +89,9 @@ PMC/PubMed（NCBI）是 `ref` 的正式支持核心流程，也是 `ref build` �
 
 `ref resolve` 使用 DOI、PMID、规范化标题和保守的模糊标题匹配，将参考文献解析回本地 Zotero 条目。`ref cited-by` 提供反向引用查询；`ref contexts` 返回 PMC JATS 正文中引用标记所在的章节和完整段落。PubMed 只提供参考文献关系，不提供正文上下文，因此其 `contexts` 为空。
 
-`ref search QUERY` 默认使用 FTS5 同时检索结构化参考文献和正文引用上下文。需要限制范围时使用 `--contexts` 或 `--references`；指定 `--section` 会自动限定到上下文。还可按 `--source pmc|pubmed|grobid`、`--target ITEMKEY` 和 `--limit` 过滤。
+`ref search QUERY` 默认使用 FTS5 同时检索结构化参考文献、正文引用上下文和 PubMed 元数据。需要限制范围时使用 `--contexts`、`--references` 或 `--metadata`；`--field mesh|publication_types|keywords|chemicals|grants|corrections` 可精确限定元数据字段。指定 `--section` 会自动限定到上下文。还可按 `--source pmc|pubmed|grobid`、`--target ITEMKEY` 和 `--limit` 过滤。
+
+成功的 PubMed 解析会随 `ref build` 保存 MeSH（包括 Major Topic 与 qualifier）、publication types、作者关键词、化学物质、基金和勘误/撤稿关系，不产生额外 EFetch 请求。`ref related` 使用 PubMed Similar Articles 官方顺序并排除原文；`ref links` 并行查询 PMC、Gene、GEO、SRA、BioProject、BioSample、ClinVar 和 Assembly，仍由统一 NCBI 限速器控制请求速率。
 
 每个成功索引条目同时记录引用上下文完整性：`available`、`not_supported`、`not_found`、`parse_failed` 或 `not_indexed`，以及有/无上下文的参考文献数量和覆盖率。`ref contexts --json` 在 `meta.context_summary` 中返回这些指标。
 

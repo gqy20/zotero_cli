@@ -13,7 +13,7 @@ func TestStoreSearchReferencesAndContexts(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	result := Result{ItemKey: "SOURCE", ItemTitle: "Source paper", Strategy: string(SourcePMC), References: []Reference{{Index: 1, ID: "b1", Title: "Genome assembly with long reads", DOI: "10.1/a", Source: SourcePMC, TargetItemKey: "TARGET", MatchStatus: "resolved", MatchMethod: "doi", MatchScore: 1}}, Contexts: []Context{{ReferenceID: "b1", ReferenceIndex: 1, Marker: "[1]", Section: "Methods", Paragraph: "We used long-read sequencing for genome reconstruction.", Source: SourcePMC}}}
+	result := Result{ItemKey: "SOURCE", ItemTitle: "Source paper", Strategy: string(SourcePMC), Metadata: PubMedMetadata{MeSH: []MeSHTerm{{UI: "D012345", Name: "Sequence Assembly", MajorTopic: true}}, PublicationTypes: []string{"Review"}, Keywords: []string{"pangenome"}}, References: []Reference{{Index: 1, ID: "b1", Title: "Genome assembly with long reads", DOI: "10.1/a", Source: SourcePMC, TargetItemKey: "TARGET", MatchStatus: "resolved", MatchMethod: "doi", MatchScore: 1}}, Contexts: []Context{{ReferenceID: "b1", ReferenceIndex: 1, Marker: "[1]", Section: "Methods", Paragraph: "We used long-read sequencing for genome reconstruction.", Source: SourcePMC}}}
 	if err := store.SaveResult(ctx, result, "fp"); err != nil {
 		t.Fatal(err)
 	}
@@ -24,6 +24,10 @@ func TestStoreSearchReferencesAndContexts(t *testing.T) {
 	hits, err = store.Search(ctx, SearchOptions{Query: "long read sequencing", In: "contexts", Section: "Method", Limit: 10})
 	if err != nil || len(hits) != 1 || len(hits[0].Contexts) != 1 || hits[0].MatchedOn[0] != "context" {
 		t.Fatalf("context hits=%+v err=%v", hits, err)
+	}
+	hits, err = store.Search(ctx, SearchOptions{Query: "sequence assembly", In: "metadata", Field: "mesh", Limit: 10})
+	if err != nil || len(hits) != 1 || hits[0].Metadata.MeSH[0].UI != "D012345" || hits[0].MatchedOn[0] != "metadata" {
+		t.Fatalf("metadata hits=%+v err=%v", hits, err)
 	}
 	hits, err = store.Search(ctx, SearchOptions{Query: "genome", Target: "TARGET", Source: string(SourcePMC), Limit: 10})
 	if err != nil || len(hits) != 1 || len(hits[0].MatchedOn) != 2 {

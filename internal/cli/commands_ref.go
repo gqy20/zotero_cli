@@ -29,7 +29,9 @@ const usageRef = `usage: zot ref <item-key> [--source auto|pmc|pubmed] [--refres
        zot ref contexts <item-key> [--json]
        zot ref contexts build [--workers N] [--limit N] [--refresh] [--json]
        zot ref grobid <status|build> [options]
-       zot ref search <query> [--contexts|--references] [filters]
+	   zot ref search <query> [--contexts|--references|--metadata] [--field FIELD] [filters]
+	   zot ref related <item-key> [--limit N] [--also-viewed] [--refresh] [--json]
+	   zot ref links <item-key> [--refresh] [--json]
 
 What: Manage the local structured-reference index. The officially supported
 core is NCBI: prefer complete PMC JATS, otherwise use PubMed reference links
@@ -48,6 +50,8 @@ Subcommands:
   contexts      Show or backfill PMC JATS citation contexts.
   grobid        EXPERIMENTAL: check or run the optional PDF fallback.
   search        Search structured references and citation contexts.
+  related       List PubMed Similar Articles in official rank order.
+  links         List linked NCBI resources (PMC, Gene, GEO, SRA, and more).
 
 Options:
   --source auto|pmc|pubmed  Select NCBI routing (default auto).
@@ -101,6 +105,10 @@ func (c *CLI) runRef(args []string) int {
 		return c.runRefGrobid(args[1:])
 	case "search":
 		return c.runRefSearch(args[1:])
+	case "related":
+		return c.runRefRelated(args[1:])
+	case "links":
+		return c.runRefLinks(args[1:])
 	default:
 		if strings.HasPrefix(args[0], "-") {
 			return c.refUsageError("missing item key or subcommand")

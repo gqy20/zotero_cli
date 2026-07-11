@@ -33,7 +33,39 @@ type pubmedArticle struct {
 				Last       string `xml:"LastName"`
 				Fore       string `xml:"ForeName"`
 			} `xml:"AuthorList>Author"`
+			PublicationTypes []innerText `xml:"PublicationTypeList>PublicationType"`
+			Grants           []struct {
+				ID      string `xml:"GrantID"`
+				Agency  string `xml:"Agency"`
+				Country string `xml:"Country"`
+				Acronym string `xml:"Acronym"`
+			} `xml:"GrantList>Grant"`
 		} `xml:"Article"`
+		Mesh []struct {
+			Descriptor struct {
+				UI    string `xml:"UI,attr"`
+				Major string `xml:"MajorTopicYN,attr"`
+				Text  string `xml:",chardata"`
+			} `xml:"DescriptorName"`
+			Qualifiers []struct {
+				UI    string `xml:"UI,attr"`
+				Major string `xml:"MajorTopicYN,attr"`
+				Text  string `xml:",chardata"`
+			} `xml:"QualifierName"`
+		} `xml:"MeshHeadingList>MeshHeading"`
+		Keywords  []innerText `xml:"KeywordList>Keyword"`
+		Chemicals []struct {
+			Registry  string `xml:"RegistryNumber"`
+			Substance struct {
+				UI   string `xml:"UI,attr"`
+				Text string `xml:",chardata"`
+			} `xml:"NameOfSubstance"`
+		} `xml:"ChemicalList>Chemical"`
+		Corrections []struct {
+			Type string `xml:"RefType,attr"`
+			PMID string `xml:"PMID"`
+			Ref  string `xml:"RefSource"`
+		} `xml:"CommentsCorrectionsList>CommentsCorrections"`
 	} `xml:"MedlineCitation"`
 	Data struct {
 		IDs []struct {
@@ -54,6 +86,7 @@ type pubmedRecord struct {
 	Volume    string
 	Issue     string
 	Pages     string
+	Metadata  PubMedMetadata
 }
 
 func (article pubmedArticle) record() pubmedRecord {
@@ -74,6 +107,34 @@ func (article pubmedArticle) record() pubmedRecord {
 	}
 	for _, author := range article.Citation.Article.Authors {
 		record.Authors = append(record.Authors, Author{Family: cleanSpace(author.Last), Given: cleanSpace(author.Fore), Name: cleanSpace(author.Collective)})
+	}
+	for _, value := range article.Citation.Article.PublicationTypes {
+		if v := cleanSpace(value.Text); v != "" {
+			record.Metadata.PublicationTypes = append(record.Metadata.PublicationTypes, v)
+		}
+	}
+	for _, value := range article.Citation.Keywords {
+		if v := cleanSpace(value.Text); v != "" {
+			record.Metadata.Keywords = append(record.Metadata.Keywords, v)
+		}
+	}
+	for _, heading := range article.Citation.Mesh {
+		term := MeSHTerm{UI: cleanSpace(heading.Descriptor.UI), Name: cleanSpace(heading.Descriptor.Text), MajorTopic: strings.EqualFold(heading.Descriptor.Major, "Y")}
+		for _, q := range heading.Qualifiers {
+			term.Qualifiers = append(term.Qualifiers, MeSHQualifier{UI: cleanSpace(q.UI), Name: cleanSpace(q.Text), MajorTopic: strings.EqualFold(q.Major, "Y")})
+		}
+		if term.Name != "" {
+			record.Metadata.MeSH = append(record.Metadata.MeSH, term)
+		}
+	}
+	for _, value := range article.Citation.Chemicals {
+		record.Metadata.Chemicals = append(record.Metadata.Chemicals, Chemical{UI: cleanSpace(value.Substance.UI), Name: cleanSpace(value.Substance.Text), RegistryNumber: cleanSpace(value.Registry)})
+	}
+	for _, value := range article.Citation.Article.Grants {
+		record.Metadata.Grants = append(record.Metadata.Grants, Grant{ID: cleanSpace(value.ID), Agency: cleanSpace(value.Agency), Country: cleanSpace(value.Country), Acronym: cleanSpace(value.Acronym)})
+	}
+	for _, value := range article.Citation.Corrections {
+		record.Metadata.Corrections = append(record.Metadata.Corrections, Correction{Type: cleanSpace(value.Type), PMID: cleanSpace(value.PMID), Ref: cleanSpace(value.Ref)})
 	}
 	for _, id := range article.Data.IDs {
 		switch strings.ToLower(id.Type) {

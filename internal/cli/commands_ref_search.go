@@ -12,7 +12,7 @@ import (
 func (c *CLI) runRefSearch(args []string) int {
 	opts := references.SearchOptions{In: "all", Limit: 20}
 	jsonOutput := false
-	contextsOnly, referencesOnly := false, false
+	contextsOnly, referencesOnly, metadataOnly := false, false, false
 	queryParts := []string{}
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -22,6 +22,14 @@ func (c *CLI) runRefSearch(args []string) int {
 			contextsOnly = true
 		case "--references":
 			referencesOnly = true
+		case "--metadata":
+			metadataOnly = true
+		case "--field":
+			if i+1 >= len(args) {
+				return c.refUsageError("missing value for --field")
+			}
+			i++
+			opts.Field = strings.ToLower(args[i])
 		case "--section":
 			if i+1 >= len(args) {
 				return c.refUsageError("missing value for --section")
@@ -64,8 +72,8 @@ func (c *CLI) runRefSearch(args []string) int {
 	if strings.TrimSpace(opts.Query) == "" {
 		return c.refUsageError("ref search requires a query")
 	}
-	if contextsOnly && referencesOnly {
-		return c.refUsageError("--contexts and --references cannot be used together")
+	if boolCount(contextsOnly, referencesOnly, metadataOnly) > 1 {
+		return c.refUsageError("--contexts, --references, and --metadata cannot be combined")
 	}
 	if referencesOnly && opts.Section != "" {
 		return c.refUsageError("--section applies to contexts and cannot be used with --references")
@@ -74,6 +82,12 @@ func (c *CLI) runRefSearch(args []string) int {
 		opts.In = "contexts"
 	} else if referencesOnly {
 		opts.In = "references"
+	} else if metadataOnly || opts.Field != "" {
+		opts.In = "metadata"
+	}
+	validFields := map[string]bool{"": true, "mesh": true, "publication_types": true, "keywords": true, "chemicals": true, "grants": true, "corrections": true}
+	if !validFields[opts.Field] {
+		return c.refUsageError("invalid value for --field")
 	}
 	if opts.Source != "" && opts.Source != string(references.SourcePMC) && opts.Source != string(references.SourcePubMed) && opts.Source != string(references.SourceGROBID) {
 		return c.refUsageError("invalid value for --source")
@@ -102,4 +116,14 @@ func (c *CLI) runRefSearch(args []string) int {
 		}
 	}
 	return ExitOK
+}
+
+func boolCount(values ...bool) int {
+	n := 0
+	for _, v := range values {
+		if v {
+			n++
+		}
+	}
+	return n
 }

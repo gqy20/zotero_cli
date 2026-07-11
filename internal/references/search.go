@@ -11,16 +11,17 @@ import (
 )
 
 type SearchOptions struct {
-	Query, In, Section, Source, Target string
-	Limit                              int
+	Query, In, Field, Section, Source, Target string
+	Limit                                     int
 }
 type SearchHit struct {
-	SourceItemKey string    `json:"source_item_key"`
-	SourceTitle   string    `json:"source_title"`
-	Reference     Reference `json:"reference"`
-	Contexts      []Context `json:"contexts,omitempty"`
-	MatchedOn     []string  `json:"matched_on"`
-	Score         float64   `json:"score"`
+	SourceItemKey string         `json:"source_item_key"`
+	SourceTitle   string         `json:"source_title"`
+	Reference     Reference      `json:"reference"`
+	Contexts      []Context      `json:"contexts,omitempty"`
+	MatchedOn     []string       `json:"matched_on"`
+	Score         float64        `json:"score"`
+	Metadata      PubMedMetadata `json:"metadata,omitempty"`
 }
 
 var ftsSearchWords = regexp.MustCompile(`[\p{L}\p{N}]+`)
@@ -86,6 +87,15 @@ func (s *Store) Search(ctx context.Context, opts SearchOptions) ([]SearchHit, er
 			add(h, "context")
 		}
 	}
+	if opts.In == "all" || opts.In == "metadata" {
+		rows, err := s.searchMetadataRows(ctx, q, opts)
+		if err != nil {
+			return nil, err
+		}
+		for _, h := range rows {
+			add(h, "metadata")
+		}
+	}
 	out := make([]SearchHit, 0, len(order))
 	for _, key := range order {
 		out = append(out, *hits[key])
@@ -95,6 +105,30 @@ func (s *Store) Search(ctx context.Context, opts SearchOptions) ([]SearchHit, er
 		out = out[:opts.Limit]
 	}
 	return out, nil
+}
+
+func (s *Store) searchMetadataRows(ctx context.Context, q string, o SearchOptions) ([]SearchHit, error) {
+	match := q
+	if o.Field != "" {
+		match = o.Field + ":(" + q + ")"
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT i.item_key,i.title,i.pubmed_metadata_json,bm25(ref_metadata_fts) FROM ref_metadata_fts JOIN ref_items i ON i.item_key=ref_metadata_fts.item_key WHERE ref_metadata_fts MATCH ? ORDER BY bm25(ref_metadata_fts) LIMIT ?`, match, o.Limit*3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []SearchHit{}
+	for rows.Next() {
+		var h SearchHit
+		var metadata string
+		if err := rows.Scan(&h.SourceItemKey, &h.SourceTitle, &metadata, &h.Score); err != nil {
+			return nil, err
+		}
+		h.Reference = Reference{Title: h.SourceTitle}
+		_ = json.Unmarshal([]byte(metadata), &h.Metadata)
+		out = append(out, h)
+	}
+	return out, rows.Err()
 }
 func (s *Store) searchReferenceRows(ctx context.Context, q string, o SearchOptions) ([]SearchHit, error) {
 	query := `SELECT e.source_item_key,i.title,e.ref_index,e.ref_id,e.raw,e.title,e.authors_json,e.container,e.year,e.volume,e.issue,e.pages,e.doi,e.pmid,e.pmcid,e.source,COALESCE(e.target_item_key,''),COALESCE(e.match_method,''),e.match_score,COALESCE(e.match_status,''),e.context_status,e.context_count,bm25(ref_entries_fts) FROM ref_entries_fts JOIN ref_entries e ON e.source_item_key=ref_entries_fts.source_item_key AND e.ref_index=ref_entries_fts.ref_index JOIN ref_items i ON i.item_key=e.source_item_key WHERE ref_entries_fts MATCH ?`

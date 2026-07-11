@@ -93,7 +93,92 @@ func (c *Client) FetchPubMedArticle(ctx context.Context, pmid string, refresh bo
 }
 
 func (c *Client) FetchPubMedReferences(ctx context.Context, pmid string, refresh bool) ([]Reference, error) {
-	values := url.Values{"dbfrom": {"pubmed"}, "db": {"pubmed"}, "id": {pmid}, "linkname": {"pubmed_pubmed_refs"}, "retmode": {"json"}}
+	ids, err := c.fetchLinkIDs(ctx, pmid, "pubmed", "pubmed_pubmed_refs", refresh)
+	if err != nil {
+		return nil, err
+	}
+	records, err := c.fetchPubMedRecords(ctx, ids, refresh)
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]Reference, 0, len(records))
+	for i, record := range records {
+		refs = append(refs, record.reference(i+1, SourcePubMed))
+	}
+	return refs, nil
+}
+
+func (c *Client) FetchRelatedArticles(ctx context.Context, pmid string, limit int, refresh bool) ([]RelatedArticle, error) {
+	return c.fetchRelatedArticles(ctx, pmid, "pubmed_pubmed", limit, refresh)
+}
+
+func (c *Client) FetchAlsoViewedArticles(ctx context.Context, pmid string, limit int, refresh bool) ([]RelatedArticle, error) {
+	return c.fetchRelatedArticles(ctx, pmid, "pubmed_pubmed_alsoviewed", limit, refresh)
+}
+
+func (c *Client) fetchRelatedArticles(ctx context.Context, pmid, linkName string, limit int, refresh bool) ([]RelatedArticle, error) {
+	ids, err := c.fetchLinkIDs(ctx, pmid, "pubmed", linkName, refresh)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id != pmid {
+			filtered = append(filtered, id)
+		}
+	}
+	if limit > 0 && len(filtered) > limit {
+		filtered = filtered[:limit]
+	}
+	records, err := c.fetchPubMedRecords(ctx, filtered, refresh)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]RelatedArticle, 0, len(records))
+	for i, record := range records {
+		out = append(out, RelatedArticle{Rank: i + 1, Reference: record.reference(i+1, SourcePubMed)})
+	}
+	return out, nil
+}
+
+var supportedResourceLinks = []struct{ Database, LinkName string }{
+	{"pmc", "pubmed_pmc"}, {"gene", "pubmed_gene"}, {"gds", "pubmed_gds"},
+	{"sra", "pubmed_sra"}, {"bioproject", "pubmed_bioproject"}, {"biosample", "pubmed_biosample"},
+	{"clinvar", "pubmed_clinvar"}, {"assembly", "pubmed_assembly"},
+}
+
+func (c *Client) FetchResourceLinks(ctx context.Context, pmid string, refresh bool) ([]ResourceLink, error) {
+	type linkResult struct {
+		index int
+		link  ResourceLink
+		err   error
+	}
+	results := make(chan linkResult, len(supportedResourceLinks))
+	for i, spec := range supportedResourceLinks {
+		go func(index int, database, linkName string) {
+			ids, err := c.fetchLinkIDs(ctx, pmid, database, linkName, refresh)
+			results <- linkResult{index, ResourceLink{Database: database, LinkName: linkName, IDs: ids}, err}
+		}(i, spec.Database, spec.LinkName)
+	}
+	ordered := make([]ResourceLink, len(supportedResourceLinks))
+	for range supportedResourceLinks {
+		result := <-results
+		if result.err != nil {
+			return nil, result.err
+		}
+		ordered[result.index] = result.link
+	}
+	out := []ResourceLink{}
+	for _, link := range ordered {
+		if len(link.IDs) > 0 {
+			out = append(out, link)
+		}
+	}
+	return out, nil
+}
+
+func (c *Client) fetchLinkIDs(ctx context.Context, pmid, database, linkName string, refresh bool) ([]string, error) {
+	values := url.Values{"dbfrom": {"pubmed"}, "db": {database}, "id": {pmid}, "linkname": {linkName}, "retmode": {"json"}}
 	data, err := c.get(ctx, "elink.fcgi", values, refresh)
 	if err != nil {
 		return nil, err
@@ -106,21 +191,12 @@ func (c *Client) FetchPubMedReferences(ctx context.Context, pmid string, refresh
 		} `json:"linksets"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, fmt.Errorf("decode NCBI reference links: %w", err)
+		return nil, fmt.Errorf("decode NCBI %s links: %w", linkName, err)
 	}
 	if len(response.LinkSets) == 0 || len(response.LinkSets[0].DBs) == 0 {
-		return []Reference{}, nil
+		return []string{}, nil
 	}
-	ids := response.LinkSets[0].DBs[0].Links
-	records, err := c.fetchPubMedRecords(ctx, ids, refresh)
-	if err != nil {
-		return nil, err
-	}
-	refs := make([]Reference, 0, len(records))
-	for i, record := range records {
-		refs = append(refs, record.reference(i+1, SourcePubMed))
-	}
-	return refs, nil
+	return response.LinkSets[0].DBs[0].Links, nil
 }
 
 func (c *Client) FetchPMCDocument(ctx context.Context, pmcid string, refresh bool) ([]Reference, []Context, string, error) {
