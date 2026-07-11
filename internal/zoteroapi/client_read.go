@@ -269,10 +269,15 @@ func (c *Client) ListSearches(ctx context.Context) ([]Search, error) {
 
 	searches := make([]Search, 0, len(raw))
 	for _, search := range raw {
+		conditions := make([]SearchCondition, 0, len(search.Data.Conditions))
+		for _, condition := range search.Data.Conditions {
+			conditions = append(conditions, SearchCondition{Condition: condition.Condition, Operator: condition.Operator, Value: condition.Value})
+		}
 		searches = append(searches, Search{
 			Key:           search.Key,
 			Name:          search.Data.Name,
-			NumConditions: len(search.Data.Conditions),
+			NumConditions: len(conditions),
+			Conditions:    conditions,
 		})
 	}
 

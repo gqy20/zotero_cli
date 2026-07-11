@@ -58,7 +58,7 @@ func TestSubcommandHelpSkipsConfigLoading(t *testing.T) {
 		args      []string
 		wantUsage string
 	}{
-		{name: "export help", args: []string{"export", "--help"}, wantUsage: usageExport},
+		{name: "export help", args: []string{"item", "export", "--help"}, wantUsage: "zot item export"},
 		{name: "stats help", args: []string{"lib", "stats", "--help"}, wantUsage: "zot lib stats"},
 	}
 
@@ -158,8 +158,8 @@ func TestRunShowRejectsExtraPositionalArgs(t *testing.T) {
 	if exitCode != 2 {
 		t.Fatalf("expected exit code 2, got %d; stderr=%q", exitCode, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), usageShow) {
-		t.Fatalf("expected usage message, got %q", stderr.String())
+	if !strings.Contains(stderr.String(), "accepts 1 arg") {
+		t.Fatalf("expected positional-argument error, got %q", stderr.String())
 	}
 }
 
@@ -213,28 +213,25 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 		wantStderr string
 	}{
 		{
-			name:      "find missing query",
-			args:      []string{"find"},
-			wantUsage: usageFind,
+			name:       "find missing query",
+			args:       []string{"find"},
+			wantStderr: "error: QUERY, --all, or a filter is required",
 		},
 
 		{
 			name:       "export conflicting args",
 			args:       []string{"export", "mixed", "--item-key", "X42A7DEE"},
-			wantUsage:  usageExport,
-			wantStderr: "error: cannot combine query, --item-key, --collection, and --from-find",
+			wantStderr: "error: provide exactly one export source",
 		},
 		{
 			name:       "export conflicting collection args",
 			args:       []string{"export", "--collection", "COLL1234", "--item-key", "X42A7DEE"},
-			wantUsage:  usageExport,
-			wantStderr: "error: cannot combine query, --item-key, --collection, and --from-find",
+			wantStderr: "error: provide exactly one export source",
 		},
 		{
 			name:       "export invalid format",
 			args:       []string{"export", "--item-key", "X42A7DEE", "--format", "bad"},
-			wantUsage:  usageExport,
-			wantStderr: "error: unsupported format",
+			wantStderr: "error: unsupported export format",
 		},
 		{
 			name: "collections extra arg",
@@ -297,13 +294,11 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 		{
 			name:       "find invalid qmode",
 			args:       []string{"find", "test", "--qmode", "bad"},
-			wantUsage:  usageFind,
 			wantStderr: "error: invalid value for --qmode",
 		},
 		{
 			name:       "find invalid include fields",
 			args:       []string{"find", "test", "--include-fields", "url,bad"},
-			wantUsage:  usageFind,
 			wantStderr: "error: invalid value for --include-fields: bad",
 		},
 		{
@@ -319,43 +314,29 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			args: []string{"publications", "extra"},
 		},
 		{
-			name:      "create item missing data",
-			args:      []string{"create-item"},
-			wantUsage: usageCreateItem,
+			name:       "create item missing data",
+			args:       []string{"create-item"},
+			wantStderr: "error: one of --data, --from, or --set is required",
 		},
 		{
 			name:       "create item conflicting data sources",
 			args:       []string{"create-item", "--data", `{"itemType":"book"}`, "--from-file", "item.json", "--if-unmodified-since-version", "1"},
-			wantUsage:  usageCreateItem,
-			wantStderr: "error: cannot combine --data and --from-file",
+			wantStderr: "error: --data, --from, and --set are mutually exclusive",
 		},
 		{
 			name:       "create item missing file",
 			args:       []string{"create-item", "--from-file", "missing.json", "--if-unmodified-since-version", "1"},
-			wantUsage:  usageCreateItem,
-			wantStderr: "error: could not read --from-file",
+			wantStderr: "error: read --from",
 		},
 		{
 			name:       "create item invalid json",
 			args:       []string{"create-item", "--data", `{"itemType":`, "--if-unmodified-since-version", "1"},
-			wantUsage:  usageCreateItem,
 			wantStderr: "error: invalid JSON payload",
 		},
 		{
-			name:      "update item missing args",
-			args:      []string{"update-item", "ABCD2345"},
-			wantUsage: usageUpdateItem,
-		},
-		{
-			name:       "update item missing version",
-			args:       []string{"update-item", "ABCD2345", "--data", `{"title":"Updated"}`},
-			wantUsage:  usageUpdateItem,
-			wantStderr: "error: missing value for --if-unmodified-since-version",
-		},
-		{
-			name:      "delete item missing version",
-			args:      []string{"delete-item", "ABCD2345"},
-			wantUsage: usageDeleteItem,
+			name:       "update item missing data",
+			args:       []string{"update-item", "ABCD2345"},
+			wantStderr: "error: one of --data, --from, or --set is required",
 		},
 		{
 
@@ -384,44 +365,34 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			wantStderr: "unknown command: delete-items",
 		},
 		{
-			name:      "add tag missing tag",
-			args:      []string{"add-tag", "--items", "ITEMA001"},
-			wantUsage: usageAddTag,
+			name:       "add tag missing tag",
+			args:       []string{"add-tag", "--items", "ITEMA001"},
+			wantStderr: "error: --tag is required",
 		},
 		{
-			name:      "remove tag missing items",
-			args:      []string{"remove-tag", "--tag", "ai"},
-			wantUsage: usageRemoveTag,
+			name:       "remove tag missing items",
+			args:       []string{"remove-tag", "--tag", "ai"},
+			wantStderr: "error: requires at least 1 arg",
 		},
 		{
-			name:      "create collection missing data",
-			args:      []string{"create-collection"},
-			wantUsage: usageCreateCollection,
+			name:       "create collection missing data",
+			args:       []string{"create-collection"},
+			wantStderr: "error: one of --data, --from, or --set is required",
 		},
 		{
-			name:      "update collection missing args",
-			args:      []string{"update-collection", "COLL1234"},
-			wantUsage: usageUpdateCollection,
+			name:       "update collection missing data",
+			args:       []string{"update-collection", "COLL1234"},
+			wantStderr: "error: one of --data, --from, or --set is required",
 		},
 		{
-			name:      "delete collection missing version",
-			args:      []string{"delete-collection", "COLL1234"},
-			wantUsage: usageDeleteCollection,
+			name:       "create search missing data",
+			args:       []string{"create-search"},
+			wantStderr: "error: one of --data, --from, or --set is required",
 		},
 		{
-			name:      "create search missing data",
-			args:      []string{"create-search"},
-			wantUsage: usageCreateSearch,
-		},
-		{
-			name:      "update search missing args",
-			args:      []string{"update-search", "SCH12345"},
-			wantUsage: usageUpdateSearch,
-		},
-		{
-			name:      "delete search missing version",
-			args:      []string{"delete-search", "SCH12345"},
-			wantUsage: usageDeleteSearch,
+			name:       "update search missing data",
+			args:       []string{"update-search", "SCH12345"},
+			wantStderr: "error: one of --data, --from, or --set is required",
 		},
 	}
 

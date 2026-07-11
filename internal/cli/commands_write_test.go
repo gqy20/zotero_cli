@@ -2,11 +2,52 @@ package cli
 
 import (
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestCanonicalAndLegacyDeleteCancellation(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_ALLOW_DELETE", "1")
+
+	for _, args := range [][]string{{"item", "delete", "ITEM1", "--if-version", "1"}, {"delete-item", "ITEM1", "--if-unmodified-since-version", "1"}} {
+		_, stderr := captureOutput(t)
+		testCLI.stdin = strings.NewReader("n\n")
+		if code := Run(args); code != 130 {
+			t.Fatalf("Run(%v) code=%d stderr=%q", args, code, stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "operation cancelled") {
+			t.Fatalf("Run(%v) stderr=%q", args, stderr.String())
+		}
+	}
+}
+
+func TestCanonicalAndLegacyWritesPreserveConflictErrors(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	server := newErrorAPI(t, http.StatusPreconditionFailed, "library version conflict")
+	defer server.cleanup()
+	t.Setenv("ZOT_BASE_URL", server.url)
+
+	for _, args := range [][]string{
+		{"item", "edit", "ITEM1", "--set", "title=New", "--if-version", "1", "--json"},
+		{"update-item", "ITEM1", "--data", `{"title":"New"}`, "--if-unmodified-since-version", "1", "--json"},
+	} {
+		stdout, stderr := captureOutput(t)
+		if code := Run(args); code != ExitError {
+			t.Fatalf("Run(%v) code=%d stdout=%q stderr=%q", args, code, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "precondition_failed") {
+			t.Fatalf("Run(%v) stdout=%q", args, stdout.String())
+		}
+	}
+}
 
 func TestRunCreateItemJSON(t *testing.T) {
 	configRoot := t.TempDir()
@@ -27,7 +68,7 @@ func TestRunCreateItemJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
-	if got["command"] != "create-item" {
+	if got["command"] != "item new" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 }
@@ -89,7 +130,7 @@ func TestRunAddTagJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
-	if got["command"] != "add-tag" {
+	if got["command"] != "item tag" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 	data, ok := got["data"].(map[string]any)

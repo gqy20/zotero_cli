@@ -9,6 +9,7 @@
 ### 新增
 - **CLI v2 阶段 1 基础设施**：引入 Cobra 命令树、canonical Invocation、应用服务 Result 与统一 JSON/text/error renderer；`version`、`config init/show/check` 已迁移，旧 `zot init`、`config validate/path` 通过参数翻译进入同一实现。
 - **CLI v2 阶段 2 只读资源切片**：迁移 `lib show/stats/log`、`item list --scope trash|pubs`、`coll/tag/note/search/group list`；所有入口统一经过 typed request、应用服务和 renderer，旧命令仅翻译参数并返回 canonical JSON command。
+- **CLI v2 阶段 3 资源与安全写入**：迁移 `item find/show/new/edit/delete/tag/untag/supp/export`、Collection/Note/Saved Search 的 show/find/CRUD 及集合成员操作；统一 `--data`、`--from`、`--set`、批量位置 key、`--dry-run`、`--yes`、`--if-version`，未显式给版本时由应用服务读取当前 library version。
 - **`extract-text` 文件输出与全库批量**：`-o/--output-dir` 可把单篇 PDF 全文写成 Markdown；`--all` 支持批量导出本地所有带 PDF 的条目，默认落盘为 Markdown，JSON 模式返回 manifest，避免把全文正文塞进响应。
 - **`extract-figures --all`**：支持直接批量处理本地所有带 PDF 的条目，复用现有 worker pool、页数排序和缓存路径。
 - **附件健康检查**：`inspect-attachment` 新增 `--health`，可诊断本地附件路径未解析、文件缺失、路径是目录、文件名过长、非法字符、异常空格、PDF 缺 `.pdf` 后缀和泛化命名等问题；`find` 新增 `--missing-attachment`、`--bad-attachment-name`、`--attachment-health critical|error|warning|info` 用于批量定位异常附件。
@@ -23,6 +24,7 @@
 
 ### 移除
 - 删除阶段 2 对应的旧只读 handler、旧 dispatch 分支与 `changes` 手写参数解析器，避免新旧两套业务逻辑并存。
+- 删除阶段 3 对应的 find/show/export/supplements/写操作旧 handler 与手写参数解析器；高频旧入口统一翻译到 canonical invocation。
 
 ### 工具链
 

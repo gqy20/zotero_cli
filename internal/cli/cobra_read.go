@@ -69,15 +69,30 @@ func addListFlags(cmd *cobra.Command, opts *app.ListOptions) {
 func (c *CLI) newItemListCommand(opts *globalOptions) *cobra.Command {
 	item := &cobra.Command{Use: "item", Short: "Work with library items"}
 	var list app.ListOptions
-	cmd := &cobra.Command{Use: "list", Short: "List items in a library scope", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		if list.Scope == "" {
-			return &exitError{code: ExitUsage, err: fmt.Errorf("--scope is required (trash or pubs)")}
-		}
+	cmd := &cobra.Command{Use: "list", Short: "List library items", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return c.runRead(cmd, opts, app.CommandPath{Resource: "item", Action: "list"}, func(ctx context.Context, s app.ReadService) (app.Result, error) { return s.Items(ctx, list) })
 	}}
 	addListFlags(cmd, &list)
 	cmd.Flags().StringVar(&list.Scope, "scope", "", "trash or pubs")
+	cmd.Flags().IntVar(&list.Offset, "offset", 0, "result offset")
+	cmd.Flags().StringVar(&list.Sort, "sort", "", "sort field")
+	cmd.Flags().StringVar(&list.Order, "order", "", "asc or desc")
+	cmd.Flags().StringVar(&list.ItemType, "type", "", "item type, such as article or journalArticle")
+	cmd.Flags().StringArrayVar(&list.Tags, "tag", nil, "require a tag")
+	previousRun := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		list.ItemType = app.NormalizeItemType(list.ItemType)
+		if list.Limit < 0 || list.Offset < 0 {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--limit and --offset must be non-negative")}
+		}
+		if list.Order != "" && list.Order != "asc" && list.Order != "desc" {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--order must be asc or desc")}
+		}
+		return previousRun(cmd, args)
+	}
 	item.AddCommand(cmd)
+	c.addItemReadCommands(item, opts)
+	c.addItemWriteCommands(item, opts)
 	return item
 }
 
@@ -90,6 +105,13 @@ func (c *CLI) newCollCommand(opts *globalOptions) *cobra.Command {
 	addListFlags(cmd, &list)
 	cmd.Flags().BoolVar(&list.Top, "top", false, "only top-level collections")
 	coll.AddCommand(cmd)
+	show := &cobra.Command{Use: "show KEY", Short: "Show one collection", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		return c.runRead(cmd, opts, app.CommandPath{Resource: "coll", Action: "show"}, func(ctx context.Context, s app.ReadService) (app.Result, error) {
+			return s.ShowCollection(ctx, args[0])
+		})
+	}}
+	coll.AddCommand(show)
+	c.addCollectionWriteCommands(coll, opts)
 	return coll
 }
 
@@ -112,6 +134,17 @@ func (c *CLI) newNoteListCommand(opts *globalOptions) *cobra.Command {
 	addListFlags(cmd, &list)
 	cmd.Flags().StringVar(&list.Query, "query", "", "filter note text")
 	note.AddCommand(cmd)
+	find := &cobra.Command{Use: "find QUERY", Short: "Find notes by content", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		return c.runRead(cmd, opts, app.CommandPath{Resource: "note", Action: "find"}, func(ctx context.Context, s app.ReadService) (app.Result, error) {
+			return s.Notes(ctx, app.ListOptions{Query: args[0], Limit: list.Limit})
+		})
+	}}
+	addListFlags(find, &list)
+	show := &cobra.Command{Use: "show KEY", Short: "Show one note", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		return c.runRead(cmd, opts, app.CommandPath{Resource: "note", Action: "show"}, func(ctx context.Context, s app.ReadService) (app.Result, error) { return s.ShowNote(ctx, args[0]) })
+	}}
+	note.AddCommand(find, show)
+	c.addObjectWriteCommands(note, opts, "note")
 	return note
 }
 func (c *CLI) newSearchListCommand(opts *globalOptions) *cobra.Command {
@@ -122,6 +155,11 @@ func (c *CLI) newSearchListCommand(opts *globalOptions) *cobra.Command {
 	}}
 	addListFlags(cmd, &list)
 	search.AddCommand(cmd)
+	show := &cobra.Command{Use: "show KEY", Short: "Show one saved search", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		return c.runRead(cmd, opts, app.CommandPath{Resource: "search", Action: "show"}, func(ctx context.Context, s app.ReadService) (app.Result, error) { return s.ShowSearch(ctx, args[0]) })
+	}}
+	search.AddCommand(show)
+	c.addObjectWriteCommands(search, opts, "search")
 	return search
 }
 func (c *CLI) newGroupCommand(opts *globalOptions) *cobra.Command {

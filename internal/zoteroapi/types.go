@@ -64,9 +64,16 @@ type Tag struct {
 }
 
 type Search struct {
-	Key           string `json:"key"`
-	Name          string `json:"name"`
-	NumConditions int    `json:"num_conditions,omitempty"`
+	Key           string            `json:"key"`
+	Name          string            `json:"name"`
+	NumConditions int               `json:"num_conditions,omitempty"`
+	Conditions    []SearchCondition `json:"conditions,omitempty"`
+}
+
+type SearchCondition struct {
+	Condition string `json:"condition"`
+	Operator  string `json:"operator"`
+	Value     string `json:"value"`
 }
 
 type Deleted struct {
@@ -158,6 +165,7 @@ type Item struct {
 	DOI         string              `json:"doi,omitempty"`
 	URL         string              `json:"url,omitempty"`
 	Tags        []string            `json:"tags,omitempty"`
+	Collections []string            `json:"collections,omitempty"`
 	Attachments []Attachment        `json:"attachments,omitempty"`
 	Notes       []Note              `json:"notes,omitempty"`
 	Relations   map[string][]string `json:"relations,omitempty"`
@@ -204,6 +212,7 @@ type apiItemData struct {
 	Pages            string                     `json:"pages"`
 	Creators         []apiCreator               `json:"creators"`
 	Tags             []apiTag                   `json:"tags"`
+	Collections      []string                   `json:"collections"`
 	Note             string                     `json:"note"`
 	Relations        map[string]json.RawMessage `json:"relations,omitempty"`
 }

@@ -38,7 +38,7 @@ func TestRunSupplementsLocalJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
-	if got["command"] != "supplements" {
+	if got["command"] != "item supp" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 	meta, ok := got["meta"].(map[string]any)

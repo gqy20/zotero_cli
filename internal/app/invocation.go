@@ -28,6 +28,7 @@ type SafetyOptions struct {
 	DryRun    bool
 	Yes       bool
 	IfVersion int
+	Confirm   func(string) bool
 }
 
 type Invocation struct {

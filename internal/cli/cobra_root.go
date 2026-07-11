@@ -73,6 +73,36 @@ func translateStageOneArgs(args []string) ([]string, bool) {
 		return append([]string{"item", "list", "--scope", "trash"}, args[1:]...), true
 	case "publications":
 		return append([]string{"item", "list", "--scope", "pubs"}, args[1:]...), true
+	case "find":
+		return append([]string{"item", "find"}, translateFindFlags(args[1:])...), true
+	case "show":
+		return append([]string{"item", "show"}, args[1:]...), true
+	case "supplements":
+		return append([]string{"item", "supp"}, args[1:]...), true
+	case "export":
+		return translateLegacyExport(args[1:]), true
+	case "create-item":
+		return append([]string{"item", "new"}, translateWriteFlags(args[1:])...), true
+	case "update-item":
+		return append([]string{"item", "edit"}, translateWriteFlags(args[1:])...), true
+	case "delete-item":
+		return append([]string{"item", "delete"}, translateWriteFlags(args[1:])...), true
+	case "add-tag":
+		return translateLegacyTag("tag", args[1:]), true
+	case "remove-tag":
+		return translateLegacyTag("untag", args[1:]), true
+	case "create-collection":
+		return append([]string{"coll", "new"}, translateWriteFlags(args[1:])...), true
+	case "update-collection":
+		return append([]string{"coll", "edit"}, translateWriteFlags(args[1:])...), true
+	case "delete-collection":
+		return append([]string{"coll", "delete"}, translateWriteFlags(args[1:])...), true
+	case "create-search":
+		return append([]string{"search", "new"}, translateWriteFlags(args[1:])...), true
+	case "update-search":
+		return append([]string{"search", "edit"}, translateWriteFlags(args[1:])...), true
+	case "delete-search":
+		return append([]string{"search", "delete"}, translateWriteFlags(args[1:])...), true
 	case "config":
 		if len(args) < 2 {
 			return args, true
@@ -89,6 +119,122 @@ func translateStageOneArgs(args []string) ([]string, bool) {
 		}
 	}
 	return nil, false
+}
+
+func translateLegacyExport(args []string) []string {
+	translated := []string{"item", "export"}
+	query := make([]string, 0)
+	fromFind := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "--item-key":
+			if i+1 < len(args) {
+				i++
+				translated = append(translated, args[i])
+			}
+		case "--format", "-f":
+			translated = append(translated, "--as")
+			if i+1 < len(args) {
+				i++
+				translated = append(translated, args[i])
+			}
+		case "--from-find":
+			fromFind = true
+		case "--collection", "--limit", "--item-type", "--tag", "--date-after", "--date-before", "--start", "--sort", "--direction", "--qmode", "--include-fields", "--no-type", "--no-collection", "--tag-contains", "--exclude-tag", "--modified-within", "--added-since", "--attachment-name":
+			mapped := translateFindFlags([]string{arg})[0]
+			translated = append(translated, mapped)
+			if i+1 < len(args) {
+				i++
+				translated = append(translated, args[i])
+			}
+		default:
+			if strings.HasPrefix(arg, "--item-key=") {
+				translated = append(translated, strings.TrimPrefix(arg, "--item-key="))
+			} else if strings.HasPrefix(arg, "--format=") {
+				translated = append(translated, "--as="+strings.TrimPrefix(arg, "--format="))
+			} else if strings.HasPrefix(arg, "-") {
+				translated = append(translated, translateFindFlags([]string{arg})...)
+			} else {
+				query = append(query, arg)
+			}
+		}
+	}
+	if len(query) > 0 {
+		translated = append(translated, "--query", strings.Join(query, " "))
+	} else if fromFind {
+		translated = append(translated, "--all")
+	}
+	return translated
+}
+
+func translateFindFlags(args []string) []string {
+	translated := make([]string, len(args))
+	for i, arg := range args {
+		switch {
+		case arg == "--item-type":
+			translated[i] = "--type"
+		case strings.HasPrefix(arg, "--item-type="):
+			translated[i] = "--type=" + strings.TrimPrefix(arg, "--item-type=")
+		case arg == "--start":
+			translated[i] = "--offset"
+		case strings.HasPrefix(arg, "--start="):
+			translated[i] = "--offset=" + strings.TrimPrefix(arg, "--start=")
+		case arg == "--direction":
+			translated[i] = "--order"
+		case strings.HasPrefix(arg, "--direction="):
+			translated[i] = "--order=" + strings.TrimPrefix(arg, "--direction=")
+		default:
+			translated[i] = arg
+		}
+	}
+	return translated
+}
+
+func translateWriteFlags(args []string) []string {
+	translated := make([]string, len(args))
+	for i, arg := range args {
+		switch {
+		case arg == "--from-file":
+			translated[i] = "--from"
+		case strings.HasPrefix(arg, "--from-file="):
+			translated[i] = "--from=" + strings.TrimPrefix(arg, "--from-file=")
+		case arg == "--if-unmodified-since-version":
+			translated[i] = "--if-version"
+		case strings.HasPrefix(arg, "--if-unmodified-since-version="):
+			translated[i] = "--if-version=" + strings.TrimPrefix(arg, "--if-unmodified-since-version=")
+		default:
+			translated[i] = arg
+		}
+	}
+	return translated
+}
+
+func translateLegacyTag(action string, args []string) []string {
+	translated := []string{"item", action}
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--items" && i+1 < len(args) {
+			i++
+			for _, key := range strings.Split(args[i], ",") {
+				if key = strings.TrimSpace(key); key != "" {
+					translated = append(translated, key)
+				}
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "--items=") {
+			for _, key := range strings.Split(strings.TrimPrefix(arg, "--items="), ",") {
+				if key = strings.TrimSpace(key); key != "" {
+					translated = append(translated, key)
+				}
+			}
+			continue
+		}
+		rest = append(rest, arg)
+	}
+	return append(translated, translateWriteFlags(rest)...)
 }
 
 func translateChangesFlags(args []string) []string {

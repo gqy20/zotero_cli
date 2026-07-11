@@ -39,7 +39,7 @@ func TestRunExportByItemKeyJSON(t *testing.T) {
 	if !ok || meta["read_source"] != "web" {
 		t.Fatalf("unexpected meta payload: %#v", got["meta"])
 	}
-	if got["command"] != "export" {
+	if got["command"] != "item export" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 
@@ -113,7 +113,7 @@ func TestRunExportCSLJSONJSON(t *testing.T) {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
 
-	if got["command"] != "export" {
+	if got["command"] != "item export" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 	data, ok := got["data"].(map[string]any)
@@ -150,7 +150,7 @@ func TestRunExportCSLJSONLocalByItemKey(t *testing.T) {
 	if !ok || meta["read_source"] != "live" {
 		t.Fatalf("unexpected meta payload: %#v", got["meta"])
 	}
-	if got["command"] != "export" {
+	if got["command"] != "item export" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 	data, ok := got["data"].(map[string]any)
@@ -308,13 +308,13 @@ func TestRunExportCSLJSONHybridPreservesUnexpectedLocalExportError(t *testing.T)
 
 	t.Setenv("ZOT_BASE_URL", "http://127.0.0.1:1")
 
-	_, stderr := captureOutput(t)
+	stdout, stderr := captureOutput(t)
 	exitCode := Run([]string{"export", "--item-key", "ITEM1234", "--format", "csljson", "--json"})
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "local csljson cache corrupted") {
-		t.Fatalf("expected unexpected local export error, got %q", stderr.String())
+	if !strings.Contains(stdout.String(), "local csljson cache corrupted") {
+		t.Fatalf("expected unexpected local export error, got stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
 

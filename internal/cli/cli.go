@@ -89,14 +89,8 @@ func (c *CLI) dispatch(name string, args []string) int {
 		return c.runServer(args)
 	case "sync":
 		return c.runSync(args)
-	case "find":
-		return c.runFind(args)
-	case "show":
-		return c.runShow(args)
 	case "ref":
 		return c.runRef(args)
-	case "supplements":
-		return c.runSupplements(args)
 	case "inspect-attachment":
 		return c.runInspectAttachment(args)
 	case "extract-text":
@@ -113,36 +107,12 @@ func (c *CLI) dispatch(name string, args []string) int {
 		return c.runAbstract(args)
 	case "relate":
 		return c.runRelate(args)
-	case "export":
-		return c.runExport(args)
 	case "schema":
 		return c.runSchema(args)
 	case "key-info":
 		return c.runKeyInfo(args)
 	case "annotate":
 		return c.runAnnotate(args)
-	case "create-item":
-		return c.runCreateItem(args)
-	case "update-item":
-		return c.runUpdateItem(args)
-	case "delete-item":
-		return c.runDeleteItem(args)
-	case "add-tag":
-		return c.runAddTag(args)
-	case "remove-tag":
-		return c.runRemoveTag(args)
-	case "create-collection":
-		return c.runCreateCollection(args)
-	case "update-collection":
-		return c.runUpdateCollection(args)
-	case "delete-collection":
-		return c.runDeleteCollection(args)
-	case "create-search":
-		return c.runCreateSearch(args)
-	case "update-search":
-		return c.runUpdateSearch(args)
-	case "delete-search":
-		return c.runDeleteSearch(args)
 	}
 	fmt.Fprintf(c.stderr, "unknown command: %s\n\n", name)
 	c.printUsage()

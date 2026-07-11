@@ -726,7 +726,7 @@ Cobra → typed request → app service → Result → renderer
 
 退出条件：对应旧 handler 不再负责参数解析、依赖加载或渲染；新旧入口业务结果等价。
 
-### 阶段 3：Item、Collection、Note 与写操作
+### 阶段 3：Item、Collection、Note 与写操作（已完成）
 
 迁移：
 

@@ -16,10 +16,15 @@ import (
 )
 
 type ListOptions struct {
-	Limit int
-	Query string
-	Top   bool
-	Scope string
+	Limit    int
+	Offset   int
+	Query    string
+	Top      bool
+	Scope    string
+	Sort     string
+	Order    string
+	ItemType string
+	Tags     []string
 }
 
 type LogOptions struct {
@@ -93,6 +98,18 @@ func readMeta(reader backend.Reader) map[string]any {
 		if m.SnapshotStale {
 			meta["snapshot_stale"] = true
 		}
+		if m.FullTextEngine != "" {
+			meta["full_text_engine"] = m.FullTextEngine
+		}
+		if m.FullTextSource != "" {
+			meta["full_text_source"] = m.FullTextSource
+		}
+		if m.FullTextAttachmentKey != "" {
+			meta["full_text_attachment_key"] = m.FullTextAttachmentKey
+		}
+		if m.FullTextCacheHit {
+			meta["full_text_cache_hit"] = true
+		}
 	}
 	return meta
 }
@@ -137,6 +154,25 @@ func (s ReadService) Collections(ctx context.Context, opts ListOptions) (Result,
 		text = "no collections found"
 	}
 	return Result{Data: rows, Meta: meta, Text: text, Warnings: readWarnings(meta)}, nil
+}
+
+func (s ReadService) ShowCollection(ctx context.Context, key string) (Result, error) {
+	_, reader, err := s.reader()
+	if err != nil {
+		return Result{}, err
+	}
+	rows, err := reader.ListCollections(ctx)
+	if err != nil {
+		return Result{}, err
+	}
+	for _, row := range rows {
+		if row.Key == key {
+			meta := readMeta(reader)
+			meta["total"] = 1
+			return Result{Data: row, Meta: meta, Text: fmt.Sprintf("Key: %s\nName: %s\nItems: %d", row.Key, row.Name, row.NumItems), Warnings: readWarnings(meta)}, nil
+		}
+	}
+	return Result{}, fmt.Errorf("collection %q not found", key)
 }
 
 func (s ReadService) Tags(ctx context.Context, opts ListOptions) (Result, error) {
@@ -201,6 +237,23 @@ func (s ReadService) Notes(ctx context.Context, opts ListOptions) (Result, error
 	return Result{Data: rows, Meta: meta, Text: text, Warnings: readWarnings(meta)}, nil
 }
 
+func (s ReadService) ShowNote(ctx context.Context, key string) (Result, error) {
+	result, err := s.Notes(ctx, ListOptions{})
+	if err != nil {
+		return Result{}, err
+	}
+	rows, _ := result.Data.([]domain.Note)
+	for _, row := range rows {
+		if row.Key == key {
+			result.Data = row
+			result.Meta["total"] = 1
+			result.Text = fmt.Sprintf("Key: %s\nParent: %s\n%s", row.Key, row.ParentItemKey, backend.StripHTMLTags(row.Content))
+			return result, nil
+		}
+	}
+	return Result{}, fmt.Errorf("note %q not found", key)
+}
+
 func (s ReadService) Searches(ctx context.Context, opts ListOptions) (Result, error) {
 	_, client, err := s.client()
 	if err != nil {
@@ -220,6 +273,23 @@ func (s ReadService) Searches(ctx context.Context, opts ListOptions) (Result, er
 		text = "no saved searches found"
 	}
 	return Result{Data: rows, Meta: map[string]any{"total": len(rows), "read_source": "web"}, Text: text}, nil
+}
+
+func (s ReadService) ShowSearch(ctx context.Context, key string) (Result, error) {
+	result, err := s.Searches(ctx, ListOptions{})
+	if err != nil {
+		return Result{}, err
+	}
+	rows, _ := result.Data.([]zoteroapi.Search)
+	for _, row := range rows {
+		if row.Key == key {
+			result.Data = row
+			result.Meta["total"] = 1
+			result.Text = fmt.Sprintf("Key: %s\nName: %s\nConditions: %d", row.Key, row.Name, row.NumConditions)
+			return result, nil
+		}
+	}
+	return Result{}, fmt.Errorf("saved search %q not found", key)
 }
 
 func (s ReadService) Groups(ctx context.Context, _ ListOptions) (Result, error) {
@@ -305,16 +375,34 @@ func (s ReadService) Overview(ctx context.Context) (Result, error) {
 }
 
 func (s ReadService) Items(ctx context.Context, opts ListOptions) (Result, error) {
+	if opts.Scope == "" {
+		_, reader, err := s.reader()
+		if err != nil {
+			return Result{}, err
+		}
+		rows, err := reader.FindItems(ctx, backend.FindOptions{All: true, Limit: opts.Limit, Start: opts.Offset, Sort: opts.Sort, Direction: opts.Order, ItemType: opts.ItemType, Tags: opts.Tags})
+		if err != nil {
+			return Result{}, err
+		}
+		meta := readMeta(reader)
+		meta["total"] = len(rows)
+		text := domainItemText(rows)
+		if len(rows) == 0 {
+			text = "no items found"
+		}
+		return Result{Data: rows, Meta: meta, Text: text, Warnings: readWarnings(meta)}, nil
+	}
 	_, client, err := s.client()
 	if err != nil {
 		return Result{}, err
 	}
 	var rows []zoteroapi.Item
+	find := zoteroapi.FindOptions{Limit: opts.Limit, Start: opts.Offset, Sort: opts.Sort, Direction: opts.Order, ItemType: opts.ItemType, Tags: opts.Tags}
 	switch opts.Scope {
 	case "trash":
-		rows, err = client.ListTrashItems(ctx, zoteroapi.FindOptions{Limit: opts.Limit})
+		rows, err = client.ListTrashItems(ctx, find)
 	case "pubs":
-		rows, err = client.ListPublicationsItems(ctx, zoteroapi.FindOptions{Limit: opts.Limit})
+		rows, err = client.ListPublicationsItems(ctx, find)
 	default:
 		return Result{}, fmt.Errorf("unsupported item scope %q", opts.Scope)
 	}
@@ -330,6 +418,14 @@ func (s ReadService) Items(ctx context.Context, opts ListOptions) (Result, error
 		}
 	}
 	return Result{Data: rows, Meta: map[string]any{"total": len(rows), "read_source": "web", "scope": opts.Scope}, Text: text}, nil
+}
+
+func domainItemText(rows []domain.Item) string {
+	var lines []string
+	for _, row := range rows {
+		lines = append(lines, fmt.Sprintf("%-10s  %-16s  %s", row.Key, row.ItemType, row.Title))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (s ReadService) Log(ctx context.Context, opts LogOptions) (Result, error) {
