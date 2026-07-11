@@ -8,14 +8,16 @@ import (
 	"testing"
 )
 
-func TestRunConfigInitRedirectsToZotInit(t *testing.T) {
-	_, stderr := captureOutput(t)
-	exitCode := Run([]string{"config", "init"})
-	if exitCode != 2 {
-		t.Fatalf("expected exit code 2 (redirect), got %d; stderr=%q", exitCode, stderr.String())
+func TestRunConfigInitIsCanonical(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"config", "init", "--mode", "web", "--library-type", "user", "--library-id", "123", "--api-key", "secret"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "replaced by `zot init`") {
-		t.Fatalf("expected redirect message, got %q", stderr.String())
+	if !strings.Contains(stdout.String(), "created config at") {
+		t.Fatalf("expected config creation message, got %q", stdout.String())
 	}
 }
 
@@ -87,7 +89,7 @@ func TestRunConfigValidateJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"config", "validate"})
+	exitCode := Run([]string{"config", "check", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -96,7 +98,7 @@ func TestRunConfigValidateJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
-	if got["command"] != "config-validate" {
+	if got["command"] != "config check" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 	data, ok := got["data"].(map[string]any)
@@ -143,7 +145,7 @@ func TestRunConfigValidateJSONReportsUnavailableLocalReader(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"config", "validate"})
+	exitCode := Run([]string{"config", "check", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

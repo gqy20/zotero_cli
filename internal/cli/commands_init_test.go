@@ -185,7 +185,7 @@ func TestRunInitHelp(t *testing.T) {
 	}
 	out := stdout.String()
 	for _, expected := range []string{
-		"zot init",
+		"zot config init",
 		"--mode",
 		"--library-id",
 		"--api-key",

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"zotero_cli/internal/backend"
-	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
 )
 
@@ -218,33 +217,4 @@ func attachmentKind(attachment domain.Attachment) string {
 		}
 		return "attachment"
 	}
-}
-
-func maskConfig(cfg config.Config) map[string]any {
-	return map[string]any{
-		"mode":                cfg.Mode,
-		"data_dir":            cfg.DataDir,
-		"library_type":        cfg.LibraryType,
-		"library_id":          cfg.LibraryID,
-		"api_key":             maskSecret(cfg.APIKey),
-		"server_addr":         cfg.ServerAddr,
-		"server_auth_key":     maskSecret(cfg.ServerAuthKey),
-		"style":               cfg.Style,
-		"locale":              cfg.Locale,
-		"timeout_seconds":     cfg.TimeoutSeconds,
-		"retry_max_attempts":  cfg.RetryMaxAttempts,
-		"retry_base_delay_ms": cfg.RetryBaseDelayMilliseconds,
-		"allow_write":         cfg.AllowWrite,
-		"allow_delete":        cfg.AllowDelete,
-	}
-}
-
-func maskSecret(value string) string {
-	if value == "" {
-		return ""
-	}
-	if len(value) <= 4 {
-		return "****"
-	}
-	return strings.Repeat("*", len(value)-4) + value[len(value)-4:]
 }

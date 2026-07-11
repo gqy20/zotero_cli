@@ -673,7 +673,7 @@ cmd → cli → app → backend/references/zoteroapi
 
 退出条件：命令树和参数规范获确认；阶段 1 后变更必须更新本计划并说明迁移影响。
 
-### 阶段 1：Cobra、Invocation 与 Renderer 基础设施
+### 阶段 1：Cobra、Invocation 与 Renderer 基础设施（已完成）
 
 交付：
 

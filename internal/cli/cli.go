@@ -2,16 +2,12 @@ package cli
 
 import (
 	"bufio"
-	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"time"
 
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/config"
@@ -45,6 +41,13 @@ func New() *CLI {
 }
 
 func (c *CLI) Run(args []string) int {
+	if translated, ok := translateStageOneArgs(args); ok {
+		return c.runCobra(translated)
+	}
+	return c.runLegacy(args)
+}
+
+func (c *CLI) runLegacy(args []string) int {
 	if len(args) == 0 {
 		c.printUsage()
 		return 0
@@ -78,12 +81,6 @@ func (c *CLI) dispatch(name string, args []string) int {
 	}()
 
 	switch name {
-	case "version":
-		return c.runVersion(args)
-	case "init":
-		return c.runInit(args)
-	case "config":
-		return c.runConfig(args)
 	case "index":
 		return c.runIndex(args)
 	case "setup":
@@ -240,100 +237,6 @@ Environment (run 'zot config show' for full list):
                     delete-item/collection/search.
 
 Run 'zot <command> -h' for usage, examples, and per-command mode support.
-`)
-}
-
-func (c *CLI) printVersion() {
-	fmt.Fprintf(c.stdout, "zot %s\n", version)
-	fmt.Fprintf(c.stdout, "commit: %s\n", commit)
-	fmt.Fprintf(c.stdout, "built: %s\n", buildDate)
-}
-
-func (c *CLI) runVersion(args []string) int {
-	if isHelpOnly(args) {
-		return c.printCommandUsage("usage: zot version [--check] [--json]")
-	}
-	check := false
-	jsonOutput := false
-	for _, a := range args {
-		switch a {
-		case "--check":
-			check = true
-		case "--json":
-			jsonOutput = true
-		default:
-			fmt.Fprintf(c.stderr, "unknown flag: %s\n\nusage: zot version [--check] [--json]\n", a)
-			return 2
-		}
-	}
-	if !check {
-		c.printVersion()
-		return 0
-	}
-	latest, date, err := checkLatestVersion()
-	if err != nil {
-		if jsonOutput {
-			return c.jsonError(fmt.Errorf("failed to check latest version: %w", err), "version")
-		}
-		fmt.Fprintf(c.stderr, "error checking for updates: %v\n", err)
-		return 1
-	}
-	if jsonOutput {
-		return c.writeJSON(jsonResponse{OK: true, Command: "version", Data: map[string]any{
-			"current": version,
-			"latest":  latest,
-			"date":    date,
-			"update":  version != latest,
-		}})
-	}
-	fmt.Fprintf(c.stdout, "Current: %s\n", version)
-	fmt.Fprintf(c.stdout, "Latest:  %s (%s)\n", latest, date)
-	if version != latest {
-		fmt.Fprintln(c.stdout, "\n→ New version available!")
-		fmt.Fprintln(c.stdout, "\nUpdate:")
-		switch runtime.GOOS {
-		case "windows":
-			fmt.Fprintln(c.stdout, "  curl -fsSL https://github.com/gqy20/zotero_cli/releases/latest/download/zot.exe -o ~/.local/bin/zot.exe")
-		case "darwin":
-			fmt.Fprintln(c.stdout, "  brew upgrade gqy20/tap/zotcli")
-		default:
-			fmt.Fprintln(c.stdout, "  curl -fsSL https://github.com/gqy20/zotero_cli/releases/latest/download/zot-linux-amd64 -o ~/.local/bin/zot && chmod +x ~/.local/bin/zot")
-		}
-	} else {
-		fmt.Fprintln(c.stdout, "Up to date.")
-	}
-	return 0
-}
-
-func checkLatestVersion() (tag string, date string, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
-		"https://api.github.com/repos/gqy20/zotero_cli/releases/latest", nil)
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("GitHub API returned %d", resp.StatusCode)
-	}
-	var result struct {
-		TagName     string `json:"tag_name"`
-		PublishedAt string `json:"published_at"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", "", err
-	}
-	return result.TagName, result.PublishedAt[:10], nil
-}
-
-func (c *CLI) printConfigUsage() {
-	fmt.Fprint(c.stdout, `Usage:
-  zot config path
-  zot config show
-  zot config validate
 `)
 }
 
