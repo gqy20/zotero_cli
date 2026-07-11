@@ -25,6 +25,7 @@ AI 原生的 Zotero 命令行工具。为 Claude Code、Codex 等 AI agent 设�
 | [后端设计](architecture/backend.md) | LocalReader 实现细节、SQLite 查询策略、附件路径解析 |
 | [领域模型](architecture/domain-model.md) | 核心数据结构：Item / Annotation / Attachment / FindOptions |
 | [设计决策](architecture/decisions.md) | 关键技术决策及其理由 |
+| [回退与历史兼容](architecture/fallbacks.md) | 运行时回退矩阵、不可回退边界、旧入口与持久化兼容生命周期 |
 
 ### 参考资料
 
@@ -47,6 +48,7 @@ AI 原生的 Zotero 命令行工具。为 Claude Code、Codex 等 AI agent 设�
 | [路线图](plans/roadmap.md) | 当前版本目标与执行顺序 | 活跃 |
 | [知识图谱设计](plans/knowledge-graph.md) | 数据模型、GraphStore 接口、ER 图 | 规划中 |
 | [Agent 运行时](plans/agent-runtime.md) | Agent Loop、记忆分层、行为规则、自进化 | 规划中 |
+| [CLI v2：Cobra 与应用层重构](plans/cli-cobra-refactor.md) | Canonical 命令树、应用服务边界、七阶段迁移与兼容策略 | 拟实施 |
 | [限流优化](plans/optimizations/rate-limiting.md) | 重试/限流/缓存/熔断器分层方案 | 待实施 |
 | [原生能力对接](plans/optimizations/native-integration.md) | Zotero API/Web 本地 DB 优化机会 | 待实施 |
 | [平台统一化 + 手柄集成](plans/unified-platform.md) | 三层功能覆盖分析、补齐路线图、代码量估算、Gamepad 交互设计 | 规划中 |

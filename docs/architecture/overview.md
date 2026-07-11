@@ -2,7 +2,7 @@
 
 项目结构、分层设计、四种运行模式和关键接口。
 
-> 后端实现细节见 [后端设计](./backend.md)，领域模型见 [领域模型](./domain-model.md)，设计决策见 [设计决策](./decisions.md)。
+> 后端实现细节见 [后端设计](./backend.md)，领域模型见 [领域模型](./domain-model.md)，设计决策见 [设计决策](./decisions.md)，完整回退契约见 [回退与历史兼容](./fallbacks.md)。
 
 ---
 
@@ -96,7 +96,7 @@ type Reader interface {
 3. 本地独有能力（全文检索、PDF 标注、附件过滤）不回退
 4. 返回结果携带 `read_source` 元数据标记实际来源
 
-详见 [设计决策 - Hybrid 回退策略](./decisions.md)。
+详见 [设计决策 - Hybrid 回退策略](./decisions.md) 和 [回退与历史兼容](./fallbacks.md)。
 
 ### RemoteReader
 
