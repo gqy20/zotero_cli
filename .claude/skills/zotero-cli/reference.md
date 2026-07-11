@@ -1,236 +1,237 @@
-# Zotero CLI 详细参考
+# Zotero CLI v2 Reference
 
-> 本文件为 SKILL.md 的补充参考，包含决策树、陷阱规避、默认行为、JSON 格式规范和模式差异表。
-> SKILL.md 中的「详细参考」链接指向此处。
+本文件是 Claude skill 的扩展参考，集中说明参数约定、输出结构和运行模式。
 
-## Agent 决策树
+## 任务路由
 
-```
-用户想要…？
-│
-├─ 了解库整体情况 ──────→ zot overview --json          # 首选入口：统计+Top条目+FTS状态
-│
-├─ 搜索/筛选文献 ───────→ zot find [查询词] [过滤条件] --json
-│   ├─ 有具体关键词？    → 加查询词（支持中英文）
-│   ├─ 只有过滤条件？    → 直接加 --tag/--collection/--date-after 等（无需 --all）
-│   ├─ 要全量？         → --all
-│   └─ 要全文检索？     → local/hybrid 下有 FTS 索引时自动启用，无需额外标志
-│
-├─ 查看单条目详情 ─────→ zot show ITEMKEY --json       # 含子笔记+标注+期刊等级
-│
-├─ 导出文献数据 ───────→ zot export --[all|collection KEY|item-key KEY] --format FORMAT --json
-│   ├─ 引文管理器导入   → --format bibtex 或 biblatex
-│   ├─ 程序化处理       → --format csljson
-│   └─ 其他工具         → --format ris
-│
-├─ 管理条目关系 ───────→ zot relate ITEMKEY [选项] --json
-│   ├─ 基础查询         → 默认（显式关系）
-│   ├─ 含笔记+引用      → --aggregate（local/hybrid）
-│   ├─ 可视化           → --dot > output.dot
-│   └─ 写入关系         → --add / --remove / --from-file（需写权限）
-│
-├─ 操作 PDF ───────────→ （需 local/hybrid + PyMuPDF；remote 模式通过服务器代理）
-│   ├─ 提取正文         → zot extract-text ITEMKEY --json
-│   ├─ 提取图表         → zot extract-figures ITEMKEY [...] [-o DIR] [-w N] [-m N] --json
-│   ├─ 读取标注         → zot annotations ITEMKEY [--type|--page|--author] --json
-│   └─ 写入标注         → zot annotate ITEMKEY --page N --text "关键词" --color red
-│                          （推荐 Mode 1.5，避免全文误匹配）
-│
-├─ 写入/修改数据 ──────→ （需 ZOT_ALLOW_WRITE=1）
-│   ├─ 创建条目/笔记    → zot create-item --data 'JSON' --json
-│   ├─ 更新条目         → zot update-item KEY --data 'JSON' --json
-│   ├─ 批量打标签       → zot add-tag --items KEYS --tag TAG --json
-│   └─ 创建收藏夹       → zot create-collection --data 'JSON' --json
-│
-├─ 删除数据 ───────────→ （需 ZOT_ALLOW_DELETE=1 + 确认）
-│   └─ delete-item / delete-collection / delete-search
-│
-└─ 其他只读操作 ───────→ collections / tags / notes / searches / groups /
-                         trash / schema types / versions / key-info / index build
+```text
+了解库整体情况 ─────────→ zot lib show --json
+统计库规模 ─────────────→ zot lib stats --json
+搜索/筛选文献 ──────────→ zot item find QUERY [filters] --json
+查看单条目 ─────────────→ zot item show ITEMKEY --json
+导出引用数据 ───────────→ zot item export [KEYS...] --as FORMAT --json
+补充材料/附件 ──────────→ zot item supp / zot file show|check
+正文检索 ───────────────→ item find --fulltext --snippet
+整篇正文 ───────────────→ zot pdf text ITEMKEY
+图表提取 ───────────────→ zot pdf figs ITEMKEY
+标注读取/写入/删除 ─────→ zot ann list/new/delete
+引用数据 ───────────────→ zot ref show|find|related|cited|ctx|...
+全文索引 ───────────────→ zot index build|status
+配置检查 ───────────────→ zot config check
+远端同步 ───────────────→ zot sync pull
 ```
 
-## 常见陷阱
+## 全局输出与错误
 
-| 陷阱 | 正确做法 | 原因 |
-|------|----------|------|
-| 使用旧 `zot cite ...` 命令 | 改用 `zot export --item-key KEY --format bibtex\|biblatex\|csljson --json` | `cite` 已移除，当前 CLI 以标准导出格式交给写作工具或 AI 后处理 |
-| `zot export --items KEY ...` | `zot export --item-key KEY ...` | `export` 单条目参数是 `--item-key`；`--items` 只用于批量标签命令 |
-| `zot extract-figures KEY` 输出过多碎片 | 加 `--max-per-page N`，必要时降低 N | 防止病态矢量页或图片碎片页产生过多低价值输出 |
-| 批量提图时长尾明显 | 多 key 一次传入并设置 `--workers N`，不要外层脚本逐个串行 | CLI 会预取、按 PDF 页数降序调度，长任务优先能降低尾部等待 |
-| `zot annotate ... --dry-run` | 先 `extract-text` 确认文本位置，再直接执行 | annotate **不支持** `--dry-run`，见 roadmap P0 |
-| `zot index status` | `zot index build [--force]` | 不存在 `status` 子命令，只有 `build` |
-| `zot find --json`（无查询词无过滤） | 加 `--all` 或至少一个过滤条件 | 无查询词+无过滤会报错，防止意外返回全库 |
-| `zot changes --since 100` | `zot changes items --since 100` | `changes` 必须指定类型：`collections\|searches\|items\|items-top` |
-| 搜索结果含不相关条目 | FTS 自动启用后搜索范围含 PDF 全文正文 | 非仅元数据匹配。纯元数据搜索临时设 `ZOT_MODE=web` |
-| 使用旧版二进制测试新功能 | `go build -o zot.exe ./cmd/zot` 后用 `./zot.exe` | PATH 中可能是旧版本（如 v0.0.8），缺少后续新增功能 |
-| 写操作未设置环境变量 | 确保 `ZOT_ALLOW_WRITE=1` / `ZOT_ALLOW_DELETE=1` | 所有写操作和删除操作会检查这些变量 |
-| DB 层标注删除失败 | 关闭 Zotero 后重试 | `--clear` 双层删除中 DB 层需要 Zotero 未运行，PDF 层不受限 |
+全局 flags：
 
-## 默认行为速查
-
-| 维度 | 默认值 | 说明 |
-|------|--------|------|
-| **模式** | `hybrid` | 本地优先 + Web 回退，兼顾速度与完整性 |
-| **输出格式** | 文本 | Agent 工作流应**始终加 `--json`** |
-| **图表输出目录** | `{ZOT_DATA_DIR}/.zotero_cli/figures` | `extract-figures` 未指定 `--output-dir/-o` 时使用 |
-| **图表并发** | CPU 核数，最小 2 最大 8 | `extract-figures --workers/-w` 可覆盖；多篇自动并行 |
-| **每页图表上限** | 25 | `extract-figures --max-per-page/-m` 可覆盖 |
-| **搜索推断** | 自动 | 有过滤标志时自动设 `All=true`，无需手动 `--all` |
-| **FTS 全文检索** | 自动启用 | local/hybrid 下 `{dataDir}/.zotero_cli/fulltext/index.sqlite` > 4KB 时 |
-| **Snippet limit 回退** | 50 | `--snippet` 是布尔开关（非条数参数）；启用时若未指定 `--limit` 则回退为 50 |
-| **写权限** | 开启 | 默认 `ZOT_ALLOW_WRITE=1`；设为 `0` 使库只读 |
-| **删除权限** | 关闭 | 需 `ZOT_ALLOW_DELETE=1`，且交互模式需确认 |
-| **删除确认** | `[y/N]` 提示 | `--yes`/`-y` 跳过；`--json` 模式自动跳过 |
-| **快照缓存** | 自动 | hybrid 下 Zotero 运行时使用持久化快照（~0.3s/次） |
-| **版本检查** | 手动 | `zot version --check` 查询 GitHub Releases API，有新版时输出更新命令 |
-| **重试** | 3 次 | 遇 429 等可重试错误自动退避+抖动；基础延迟 250ms（`ZOT_RETRY_BASE_DELAY_MS`） |
-
-## 写操作 JSON 输入格式
-
-所有写操作通过 `--data 'JSON'` 或 `--from-file file.json` 传入数据，JSON 结构遵循 [Zotero Web API 规范](https://www.zotero.org/support/dev/web_api/v3/write_item)：
-
-```shell
-# 创建条目
-zot create-item --data '{"itemType":"journalArticle","title":"...","creators":[{"creatorType":"author","lastName":"Doe","firstName":"Jane"}],"date":"2024-01"}' --if-unmodified-since-version 59186 --json
-
-# 创建笔记（hybrid/local 下 Zotero 未运行时可直写 SQLite ~50ms）
-zot create-item --data '{"itemType":"note","parentItem":"ITEMKEY","note":"<p>笔记内容</p>"}' --json
-
-# 更新条目（只需传入要修改的字段）
-zot update-item ITEMKEY --data '{"abstractNote":"更新后的摘要"}' --if-unmodified-since-version 59186 --json
-
-# 创建收藏夹
-zot create-collection --data '{"name":"新收藏夹","parentCollection":"PARENT_KEY"}' --if-unmodified-since-version 59186 --json
-
-# 批量添加/删除标签
-zot add-tag --items KEY1,KEY2 --tag "新标签" --json
-zot remove-tag --items KEY1,KEY2 --tag "旧标签" --json
-
-# relate 批量操作（--from-file 格式）
-# batch.json 内容：
-#   [{"action":"add","source":"KEY_A","target":"KEY_B","predicate":"dc:relation"},
-#    {"action":"remove","source":"KEY_A","target":"KEY_C","predicate":"dc:relation"}]
-zot relate KEY_A --from-file batch.json --dry-run          # 预览
-zot relate KEY_A --from-file batch.json                     # 执行
+```text
+--format text|json
+--json
+--quiet, -q
+--verbose, -v
+--no-color
+--mode MODE
+--timeout DURATION
 ```
 
-**版本前置条件**：`--if-unmodified-since-version N` 用于乐观并发控制，从最近一次 `overview` 或 `versions items --since N` 获取当前 library version 传入即可省略（不保证原子性）。
+成功 JSON：
 
-## Relate 三层关系模型与模式支持
-
-### 三层模型
-
-| 层 | 来源 | 命令选项 |
-|----|------|----------|
-| ① 显式关系 | `itemRelations` 表 | 默认查询 |
-| ② 子笔记关系 | 子笔记的 `itemRelations` | `--aggregate` 的 Notes 字段 |
-| ③ 内嵌 Citation | 笔记 HTML `data-citation-items` | `--aggregate` 的 Citations 字段 |
-
-### 模式支持矩阵
-
-| 功能 | local | hybrid | web | remote |
-|------|-------|--------|-----|--------|
-| 查询显式关系 | ✅ | ✅ | ✅ | ✅ |
-| `--aggregate` 聚合 | ✅ | ✅ | ❌ | ✅（取决于服务器端模式） |
-| `--dot` 可视化 | ✅ | ✅ | ✅ | ✅ |
-| `--add` / `--remove` | ✅ | ✅ | ❌ | 需配置 API key |
-| `--from-file` 批量 | ✅ | ✅ | ❌ | 需配置 API key |
-| `--predicate` 过滤 | ✅ | ✅ | ✅ | ✅ |
-
-## 模式行为差异速查
-
-| 功能 | web | local | hybrid | remote |
-|------|-----|-------|--------|--------|
-| **搜索范围** | 元数据 + 远程全文 | 本地元数据 | 元数据；有 FTS 索引时自动扩展至 PDF 全文 | 取决于服务器端模式 |
-| **过滤参数** | 基础过滤全部可用 | 全部过滤可用 | 全部过滤可用 | 全部过滤可用（服务器端处理） |
-| **高级过滤** | ❌ 不支持 collection/no-collection/tag-contains 等 | ✅ | ✅（回退到 web 时降级为仅基础过滤） | ✅（服务器端处理） |
-| **FTS 全文检索** | ❌ | ✅（需先 `index build`） | ✅（同 local） | ✅（服务器端有 FTS 索引时） |
-| **PDF 操作** | ❌ | ✅ | ✅ | ✅（通过服务器代理执行） |
-| **写操作** | ✅ 全部 | 仅笔记创建 + PDF 标注 | ✅ 全部（笔记可本地直写） | `annotate` / `annotations --clear` 可直走 server；其余需配置 API key（remote+web 模式） |
-| **relate 写入** | ❌ | ✅ | ✅ | 需配置 API key |
-| **快照缓存** | — | — | ✅ Zotero 运行时 ~0.3s/次 | — |
-
-## 环境变量完整速查
-
-存储位置：`~/.zot/.env`
-
-| 变量 | 说明 | 默认 |
-|------|------|------|
-| `ZOT_MODE` | `web` / `local` / `hybrid` / `remote` | **`hybrid`** |
-| `ZOT_DATA_DIR` | Zotero 数据目录 | — |
-| `ZOT_SERVER_ADDR` | 远程服务器地址（remote 模式必需） | — |
-| `ZOT_SERVER_PORT` | 服务器监听端口（服务器端使用） | `8021` |
-| `ZOT_LIBRARY_ID` | 库 ID | — |
-| `ZOT_API_KEY` | API 密钥 | — |
-| `ZOT_STYLE` | 引文样式 | `apa` |
-| `ZOT_TIMEOUT_SECONDS` | API 超时秒数 | `20` |
-| `ZOT_ALLOW_WRITE` | 允许写操作 | `1` |
-| `ZOT_ALLOW_DELETE` | 允许删除操作 | `0` |
-| `ZOT_RETRY_MAX_ATTEMPTS` | 最大重试次数 | `3` |
-| `ZOT_RETRY_BASE_DELAY_MS` | 重试基础延迟 ms | `250` |
-| `ZOT_JSON_ERRORS` | 错误以 JSON 输出到 stdout | `0` |
-
-## FTS5 全文检索详解
-
-- **自动启用条件**：local/hybrid 模式下 `{dataDir}/.zotero_cli/fulltext/index.sqlite` 文件大小 > 4096 bytes (4KB)
-- **搜索范围变化**：启用后 `find` 命令从纯元数据匹配切换到 **PDF 全文内容** 匹配，结果可能包含正文中提及关键词但主题不直接相关的条目
-- **禁用方法**：临时设 `ZOT_MODE=web`，或删除索引目录 `{dataDir}/.zotero_cli/fulltext/` 后重建
-- **Snippet**：`--snippet` 是布尔开关，启用 FTS5 匹配片段预览输出；若同时未指定 `--limit`，则回退上限为 **50** 条
-- **匹配模式**：默认所有词匹配（AND）；`--fulltext-any` 切换为任一词匹配（OR）
-
-## Hybrid 笔记创建特殊行为
-
-`create-item` 创建笔记时（`itemType: "note"`），若满足以下条件会走本地 SQLite 直写而非 Web API：
-
-1. 当前模式为 `local` 或 `hybrid`
-2. Zotero 桌面端**未运行**
-3. 数据中包含有效的 `parentItem` 和 `note` 字段
-
-直写性能约 **~50ms**，JSON 输出含 `"write_source": "local"` 标识。Web API 作为 fallback 保留（若 SQLite 直写失败则自动回退）。
-
-## Remote 模式
-
-### 架构
-
-```
-[CLI Client (remote)]  --HTTP/JSON-->  [zot server]  --> [Zotero Local DB / Web API]
+```json
+{
+  "ok": true,
+  "command": "item find",
+  "data": [],
+  "meta": {"total": 0}
+}
 ```
 
-- 服务器端：运行 `zot server`（同一 `zot` 二进制的子命令），默认端口 `8021`（`ZOT_SERVER_PORT` 或 `--port` 可覆盖）
-- 客户端：`zot init --mode remote --server-addr http://HOST:8021`
-- 服务器必须以 web/local/hybrid 模式运行（不支持 remote 嵌套）
+失败 JSON 使用同一 envelope，并在 `data` 中提供 `error`、`type`、`code`。canonical `command` 不随旧入口变化。
 
-### 两种配置
+## Item 查询
 
-1. **纯 remote**（只有 `ZOT_SERVER_ADDR`）：reader 路径命令可用；`annotations` / `annotate` 也可通过 server 执行
-2. **remote + web**（额外配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID` + `ZOT_LIBRARY_TYPE`）：全部命令可用。读操作走服务器，普通写操作和 web-only 命令（collections/searches/schema 等）直连 Zotero Web API
-
-初始化示例：
-```shell
-# 纯 remote（只读）
-zot init --mode remote --server-addr http://192.168.1.100:8021
-
-# remote + web（全功能）
-zot init --mode remote --server-addr http://192.168.1.100:8021 --library-type user --library-id 123 --api-key KEY
+```powershell
+zot item list --limit 20 --offset 0 --json
+zot item list --scope trash --json
+zot item list --scope pubs --json
+zot item find "CRISPR" --type article --json
+zot item find --all --sort dateAdded --order desc --limit 10 --json
+zot item show ITEMKEY --json
+zot item show ITEMKEY --snippet --json
 ```
 
-### 一次性同步到本地（`zot sync`）
+常用过滤：
 
-不想保持远程服务常开时，把整库一次性拉到本地、之后断网用 `local` 模式：
+- `--date-after` / `--date-before`
+- `--tag`（重复为 AND）/ `--tag-any`
+- `--collection` / `--no-collection`
+- `--type` / `--no-type`
+- `--modified-within` / `--added-since`
+- `--has-pdf`
+- `--attachment-name` / `--attachment-path`
+- `--fulltext` / `--metadata-only` / `--fulltext-only` / `--fulltext-any`
+- `--snippet`
 
-```shell
-# 在有 Zotero 数据的机器上起服务端
-HOST$ zot server                       # 默认 :8021
+分页和排序只使用 `--limit`、`--offset`、`--sort`、`--order`。
 
-# 客户端同步到 ~/.zot/sync/（zotero.sqlite + storage/，增量、并发）
-CLIENT$ zot sync --server-addr http://HOST:8021
-# 之后离线使用
-CLIENT$ ZOT_MODE=local ZOT_DATA_DIR=~/.zot/sync zot find ...
-CLIENT$ zot index build --data-dir ~/.zot/sync   # 可选，建全文索引
+## Item type alias
+
+| 输入 | application/API/JSON |
+|---|---|
+| `article` | `journalArticle` |
+| `chapter` | `bookSection` |
+| `conf` | `conferencePaper` |
+| `web` | `webpage` |
+| `blog` | `blogPost` |
+
+官方值也始终可以直接输入。不要将 `journalArticle` 缩写写入 JSON 或持久化数据。
+
+## 导出
+
+```powershell
+zot item export ITEMKEY --as bibtex --json
+zot item export KEY1 KEY2 --as csljson --json
+zot item export --collection COLLKEY --as ris --json
+zot item export --query "hybrid speciation" --as biblatex --json
+zot item export --all --date-after 2024 --as csljson --json
 ```
 
-- 拉取原始 `zotero.sqlite`（数据库）+ `storage/`（PDF/附件）+ `.zotero_cli/fulltext/`（FTS5 全文索引 + 解析文本），落地的库与 Zotero 原生数据隔离；同步后 `local` 模式零改动可用、`find --fulltext` 立即可用（无需本地 `zot index build`）
-- **增量**：按文件 size+mtime 跳过未变文件（远程 mtime 写回本地）；`--force` 全量重下
-- **并发**：`--concurrency N`（默认 4）；`--no-storage` 跳过 storage（PDF/附件），仍同步 sqlite + fulltext 索引
-- **范围限制**：仅同步 `storage/` 下的 imported 附件；`linked_file`（外部绝对路径）附件不同步。首错即停止（fail-fast），中断残留的 `.tmp`/staging 目录在下次 sync 自动清理
-- server 端复用 `ZOT_SERVER_AUTH_KEY` 鉴权；端点 `/api/v1/sync/manifest|sqlite|storage/{key}/{file}`
+格式：`csljson`、`bibtex`、`biblatex`、`ris`。canonical 语法用位置 key 和 `--as`，不用 `--item-key` 或 `--format`。
+
+## 写操作
+
+```powershell
+zot item new --set itemType=article --set title="Example" --dry-run --json
+zot item new --data '{"itemType":"journalArticle","title":"Example"}' --json
+zot item edit ITEMKEY --set abstractNote="Updated" --if-version 42 --json
+zot item delete ITEMKEY --if-version 42 --yes --json
+zot item tag KEY1 KEY2 --tag review --json
+zot item untag KEY1 KEY2 --tag review --json
+
+zot coll new --name "Inbox" --json
+zot coll add COLLKEY ITEM1 ITEM2 --json
+zot coll remove COLLKEY ITEM1 --json
+zot note new --parent ITEMKEY --text "Reading note" --json
+zot search new --data '{"name":"Recent","conditions":[]}' --json
+```
+
+输入统一为 `--set`、`--data`、`--from`。安全参数统一为 `--dry-run`、`--yes`、`--if-version`。
+
+权限：
+
+- `ZOT_ALLOW_WRITE=1`：允许创建和修改。
+- `ZOT_ALLOW_DELETE=1`：允许删除，默认关闭。
+- destructive action 必须明确目标并确认，不允许因 `--json` 或 legacy translation 静默绕过。
+
+## PDF 与标注
+
+```powershell
+zot pdf text ITEMKEY --json
+zot pdf text ITEMKEY --pages 3-8 --grep methods --max-chars 12000 --json
+zot pdf text KEY1 KEY2 --workers 4 --output-dir ./markdown --json
+zot pdf figs ITEMKEY --output-dir ./figures --json
+zot pdf open ITEMKEY --page 5
+
+zot ann list ITEMKEY --type highlight --page 3 --json
+zot ann new ITEMKEY --page 4 --text "GATK" --color red --json
+zot ann delete ITEMKEY --type highlight --yes --json
+```
+
+全文路由优先级：
+
+1. `item find --fulltext --snippet`
+2. `item show --snippet`
+3. `pdf text`
+
+`ann delete` 是唯一 canonical 删除入口；不要组合 `list/new` 与 `--clear`。
+
+## Reference
+
+```powershell
+zot ref show ITEMKEY --json
+zot ref find "query" --json
+zot ref related ITEMKEY --limit 20 --json
+zot ref cited ITEMKEY --external --json
+zot ref ctx ITEMKEY --json
+zot ref links ITEMKEY --json
+zot ref entities ITEMKEY --json
+zot ref profile ITEMKEY --json
+zot ref build --workers 3 --json
+zot ref build --failed --workers 2 --json
+zot ref build --contexts --workers 3 --json
+zot ref build --grobid --limit 5 --json
+zot ref resolve --workers 8 --json
+zot ref status --json
+zot ref status --failed --json
+zot ref status --unsupported --json
+zot ref status --grobid --json
+```
+
+来源规则：PMC JATS 优先；没有 PMC 时使用 PubMed；Europe PMC 是增强层，失败不应使 NCBI 核心结果失败；GROBID 是显式实验性后备。
+
+## Schema
+
+```powershell
+zot schema list types --json
+zot schema list fields --json
+zot schema list fields article --json
+zot schema list roles article --json
+zot schema show article --json
+```
+
+`types|fields|roles` 是 `schema list` 的位置参数，不是更深一层 Cobra 子命令。
+
+## 模式矩阵
+
+| 能力 | web | local | hybrid | remote |
+|---|---:|---:|---:|---:|
+| Web 元数据读取 | ✅ | — | fallback | 取决于服务端/凭据 |
+| 本地 SQLite / FTS | — | ✅ | ✅ | 由服务端提供 |
+| 本地附件/PDF | — | ✅ | ✅ | 由服务端提供 |
+| 普通 Web API 写入 | ✅ | 受限 | ✅ | 需 API key |
+| `ann list/new/delete` | — | ✅ | ✅ | 由服务端门控 |
+
+Hybrid 只在目标 backend 能保持请求语义时回退；全文、附件路径、附件健康等 local-only 请求不能伪装成 Web 能力。
+
+## Remote
+
+```powershell
+# 服务端
+zot server start --port 8021
+
+# 客户端配置
+zot config init --mode remote --server-addr http://HOST:8021
+
+# 一次性拉取到本地镜像
+zot sync pull --server-addr http://HOST:8021 --data-dir ~/.zot/sync
+```
+
+`sync pull` 同步 SQLite、storage 和全文索引；`--force` 全量重下，`--no-storage` 跳过附件，`--concurrency` 控制并发。
+
+## 兼容边界
+
+旧入口先翻译成 canonical argv，warning 写 stderr，JSON stdout 保持纯净。正式快捷入口只有 `find/show/export`。
+
+Redirect-only：
+
+| 入口 | 提示 |
+|---|---|
+| `setup` | 使用 `config init` |
+| `abstract` | 使用 `item show` |
+| `key-info` | 使用 `config check` |
+| `select` | 平台特定 Desktop bridge，已退出稳定 CLI |
+| `relate` | 实验性关系图语法，无稳定替代 |
+
+## 常见错误
+
+| 错误写法 | 正确写法 |
+|---|---|
+| `export --item-key KEY --format bibtex` | `item export KEY --as bibtex` |
+| `add-tag --items A,B --tag T` | `item tag A B --tag T` |
+| `extract-text KEY` | `pdf text KEY` |
+| `annotations KEY --clear` | `ann delete KEY --yes` |
+| `schema fields-for journalArticle` | `schema list fields article` |
+| `server` | `server start` |
+| `sync --server-addr URL` | `sync pull --server-addr URL` |
+| `--start/--direction` | `--offset/--order` |
+| `--if-unmodified-since-version` | `--if-version` |
