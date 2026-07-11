@@ -96,6 +96,8 @@ func (c *CLI) dispatch(name string, args []string) int {
 		return c.runFind(args)
 	case "show":
 		return c.runShow(args)
+	case "ref":
+		return c.runRef(args)
 	case "supplements":
 		return c.runSupplements(args)
 	case "inspect-attachment":

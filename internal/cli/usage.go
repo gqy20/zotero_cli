@@ -108,6 +108,12 @@ Subcommands:
 		Long:     usageShow,
 	},
 	{
+		Name:     "ref",
+		Category: CatRead,
+		Short:    "Manage structured references and the local citation index",
+		Long:     usageRef,
+	},
+	{
 		Name:     "supplements",
 		Category: CatRead,
 		Short:    "Find local supplementary/data attachments",

@@ -57,6 +57,22 @@
 
 ---
 
+## 结构化参考文献 (`ref`)
+
+```bash
+zot ref ITEMKEY --json
+zot ref build --workers 3 --json
+zot ref status --json
+zot ref failed --json
+zot ref retry --workers 2 --json
+```
+
+`ref ITEMKEY` 从 DOI、PubMed URL 和摘要中识别 PMID/PMCID，优先读取 PMC JATS XML 的完整 `<ref-list>`；没有 PMC 时，通过 PubMed ELink 获取可映射到 PMID 的引用，并批量 EFetch 结构化元数据。
+
+`ref build` 默认扫描所有符合条件的顶层文献并执行增量构建。索引按条目版本和标识符指纹跳过未变化条目；失败状态可用 `ref failed` 查看并通过 `ref retry` 重试。结构化索引位于 `.zotero_cli/ref/index.sqlite`，NCBI 原始响应缓存在 `.zotero_cli/ref/ncbi/`。
+
+环境变量：`ZOT_NCBI_API_KEY`、`ZOT_NCBI_EMAIL`、`ZOT_NCBI_RATE_MS`。`--refresh` 会绕过缓存。
+
 ## 关系 (`relate`)
 
 查询和管理条目之间的显式关联、笔记内嵌引用，支持关系网络可视化。

@@ -29,6 +29,7 @@
 |----------|-------------|
 | 手动在 Zotero UI 里翻找文献 | `zot find "关键词" --json` → AI 直接消费结构化结果 |
 | 逐篇打开 PDF 找内容 | `zot find "概念" --fulltext --snippet` → 全库全文检索 |
+| 查看论文参考文献 | `zot ref ITEMKEY --json` → 优先 PMC JATS，否则 PubMed references |
 | 复制粘贴 BibTeX / RIS | `zot export --item-key KEY --format bibtex` → AI 直接消费标准导出 |
 | 标注散落在各处无法汇总 | `zot annotations KEY --json` → 双源（DB+PDF）统一输出，支持按类型/页码/作者过滤，双层清除 |
 | 批量打标签靠手点 | `zot add-tag --items K1,K2,K3 --tag "to-read"` | 一条命令 |
