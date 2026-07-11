@@ -67,6 +67,38 @@ func TestStageFourCanonicalCommandsExist(t *testing.T) {
 	}
 }
 
+func TestStageFiveCanonicalCommandsExist(t *testing.T) {
+	root := testCLI.newRootCommand()
+	for _, path := range [][]string{{"ref", "show"}, {"ref", "find"}, {"ref", "related"}, {"ref", "cited"}, {"ref", "ctx"}, {"ref", "links"}, {"ref", "entities"}, {"ref", "profile"}, {"ref", "build"}, {"ref", "resolve"}, {"ref", "status"}, {"index", "build"}, {"index", "status"}} {
+		cmd, remaining, err := root.Find(path)
+		if err != nil || len(remaining) != 0 || cmd.Name() != path[len(path)-1] {
+			t.Fatalf("find %v = %q remaining=%v err=%v", path, cmd.CommandPath(), remaining, err)
+		}
+	}
+}
+
+func TestStageFiveLegacyTranslation(t *testing.T) {
+	tests := []struct{ legacy, canonical []string }{
+		{[]string{"ref", "ITEM1", "--json"}, []string{"ref", "show", "ITEM1", "--json"}},
+		{[]string{"ref", "search", "mesh", "--field", "mesh"}, []string{"ref", "find", "mesh", "--field", "mesh"}},
+		{[]string{"ref", "cited-by", "ITEM1"}, []string{"ref", "cited", "ITEM1"}},
+		{[]string{"ref", "contexts", "ITEM1"}, []string{"ref", "ctx", "ITEM1"}},
+		{[]string{"ref", "contexts", "build", "--workers", "2"}, []string{"ref", "build", "--contexts", "--workers", "2"}},
+		{[]string{"ref", "annotations", "ITEM1"}, []string{"ref", "entities", "ITEM1"}},
+		{[]string{"ref", "retry", "--workers", "2"}, []string{"ref", "build", "--failed", "--workers", "2"}},
+		{[]string{"ref", "failed"}, []string{"ref", "status", "--failed"}},
+		{[]string{"ref", "unsupported"}, []string{"ref", "status", "--unsupported"}},
+		{[]string{"ref", "grobid", "status"}, []string{"ref", "status", "--grobid"}},
+		{[]string{"ref", "grobid", "build", "--limit", "2"}, []string{"ref", "build", "--grobid", "--limit", "2"}},
+	}
+	for _, tt := range tests {
+		got, ok := translateStageOneArgs(tt.legacy)
+		if !ok || !reflect.DeepEqual(got, tt.canonical) {
+			t.Fatalf("translate %v = %v, %t; want %v", tt.legacy, got, ok, tt.canonical)
+		}
+	}
+}
+
 func TestStageFourLegacyTranslation(t *testing.T) {
 	tests := []struct{ legacy, canonical []string }{
 		{[]string{"inspect-attachment", "ATT1"}, []string{"file", "show", "ATT1"}},

@@ -1,8 +1,10 @@
-package cli
+package app
 
 import (
 	"context"
 	"testing"
+
+	"zotero_cli/internal/config"
 
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/domain"
@@ -92,12 +94,17 @@ func TestIndexBuildRepairsCachedButUnindexedAttachments(t *testing.T) {
 		},
 	}
 
-	result, err := (&CLI{}).indexBuild(context.Background(), reader, indexBuildOpts{Workers: 1, JSONOutput: true})
+	service := IndexService{
+		LoadConfig: func() (config.Config, string, error) { return config.Config{}, "", nil },
+		NewReader:  func(config.Config) (backend.Reader, error) { return reader, nil },
+	}
+	resultValue, err := service.Build(context.Background(), IndexBuildRequest{Workers: 1})
+	result := resultValue.Data.(IndexBuildResult)
 	if err != nil {
-		t.Fatalf("indexBuild() error = %v", err)
+		t.Fatalf("IndexService.Build() error = %v", err)
 	}
 	if result.Indexed != 1 || result.Skipped != 0 || result.Failed != 0 {
-		t.Fatalf("indexBuild() result = %#v, want indexed repair", result)
+		t.Fatalf("IndexService.Build() result = %#v, want indexed repair", result)
 	}
 	if len(reader.savedDocs) != 1 || reader.savedDocs[0].Text != "cached text" {
 		t.Fatalf("savedDocs = %#v, want cached doc saved to index", reader.savedDocs)
@@ -118,12 +125,17 @@ func TestIndexBuildSkipsCachedAndIndexedAttachments(t *testing.T) {
 		indexed: map[string]bool{"ATT123": true},
 	}
 
-	result, err := (&CLI{}).indexBuild(context.Background(), reader, indexBuildOpts{Workers: 1, JSONOutput: true})
+	service := IndexService{
+		LoadConfig: func() (config.Config, string, error) { return config.Config{}, "", nil },
+		NewReader:  func(config.Config) (backend.Reader, error) { return reader, nil },
+	}
+	resultValue, err := service.Build(context.Background(), IndexBuildRequest{Workers: 1})
+	result := resultValue.Data.(IndexBuildResult)
 	if err != nil {
-		t.Fatalf("indexBuild() error = %v", err)
+		t.Fatalf("IndexService.Build() error = %v", err)
 	}
 	if result.Indexed != 0 || result.Skipped != 1 || result.Failed != 0 {
-		t.Fatalf("indexBuild() result = %#v, want skip", result)
+		t.Fatalf("IndexService.Build() result = %#v, want skip", result)
 	}
 	if len(reader.savedDocs) != 0 {
 		t.Fatalf("savedDocs = %#v, want none", reader.savedDocs)

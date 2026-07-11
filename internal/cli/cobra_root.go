@@ -41,8 +41,10 @@ func translateStageOneArgs(args []string) ([]string, bool) {
 	switch args[0] {
 	case "version":
 		return args, true
-	case "lib", "item", "coll", "tag", "note", "search", "group", "file", "pdf", "ann":
+	case "lib", "item", "coll", "tag", "note", "search", "group", "file", "pdf", "ann", "index":
 		return args, true
+	case "ref":
+		return translateReferenceArgs(args)
 	case "init":
 		return append([]string{"config", "init"}, args[1:]...), true
 	case "overview":
@@ -131,6 +133,52 @@ func translateStageOneArgs(args []string) ([]string, bool) {
 		}
 	}
 	return nil, false
+}
+
+func translateReferenceArgs(args []string) ([]string, bool) {
+	if len(args) < 2 {
+		return args, true
+	}
+	action := args[1]
+	rest := args[2:]
+	switch action {
+	case "show", "find", "related", "cited", "ctx", "links", "entities", "profile", "build", "resolve", "status":
+		return args, true
+	case "search":
+		return append([]string{"ref", "find"}, rest...), true
+	case "cited-by":
+		return append([]string{"ref", "cited"}, rest...), true
+	case "annotations":
+		return append([]string{"ref", "entities"}, rest...), true
+	case "retry":
+		return append([]string{"ref", "build", "--failed"}, rest...), true
+	case "failed":
+		return append([]string{"ref", "status", "--failed"}, rest...), true
+	case "unsupported":
+		return append([]string{"ref", "status", "--unsupported"}, rest...), true
+	case "contexts":
+		if len(rest) > 0 && rest[0] == "build" {
+			return append([]string{"ref", "build", "--contexts"}, rest[1:]...), true
+		}
+		return append([]string{"ref", "ctx"}, rest...), true
+	case "grobid":
+		if len(rest) == 0 {
+			return []string{"ref", "status", "--grobid"}, true
+		}
+		switch rest[0] {
+		case "status":
+			return append([]string{"ref", "status", "--grobid"}, rest[1:]...), true
+		case "build":
+			return append([]string{"ref", "build", "--grobid"}, rest[1:]...), true
+		default:
+			return append([]string{"ref", "status", "--grobid"}, rest...), true
+		}
+	default:
+		if strings.HasPrefix(action, "-") {
+			return args, true
+		}
+		return append([]string{"ref", "show"}, args[1:]...), true
+	}
 }
 
 func translateLegacyFile(args []string) []string {
@@ -373,6 +421,8 @@ func (c *CLI) newRootCommand() *cobra.Command {
 	root.AddCommand(c.newVersionCommand(opts), c.newConfigCommand(opts))
 	c.addReadCommands(root, opts)
 	c.addContentCommands(root, opts)
+	root.AddCommand(c.newReferenceCommand(opts))
+	root.AddCommand(c.newIndexCommand(opts))
 	return root
 }
 

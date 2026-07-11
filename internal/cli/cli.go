@@ -81,16 +81,12 @@ func (c *CLI) dispatch(name string, args []string) int {
 	}()
 
 	switch name {
-	case "index":
-		return c.runIndex(args)
 	case "setup":
 		return c.runSetup(args)
 	case "server":
 		return c.runServer(args)
 	case "sync":
 		return c.runSync(args)
-	case "ref":
-		return c.runRef(args)
 	case "select":
 		return c.runSelect(args)
 	case "abstract":
