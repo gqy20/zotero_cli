@@ -31,6 +31,9 @@
 | 逐篇打开 PDF 找内容 | `zot find "概念" --fulltext --snippet` → 全库全文检索 |
 | 查看论文参考文献 | `zot ref ITEMKEY --json` → 优先 PMC JATS，否则 PubMed references |
 | 解析本地引用关系 | `zot ref resolve`，再用 `ref cited-by ITEMKEY` / `ref contexts ITEMKEY` 查询 |
+| 搜索引用关系与语境 | `zot ref search "query" --json`，可用 `--contexts` 限定正文引用语境 |
+
+> `ref` 的正式支持核心是 PMC/PubMed（NCBI）。`ref grobid` 仅为实验性、显式调用的 PDF 后备，不属于默认构建流程；公共演示端点不提供稳定性或配额保证。
 | 复制粘贴 BibTeX / RIS | `zot export --item-key KEY --format bibtex` → AI 直接消费标准导出 |
 | 标注散落在各处无法汇总 | `zot annotations KEY --json` → 双源（DB+PDF）统一输出，支持按类型/页码/作者过滤，双层清除 |
 | 批量打标签靠手点 | `zot add-tag --items K1,K2,K3 --tag "to-read"` | 一条命令 |

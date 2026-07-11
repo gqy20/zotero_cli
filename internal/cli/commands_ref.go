@@ -28,21 +28,26 @@ const usageRef = `usage: zot ref <item-key> [--source auto|pmc|pubmed] [--refres
        zot ref cited-by <item-key> [--json]
        zot ref contexts <item-key> [--json]
        zot ref contexts build [--workers N] [--limit N] [--refresh] [--json]
+       zot ref grobid <status|build> [options]
+       zot ref search <query> [--contexts|--references] [filters]
 
-What: Manage the local structured-reference index. A direct item key is short
-for 'ref show'. NCBI routing prefers complete PMC JATS and otherwise uses
-PubMed reference links plus batched metadata.
+What: Manage the local structured-reference index. The officially supported
+core is NCBI: prefer complete PMC JATS, otherwise use PubMed reference links
+plus batched metadata. GROBID is an experimental, opt-in PDF fallback only;
+it is not part of the default build route.
 
 Subcommands:
   show ITEMKEY  Fetch one item and persist it in the local reference index.
   build         Incrementally index every eligible top-level library item.
   status        Show index coverage and reference counts.
   failed        List failed items and their last errors.
-  unsupported   List items outside NCBI coverage (GROBID candidates).
+  unsupported   List items outside the supported NCBI coverage.
   retry         Retry all currently failed items.
   resolve       Match indexed references back to local Zotero items.
   cited-by      List indexed library items that cite one local item.
   contexts      Show or backfill PMC JATS citation contexts.
+  grobid        EXPERIMENTAL: check or run the optional PDF fallback.
+  search        Search structured references and citation contexts.
 
 Options:
   --source auto|pmc|pubmed  Select NCBI routing (default auto).
@@ -92,6 +97,10 @@ func (c *CLI) runRef(args []string) int {
 		return c.runRefCitedBy(args[1:])
 	case "contexts":
 		return c.runRefContexts(args[1:])
+	case "grobid":
+		return c.runRefGrobid(args[1:])
+	case "search":
+		return c.runRefSearch(args[1:])
 	default:
 		if strings.HasPrefix(args[0], "-") {
 			return c.refUsageError("missing item key or subcommand")
@@ -269,7 +278,7 @@ func (c *CLI) runRefStatus(args []string) int {
 	if jsonOutput {
 		return c.writeJSON(jsonResponse{OK: true, Command: "ref-status", Data: status, Meta: map[string]any{"index_path": store.Path()}})
 	}
-	fmt.Fprintf(c.stdout, "Reference index: %d items (%d successful, %d unsupported, %d failed), %d references\nResolved: %d  Unresolved: %d  Contexts: %d\nPMC: %d  PubMed: %d\nLast indexed: %s\nPath: %s\n", status.IndexedItems, status.SuccessfulItems, status.UnsupportedItems, status.FailedItems, status.TotalReferences, status.ResolvedReferences, status.UnresolvedReferences, status.CitationContexts, status.PMCItems, status.PubMedItems, status.LastIndexedAt, store.Path())
+	fmt.Fprintf(c.stdout, "Reference index: %d items (%d successful, %d unsupported, %d failed), %d references\nResolved: %d  Unresolved: %d  Contexts: %d\nPMC: %d  PubMed: %d  GROBID: %d\nLast indexed: %s\nPath: %s\n", status.IndexedItems, status.SuccessfulItems, status.UnsupportedItems, status.FailedItems, status.TotalReferences, status.ResolvedReferences, status.UnresolvedReferences, status.CitationContexts, status.PMCItems, status.PubMedItems, status.GrobidItems, status.LastIndexedAt, store.Path())
 	fmt.Fprintf(c.stdout, "Context status: %d available, %d not supported, %d not found, %d parse failed, %d not indexed\nReferences with context: %d  without context: %d\n", status.ContextAvailableItems, status.ContextNotSupportedItems, status.ContextNotFoundItems, status.ContextParseFailedItems, status.ContextNotIndexedItems, status.ReferencesWithContext, status.ReferencesWithoutContext)
 	return ExitOK
 }

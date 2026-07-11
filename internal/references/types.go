@@ -7,6 +7,7 @@ type Source string
 const (
 	SourcePMC    Source = "pmc_jats"
 	SourcePubMed Source = "pubmed"
+	SourceGROBID Source = "grobid"
 )
 
 type Author struct {
@@ -88,7 +89,7 @@ func SummarizeContexts(strategy string, references []Reference, contexts []Conte
 	summary := ContextSummary{Status: ContextNotIndexed, ContextCount: len(contexts)}
 	if strategy == string(SourcePubMed) {
 		summary.Status = ContextNotSupported
-	} else if strategy == string(SourcePMC) {
+	} else if strategy == string(SourcePMC) || strategy == string(SourceGROBID) {
 		if len(contexts) > 0 {
 			summary.Status = ContextAvailable
 		} else {

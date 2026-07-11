@@ -27,6 +27,7 @@ type Status struct {
 	TotalReferences          int    `json:"total_references"`
 	PMCItems                 int    `json:"pmc_items"`
 	PubMedItems              int    `json:"pubmed_items"`
+	GrobidItems              int    `json:"grobid_items"`
 	ResolvedReferences       int    `json:"resolved_references"`
 	UnresolvedReferences     int    `json:"unresolved_references"`
 	CitationContexts         int    `json:"citation_contexts"`
@@ -114,6 +115,9 @@ CREATE TABLE IF NOT EXISTS ref_contexts (
   PRIMARY KEY(source_item_key, ordinal),
   FOREIGN KEY(source_item_key) REFERENCES ref_items(item_key) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS ref_meta (key TEXT PRIMARY KEY,value TEXT NOT NULL);
+CREATE VIRTUAL TABLE IF NOT EXISTS ref_entries_fts USING fts5(source_item_key UNINDEXED,ref_index UNINDEXED,title,authors,container,doi,pmid,raw);
+CREATE VIRTUAL TABLE IF NOT EXISTS ref_contexts_fts USING fts5(source_item_key UNINDEXED,ordinal UNINDEXED,reference_index UNINDEXED,section,marker,paragraph);
 CREATE INDEX IF NOT EXISTS idx_ref_entries_doi ON ref_entries(doi);
 CREATE INDEX IF NOT EXISTS idx_ref_entries_pmid ON ref_entries(pmid);
 CREATE INDEX IF NOT EXISTS idx_ref_items_status ON ref_items(status);
@@ -166,7 +170,53 @@ CREATE INDEX IF NOT EXISTS idx_ref_contexts_reference ON ref_contexts(source_ite
 		 ELSE COALESCE((SELECT context_status FROM ref_items i WHERE i.item_key=ref_entries.source_item_key),'not_indexed') END
 		WHERE context_status='not_indexed'`)
 	}
+	if err == nil {
+		err = s.syncReferenceFTS()
+	}
 	return err
+}
+
+func (s *Store) syncReferenceFTS() error {
+	var version string
+	if err := s.db.QueryRow(`SELECT value FROM ref_meta WHERE key='reference_fts_version'`).Scan(&version); err == nil && version == "1" {
+		return nil
+	} else if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	var entries, entryFTS, contexts, contextFTS int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM ref_entries`).Scan(&entries); err != nil {
+		return err
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM ref_entries_fts`).Scan(&entryFTS); err != nil {
+		return err
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM ref_contexts`).Scan(&contexts); err != nil {
+		return err
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM ref_contexts_fts`).Scan(&contextFTS); err != nil {
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec(`DELETE FROM ref_entries_fts`); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO ref_entries_fts(source_item_key,ref_index,title,authors,container,doi,pmid,raw) SELECT source_item_key,ref_index,title,authors_json,container,doi,pmid,raw FROM ref_entries`); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`DELETE FROM ref_contexts_fts`); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO ref_contexts_fts(source_item_key,ordinal,reference_index,section,marker,paragraph) SELECT source_item_key,ordinal,reference_index,section,marker,paragraph FROM ref_contexts`); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO ref_meta(key,value) VALUES('reference_fts_version','1') ON CONFLICT(key) DO UPDATE SET value=excluded.value`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) IsFresh(ctx context.Context, itemKey, fingerprint string) (bool, error) {
@@ -247,6 +297,12 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'',1,?) ON CONFLICT(item_key) DO UPDATE SET t
 	if _, err = tx.ExecContext(ctx, `DELETE FROM ref_entries WHERE source_item_key=?`, result.ItemKey); err != nil {
 		return err
 	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM ref_entries_fts WHERE source_item_key=?`, result.ItemKey); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM ref_contexts_fts WHERE source_item_key=?`, result.ItemKey); err != nil {
+		return err
+	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM ref_contexts WHERE source_item_key=?`, result.ItemKey); err != nil {
 		return err
 	}
@@ -261,6 +317,17 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'',1,?) ON CONFLICT(item_key) DO UPDATE SET t
 			return err
 		}
 	}
+	entryFTS, err := tx.PrepareContext(ctx, `INSERT INTO ref_entries_fts(source_item_key,ref_index,title,authors,container,doi,pmid,raw) VALUES(?,?,?,?,?,?,?,?)`)
+	if err != nil {
+		return err
+	}
+	defer entryFTS.Close()
+	for _, ref := range result.References {
+		authors, _ := json.Marshal(ref.Authors)
+		if _, err = entryFTS.ExecContext(ctx, result.ItemKey, ref.Index, ref.Title, string(authors), ref.Container, ref.DOI, ref.PMID, ref.Raw); err != nil {
+			return err
+		}
+	}
 	contextStmt, err := tx.PrepareContext(ctx, `INSERT INTO ref_contexts(source_item_key,ordinal,reference_id,reference_index,marker,section,paragraph,target_item_key,source) VALUES(?,?,?,?,?,?,?,?,?)`)
 	if err != nil {
 		return err
@@ -268,6 +335,16 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'',1,?) ON CONFLICT(item_key) DO UPDATE SET t
 	defer contextStmt.Close()
 	for i, c := range result.Contexts {
 		if _, err = contextStmt.ExecContext(ctx, result.ItemKey, i+1, c.ReferenceID, c.ReferenceIndex, c.Marker, c.Section, c.Paragraph, c.TargetItemKey, c.Source); err != nil {
+			return err
+		}
+	}
+	contextFTS, err := tx.PrepareContext(ctx, `INSERT INTO ref_contexts_fts(source_item_key,ordinal,reference_index,section,marker,paragraph) VALUES(?,?,?,?,?,?)`)
+	if err != nil {
+		return err
+	}
+	defer contextFTS.Close()
+	for i, c := range result.Contexts {
+		if _, err = contextFTS.ExecContext(ctx, result.ItemKey, i+1, c.ReferenceIndex, c.Section, c.Marker, c.Paragraph); err != nil {
 			return err
 		}
 	}
@@ -341,7 +418,7 @@ func (s *Store) LoadResult(ctx context.Context, itemKey string) (Result, bool, e
 
 func (s *Store) Status(ctx context.Context) (Status, error) {
 	var status Status
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(status='success'),0),COALESCE(SUM(status='failed'),0),COALESCE(SUM(status='unsupported'),0),COALESCE(SUM(reference_count),0),COALESCE(SUM(strategy='pmc_jats' AND status='success'),0),COALESCE(SUM(strategy='pubmed' AND status='success'),0),COALESCE(MAX(updated_at),'') FROM ref_items`).Scan(&status.IndexedItems, &status.SuccessfulItems, &status.FailedItems, &status.UnsupportedItems, &status.TotalReferences, &status.PMCItems, &status.PubMedItems, &status.LastIndexedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(status='success'),0),COALESCE(SUM(status='failed'),0),COALESCE(SUM(status='unsupported'),0),COALESCE(SUM(reference_count),0),COALESCE(SUM(strategy='pmc_jats' AND status='success'),0),COALESCE(SUM(strategy='pubmed' AND status='success'),0),COALESCE(SUM(strategy='grobid' AND status='success'),0),COALESCE(MAX(updated_at),'') FROM ref_items`).Scan(&status.IndexedItems, &status.SuccessfulItems, &status.FailedItems, &status.UnsupportedItems, &status.TotalReferences, &status.PMCItems, &status.PubMedItems, &status.GrobidItems, &status.LastIndexedAt)
 	if err == nil {
 		_ = s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(match_status='resolved'),0),COALESCE(SUM(match_status!='resolved'),0) FROM ref_entries`).Scan(&status.ResolvedReferences, &status.UnresolvedReferences)
 		_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM ref_contexts`).Scan(&status.CitationContexts)
