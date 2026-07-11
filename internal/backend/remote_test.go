@@ -243,6 +243,8 @@ func TestFindOptionsRoundTrip_AllFields(t *testing.T) {
 		Query:             "CRISPR",
 		FullText:          true,
 		FullTextAny:       true,
+		FullTextOnly:      true,
+		MetadataOnly:      false,
 		All:               true,
 		Full:              true,
 		ItemType:          "journalArticle",
@@ -287,6 +289,7 @@ func TestFindOptionsRoundTrip_AllFields(t *testing.T) {
 	assertQueryEqual(t, capturedQuery, "q", "CRISPR")
 	assertQueryEqual(t, capturedQuery, "full_text", "true")
 	assertQueryEqual(t, capturedQuery, "full_text_any", "true")
+	assertQueryEqual(t, capturedQuery, "full_text_only", "true")
 	assertQueryEqual(t, capturedQuery, "all", "true")
 	assertQueryEqual(t, capturedQuery, "full", "true")
 	assertQueryEqual(t, capturedQuery, "item_type", "journalArticle")
@@ -331,7 +334,7 @@ func TestFindOptionsRoundTrip_EmptyFields(t *testing.T) {
 
 	// empty options should not send any of the optional params
 	optionalParams := []string{
-		"q", "full_text", "full_text_any", "all", "item_type",
+		"q", "full_text", "full_text_any", "full_text_only", "metadata_only", "all", "item_type",
 		"tag", "tags", "tag_any", "include_fields", "sort", "direction",
 		"qmode", "include_trashed", "date_after", "date_before",
 		"has_pdf", "attachment_name", "attachment_path", "attachment_type",
@@ -351,6 +354,7 @@ func TestParseFindOptions_AllFields(t *testing.T) {
 	q.Set("q", "CRISPR")
 	q.Set("full_text", "true")
 	q.Set("full_text_any", "true")
+	q.Set("full_text_only", "true")
 	q.Set("all", "true")
 	q.Set("full", "true")
 	q.Set("item_type", "journalArticle")
@@ -388,6 +392,9 @@ func TestParseFindOptions_AllFields(t *testing.T) {
 	}
 	if !opts.FullTextAny {
 		t.Error("FullTextAny: expected true")
+	}
+	if !opts.FullTextOnly {
+		t.Error("FullTextOnly: expected true")
 	}
 	if !opts.All {
 		t.Error("All: expected true")

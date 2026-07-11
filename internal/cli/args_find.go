@@ -34,6 +34,11 @@ func parseFindArgs(args []string) (findParsedArgs, error) {
 			opts.All = true
 		case "--fulltext":
 			opts.FullText = true
+		case "--fulltext-only":
+			opts.FullText = true
+			opts.FullTextOnly = true
+		case "--metadata-only":
+			opts.MetadataOnly = true
 		case "--fulltext-any":
 			opts.FullTextAny = true
 		case "--full":
@@ -207,6 +212,12 @@ func parseFindArgs(args []string) (findParsedArgs, error) {
 	}
 
 	opts.Query = strings.TrimSpace(strings.Join(queryParts, " "))
+	if opts.FullTextOnly && opts.MetadataOnly {
+		return findParsedArgs{}, fmt.Errorf("cannot combine --fulltext-only and --metadata-only")
+	}
+	if opts.MetadataOnly && opts.FullTextAny {
+		return findParsedArgs{}, fmt.Errorf("cannot combine --metadata-only and --fulltext-any")
+	}
 	return findParsedArgs{Opts: opts, JSONOutput: jsonOutput, Snippet: snippet, QueryProvided: queryProvided}, nil
 }
 

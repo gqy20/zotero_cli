@@ -3,23 +3,24 @@
   <desc id="desc">用户以自然语言提出研究任务，AI Agent 调用 zot CLI，从 Zotero 本地库、云端 API 或远程服务获取资料，再返回结构化结果。</desc>
   <style>
     :root { color-scheme: light dark; }
-    .bg { fill: #f7f8fa; }
-    .panel { fill: #fff; stroke: #d8dee8; stroke-width: 1.5; }
-    .soft { fill: #edf7f6; stroke: #77bdb5; }
-    .cli { fill: #16202a; stroke: #32c3ae; stroke-width: 2; }
-    .title { fill: #17212b; font: 700 20px ui-sans-serif,system-ui,sans-serif; }
-    .label { fill: #263442; font: 600 15px ui-sans-serif,system-ui,sans-serif; }
-    .muted { fill: #687787; font: 13px ui-sans-serif,system-ui,sans-serif; }
-    .code { fill: #c9fff6; font: 14px ui-monospace,SFMono-Regular,Consolas,monospace; }
-    .line { fill: none; stroke: #9aa9b8; stroke-width: 2; stroke-linecap: round; }
-    .pulse { fill: #20b8a4; filter: drop-shadow(0 0 4px #20b8a4); }
-    .result { opacity: .22; }
-    .step { animation: glow 6s ease-in-out infinite; }
+    .bg { fill: #f1efe8; }
+    .panel { fill: #faf9f5; stroke: #c9c5ba; stroke-width: 1.5; }
+    .soft { fill: #e8e4ff; stroke: #6d5ee8; stroke-width: 1.5; }
+    .cli { fill: #191918; stroke: #d9ff68; stroke-width: 2; }
+    .title { fill: #181817; font: 700 20px ui-sans-serif,system-ui,sans-serif; letter-spacing: -.2px; }
+    .label { fill: #22221f; font: 650 15px ui-sans-serif,system-ui,sans-serif; }
+    .muted { fill: #6c6a62; font: 13px ui-sans-serif,system-ui,sans-serif; }
+    .code { fill: #e5ff9b; font: 14px ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .line { fill: none; stroke: #908c82; stroke-width: 1.5; stroke-linecap: round; }
+    .pulse { fill: #6d5ee8; stroke: #f1efe8; stroke-width: 2; }
+    .result { fill: #6d5ee8; opacity: .82; }
+    .step { animation: focus 6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
     .s2 { animation-delay: 1.25s; } .s3 { animation-delay: 2.5s; } .s4 { animation-delay: 4.15s; }
-    @keyframes glow { 0%,18%,100% { opacity:.45 } 7%,12% { opacity:1 } }
+    @keyframes focus { 0%,18%,100% { opacity:.82; transform:translateY(0) } 7%,12% { opacity:1; transform:translateY(-3px) } }
     @media (prefers-color-scheme: dark) {
-      .bg { fill:#0d1117 } .panel { fill:#151b23; stroke:#34404d } .soft { fill:#102927; stroke:#3b8f86 }
-      .title,.label { fill:#e6edf3 } .muted { fill:#9baab8 }
+      .bg { fill:#10100f } .panel { fill:#1b1b19; stroke:#41413b } .soft { fill:#27233f; stroke:#9a8cff }
+      .cli { fill:#181817; stroke:#d9ff68 } .title,.label { fill:#f2efe7 } .muted { fill:#aaa79e }
+      .pulse { fill:#9a8cff; stroke:#10100f } .result { fill:#9a8cff }
     }
     @media (prefers-reduced-motion: reduce) { .step { animation:none; opacity:1 } }
   </style>
@@ -63,9 +64,9 @@
   <g class="step s4">
     <rect class="panel" x="770" y="105" width="150" height="220" rx="13"/>
     <text class="label" x="793" y="138">结构化结果</text>
-    <rect class="result" x="793" y="158" width="102" height="9" rx="4" fill="#20b8a4"/>
-    <rect class="result" x="793" y="177" width="80" height="9" rx="4" fill="#20b8a4"/>
-    <rect class="result" x="793" y="196" width="112" height="9" rx="4" fill="#20b8a4"/>
+    <rect class="result" x="793" y="158" width="102" height="9" rx="4"/>
+    <rect class="result" x="793" y="177" width="80" height="9" rx="4"/>
+    <rect class="result" x="793" y="196" width="112" height="9" rx="4"/>
     <text class="muted" x="793" y="238">JSON · PDF 文本</text>
     <text class="muted" x="793" y="260">标注 · BibTeX</text>
     <text class="muted" x="793" y="282">可继续分析写作</text>

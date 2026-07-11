@@ -45,8 +45,10 @@ Output:
   --json                 Structured for agents (strongly recommended).
   --full                 Include abstract/notes/tags.
   --include-fields F[,F] Restrict to specific fields.
-  --snippet              Enable FTS5 match-snippet preview (local/hybrid + index).
-  --fulltext             Match against PDF text (local/hybrid + FTS5).
+  --snippet              Add FTS5 match-snippet preview (local/hybrid + index).
+  --fulltext             Merge metadata and PDF full-text matches.
+  --fulltext-only        Match only PDF text (local/hybrid + FTS5).
+  --metadata-only        Match only title/creator/tag/other metadata.
   --fulltext-any         OR semantics for --fulltext terms.
   --qmode MODE           titleCreatorYear (default) | everything (adds abstract+tags).
   --limit N              Max results. No default unless --snippet is set (then 50).
@@ -55,14 +57,15 @@ Output:
 Examples:
   zot find "CRISPR" --json                              # Basic search
   zot find --tag ai --tag ml --json                     # AND-tag filter
-  zot find "attention" --fulltext --snippet --limit 20 --json  # FTS5 over PDF text
+  zot find "attention" --fulltext --snippet --limit 20 --json  # merged search
+  zot find "attention" --fulltext-only --json                  # PDF text only
   zot find --all --has-pdf --json                       # All PDFs
   zot find --missing-attachment --json                  # Broken local attachments
 
 Notes:
-  - FTS5 is automatic in local/hybrid when the index exists (run 'zot index build' first).
-    Force metadata-only by setting ZOT_MODE=web.
-  - --snippet / --fulltext require FTS5; ignored in web/remote mode.
+  - Metadata + FTS5 merging is automatic in local/hybrid when the index exists.
+    Use --metadata-only or --fulltext-only to select one source explicitly.
+  - --snippet / --fulltext-only require a local FTS5 index.
   - See also: export (write results), show <key> (item detail), schema types.`
 
 	usageShow = `usage: zot show <item-key> [--json] [--full] [--snippet]
@@ -205,7 +208,7 @@ func (c *CLI) runFind(args []string) int {
 	snippet := parsed.Snippet
 	queryProvided := parsed.QueryProvided
 
-	if opts.FullTextAny && !opts.FullText {
+	if opts.FullTextAny && !opts.FullText && !opts.FullTextOnly {
 		fmt.Fprintln(c.stderr, "error: --fulltext-any requires --fulltext")
 		fmt.Fprintln(c.stderr, usageFind)
 		return 2
@@ -224,10 +227,13 @@ func (c *CLI) runFind(args []string) int {
 		return exitCode
 	}
 
-	if !opts.FullText && cfg.Mode != "web" && strings.TrimSpace(opts.Query) != "" && !opts.All {
+	if !opts.FullText && !opts.MetadataOnly && cfg.Mode != "web" && strings.TrimSpace(opts.Query) != "" && !opts.All {
 		if hasFullTextData(reader) {
 			opts.FullText = true
 		}
+	}
+	if snippet && !opts.MetadataOnly && cfg.Mode != "web" {
+		opts.FullText = true
 	}
 
 	requestedIncludeFields := append([]string(nil), opts.IncludeFields...)

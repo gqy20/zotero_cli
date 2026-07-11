@@ -261,8 +261,10 @@ zot find --missing-attachment --json
 zot find --bad-attachment-name --json
 
 # 全文搜索 PDF 内容（local / hybrid）
-# 注意：有 query 且 FTS 索引有数据时会自动启用全文检索；--all 不会自动走全文
+# 注意：有 query 且 FTS 索引有数据时会自动合并元数据与全文结果；--all 不会自动走全文
 zot find "同源多倍体" --fulltext --snippet --json
+zot find "同源多倍体" --metadata-only --json  # 仅标题/作者/标签等元数据
+zot find "同源多倍体" --fulltext-only --json  # 仅 PDF 正文
 # snippet 默认限制 50 条，需要更多结果时显式指定 --limit
 zot find "同源多倍体" --snippet --limit 200 --json
 ```

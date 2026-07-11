@@ -15,6 +15,7 @@ timeline
         阶段 2 : 批量标注 from-file
         阶段 3 : find → export 管道连接
         已完成 : 附件健康检查 inspect-attachment + find filters
+        P1 : extract-figures 多 panel 合并与 Figure 区域重建
 
     section A : Zotero 原生能力深化
         P0 : 条件请求缓存 / 批量写入 / 格式透传
@@ -86,6 +87,18 @@ timeline
 | 无 `.pdf` 扩展名 | 缺少后缀 | Warning |
 | 无意义命名 | `download(`、`Copy of`、纯数字等 | Info |
 | 文件缺失 / 路径未解析 / 路径是目录 | DB 指向不存在或本地不可访问 | Error |
+
+#### PDF Figure 提取质量
+
+`extract-figures` 已能批量提取 PDF 图像并缓存结果，但抽检发现它目前更像“候选截图器”，还没有完整的 Figure 区域重建能力。典型问题是同一正文 Figure 中的多 panel 被拆成多个候选，或只保留其中一部分 panel。
+
+| 优先级 | 改进项 | 说明 | 验证样例 |
+|--------|--------|------|----------|
+| **P1** | 多 panel 合并 / 扩大边界 | 在候选过滤后新增 grouping 阶段：根据 caption、panel 间距、同栏约束、panel 标签（A/B/C/D 或 a/b/c/d）合并同一 Figure 的多个候选区域，再统一渲染 | `NWBY4FGX` page 6/7、`PZMH34QZ` page 3、`AJ8SE85P` page 3/11 |
+| **P1** | caption 锚定反推 Figure 区域 | 不只从单个候选出发吸附 caption，还要从 `Fig. N` / `Figure N` caption block 反向收集其上方或邻近的视觉候选，避免漏掉同一 caption 下的其他 panel | Nature/Springer 双栏 PDF |
+| **P2** | 同页局部/整图去重 | 当小候选基本被大候选包含，且二者没有独立 caption 时，保留大图、删除局部重复，减少“整图 + panel 局部”重复输出 | `IQTSPAXX` page 4、`K9XNFN6L` page 6 |
+
+实现时需避免粗暴合并同页所有候选：同页可能存在两个独立 Figure，或 Figure 与表格/正文相邻。合并策略应以 caption 邻域、栏布局和 panel 标签为主要约束，并保留保守模式。
 
 ---
 

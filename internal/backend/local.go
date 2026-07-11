@@ -131,9 +131,47 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 	if opts.QMode != "" {
 		return nil, newUnsupportedFeatureErrorWithHint("local", "find --qmode", "set ZOT_MODE=web or ZOT_MODE=hybrid to use this feature")
 	}
-	if opts.FullText {
+	if opts.FullTextOnly {
 		return r.findItemsFromFullTextIndex(ctx, opts)
 	}
+	if opts.MetadataOnly || !opts.FullText || opts.All || opts.Query == "" {
+		return r.findItemsFromMetadata(ctx, opts)
+	}
+	return r.findItemsMerged(ctx, opts)
+}
+
+func (r *LocalReader) findItemsMerged(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
+	branchOpts := opts
+	branchOpts.Start = 0
+	if opts.Limit > 0 {
+		branchOpts.Limit = opts.Start + opts.Limit
+	}
+
+	metadataOpts := branchOpts
+	metadataOpts.FullText = false
+	metadataOpts.FullTextOnly = false
+	metadataOpts.MetadataOnly = true
+	fullTextOpts := branchOpts
+	fullTextOpts.FullTextOnly = true
+	fullTextOpts.MetadataOnly = false
+
+	metadataItems, err := r.findItemsFromMetadata(ctx, metadataOpts)
+	if err != nil {
+		return nil, err
+	}
+	fullTextItems, err := r.findItemsFromFullTextIndex(ctx, fullTextOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	items := mergeFindItems(metadataItems, fullTextItems)
+	items = localFilterAndOrderItems(items, opts)
+	return paginateItems(items, opts.Start, opts.Limit), nil
+}
+
+func (r *LocalReader) findItemsFromMetadata(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
+	opts.FullText = false
+	opts.FullTextOnly = false
 
 	items := []domain.Item{}
 	err := r.withReadableDB(ctx, func(db *sql.DB) error {
@@ -234,6 +272,7 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 			items[index].Tags = tagsByItemID[itemID]
 			items[index].Attachments = attachmentsByParentID[itemID]
 			items[index].MatchedOn = localMatchedOn(items[index], opts)
+			items[index].SearchScore = metadataFindScore(items[index], opts.Query)
 		}
 		return nil
 	})
@@ -251,6 +290,66 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 		}
 	}
 	return items, nil
+}
+
+func metadataFindScore(item domain.Item, query string) int {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return 0
+	}
+	title := strings.ToLower(strings.TrimSpace(item.Title))
+	switch {
+	case title == query:
+		return 1_000_003
+	case strings.HasPrefix(title, query):
+		return 1_000_002
+	case strings.Contains(title, query):
+		return 1_000_001
+	default:
+		return 1_000_000
+	}
+}
+
+func mergeFindItems(metadataItems, fullTextItems []domain.Item) []domain.Item {
+	merged := make([]domain.Item, 0, len(metadataItems)+len(fullTextItems))
+	byKey := make(map[string]int, len(metadataItems)+len(fullTextItems))
+	for _, item := range metadataItems {
+		byKey[item.Key] = len(merged)
+		merged = append(merged, item)
+	}
+	for _, item := range fullTextItems {
+		if index, ok := byKey[item.Key]; ok {
+			existing := &merged[index]
+			existing.MatchedOn = mergeMatchedOn(existing.MatchedOn, item.MatchedOn)
+			if existing.SnippetAttachmentKey == "" {
+				existing.SnippetAttachmentKey = item.SnippetAttachmentKey
+			}
+			if existing.MatchedChunk == nil {
+				existing.MatchedChunk = item.MatchedChunk
+			}
+			continue
+		}
+		byKey[item.Key] = len(merged)
+		merged = append(merged, item)
+	}
+	return merged
+}
+
+func mergeMatchedOn(left, right []string) []string {
+	out := append([]string(nil), left...)
+	for _, value := range right {
+		found := false
+		for _, existing := range out {
+			if existing == value {
+				found = true
+				break
+			}
+		}
+		if !found {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func (r *LocalReader) findItemsFromFullTextIndex(ctx context.Context, opts FindOptions) ([]domain.Item, error) {

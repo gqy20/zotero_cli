@@ -430,6 +430,8 @@ func EncodeFindOptions(opts FindOptions) url.Values {
 	setString(q, "date_added_after", opts.DateAddedAfter)
 	setBool(q, "full_text", opts.FullText)
 	setBool(q, "full_text_any", opts.FullTextAny)
+	setBool(q, "full_text_only", opts.FullTextOnly)
+	setBool(q, "metadata_only", opts.MetadataOnly)
 	setBool(q, "all", opts.All)
 	setBool(q, "full", opts.Full)
 	setBool(q, "tag_any", opts.TagAny)
@@ -475,6 +477,8 @@ func ParseFindOptionsFromQuery(q url.Values) FindOptions {
 	opts.DateAddedAfter = q.Get("date_added_after")
 	opts.FullText = q.Get("full_text") == "true"
 	opts.FullTextAny = q.Get("full_text_any") == "true"
+	opts.FullTextOnly = q.Get("full_text_only") == "true"
+	opts.MetadataOnly = q.Get("metadata_only") == "true"
 	opts.All = q.Get("all") == "true"
 	opts.Full = q.Get("full") == "true"
 	opts.TagAny = q.Get("tag_any") == "true"

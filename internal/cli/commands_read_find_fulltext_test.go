@@ -66,6 +66,53 @@ func TestRunFindLocalJSONMatchesFullTextAttachmentTerms(t *testing.T) {
 	}
 }
 
+func TestRunFindLocalJSONMergesMetadataAndFullTextMatches(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+	buildGlobalFTSCacheForTest(t, dataDir, []ftsCacheRow{
+		{"ATTA1111", "ART67890", "Mixed Survey", "", "unrelated body text"},
+		{"ATTB2222", "ARTFULL2", "Prefix Match Article", "", "a mixed signal found only in the PDF body"},
+	})
+
+	stdout, stderr := captureOutput(t)
+	if exitCode := Run([]string{"find", "mixed", "--fulltext", "--json"}); exitCode != 0 {
+		t.Fatalf("exit code = %d; stderr=%q", exitCode, stderr.String())
+	}
+	var got struct {
+		Data []struct {
+			Key       string   `json:"key"`
+			MatchedOn []string `json:"matched_on"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Data) != 3 || got.Data[0].Key != "ART67890" || got.Data[1].Key != "BOOK1234" || got.Data[2].Key != "ARTFULL2" {
+		t.Fatalf("merged result order = %#v", got.Data)
+	}
+
+	stdout, stderr = captureOutput(t)
+	if exitCode := Run([]string{"find", "mixed", "--fulltext-only", "--json"}); exitCode != 0 {
+		t.Fatalf("fulltext-only exit code = %d; stderr=%q", exitCode, stderr.String())
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Data) != 1 || got.Data[0].Key != "ARTFULL2" {
+		t.Fatalf("fulltext-only result = %#v", got.Data)
+	}
+}
+
 func TestRunFindLocalJSONIncludesFullTextPreviewWhenSnippetRequested(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

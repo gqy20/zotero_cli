@@ -75,7 +75,7 @@ func isDefaultFindVisibleItemType(itemType string) bool {
 }
 
 func requiresLocalFindSupport(opts FindOptions) bool {
-	if opts.FullText || hasAttachmentFindFilters(opts) {
+	if opts.FullText || opts.FullTextOnly || hasAttachmentFindFilters(opts) {
 		return true
 	}
 	if len(opts.Collection) > 0 || len(opts.NoCollection) > 0 {

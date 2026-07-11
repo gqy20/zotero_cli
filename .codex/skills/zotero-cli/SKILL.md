@@ -167,7 +167,9 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 - `--start N` + `--limit N` — 分页
 
 **全文检索：**
-- `--fulltext` — FTS5 全文搜索；local/hybrid 下有 query 且非 `--all` 时可自动启用
+- `--fulltext` — 合并元数据与 FTS5 全文结果；local/hybrid 下有 query 且非 `--all` 时可自动启用
+- `--metadata-only` — 仅检索标题、作者、标签等元数据
+- `--fulltext-only` — 仅检索 PDF 正文
 - `--fulltext-any` — 任一词匹配
 - `--snippet` — 布尔开关，启用 FTS5 匹配片段预览（未指定 `--limit` 时回退 50 条）
 

@@ -440,7 +440,7 @@ zot extract-figures <item-key> [...]|--all [--output-dir DIR] [--json] [--worker
 |------|------|
 | `init` | 交互式初始化 `~/.zot/.env`（mode 选择、API key、library id、PyMuPDF 一站式） |
 | `config <sub>` | `path` / `show` / `validate` 三个子命令，校验当前凭据 |
-| `index build` | 构建 FTS5 全文索引（`find --fulltext` / `show --snippet` 的前置） |
+| `index build` | 构建 FTS5 全文索引（合并检索、`find --fulltext-only` / `show --snippet` 的前置） |
 | `setup pdf-extract` | **旧命令**，已被 `zot init --pdf` 替代（保留兼容） |
 | `version [--check]` | 显示当前版本；`--check` 查 GitHub 最新 release 并给出升级提示 |
 
