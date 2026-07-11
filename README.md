@@ -9,6 +9,10 @@
 
 同时也支持终端手动使用和脚本自动化。
 
+<p align="center">
+  <img src="docs/assets/zot-workflow.svg" alt="zot 工作流程：自然语言任务经 AI Agent 转换为 zot 命令，从本地、云端或远程 Zotero 数据源返回结构化结果" width="960">
+</p>
+
 ## 目录
 
 - [为什么用 zot](#为什么用-zot)

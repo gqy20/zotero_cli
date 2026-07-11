@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img" aria-labelledby="title desc">
+  <title id="title">zot 工作流程动画</title>
+  <desc id="desc">用户以自然语言提出研究任务，AI Agent 调用 zot CLI，从 Zotero 本地库、云端 API 或远程服务获取资料，再返回结构化结果。</desc>
+  <style>
+    :root { color-scheme: light dark; }
+    .bg { fill: #f7f8fa; }
+    .panel { fill: #fff; stroke: #d8dee8; stroke-width: 1.5; }
+    .soft { fill: #edf7f6; stroke: #77bdb5; }
+    .cli { fill: #16202a; stroke: #32c3ae; stroke-width: 2; }
+    .title { fill: #17212b; font: 700 20px ui-sans-serif,system-ui,sans-serif; }
+    .label { fill: #263442; font: 600 15px ui-sans-serif,system-ui,sans-serif; }
+    .muted { fill: #687787; font: 13px ui-sans-serif,system-ui,sans-serif; }
+    .code { fill: #c9fff6; font: 14px ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .line { fill: none; stroke: #9aa9b8; stroke-width: 2; stroke-linecap: round; }
+    .pulse { fill: #20b8a4; filter: drop-shadow(0 0 4px #20b8a4); }
+    .result { opacity: .22; }
+    .step { animation: glow 6s ease-in-out infinite; }
+    .s2 { animation-delay: 1.25s; } .s3 { animation-delay: 2.5s; } .s4 { animation-delay: 4.15s; }
+    @keyframes glow { 0%,18%,100% { opacity:.45 } 7%,12% { opacity:1 } }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill:#0d1117 } .panel { fill:#151b23; stroke:#34404d } .soft { fill:#102927; stroke:#3b8f86 }
+      .title,.label { fill:#e6edf3 } .muted { fill:#9baab8 }
+    }
+    @media (prefers-reduced-motion: reduce) { .step { animation:none; opacity:1 } }
+  </style>
+  <rect class="bg" width="960" height="360" rx="18"/>
+  <text class="title" x="40" y="45">从一个问题，到可直接使用的研究结果</text>
+  <text class="muted" x="40" y="69">zot 为 AI Agent 提供安全、结构化的 Zotero 操作层</text>
+
+  <path class="line" d="M205 157H283M453 157H527M697 157H770"/>
+  <path class="line" d="M612 209V263"/>
+  <path class="line" d="M697 294H770"/>
+  <circle class="pulse" r="5">
+    <animateMotion dur="6s" repeatCount="indefinite" path="M205 157H283M453 157H527M697 157H770"/>
+  </circle>
+  <circle class="pulse" r="4">
+    <animateMotion begin="2.7s" dur="6s" repeatCount="indefinite" path="M612 209V294H770"/>
+  </circle>
+
+  <g class="step">
+    <rect class="panel" x="40" y="105" width="165" height="104" rx="13"/>
+    <text class="label" x="61" y="137">自然语言任务</text>
+    <text class="muted" x="61" y="165">“找出 CRISPR 综述</text>
+    <text class="muted" x="61" y="185">并导出 BibTeX”</text>
+  </g>
+  <g class="step s2">
+    <rect class="soft" x="283" y="105" width="170" height="104" rx="13"/>
+    <text class="label" x="306" y="137">AI Agent</text>
+    <text class="muted" x="306" y="165">理解意图 · 选择命令</text>
+    <text class="muted" x="306" y="185">检查写入与删除权限</text>
+  </g>
+  <g class="step s3">
+    <rect class="cli" x="527" y="105" width="170" height="104" rx="13"/>
+    <text class="code" x="550" y="139">$ zot find</text>
+    <text class="code" x="550" y="164">  "CRISPR"</text>
+    <text class="code" x="550" y="189">  --json</text>
+  </g>
+  <g class="step s3">
+    <rect class="panel" x="527" y="263" width="170" height="62" rx="13"/>
+    <text class="label" x="550" y="289">数据路由</text>
+    <text class="muted" x="550" y="310">local · web · remote</text>
+  </g>
+  <g class="step s4">
+    <rect class="panel" x="770" y="105" width="150" height="220" rx="13"/>
+    <text class="label" x="793" y="138">结构化结果</text>
+    <rect class="result" x="793" y="158" width="102" height="9" rx="4" fill="#20b8a4"/>
+    <rect class="result" x="793" y="177" width="80" height="9" rx="4" fill="#20b8a4"/>
+    <rect class="result" x="793" y="196" width="112" height="9" rx="4" fill="#20b8a4"/>
+    <text class="muted" x="793" y="238">JSON · PDF 文本</text>
+    <text class="muted" x="793" y="260">标注 · BibTeX</text>
+    <text class="muted" x="793" y="282">可继续分析写作</text>
+  </g>
+</svg>
