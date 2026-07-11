@@ -285,3 +285,53 @@ func TestOutputEnvironmentProvidesGlobalDefault(t *testing.T) {
 		t.Fatalf("command = %#v", got["command"])
 	}
 }
+
+func TestStageSixLegacyTranslation(t *testing.T) {
+	tests := []struct {
+		legacy, canonical []string
+	}{
+		{[]string{"schema", "types"}, []string{"schema", "list", "types"}},
+		{[]string{"schema", "fields-for", "article"}, []string{"schema", "list", "fields", "article"}},
+		{[]string{"schema", "creator-types-for", "book"}, []string{"schema", "list", "roles", "book"}},
+		{[]string{"schema", "template", "book"}, []string{"schema", "show", "book"}},
+		{[]string{"server", "--port", "9000"}, []string{"server", "start", "--port", "9000"}},
+		{[]string{"sync", "--force"}, []string{"sync", "pull", "--force"}},
+	}
+	for _, tt := range tests {
+		got, ok := translateStageOneArgs(tt.legacy)
+		if !ok || !reflect.DeepEqual(got, tt.canonical) {
+			t.Fatalf("translate %v = %v, %t; want %v", tt.legacy, got, ok, tt.canonical)
+		}
+	}
+}
+
+func TestStageSixCanonicalTree(t *testing.T) {
+	root := testCLI.newRootCommand()
+	for _, path := range [][]string{{"schema", "list"}, {"schema", "show"}, {"server", "start"}, {"sync", "pull"}, {"completion"}, {"version"}} {
+		cmd := root
+		for _, name := range path {
+			found := false
+			for _, child := range cmd.Commands() {
+				if child.Name() == name {
+					cmd, found = child, true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("missing canonical command path %v", path)
+			}
+		}
+	}
+}
+
+func TestCompletionGeneratesAllSupportedShellsWithoutConfig(t *testing.T) {
+	for _, shell := range []string{"bash", "zsh", "fish", "powershell"} {
+		stdout, stderr := captureOutput(t)
+		if code := Run([]string{"completion", shell}); code != ExitOK {
+			t.Fatalf("completion %s: code=%d stderr=%q", shell, code, stderr.String())
+		}
+		if stdout.Len() == 0 {
+			t.Fatalf("completion %s produced no output", shell)
+		}
+	}
+}

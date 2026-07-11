@@ -776,7 +776,7 @@ Cobra → typed request → app service → Result → renderer
 
 退出条件：PDF 算法代码不依赖 Cobra；`ann delete` 的服务端门控与本地安全语义保持一致。
 
-### 阶段 5：Reference 与 Index
+### 阶段 5：Reference 与 Index（已完成）
 
 迁移：
 
@@ -796,7 +796,7 @@ ReferenceService 统一持有 reader、store、NCBI/Europe PMC client、builder 
 
 退出条件：`ref retry`、`ref contexts build` 和 `ref KEY` 只存在于 legacy translator；默认 PMC/PubMed/Europe PMC/GROBID 路由不变。
 
-### 阶段 6：长尾命令与运行时能力
+### 阶段 6：长尾命令与运行时能力（已完成）
 
 迁移：
 
@@ -808,6 +808,16 @@ ReferenceService 统一持有 reader、store、NCBI/Europe PMC client、builder 
 - sync pull
 - completion
 - version
+
+阶段 6 冻结的 legacy-only 清单：
+
+- `setup`：历史弃用提示；配置和 PDF 环境初始化统一使用 `config init`。
+- `select`：仅用于 Zotero Desktop 的平台联动，不进入稳定的资源动作矩阵。
+- `abstract`：能力已由 `item show`/`item list` 的字段选择覆盖。
+- `relate`：实验性关系图读写语法，尚未形成稳定资源模型。
+- `key-info`：API key 诊断入口，暂不纳入以 library resource 为中心的 v2 命令树。
+
+这些入口在阶段 6 仍由旧内核执行，主帮助和 completion 不展示；阶段 7 将它们收敛为显式 legacy adapter 或 redirect-only 提示，不允许继续持有通用 CLI 分发职责。
 
 | 类型 | 规模 |
 |---|---:|

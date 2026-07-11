@@ -25,7 +25,7 @@ func TestRunSchemaTypesJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
-	if got["command"] != "item-types" {
+	if got["command"] != "schema list" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 }
@@ -95,7 +95,7 @@ func TestRunSchemaFieldsForJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
-	if got["command"] != "item-type-fields" {
+	if got["command"] != "schema list" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 }
@@ -142,7 +142,7 @@ func TestRunSchemaTemplateJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
-	if got["command"] != "item-template" {
+	if got["command"] != "schema show" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 }

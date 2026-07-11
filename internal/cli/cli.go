@@ -83,18 +83,12 @@ func (c *CLI) dispatch(name string, args []string) int {
 	switch name {
 	case "setup":
 		return c.runSetup(args)
-	case "server":
-		return c.runServer(args)
-	case "sync":
-		return c.runSync(args)
 	case "select":
 		return c.runSelect(args)
 	case "abstract":
 		return c.runAbstract(args)
 	case "relate":
 		return c.runRelate(args)
-	case "schema":
-		return c.runSchema(args)
 	case "key-info":
 		return c.runKeyInfo(args)
 	}

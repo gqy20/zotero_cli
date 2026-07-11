@@ -812,7 +812,7 @@ func TestRunSchemaHelpShowsUsage(t *testing.T) {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}
 	got := stdout.String()
-	for _, want := range []string{"schema", "subcommand", "types", "fields", "template"} {
+	for _, want := range []string{"schema", "subcommands", "list", "show"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in help output %q", want, got)
 		}
@@ -826,9 +826,8 @@ func TestRunSchemaNoSubcommandShowsUsageAndError(t *testing.T) {
 		t.Fatalf("expected exit code %d, got %d", ExitUsage, exitCode)
 	}
 	// 结构性：缺 subcommand 时，stderr 应包含 schema 父命令的 Long（子命令列表 + usage）
-	schemaLong := lookupCommand("schema").Long
-	if !strings.Contains(stderr.String(), schemaLong) {
-		t.Fatalf("expected schema long help in stderr, got %q", stderr.String())
+	if !strings.Contains(stderr.String(), "schema requires a subcommand") {
+		t.Fatalf("expected schema usage error in stderr, got %q", stderr.String())
 	}
 	// stdout 应为空（之前 split 在两个流，现合并到 stderr）
 	if stdout.Len() != 0 {
@@ -842,7 +841,7 @@ func TestRunSchemaUnknownSubcommand(t *testing.T) {
 	if exitCode != ExitUsage {
 		t.Fatalf("expected exit code %d, got %d", ExitUsage, exitCode)
 	}
-	if got := stderr.String(); !strings.Contains(got, "unknown schema subcommand") {
+	if got := stderr.String(); !strings.Contains(got, "unknown command") {
 		t.Fatalf("expected error message, got %q", got)
 	}
 }
@@ -853,7 +852,7 @@ func TestRunSchemaFieldsForMissingArg(t *testing.T) {
 	if exitCode != ExitUsage {
 		t.Fatalf("expected exit code %d, got %d", ExitUsage, exitCode)
 	}
-	if got := stderr.String(); !strings.Contains(got, "fields-for <item-type>") {
+	if got := stderr.String(); !strings.Contains(got, "unknown command") {
 		t.Fatalf("expected usage hint, got %q", got)
 	}
 }

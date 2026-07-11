@@ -1,4 +1,4 @@
-package cli
+package app
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,34 +18,7 @@ import (
 	"zotero_cli/internal/config"
 )
 
-const usageSync = `usage: zot sync [--server-addr URL] [--data-dir DIR] [--force]
-                [--concurrency N] [--no-storage]
-
-Pull the remote library from a running 'zot server' into a local directory so
-you can work offline in local mode afterwards, without keeping the server
-running. Synced: zotero.sqlite (database) + storage/ (PDF/attachment files) +
-.zotero_cli/fulltext/ (FTS5 full-text index + extracted text), so 'find
---fulltext' works right away with no local 'zot index build'. Subsequent runs
-are incremental: files whose size + mtime are unchanged are skipped.
-
-Flags:
-  --server-addr URL   Remote 'zot server' URL (default: ZOT_SERVER_ADDR from config)
-  --data-dir DIR      Local destination (default: ~/.zot/sync/)
-  --force             Re-download everything, ignore incremental state
-  --concurrency N     Parallel attachment downloads (default 8)
-  --no-storage        Skip storage (PDF/attachments); sqlite + fulltext index still sync
-
-Examples:
-  zot sync                                        # uses ZOT_SERVER_ADDR, writes ~/.zot/sync/
-  zot sync --server-addr http://192.168.1.50:8021 --data-dir ~/zotero-mirror
-  zot sync --force                                 # full re-pull
-
-After sync, point local mode at the copy:
-  ZOT_MODE=local ZOT_DATA_DIR=~/.zot/sync zot find ...
-  zot index build --data-dir ~/.zot/sync   # optional, build full-text index
-`
-
-type syncFlags struct {
+type SyncPullRequest struct {
 	ServerAddr  string
 	DataDir     string
 	Concurrency int
@@ -54,132 +26,112 @@ type syncFlags struct {
 	NoStorage   bool
 }
 
-func parseSyncFlags(args []string) (syncFlags, error) {
-	f := syncFlags{Concurrency: 8}
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--server-addr":
-			if i+1 >= len(args) {
-				return f, fmt.Errorf("--server-addr requires a value")
-			}
-			f.ServerAddr = args[i+1]
-			i++
-		case "--data-dir":
-			if i+1 >= len(args) {
-				return f, fmt.Errorf("--data-dir requires a value")
-			}
-			f.DataDir = args[i+1]
-			i++
-		case "--concurrency":
-			if i+1 >= len(args) {
-				return f, fmt.Errorf("--concurrency requires a value")
-			}
-			n, err := strconv.Atoi(args[i+1])
-			if err != nil || n < 1 {
-				return f, fmt.Errorf("invalid --concurrency %q", args[i+1])
-			}
-			f.Concurrency = n
-			i++
-		case "--force":
-			f.Force = true
-		case "--no-storage":
-			f.NoStorage = true
-		default:
-			return f, fmt.Errorf("unknown flag: %s", args[i])
-		}
-	}
-	return f, nil
+type SyncStats struct {
+	Downloaded int64 `json:"downloaded"`
+	Skipped    int64 `json:"skipped"`
+	Bytes      int64 `json:"bytes"`
 }
 
-func (c *CLI) runSync(args []string) int {
-	if isHelpOnly(args) {
-		return c.printCommandUsage(usageSync)
+type SyncSummary struct {
+	DataDir       string    `json:"data_dir"`
+	SQLiteChanged bool      `json:"sqlite_changed"`
+	Fulltext      SyncStats `json:"fulltext"`
+	Attachments   SyncStats `json:"attachments"`
+	Storage       bool      `json:"storage"`
+}
+
+type SyncService struct {
+	LoadConfig    func() (config.Config, string, error)
+	DefaultPath   func() (string, error)
+	Progress      io.Writer
+	NewHTTPClient func() *http.Client
+}
+
+func NewSyncService() SyncService {
+	return SyncService{LoadConfig: config.Load, DefaultPath: config.DefaultEnvPath, NewHTTPClient: newSyncHTTPClient}
+}
+
+func (s SyncService) Pull(ctx context.Context, req SyncPullRequest) (Result, error) {
+	if req.Concurrency == 0 {
+		req.Concurrency = 8
 	}
-	flags, err := parseSyncFlags(args)
-	if err != nil {
-		fmt.Fprintf(c.stderr, "%v\n\n%s", err, usageSync)
-		return ExitUsage
+	if req.Concurrency < 1 {
+		return Result{}, fmt.Errorf("concurrency must be at least 1")
 	}
 
 	// Resolve server addr + auth key: flags first, then config (.env + env).
-	serverAddr := flags.ServerAddr
+	serverAddr := req.ServerAddr
 	authKey := ""
-	if cfg, _, cfgErr := config.Load(); cfgErr == nil {
+	if cfg, _, cfgErr := s.LoadConfig(); cfgErr == nil {
 		if serverAddr == "" {
 			serverAddr = cfg.ServerAddr
 		}
 		authKey = cfg.ServerAuthKey
 	} else if cfgErr != config.ErrNotFound {
-		fmt.Fprintf(c.stderr, "failed to load config: %v\n", cfgErr)
-		return ExitConfig
+		return Result{}, cfgErr
 	}
 	if serverAddr == "" {
-		fmt.Fprintf(c.stderr, "no server address: pass --server-addr or set ZOT_SERVER_ADDR\n(run 'zot init --mode remote --server-addr URL').\n\n%s", usageSync)
-		return ExitConfig
+		return Result{}, fmt.Errorf("no server address: pass --server-addr or set ZOT_SERVER_ADDR")
 	}
 
-	dataDir := flags.DataDir
+	dataDir := req.DataDir
 	if dataDir == "" {
-		envPath, err := config.DefaultEnvPath()
+		envPath, err := s.DefaultPath()
 		if err != nil {
-			fmt.Fprintf(c.stderr, "resolve default data-dir: %v\n", err)
-			return ExitConfig
+			return Result{}, fmt.Errorf("resolve default data-dir: %w", err)
 		}
 		dataDir = filepath.Join(filepath.Dir(envPath), "sync")
 	}
 	if err := os.MkdirAll(filepath.Join(dataDir, "storage"), 0o755); err != nil {
-		fmt.Fprintf(c.stderr, "create data-dir: %v\n", err)
-		return ExitError
+		return Result{}, fmt.Errorf("create data-dir: %w", err)
 	}
 	cleanupStaleSync(dataDir)
 
-	client := &syncClient{baseURL: strings.TrimRight(serverAddr, "/"), authKey: authKey, httpClient: newSyncHTTPClient()}
-	ctx := context.Background()
+	httpClient := s.NewHTTPClient
+	if httpClient == nil {
+		httpClient = newSyncHTTPClient
+	}
+	client := &syncClient{baseURL: strings.TrimRight(serverAddr, "/"), authKey: authKey, httpClient: httpClient()}
 
 	manifest, err := client.getManifest(ctx)
 	if err != nil {
-		fmt.Fprintf(c.stderr, "fetch manifest: %v\n", err)
-		return ExitError
+		return Result{}, fmt.Errorf("fetch manifest: %w", err)
 	}
 
-	sqliteChanged, err := syncSqlite(ctx, client, manifest.SQLite, dataDir, flags.Force, c.stderr)
+	sqliteChanged, err := syncSqlite(ctx, client, manifest.SQLite, dataDir, req.Force, s.Progress)
 	if err != nil {
-		fmt.Fprintf(c.stderr, "sync sqlite: %v\n", err)
-		return ExitError
+		return Result{}, fmt.Errorf("sync sqlite: %w", err)
 	}
 
 	// fulltext index (.zotero_cli/fulltext) — always synced: small, and lets
 	// full-text search work right away without a local 'zot index build'.
-	ftDownloaded, ftSkipped, ftBytes, err := syncFulltext(ctx, client, manifest.Fulltext, dataDir, flags.Force, flags.Concurrency, c.stderr)
+	ftDownloaded, ftSkipped, ftBytes, err := syncFulltext(ctx, client, manifest.Fulltext, dataDir, req.Force, req.Concurrency, s.Progress)
 	if err != nil {
-		fmt.Fprintf(c.stderr, "sync fulltext: %v\n", err)
-		return ExitError
+		return Result{}, fmt.Errorf("sync fulltext: %w", err)
 	}
 
 	var downloaded, skipped, bytes int64
-	if !flags.NoStorage {
-		downloaded, skipped, bytes, err = syncStorage(ctx, client, manifest.Storage, dataDir, flags.Force, flags.Concurrency, c.stderr)
+	if !req.NoStorage {
+		downloaded, skipped, bytes, err = syncStorage(ctx, client, manifest.Storage, dataDir, req.Force, req.Concurrency, s.Progress)
 		if err != nil {
-			fmt.Fprintf(c.stderr, "sync storage: %v\n", err)
-			return ExitError
+			return Result{}, fmt.Errorf("sync storage: %w", err)
 		}
 	}
 
-	fmt.Fprintf(c.stdout, "Synced to %s\n", dataDir)
+	summary := SyncSummary{DataDir: dataDir, SQLiteChanged: sqliteChanged, Fulltext: SyncStats{ftDownloaded, ftSkipped, ftBytes}, Attachments: SyncStats{downloaded, skipped, bytes}, Storage: !req.NoStorage}
+	var text strings.Builder
+	fmt.Fprintf(&text, "Synced to %s\n", dataDir)
 	if sqliteChanged {
-		fmt.Fprintf(c.stdout, "  zotero.sqlite: updated\n")
+		fmt.Fprintln(&text, "  zotero.sqlite: updated")
 	} else {
-		fmt.Fprintf(c.stdout, "  zotero.sqlite: unchanged\n")
+		fmt.Fprintln(&text, "  zotero.sqlite: unchanged")
 	}
-	fmt.Fprintf(c.stdout, "  fulltext index: %d downloaded, %d unchanged (%s)\n", ftDownloaded, ftSkipped, humanBytes(ftBytes))
-	if !flags.NoStorage {
-		fmt.Fprintf(c.stdout, "  attachments: %d downloaded, %d unchanged (%s)\n", downloaded, skipped, humanBytes(bytes))
+	fmt.Fprintf(&text, "  fulltext index: %d downloaded, %d unchanged (%s)\n", ftDownloaded, ftSkipped, humanBytes(ftBytes))
+	if !req.NoStorage {
+		fmt.Fprintf(&text, "  attachments: %d downloaded, %d unchanged (%s)\n", downloaded, skipped, humanBytes(bytes))
 	}
-	fmt.Fprintf(c.stdout, "\nUse it:\n")
-	fmt.Fprintf(c.stdout, "  ZOT_MODE=local ZOT_DATA_DIR=%s zot find ...\n", dataDir)
-	fmt.Fprintf(c.stdout, "  (full-text index already synced; run 'zot index build --data-dir %s' only if you re-extract PDFs)\n", dataDir)
-	fmt.Fprintf(c.stdout, "  note: only storage/ attachments are synced; linked_file attachments (external paths) are not.\n")
-	return ExitOK
+	fmt.Fprintf(&text, "\nUse it:\n  ZOT_MODE=local ZOT_DATA_DIR=%s zot find ...\n", dataDir)
+	return Result{Data: summary, Text: strings.TrimRight(text.String(), "\n")}, nil
 }
 
 // --- manifest types (mirror server's syncManifest shape) ---

@@ -7,6 +7,8 @@
 ## [Unreleased]
 
 ### 新增
+- **CLI v2 阶段 6 长尾命令与运行时能力**：迁移 `schema list/show`、`server start`、`sync pull`，加入 bash/zsh/fish/PowerShell completion；旧 schema 变体、裸 `server` 与裸 `sync` 统一翻译为 canonical invocation，sync 下载生命周期下沉至应用层。
+- **CLI v2 阶段 5 Reference 与 Index**：迁移 `ref show/find/related/cited/ctx/links/entities/profile/build/resolve/status` 与 `index build/status`，Reference/Index 的 store、client、reader 和构建生命周期下沉至应用层。
 - **CLI v2 阶段 1 基础设施**：引入 Cobra 命令树、canonical Invocation、应用服务 Result 与统一 JSON/text/error renderer；`version`、`config init/show/check` 已迁移，旧 `zot init`、`config validate/path` 通过参数翻译进入同一实现。
 - **CLI v2 阶段 2 只读资源切片**：迁移 `lib show/stats/log`、`item list --scope trash|pubs`、`coll/tag/note/search/group list`；所有入口统一经过 typed request、应用服务和 renderer，旧命令仅翻译参数并返回 canonical JSON command。
 - **CLI v2 阶段 3 资源与安全写入**：迁移 `item find/show/new/edit/delete/tag/untag/supp/export`、Collection/Note/Saved Search 的 show/find/CRUD 及集合成员操作；统一 `--data`、`--from`、`--set`、批量位置 key、`--dry-run`、`--yes`、`--if-version`，未显式给版本时由应用服务读取当前 library version。
@@ -24,6 +26,7 @@
 ### 性能
 
 ### 移除
+- 删除阶段 5 的 reference/index 旧业务 handler，以及阶段 6 的 server/sync 手写参数解析与 CLI 内业务编排。
 - 删除阶段 2 对应的旧只读 handler、旧 dispatch 分支与 `changes` 手写参数解析器，避免新旧两套业务逻辑并存。
 - 删除阶段 3 对应的 find/show/export/supplements/写操作旧 handler 与手写参数解析器；高频旧入口统一翻译到 canonical invocation。
 - 删除阶段 4 对应的附件预览、PDF 提取/打开、标注读写旧 handler 与手写参数解析器；旧 `--clear` 仅翻译为 canonical `ann delete`。

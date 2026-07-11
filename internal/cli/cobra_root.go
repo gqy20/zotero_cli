@@ -41,8 +41,22 @@ func translateStageOneArgs(args []string) ([]string, bool) {
 	switch args[0] {
 	case "version":
 		return args, true
+	case "completion":
+		return args, true
 	case "lib", "item", "coll", "tag", "note", "search", "group", "file", "pdf", "ann", "index":
 		return args, true
+	case "schema":
+		return translateLegacySchema(args), true
+	case "server":
+		if len(args) > 1 && args[1] == "start" {
+			return args, true
+		}
+		return append([]string{"server", "start"}, args[1:]...), true
+	case "sync":
+		if len(args) > 1 && args[1] == "pull" {
+			return args, true
+		}
+		return append([]string{"sync", "pull"}, args[1:]...), true
 	case "ref":
 		return translateReferenceArgs(args)
 	case "init":
@@ -178,6 +192,38 @@ func translateReferenceArgs(args []string) ([]string, bool) {
 			return args, true
 		}
 		return append([]string{"ref", "show"}, args[1:]...), true
+	}
+}
+
+func translateLegacySchema(args []string) []string {
+	if len(args) < 2 || args[1] == "list" || args[1] == "show" {
+		return args
+	}
+	rest := args[2:]
+	switch args[1] {
+	case "types":
+		return append([]string{"schema", "list", "types"}, rest...)
+	case "fields":
+		return append([]string{"schema", "list", "fields"}, rest...)
+	case "creator-types":
+		return append([]string{"schema", "list", "roles"}, rest...)
+	case "fields-for":
+		if len(rest) == 0 {
+			return args
+		}
+		return append([]string{"schema", "list", "fields"}, rest...)
+	case "creator-types-for":
+		if len(rest) == 0 {
+			return args
+		}
+		return append([]string{"schema", "list", "roles"}, rest...)
+	case "template":
+		if len(rest) == 0 {
+			return args
+		}
+		return append([]string{"schema", "show"}, rest...)
+	default:
+		return args
 	}
 }
 
@@ -423,6 +469,10 @@ func (c *CLI) newRootCommand() *cobra.Command {
 	c.addContentCommands(root, opts)
 	root.AddCommand(c.newReferenceCommand(opts))
 	root.AddCommand(c.newIndexCommand(opts))
+	root.AddCommand(c.newSchemaCommand(opts))
+	root.AddCommand(c.newServerCommand(opts))
+	root.AddCommand(c.newSyncCommand(opts))
+	root.AddCommand(c.newCompletionCommand())
 	return root
 }
 
