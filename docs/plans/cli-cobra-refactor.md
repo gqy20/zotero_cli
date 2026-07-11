@@ -697,7 +697,7 @@ cmd → cli → app → backend/references/zoteroapi
 
 退出条件：新 command tree 可在同一进程重复构建；JSON 错误稳定；现有配置测试通过。
 
-### 阶段 2：只读资源垂直切片
+### 阶段 2：只读资源垂直切片（已完成）
 
 迁移：
 

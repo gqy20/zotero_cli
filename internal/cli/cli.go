@@ -115,34 +115,10 @@ func (c *CLI) dispatch(name string, args []string) int {
 		return c.runRelate(args)
 	case "export":
 		return c.runExport(args)
-	case "collections":
-		return c.runCollections(args)
-	case "notes":
-		return c.runNotes(args)
-	case "tags":
-		return c.runTags(args)
-	case "searches":
-		return c.runSearches(args)
-	case "deleted":
-		return c.runDeleted(args)
-	case "stats":
-		return c.runStats(args)
-	case "changes":
-		return c.runVersions(args)
 	case "schema":
 		return c.runSchema(args)
-	case "overview":
-		return c.runOverview(args)
 	case "key-info":
 		return c.runKeyInfo(args)
-	case "groups":
-		return c.runGroups(args)
-	case "trash":
-		return c.runTrash(args)
-	case "collections-top":
-		return c.runCollectionsTop(args)
-	case "publications":
-		return c.runPublications(args)
 	case "annotate":
 		return c.runAnnotate(args)
 	case "create-item":

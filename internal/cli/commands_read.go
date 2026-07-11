@@ -323,46 +323,6 @@ func (c *CLI) runFind(args []string) int {
 	return 0
 }
 
-func (c *CLI) runStats(args []string) int {
-	if isHelpOnly(args) {
-		return c.printCommandUsage(usageStats)
-	}
-	jsonOutput, ok, helpPrinted := c.parseJSONOnlyArgs(args, usageStats)
-	if helpPrinted {
-		return 0
-	}
-	if !ok {
-		return 2
-	}
-
-	_, reader, exitCode := c.loadReader()
-	if exitCode != 0 {
-		return exitCode
-	}
-
-	stats, err := reader.GetLibraryStats(context.Background())
-	if err != nil {
-		return c.printErr(err)
-	}
-
-	if jsonOutput {
-		meta := map[string]any{
-			"total": stats.TotalItems,
-		}
-		c.appendReadMetadata(meta, reader)
-		return c.writeJSON(jsonResponse{OK: true, Command: "stats", Data: stats, Meta: meta})
-	}
-	c.warnIfSnapshotRead(c.consumeReaderReadMetadata(reader))
-	fmt.Fprintf(c.stdout, "library=%s:%s\n", stats.LibraryType, stats.LibraryID)
-	fmt.Fprintf(c.stdout, "items=%d\n", stats.TotalItems)
-	fmt.Fprintf(c.stdout, "collections=%d\n", stats.TotalCollections)
-	fmt.Fprintf(c.stdout, "searches=%d\n", stats.TotalSearches)
-	if stats.LastLibraryVersion > 0 {
-		fmt.Fprintf(c.stdout, "last_library_version=%d\n", stats.LastLibraryVersion)
-	}
-	return 0
-}
-
 func (c *CLI) runShow(args []string) int {
 	if isHelpOnly(args) {
 		return c.printCommandUsage(usageShow)

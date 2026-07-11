@@ -189,7 +189,7 @@ func TestRunStatsJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
-	if got["command"] != "stats" {
+	if got["command"] != "lib stats" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 }

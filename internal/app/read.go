@@ -115,7 +115,11 @@ func (s ReadService) Collections(ctx context.Context, opts ListOptions) (Result,
 			return Result{}, err
 		}
 		rows = limitSlice(rows, opts.Limit)
-		return Result{Data: rows, Meta: map[string]any{"total": len(rows), "read_source": "web"}, Text: collectionText(rows)}, nil
+		text := collectionText(rows)
+		if len(rows) == 0 {
+			text = "no top-level collections found"
+		}
+		return Result{Data: rows, Meta: map[string]any{"total": len(rows), "read_source": "web"}, Text: text}, nil
 	}
 	_, reader, err := s.reader()
 	if err != nil {
@@ -128,7 +132,11 @@ func (s ReadService) Collections(ctx context.Context, opts ListOptions) (Result,
 	rows = limitSlice(rows, opts.Limit)
 	meta := readMeta(reader)
 	meta["total"] = len(rows)
-	return Result{Data: rows, Meta: meta, Text: backendCollectionText(rows), Warnings: readWarnings(meta)}, nil
+	text := backendCollectionText(rows)
+	if len(rows) == 0 {
+		text = "no collections found"
+	}
+	return Result{Data: rows, Meta: meta, Text: text, Warnings: readWarnings(meta)}, nil
 }
 
 func (s ReadService) Tags(ctx context.Context, opts ListOptions) (Result, error) {
@@ -147,7 +155,11 @@ func (s ReadService) Tags(ctx context.Context, opts ListOptions) (Result, error)
 	for _, row := range rows {
 		lines = append(lines, fmt.Sprintf("%-20s  items=%d", row.Name, row.NumItems))
 	}
-	return Result{Data: rows, Meta: meta, Text: strings.Join(lines, "\n"), Warnings: readWarnings(meta)}, nil
+	text := strings.Join(lines, "\n")
+	if len(rows) == 0 {
+		text = "no tags found"
+	}
+	return Result{Data: rows, Meta: meta, Text: text, Warnings: readWarnings(meta)}, nil
 }
 
 func (s ReadService) Notes(ctx context.Context, opts ListOptions) (Result, error) {
@@ -173,9 +185,20 @@ func (s ReadService) Notes(ctx context.Context, opts ListOptions) (Result, error
 	meta["total"] = len(rows)
 	var lines []string
 	for _, row := range rows {
-		lines = append(lines, fmt.Sprintf("%-10s  %s", row.Key, row.Preview))
+		if isMachineNote(row.Content) {
+			continue
+		}
+		parent := ""
+		if row.ParentItemKey != "" {
+			parent = fmt.Sprintf("  [%s]", row.ParentItemKey)
+		}
+		lines = append(lines, fmt.Sprintf("%-10s%s  %s", row.Key, parent, row.Preview))
 	}
-	return Result{Data: rows, Meta: meta, Text: strings.Join(lines, "\n"), Warnings: readWarnings(meta)}, nil
+	text := strings.Join(lines, "\n")
+	if len(lines) == 0 {
+		text = "no readable notes found in text mode; use --json to inspect all notes"
+	}
+	return Result{Data: rows, Meta: meta, Text: text, Warnings: readWarnings(meta)}, nil
 }
 
 func (s ReadService) Searches(ctx context.Context, opts ListOptions) (Result, error) {
@@ -192,7 +215,11 @@ func (s ReadService) Searches(ctx context.Context, opts ListOptions) (Result, er
 	for _, row := range rows {
 		lines = append(lines, fmt.Sprintf("%-10s  %-24s  conditions=%d", row.Key, row.Name, row.NumConditions))
 	}
-	return Result{Data: rows, Meta: map[string]any{"total": len(rows), "read_source": "web"}, Text: strings.Join(lines, "\n")}, nil
+	text := strings.Join(lines, "\n")
+	if len(rows) == 0 {
+		text = "no saved searches found"
+	}
+	return Result{Data: rows, Meta: map[string]any{"total": len(rows), "read_source": "web"}, Text: text}, nil
 }
 
 func (s ReadService) Groups(ctx context.Context, _ ListOptions) (Result, error) {
@@ -212,7 +239,11 @@ func (s ReadService) Groups(ctx context.Context, _ ListOptions) (Result, error) 
 	for _, row := range rows {
 		lines = append(lines, fmt.Sprintf("%-8d  %s", row.ID, row.Name))
 	}
-	return Result{Data: rows, Meta: map[string]any{"total": len(rows)}, Text: strings.Join(lines, "\n")}, nil
+	text := strings.Join(lines, "\n")
+	if len(rows) == 0 {
+		text = "no groups found for the current api key"
+	}
+	return Result{Data: rows, Meta: map[string]any{"total": len(rows)}, Text: text}, nil
 }
 
 func (s ReadService) Stats(ctx context.Context) (Result, error) {
@@ -269,7 +300,7 @@ func (s ReadService) Overview(ctx context.Context) (Result, error) {
 	meta := readMeta(reader)
 	meta["index_status"] = indexStatus
 	meta["total_items"] = a.stats.TotalItems
-	text := fmt.Sprintf("Library: %s:%s\nItems: %d | Collections: %d | Searches: %d\nIndex: %s", a.stats.LibraryType, a.stats.LibraryID, a.stats.TotalItems, a.stats.TotalCollections, a.stats.TotalSearches, indexStatus)
+	text := overviewText(a.stats, a.collections, a.tags, a.items, indexStatus)
 	return Result{Data: data, Meta: meta, Text: text, Warnings: readWarnings(meta)}, nil
 }
 
@@ -290,7 +321,15 @@ func (s ReadService) Items(ctx context.Context, opts ListOptions) (Result, error
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Data: rows, Meta: map[string]any{"total": len(rows), "read_source": "web", "scope": opts.Scope}, Text: itemText(rows)}, nil
+	text := itemText(rows)
+	if len(rows) == 0 {
+		if opts.Scope == "trash" {
+			text = "trash is empty"
+		} else {
+			text = "no publications found"
+		}
+	}
+	return Result{Data: rows, Meta: map[string]any{"total": len(rows), "read_source": "web", "scope": opts.Scope}, Text: text}, nil
 }
 
 func (s ReadService) Log(ctx context.Context, opts LogOptions) (Result, error) {
@@ -322,11 +361,45 @@ func (s ReadService) Log(ctx context.Context, opts LogOptions) (Result, error) {
 	meta := map[string]any{"total": len(r.Versions), "kind": opts.Kind}
 	if r.NotModified {
 		meta["not_modified"] = true
+		return Result{Data: r.Versions, Meta: meta, Text: fmt.Sprintf("not modified since version %d", opts.IfModifiedVersion)}, nil
 	}
 	if r.LastModifiedVersion > 0 {
 		meta["last_modified_version"] = r.LastModifiedVersion
 	}
 	return Result{Data: r.Versions, Meta: meta, Text: strings.Join(lines, "\n")}, nil
+}
+
+func isMachineNote(content string) bool {
+	return strings.Contains(strings.TrimSpace(content), `{"readingTime":`)
+}
+
+func overviewText(stats backend.LibraryStats, collections []backend.Collection, tags []backend.Tag, items []domain.Item, indexStatus string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Library: %s:%s\n", stats.LibraryType, stats.LibraryID)
+	fmt.Fprintf(&b, "Items: %d | Collections: %d | Searches: %d\n", stats.TotalItems, stats.TotalCollections, stats.TotalSearches)
+	if stats.LastLibraryVersion > 0 {
+		fmt.Fprintf(&b, "Version: %d\n", stats.LastLibraryVersion)
+	}
+	if len(collections) > 0 {
+		b.WriteString("\nTop Collections:\n")
+		for _, collection := range collections {
+			fmt.Fprintf(&b, "  %s (%d items)\n", collection.Name, collection.NumItems)
+		}
+	}
+	if len(tags) > 0 {
+		b.WriteString("Top Tags:\n")
+		for _, tag := range tags {
+			fmt.Fprintf(&b, "  %s (%d items)\n", tag.Name, tag.NumItems)
+		}
+	}
+	if len(items) > 0 {
+		b.WriteString("Recent Items:\n")
+		for _, item := range items {
+			fmt.Fprintf(&b, "  %-10s  %s\n", item.Key, item.Title)
+		}
+	}
+	fmt.Fprintf(&b, "Index: %s", indexStatus)
+	return b.String()
 }
 
 func readWarnings(meta map[string]any) []Warning {

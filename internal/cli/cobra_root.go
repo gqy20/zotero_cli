@@ -56,7 +56,7 @@ func translateStageOneArgs(args []string) ([]string, bool) {
 			return []string{"lib", "log"}, true
 		}
 		translated := []string{"lib", "log", "--kind", args[1]}
-		return append(translated, args[2:]...), true
+		return append(translated, translateChangesFlags(args[2:])...), true
 	case "collections":
 		return append([]string{"coll", "list"}, args[1:]...), true
 	case "collections-top":
@@ -91,6 +91,21 @@ func translateStageOneArgs(args []string) ([]string, bool) {
 	return nil, false
 }
 
+func translateChangesFlags(args []string) []string {
+	translated := make([]string, len(args))
+	for i, arg := range args {
+		switch {
+		case arg == "--if-modified-since-version":
+			translated[i] = "--if-modified-version"
+		case strings.HasPrefix(arg, "--if-modified-since-version="):
+			translated[i] = "--if-modified-version=" + strings.TrimPrefix(arg, "--if-modified-since-version=")
+		default:
+			translated[i] = arg
+		}
+	}
+	return translated
+}
+
 func (c *CLI) runCobra(args []string) int {
 	root := c.newRootCommand()
 	root.SetArgs(args)
@@ -102,7 +117,7 @@ func (c *CLI) runCobra(args []string) int {
 	var ee *exitError
 	if errors.As(err, &ee) {
 		code = ee.code
-	} else if strings.Contains(err.Error(), "unknown flag") || strings.Contains(err.Error(), "requires") || strings.Contains(err.Error(), "accepts") {
+	} else if strings.Contains(err.Error(), "unknown flag") || strings.Contains(err.Error(), "unknown command") || strings.Contains(err.Error(), "requires") || strings.Contains(err.Error(), "accepts") {
 		code = ExitUsage
 	}
 	path := app.CommandPath{Resource: "zot"}

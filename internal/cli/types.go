@@ -16,12 +16,6 @@ const (
 	ExitConfig = 3 // 配置错误（配置文件缺失、认证失败等）
 )
 
-type versionsArgs struct {
-	Since                  int
-	IncludeTrashed         bool
-	IfModifiedSinceVersion int
-}
-
 type jsonResponse struct {
 	OK      bool           `json:"ok"`
 	Command string         `json:"command"`

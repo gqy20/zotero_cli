@@ -26,7 +26,7 @@ func TestRunOverviewJSON(t *testing.T) {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
 
-	if got["command"] != "overview" {
+	if got["command"] != "lib show" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 	if got["ok"] != true {
@@ -101,7 +101,7 @@ func TestRunOverviewHelpShowsUsage(t *testing.T) {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}
 	got := stdout.String()
-	if !strings.Contains(got, "zot overview") {
+	if !strings.Contains(got, "zot lib show") {
 		t.Fatalf("expected usage in help output, got: %q", got)
 	}
 }

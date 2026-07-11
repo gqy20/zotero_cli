@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -40,6 +41,15 @@ func (c *CLI) newLibCommand(opts *globalOptions) *cobra.Command {
 	logCmd := &cobra.Command{Use: "log", Short: "Show changed or deleted objects", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		if !logOpts.Deleted && logOpts.Kind == "" {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("--kind is required unless --deleted is set")}
+		}
+		if logOpts.Kind != "" && !slices.Contains([]string{"items", "items-top", "collections", "searches"}, logOpts.Kind) {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("unsupported object type %q", logOpts.Kind)}
+		}
+		if !logOpts.Deleted && !cmd.Flags().Changed("since") {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--since is required")}
+		}
+		if logOpts.IfModifiedVersion < 0 {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("invalid value for --if-modified-version: must be non-negative")}
 		}
 		return c.runRead(cmd, opts, app.CommandPath{Resource: "lib", Action: "log"}, func(ctx context.Context, s app.ReadService) (app.Result, error) { return s.Log(ctx, logOpts) })
 	}}

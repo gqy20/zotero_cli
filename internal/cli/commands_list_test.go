@@ -28,7 +28,7 @@ func TestRunCollectionsJSON(t *testing.T) {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
 
-	if got["command"] != "collections" {
+	if got["command"] != "coll list" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 
@@ -105,7 +105,7 @@ func TestRunNotesJSON(t *testing.T) {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
 
-	if got["command"] != "notes" {
+	if got["command"] != "note list" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 
@@ -211,7 +211,7 @@ func TestRunTagsJSON(t *testing.T) {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
 
-	if got["command"] != "tags" {
+	if got["command"] != "tag list" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 
@@ -287,7 +287,7 @@ func TestRunSearchesJSON(t *testing.T) {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
 
-	if got["command"] != "searches" {
+	if got["command"] != "search list" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 
@@ -363,7 +363,7 @@ func TestRunDeletedJSON(t *testing.T) {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
 
-	if got["command"] != "deleted" {
+	if got["command"] != "lib log" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 
@@ -425,7 +425,7 @@ func TestRunVersionsJSON(t *testing.T) {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
 
-	if got["command"] != "changes" {
+	if got["command"] != "lib log" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 
@@ -605,7 +605,7 @@ func TestRunTrashJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
-	if got["command"] != "trash" {
+	if got["command"] != "item list" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 }
@@ -681,7 +681,7 @@ func TestRunCollectionsTopJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
-	if got["command"] != "collections-top" {
+	if got["command"] != "coll list" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 }

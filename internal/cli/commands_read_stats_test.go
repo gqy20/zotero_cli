@@ -33,7 +33,7 @@ func TestRunStatsHybridModeUsesRemoteClient(t *testing.T) {
 	if !ok || meta["read_source"] != "web" {
 		t.Fatalf("unexpected meta payload: %#v", got["meta"])
 	}
-	if got["command"] != "stats" {
+	if got["command"] != "lib stats" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 }
@@ -66,7 +66,7 @@ func TestRunStatsLocalModeUsesLocalLibrary(t *testing.T) {
 	if !ok || meta["read_source"] != "live" {
 		t.Fatalf("unexpected meta payload: %#v", got["meta"])
 	}
-	if got["command"] != "stats" {
+	if got["command"] != "lib stats" {
 		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 	data, ok := got["data"].(map[string]any)

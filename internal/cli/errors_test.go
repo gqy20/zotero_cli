@@ -59,7 +59,7 @@ func TestSubcommandHelpSkipsConfigLoading(t *testing.T) {
 		wantUsage string
 	}{
 		{name: "export help", args: []string{"export", "--help"}, wantUsage: usageExport},
-		{name: "stats help", args: []string{"stats", "--help"}, wantUsage: usageStats},
+		{name: "stats help", args: []string{"lib", "stats", "--help"}, wantUsage: "zot lib stats"},
 	}
 
 	for _, tc := range testCases {
@@ -237,52 +237,43 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			wantStderr: "error: unsupported format",
 		},
 		{
-			name:      "collections extra arg",
-			args:      []string{"collections", "extra"},
-			wantUsage: usageCollections,
+			name: "collections extra arg",
+			args: []string{"collections", "extra"},
 		},
 		{
-			name:      "notes extra arg",
-			args:      []string{"notes", "extra"},
-			wantUsage: usageNotes,
+			name: "notes extra arg",
+			args: []string{"notes", "extra"},
 		},
 		{
-			name:      "tags extra arg",
-			args:      []string{"tags", "extra"},
-			wantUsage: usageTags,
+			name: "tags extra arg",
+			args: []string{"tags", "extra"},
 		},
 		{
-			name:      "searches extra arg",
-			args:      []string{"searches", "extra"},
-			wantUsage: usageSearches,
+			name: "searches extra arg",
+			args: []string{"searches", "extra"},
 		},
 		{
-			name:      "deleted extra arg",
-			args:      []string{"deleted", "extra"},
-			wantUsage: usageDeleted,
+			name: "deleted extra arg",
+			args: []string{"deleted", "extra"},
 		},
 		{
-			name:      "stats extra arg",
-			args:      []string{"stats", "extra"},
-			wantUsage: usageStats,
+			name: "stats extra arg",
+			args: []string{"stats", "extra"},
 		},
 		{
 			name:       "changes missing since",
 			args:       []string{"changes", "items"},
-			wantUsage:  usageChanges,
-			wantStderr: "error: missing value for --since",
+			wantStderr: "error: --since is required",
 		},
 		{
 			name:       "changes invalid object",
 			args:       []string{"changes", "bad", "--since", "1"},
-			wantUsage:  usageChanges,
 			wantStderr: "error: unsupported object type",
 		},
 		{
 			name:       "changes invalid if-modified-since-version",
 			args:       []string{"changes", "items", "--since", "1", "--if-modified-since-version", "-1"},
-			wantUsage:  usageChanges,
-			wantStderr: "error: invalid value for --if-modified-since-version",
+			wantStderr: "error: invalid value for --if-modified-version",
 		},
 		{
 			name:       "item type fields is now unknown command",
@@ -300,9 +291,8 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			wantStderr: "unknown command: item-template",
 		},
 		{
-			name:      "groups extra arg",
-			args:      []string{"groups", "extra"},
-			wantUsage: usageGroups,
+			name: "groups extra arg",
+			args: []string{"groups", "extra"},
 		},
 		{
 			name:       "find invalid qmode",
@@ -317,19 +307,16 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			wantStderr: "error: invalid value for --include-fields: bad",
 		},
 		{
-			name:      "trash extra arg",
-			args:      []string{"trash", "extra"},
-			wantUsage: usageTrash,
+			name: "trash extra arg",
+			args: []string{"trash", "extra"},
 		},
 		{
-			name:      "collections top extra arg",
-			args:      []string{"collections-top", "extra"},
-			wantUsage: usageCollectionsTop,
+			name: "collections top extra arg",
+			args: []string{"collections-top", "extra"},
 		},
 		{
-			name:      "publications extra arg",
-			args:      []string{"publications", "extra"},
-			wantUsage: usagePublications,
+			name: "publications extra arg",
+			args: []string{"publications", "extra"},
 		},
 		{
 			name:      "create item missing data",
@@ -453,7 +440,7 @@ func TestRunArgumentValidationReturnsUsageError(t *testing.T) {
 			if tc.wantStderr != "" && !strings.Contains(stderr.String(), tc.wantStderr) {
 				t.Fatalf("expected %q in stderr, got %q", tc.wantStderr, stderr.String())
 			}
-			if !strings.Contains(stderr.String(), tc.wantUsage) {
+			if tc.wantUsage != "" && !strings.Contains(stderr.String(), tc.wantUsage) {
 				t.Fatalf("expected usage %q in stderr, got %q", tc.wantUsage, stderr.String())
 			}
 		})

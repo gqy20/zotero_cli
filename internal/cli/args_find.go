@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -438,61 +437,6 @@ func (c *CLI) parseJSONAndLimitArgs(args []string, usage string) (bool, int, boo
 		}
 	}
 	return jsonOutput, limit, true, false
-}
-
-func parseVersionsArgs(args []string) (string, versionsArgs, bool, error) {
-	if len(args) == 0 {
-		return "", versionsArgs{}, false, errors.New("missing object type")
-	}
-
-	objectType := args[0]
-	switch objectType {
-	case "collections", "searches", "items", "items-top":
-	default:
-		return "", versionsArgs{}, false, errors.New("unsupported object type")
-	}
-
-	var opts versionsArgs
-	var jsonOutput bool
-	var sinceSet bool
-
-	for i := 1; i < len(args); i++ {
-		switch args[i] {
-		case "--json":
-			jsonOutput = true
-		case "--include-trashed":
-			opts.IncludeTrashed = true
-		case "--since":
-			if i+1 >= len(args) {
-				return "", versionsArgs{}, false, errors.New("missing value for --since")
-			}
-			i++
-			since, err := strconv.Atoi(args[i])
-			if err != nil || since < 0 {
-				return "", versionsArgs{}, false, errors.New("invalid value for --since")
-			}
-			opts.Since = since
-			sinceSet = true
-		case "--if-modified-since-version":
-			if i+1 >= len(args) {
-				return "", versionsArgs{}, false, errors.New("missing value for --if-modified-since-version")
-			}
-			i++
-			value, err := strconv.Atoi(args[i])
-			if err != nil || value < 0 {
-				return "", versionsArgs{}, false, errors.New("invalid value for --if-modified-since-version")
-			}
-			opts.IfModifiedSinceVersion = value
-		default:
-			return "", versionsArgs{}, false, errors.New("too many positional arguments")
-		}
-	}
-
-	if !sinceSet {
-		return "", versionsArgs{}, false, errors.New("missing value for --since")
-	}
-
-	return objectType, opts, jsonOutput, nil
 }
 
 func (c *CLI) parseSingleValueCommand(args []string, usage string) (string, bool, bool, bool) {
