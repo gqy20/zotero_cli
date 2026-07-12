@@ -85,7 +85,7 @@ go run .\cmd\zot config check
 - `hybrid`：优先本地，Web 仅在能承接时回退
 - `remote`：通过 HTTP 连接远程 `zot server`，适合无本地 Zotero 的设备
 
-`relate` / `pdf text` 在 hybrid 下仍是本地能力。remote 模式通过服务器代理访问数据；其中 `annotations` / `annotate` 走服务器端 PDF 能力，其他普通写操作仍需额外配置 `ZOT_API_KEY`。
+`ref related` / `pdf text` 在 hybrid 下仍可使用本地能力。remote 模式通过服务器代理访问数据；其中 `ann list/new/delete` 走服务器端 PDF 能力，其他普通写操作仍需额外配置 `ZOT_API_KEY`。
 
 结构化参考文献、PubMed 主题和 Europe PMC 文献发现使用 `zot ref`。第一次使用建议先运行小批量增量构建：
 
@@ -220,9 +220,9 @@ go run .\cmd\zot config check
 
 不确定该用哪条命令时按此顺序：
 
-1. **发现**：`overview --json`（一站式快照）
-2. **读优先**：`find` / `show` / `relate` / `stats` / `notes`
-3. **PDF 读取**：`pdf text` / `annotations` / `open`
+1. **发现**：`lib show --json`（一站式快照）
+2. **读优先**：`find` / `show` / `ref related` / `lib stats` / `note list`
+3. **PDF 读取**：`pdf text` / `ann list` / `pdf open`
 4. **导出**：`item export --collection COLLKEY` 或 `item export ITEMKEY`
-5. **变更次之**：`create-*` / `update-*` / `add-tag` / `remove-tag` / `annotate`
+5. **变更次之**：`item new/edit/tag/untag` / `ann new`
 6. **删除最后**：仅在用户明确要求时考虑

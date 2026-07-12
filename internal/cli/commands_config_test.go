@@ -41,7 +41,7 @@ func TestRunDeleteItemBlockedWhenDeleteDisabled(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	_, stderr := captureOutput(t)
-	exitCode := Run([]string{"delete-item", "ABCD2345", "--if-unmodified-since-version", "8"})
+	exitCode := Run([]string{"item", "delete", "ABCD2345", "--if-version", "8"})
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -70,7 +70,7 @@ func TestRunCreateItemBlockedWhenWriteDisabled(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	_, stderr := captureOutput(t)
-	exitCode := Run([]string{"create-item", "--data", `{"itemType":"book","title":"My Book"}`, "--if-unmodified-since-version", "41"})
+	exitCode := Run([]string{"item", "new", "--data", `{"itemType":"book","title":"My Book"}`, "--if-version", "41"})
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -79,7 +79,7 @@ func TestRunCreateItemBlockedWhenWriteDisabled(t *testing.T) {
 	}
 }
 
-func TestRunConfigValidateJSON(t *testing.T) {
+func TestRunConfigCheckJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -180,7 +180,7 @@ func TestRunStatsJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"stats", "--json"})
+	exitCode := Run([]string{"lib", "stats", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

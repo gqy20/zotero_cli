@@ -16,7 +16,7 @@ func TestRunInitInteractiveWebMode(t *testing.T) {
 	testCLI.stdin = strings.NewReader("web\nuser\n123456\nsecret\n")
 	t.Cleanup(func() { testCLI.stdin = oldStdin })
 
-	exitCode := Run([]string{"init"})
+	exitCode := Run([]string{"config", "init"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -56,7 +56,7 @@ func TestRunInitInteractiveHybridMode(t *testing.T) {
 	testCLI.stdin = strings.NewReader("hybrid\nuser\n123456\nsecret\n/tmp/zotero\nn")
 	t.Cleanup(func() { testCLI.stdin = oldStdin })
 
-	exitCode := Run([]string{"init"})
+	exitCode := Run([]string{"config", "init"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}
@@ -85,7 +85,7 @@ func TestRunInitNonInteractive(t *testing.T) {
 	setTestConfigDir(t, configRoot)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"init",
+	exitCode := Run([]string{"config", "init",
 		"--mode", "web",
 		"--library-type", "group",
 		"--library-id", "789",
@@ -125,7 +125,7 @@ func TestRunInitPartialFlagsPromptsRest(t *testing.T) {
 	testCLI.stdin = strings.NewReader("user\n456\nabc\n")
 	t.Cleanup(func() { testCLI.stdin = oldStdin })
 
-	exitCode := Run([]string{"init", "--mode", "local", "--api-key", "secret", "--no-pdf"})
+	exitCode := Run([]string{"config", "init", "--mode", "local", "--api-key", "secret", "--no-pdf"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -148,7 +148,7 @@ func TestRunInitConfigAlreadyExists(t *testing.T) {
 	writeTestConfig(t, configRoot)
 
 	_, stderr := captureOutput(t)
-	exitCode := Run([]string{"init"})
+	exitCode := Run([]string{"config", "init"})
 	if exitCode != 3 {
 		t.Fatalf("expected exit code 3, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -163,7 +163,7 @@ func TestRunInitPdfWithExistingConfigDoesNotFailAlreadyExists(t *testing.T) {
 	writeTestConfig(t, configRoot)
 
 	_, stderr := captureOutput(t)
-	exitCode := Run([]string{"init", "--pdf"})
+	exitCode := Run([]string{"config", "init", "--pdf"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -177,7 +177,7 @@ func TestRunInitPdfWithExistingConfigDoesNotFailAlreadyExists(t *testing.T) {
 
 func TestRunInitHelp(t *testing.T) {
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"init", "--help"})
+	exitCode := Run([]string{"config", "init", "--help"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}
@@ -207,7 +207,7 @@ func TestRunInitNoPdfFlagSkipsPdfSetup(t *testing.T) {
 	testCLI.stdin = strings.NewReader("local\nuser\n123\nkey\n/data\n")
 	t.Cleanup(func() { testCLI.stdin = oldStdin })
 
-	exitCode := Run([]string{"init", "--no-pdf"})
+	exitCode := Run([]string{"config", "init", "--no-pdf"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -228,7 +228,7 @@ func TestRunInitRemoteModeNonInteractive(t *testing.T) {
 	stdout, stderr := captureOutput(t)
 
 	exitCode := Run([]string{
-		"init",
+		"config", "init",
 		"--mode", "remote",
 		"--server-addr", "http://192.168.1.100:8021",
 	})
@@ -257,7 +257,7 @@ func TestRunInitRemoteWithWebAPINonInteractive(t *testing.T) {
 	stdout, stderr := captureOutput(t)
 
 	exitCode := Run([]string{
-		"init",
+		"config", "init",
 		"--mode", "remote",
 		"--server-addr", "http://192.168.1.100:8021",
 		"--library-id", "12345",
@@ -294,7 +294,7 @@ func TestRunInitRemoteWithWebAPIInteractive(t *testing.T) {
 	testCLI.stdin = strings.NewReader("remote\nhttp://localhost:8021\ny\nuser\n999\napikey123\n")
 	t.Cleanup(func() { testCLI.stdin = oldStdin })
 
-	exitCode := Run([]string{"init", "--no-pdf"})
+	exitCode := Run([]string{"config", "init", "--no-pdf"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
 	}
@@ -332,7 +332,7 @@ func TestRunInitRemoteWithoutWebAPIInteractive(t *testing.T) {
 	testCLI.stdin = strings.NewReader("remote\nhttp://localhost:8021\nn\n")
 	t.Cleanup(func() { testCLI.stdin = oldStdin })
 
-	exitCode := Run([]string{"init", "--no-pdf"})
+	exitCode := Run([]string{"config", "init", "--no-pdf"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
 	}

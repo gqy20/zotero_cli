@@ -18,7 +18,7 @@ func TestRunCollectionsJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"collections", "--json"})
+	exitCode := Run([]string{"coll", "list", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -48,7 +48,7 @@ func TestRunCollectionsText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"collections"})
+	exitCode := Run([]string{"coll", "list"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -76,7 +76,7 @@ func TestRunCollectionsTextShowsFriendlyMessageWhenNoCollectionsExist(t *testing
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"collections"})
+	exitCode := Run([]string{"coll", "list"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -95,7 +95,7 @@ func TestRunNotesJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"notes", "--json"})
+	exitCode := Run([]string{"note", "list", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -125,7 +125,7 @@ func TestRunNotesText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"notes"})
+	exitCode := Run([]string{"note", "list"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -156,7 +156,7 @@ func TestRunNotesJSONKeepsMachineNotes(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"notes", "--json"})
+	exitCode := Run([]string{"note", "list", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -177,7 +177,7 @@ func TestRunNotesTextShowsFriendlyMessageWhenOnlyMachineNotesExist(t *testing.T)
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"notes"})
+	exitCode := Run([]string{"note", "list"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -201,7 +201,7 @@ func TestRunTagsJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"tags", "--json"})
+	exitCode := Run([]string{"tag", "list", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -231,7 +231,7 @@ func TestRunTagsText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"tags"})
+	exitCode := Run([]string{"tag", "list"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -258,7 +258,7 @@ func TestRunTagsTextShowsFriendlyMessageWhenNoTagsExist(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"tags"})
+	exitCode := Run([]string{"tag", "list"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -277,7 +277,7 @@ func TestRunSearchesJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"searches", "--json"})
+	exitCode := Run([]string{"search", "list", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -307,7 +307,7 @@ func TestRunSearchesText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"searches"})
+	exitCode := Run([]string{"search", "list"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -334,7 +334,7 @@ func TestRunSearchesTextShowsFriendlyMessageWhenNoSearchesExist(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"searches"})
+	exitCode := Run([]string{"search", "list"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -353,7 +353,7 @@ func TestRunDeletedJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"deleted", "--json"})
+	exitCode := Run([]string{"lib", "log", "--deleted", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -387,7 +387,7 @@ func TestRunDeletedText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"deleted"})
+	exitCode := Run([]string{"lib", "log", "--deleted"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -415,7 +415,7 @@ func TestRunVersionsJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"changes", "items-top", "--since", "42", "--include-trashed", "--json"})
+	exitCode := Run([]string{"lib", "log", "--kind", "items-top", "--since", "42", "--include-trashed", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -448,7 +448,7 @@ func TestRunVersionsText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"changes", "collections", "--since", "7"})
+	exitCode := Run([]string{"lib", "log", "--kind", "collections", "--since", "7"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -474,7 +474,7 @@ func TestRunVersionsJSONIncludesLastModifiedVersionMeta(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"changes", "items-top", "--since", "42", "--json"})
+	exitCode := Run([]string{"lib", "log", "--kind", "items-top", "--since", "42", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -503,7 +503,7 @@ func TestRunVersionsTextShowsNotModifiedMessageOn304(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"changes", "items", "--since", "0", "--if-modified-since-version", "88"})
+	exitCode := Run([]string{"lib", "log", "--kind", "items", "--since", "0", "--if-modified-version", "88"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -511,17 +511,6 @@ func TestRunVersionsTextShowsNotModifiedMessageOn304(t *testing.T) {
 	got := stdout.String()
 	if !strings.Contains(got, "not modified since version 88") {
 		t.Fatalf("expected not modified message, got %q", got)
-	}
-}
-
-func TestRunKeyInfoJSON(t *testing.T) {
-	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"key-info", "secret", "--json"})
-	if exitCode != ExitUsage {
-		t.Fatalf("expected exit code %d, got %d; stderr=%q", ExitUsage, exitCode, stderr.String())
-	}
-	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "config check") {
-		t.Fatalf("unexpected redirect output: stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
 
@@ -535,7 +524,7 @@ func TestRunGroupsText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"groups"})
+	exitCode := Run([]string{"group", "list"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -560,7 +549,7 @@ func TestRunGroupsTextUsesKeyOwnerForGroupMode(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"groups"})
+	exitCode := Run([]string{"group", "list"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -583,7 +572,7 @@ func TestRunTrashJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"trash", "--json"})
+	exitCode := Run([]string{"item", "list", "--scope", "trash", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -607,7 +596,7 @@ func TestRunTrashText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"trash"})
+	exitCode := Run([]string{"item", "list", "--scope", "trash"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -640,7 +629,7 @@ func TestRunTrashReadOnlyDoesNotRequireWritePermission(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"trash"})
+	exitCode := Run([]string{"item", "list", "--scope", "trash"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -659,7 +648,7 @@ func TestRunCollectionsTopJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"collections-top", "--json"})
+	exitCode := Run([]string{"coll", "list", "--top", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -693,7 +682,7 @@ func TestRunCollectionsTopReadOnlyDoesNotRequireDeletePermission(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"collections-top"})
+	exitCode := Run([]string{"coll", "list", "--top"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -712,7 +701,7 @@ func TestRunPublicationsText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"publications"})
+	exitCode := Run([]string{"item", "list", "--scope", "pubs"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -745,7 +734,7 @@ func TestRunPublicationsReadOnlyDoesNotRequireWritePermission(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"publications"})
+	exitCode := Run([]string{"item", "list", "--scope", "pubs"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -764,7 +753,7 @@ func TestRunGroupsTextShowsFriendlyMessageWhenNoGroupsExist(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"groups"})
+	exitCode := Run([]string{"group", "list"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -783,7 +772,7 @@ func TestRunCollectionsTopTextShowsFriendlyMessageWhenNoCollectionsExist(t *test
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"collections-top"})
+	exitCode := Run([]string{"coll", "list", "--top"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -854,7 +843,7 @@ func TestRunPublicationsTextShowsFriendlyMessageWhenNoPublicationsExist(t *testi
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"publications"})
+	exitCode := Run([]string{"item", "list", "--scope", "pubs"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

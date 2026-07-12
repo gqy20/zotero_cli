@@ -21,7 +21,7 @@ argument-hint: "<resource> <action> [ITEMKEY...] [options]"
 3. 首次使用先运行 `zot config check --json`。
 4. 不确定参数时运行 `zot <resource> <action> --help`；help 不加载配置或网络。
 5. 写入前确认用户意图，并检查 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE`。
-6. 不在新工作流中生成 deprecated 长命令；兼容层只服务已有脚本。
+6. 只生成 canonical 命令；除正式快捷入口 `find/show/export` 外，不尝试旧命令或旧参数。
 
 ## Canonical 命令树
 
@@ -161,7 +161,7 @@ zot note new --parent ITEMKEY --text "Reading note" --json
 
 安全参数统一为 `--dry-run`、`--yes/-y`、`--if-version`。
 
-破坏性操作包括 `item/coll/note/search delete` 和 `ann delete`。执行前复述目标 key，确认无歧义；不得因为兼容旧命令而绕过门控或确认。
+破坏性操作包括 `item/coll/note/search delete` 和 `ann delete`。执行前复述目标 key，确认无歧义，并遵守门控和确认要求。
 
 ## 配置与运行时
 
@@ -185,12 +185,8 @@ pure remote 下 `ann list/new/delete` 可由服务端执行；其余 Web 写操�
 
 ## 已退出稳定 CLI 的入口
 
-以下入口是隐藏的 redirect-only adapter，不再执行旧业务：
+旧 alias、旧参数翻译和 redirect-only adapter 已全部移除。`setup`、`abstract`、`key-info`、`select`、`relate` 等旧入口会返回 unknown command；不要生成或尝试执行它们。
 
-- `setup` → `config init`
-- `abstract` → `item show`
-- `key-info` → `config check`
-- `select`：平台特定 Desktop bridge
-- `relate`：实验性关系图语法，无稳定 v2 替代
+仅 `find`、`show`、`export` 是受支持的正式快捷入口，且只接受对应 `item find/show/export` 的 canonical 参数。
 
 详细参数、模式矩阵、兼容清单和 JSON 示例见 [reference.md](reference.md)、[find-output.md](examples/find-output.md) 与 [show-output.md](examples/show-output.md)。

@@ -29,7 +29,7 @@ func TestRunSupplementsLocalJSON(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"supplements", "ITEM1234", "--json"})
+	exitCode := Run([]string{"item", "supp", "ITEM1234", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -82,7 +82,7 @@ func TestRunSupplementsAllHonorsLimit(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"supplements", "--all", "--json", "--limit", "1"})
+	exitCode := Run([]string{"item", "supp", "--all", "--json", "--limit", "1"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -115,7 +115,7 @@ func TestRunInspectAttachmentLocalJSON(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"inspect-attachment", "SUPPXLSX", "--sheet", "Table S1", "--head", "3", "--json"})
+	exitCode := Run([]string{"file", "show", "SUPPXLSX", "--sheet", "Table S1", "--head", "3", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -195,7 +195,7 @@ func TestRunInspectAttachmentItemHealthJSON(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"inspect-attachment", "--item", "ITEM1234", "--health", "--json"})
+	exitCode := Run([]string{"file", "check", "--item", "ITEM1234", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

@@ -110,7 +110,7 @@ func TestRunAnnotationsClearRemoteUsesServer(t *testing.T) {
 	t.Setenv("ZOT_SERVER_ADDR", srv.URL)
 
 	_, stderr := captureOutput(t)
-	exitCode := Run([]string{"annotations", "ITEM123", "--clear"})
+	exitCode := Run([]string{"ann", "delete", "ITEM123", "--yes"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d, stderr=%q", exitCode, stderr.String())
 	}
@@ -136,7 +136,7 @@ func TestRunAnnotateBatchRemoteDryRun(t *testing.T) {
 	}
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"annotate", "ITEM123", "--from-file", batchPath, "--dry-run", "--json"})
+	exitCode := Run([]string{"ann", "new", "ITEM123", "--from", batchPath, "--dry-run", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d, stderr=%q", exitCode, stderr.String())
 	}

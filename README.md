@@ -429,22 +429,20 @@ zot index build --data-dir ~/.zot/sync  # 可选，建全文索引
 |------|------|------|
 | **检索** | `find` | 关键词/全文搜索，支持日期/标签/收藏夹/附件/类型等 20+ 过滤选项，输出含 `date_added` / `abstract` 字段 |
 | **查看** | `show` | 条目详情（含标注/附件/笔记/摘要） |
-| **摘要** | `abstract` | 查看条目摘要（支持批量 key + `--json`） |
-| **关系** | `relate` | 条目间显式关系查询 |
+| **列表** | `item list` | 按范围、类型和分页列出条目 |
+| **关系** | `ref related` | 查询相关文献 |
 | **PDF** | `pdf text` | 提取 PDF 正文 |
 | **PDF** | `item supp` | 查找本地已保存的补充材料、Source data、表格/数据附件 |
 | **PDF** | `file show` | 检查本地附件健康状态，并预览 `.xlsx` 附件的 sheet、表头和前几行 |
 | **PDF** | `pdf figs` | 提取论文图表（缓存、多 PDF 附件、低质量误检过滤） |
-| **PDF** | `annotate` | 写入高亮/下划线/笔记标注（3 种定位模式，推荐 Mode 1.5） |
-| **PDF** | `annotations` | 读取/删除 PDF 标注（双源 + 双层清除） |
-| **PDF** | `open` | 在 Zotero 阅读器中打开 |
-| **导航** | `select` | 跳转到 Zotero UI 选中条目 |
+| **标注** | `ann list` / `ann new` / `ann delete` | 读取、写入和删除 PDF 标注 |
+| **PDF** | `pdf open` | 在 Zotero 阅读器中打开 |
 | **导出** | `export` | BibTeX / RIS / CSL-JSON |
-| **写操作** | `create-item` / `update-item` / `delete-item` | 条目 CRUD（笔记支持 hybrid 本地写入） |
-| **标签** | `add-tag` / `remove-tag` | 批量标签管理 |
-| **收藏夹** | `collections` / `create-collection` | 收藏夹查看与创建 |
-| **配置** | `init / config show / validate` | 配置管理 |
-| **其他** | `stats` / `tags` / `notes` / `searches` / `trash` | 库信息查看 |
+| **写操作** | `item new` / `item edit` / `item delete` | 条目 CRUD（笔记支持 hybrid 本地写入） |
+| **标签** | `item tag` / `item untag` | 批量标签管理 |
+| **收藏夹** | `coll list` / `coll new` | 收藏夹查看与创建 |
+| **配置** | `config init` / `config show` / `config check` | 配置管理 |
+| **其他** | `lib stats` / `tag list` / `note list` / `search list` | 库信息查看 |
 
 完整选项说明见 [命令参考](docs/user/commands.md)，AI Agent 使用规范见 [快速入门](docs/user/quickstart.md)，技术架构见 [架构概览](docs/architecture/overview.md)。完整文档导航见 [文档中心](docs/README.md)。
 

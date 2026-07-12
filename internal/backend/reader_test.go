@@ -305,6 +305,30 @@ func TestHybridReaderGetRelatedFallsBackToWebWhenLocalIsTemporarilyUnavailable(t
 	}
 }
 
+func TestHybridReaderGetRelatedDoesNotHideUnexpectedLocalError(t *testing.T) {
+	webCalled := false
+	reader := &HybridReader{
+		local: stubReader{
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				return nil, errors.New("sqlite corrupted")
+			},
+		},
+		web: stubReader{
+			getRelated: func(context.Context, string) ([]domain.Relation, error) {
+				webCalled = true
+				return nil, nil
+			},
+		},
+	}
+	_, err := reader.GetRelated(context.Background(), "ITEM1")
+	if err == nil || err.Error() != "sqlite corrupted" {
+		t.Fatalf("GetRelated() error = %v", err)
+	}
+	if webCalled {
+		t.Fatal("unexpected local error was hidden by web fallback")
+	}
+}
+
 func TestHybridReaderFindItemsDoesNotHideUnexpectedLocalError(t *testing.T) {
 	reader := &HybridReader{
 		local: stubReader{

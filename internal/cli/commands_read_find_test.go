@@ -43,7 +43,7 @@ func TestRemoteReadCommandsRejectLocalMode(t *testing.T) {
 		want string
 	}{
 
-		{name: "export", args: []string{"export", "--item-key", "X42A7DEE"}, want: "web API commands are not available in local mode; use web or hybrid mode"},
+		{name: "export", args: []string{"export", "X42A7DEE"}, want: "web API commands are not available in local mode; use web or hybrid mode"},
 	}
 
 	for _, tc := range cases {
@@ -248,7 +248,7 @@ func TestRunFindLocalJSONSupportsItemTypeAndLimit(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "mixed", "--item-type", "journalArticle", "--limit", "1", "--json"})
+	exitCode := Run([]string{"find", "mixed", "--type", "journalArticle", "--limit", "1", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -621,7 +621,7 @@ func TestRunFindLocalJSONSupportsSortingAndPagination(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "mixed", "--sort", "title", "--direction", "asc", "--start", "1", "--json"})
+	exitCode := Run([]string{"find", "mixed", "--sort", "title", "--order", "asc", "--offset", "1", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -655,7 +655,7 @@ func TestRunFindLocalJSONSupportsSortingByDateAddedDesc(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "--all", "--sort", "dateAdded", "--direction", "desc", "--limit", "1", "--json"})
+	exitCode := Run([]string{"find", "--all", "--sort", "dateAdded", "--order", "desc", "--limit", "1", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -698,7 +698,7 @@ func TestRunFindAllLocalJSONSortsByDateAddedWithoutAutoFullText(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "--all", "--sort", "dateAdded", "--direction", "desc", "--limit", "1", "--json"})
+	exitCode := Run([]string{"find", "--all", "--sort", "dateAdded", "--order", "desc", "--limit", "1", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

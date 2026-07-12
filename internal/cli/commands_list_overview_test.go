@@ -16,7 +16,7 @@ func TestRunOverviewJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"overview", "--json"})
+	exitCode := Run([]string{"lib", "show", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -69,7 +69,7 @@ func TestRunOverviewText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"overview"})
+	exitCode := Run([]string{"lib", "show"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -96,7 +96,7 @@ func TestRunOverviewText(t *testing.T) {
 
 func TestRunOverviewHelpShowsUsage(t *testing.T) {
 	stdout, _ := captureOutput(t)
-	exitCode := Run([]string{"overview", "--help"})
+	exitCode := Run([]string{"lib", "show", "--help"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}

@@ -26,7 +26,7 @@ func TestRunExportByItemKeyJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--item-key", "X42A7DEE", "--json"})
+	exitCode := Run([]string{"export", "X42A7DEE", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -62,7 +62,7 @@ func TestRunExportByQueryText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "mixed", "--limit", "1"})
+	exitCode := Run([]string{"export", "--query", "mixed", "--limit", "1"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -83,7 +83,7 @@ func TestRunExportBibTeXText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--item-key", "X42A7DEE", "--format", "bibtex"})
+	exitCode := Run([]string{"export", "X42A7DEE", "--as", "bibtex"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -103,7 +103,7 @@ func TestRunExportCSLJSONJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--item-key", "X42A7DEE", "--format", "csljson", "--json"})
+	exitCode := Run([]string{"export", "X42A7DEE", "--as", "csljson", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -137,7 +137,7 @@ func TestRunExportCSLJSONLocalByItemKey(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--item-key", "ITEM1234", "--format", "csljson", "--json"})
+	exitCode := Run([]string{"export", "ITEM1234", "--as", "csljson", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -193,7 +193,7 @@ func TestRunExportCSLJSONLocalFromFindUsesFindFilters(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--from-find", "--attachment-name", "mixed", "--limit", "1", "--format", "csljson", "--json"})
+	exitCode := Run([]string{"export", "--all", "--attachment-name", "mixed", "--limit", "1", "--as", "csljson", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -233,7 +233,7 @@ func TestRunExportCSLJSONHybridPrefersLocalByItemKey(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", "http://127.0.0.1:1")
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--item-key", "ITEM1234", "--format", "csljson", "--json"})
+	exitCode := Run([]string{"export", "ITEM1234", "--as", "csljson", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -275,7 +275,7 @@ func TestRunExportCSLJSONHybridFallsBackWhenLocalExportIsTemporarilyUnavailable(
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--item-key", "X42A7DEE", "--format", "csljson", "--json"})
+	exitCode := Run([]string{"export", "X42A7DEE", "--as", "csljson", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -309,7 +309,7 @@ func TestRunExportCSLJSONHybridPreservesUnexpectedLocalExportError(t *testing.T)
 	t.Setenv("ZOT_BASE_URL", "http://127.0.0.1:1")
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--item-key", "ITEM1234", "--format", "csljson", "--json"})
+	exitCode := Run([]string{"export", "ITEM1234", "--as", "csljson", "--json"})
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -333,7 +333,7 @@ func TestRunExportCSLJSONLocalByQuery(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "mixed", "--limit", "1", "--format", "csljson", "--json"})
+	exitCode := Run([]string{"export", "--query", "mixed", "--limit", "1", "--as", "csljson", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -368,7 +368,7 @@ func TestRunExportCSLJSONLocalByCollection(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--collection", "COLL1234", "--format", "csljson", "--json"})
+	exitCode := Run([]string{"export", "--collection", "COLL1234", "--as", "csljson", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -409,7 +409,7 @@ func TestRunExportCSLJSONTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
 	}
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--item-key", "SNAP1", "--format", "csljson"})
+	exitCode := Run([]string{"export", "SNAP1", "--as", "csljson"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -530,7 +530,7 @@ func TestRunExtractTextLocalJSONOutputControls(t *testing.T) {
 	}
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"extract-text", "ITEM123", "--json", "--attachment", "ATT456", "--grep", "methods", "--max-chars", "20"})
+	exitCode := Run([]string{"pdf", "text", "ITEM123", "--json", "--attachment", "ATT456", "--grep", "methods", "--max-chars", "20"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -595,7 +595,7 @@ func TestRunExtractTextLocalJSONPagesOutputControls(t *testing.T) {
 	}
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"extract-text", "ITEM123", "--json", "--pages", "2", "--grep", "methods", "--max-chars", "14"})
+	exitCode := Run([]string{"pdf", "text", "ITEM123", "--json", "--pages", "2", "--grep", "methods", "--max-chars", "14"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -671,7 +671,7 @@ func TestRunStatsTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
 	}
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"stats"})
+	exitCode := Run([]string{"lib", "stats"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -680,14 +680,6 @@ func TestRunStatsTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "items=2") {
 		t.Fatalf("expected stats output to include items count, got %q", stdout.String())
-	}
-}
-
-func TestRunRelateTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
-	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"relate", "SNAP1"})
-	if exitCode != ExitUsage || stdout.Len() != 0 || !strings.Contains(stderr.String(), "experimental relation-graph") {
-		t.Fatalf("unexpected redirect output: code=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
 	}
 }
 

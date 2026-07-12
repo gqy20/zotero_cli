@@ -138,7 +138,7 @@ func TestRunFindJSONSupportsItemTypeAndLimit(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "mixed", "--item-type", "journalArticle", "--limit", "1", "--json"})
+	exitCode := Run([]string{"find", "mixed", "--type", "journalArticle", "--limit", "1", "--json"})
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
@@ -176,9 +176,9 @@ func TestRunFindJSONSupportsPaginationAndSortingFlags(t *testing.T) {
 	exitCode := Run([]string{
 		"find", "mixed",
 		"--tag", "ai",
-		"--start", "1",
+		"--offset", "1",
 		"--sort", "title",
-		"--direction", "asc",
+		"--order", "asc",
 		"--json",
 	})
 

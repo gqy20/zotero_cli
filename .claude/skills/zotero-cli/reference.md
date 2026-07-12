@@ -210,17 +210,7 @@ zot sync pull --server-addr http://HOST:8021 --data-dir ~/.zot/sync
 
 ## 兼容边界
 
-旧入口先翻译成 canonical argv，warning 写 stderr，JSON stdout 保持纯净。正式快捷入口只有 `find/show/export`。
-
-Redirect-only：
-
-| 入口 | 提示 |
-|---|---|
-| `setup` | 使用 `config init` |
-| `abstract` | 使用 `item show` |
-| `key-info` | 使用 `config check` |
-| `select` | 平台特定 Desktop bridge，已退出稳定 CLI |
-| `relate` | 实验性关系图语法，无稳定替代 |
+旧 alias、旧参数翻译和 redirect-only adapter 已移除，旧入口返回 usage error。正式快捷入口只有 `find/show/export`，并且只接受 `item find/show/export` 的 canonical 参数。
 
 ## 常见错误
 

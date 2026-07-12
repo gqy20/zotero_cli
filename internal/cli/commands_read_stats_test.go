@@ -20,7 +20,7 @@ func TestRunStatsHybridModeUsesRemoteClient(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"stats", "--json"})
+	exitCode := Run([]string{"lib", "stats", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -53,7 +53,7 @@ func TestRunStatsLocalModeUsesLocalLibrary(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"stats", "--json"})
+	exitCode := Run([]string{"lib", "stats", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -101,7 +101,7 @@ func TestRunStatsHybridModePrefersLocalLibrary(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"stats", "--json"})
+	exitCode := Run([]string{"lib", "stats", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

@@ -15,7 +15,7 @@
 | 回退（fallback） | 首选路径无法承接请求时，切换到能力已知的次选路径 | hybrid 从 LocalReader 切到 WebReader |
 | 重试（retry） | 同一路径发生暂时性失败后再次执行 | Web API 遇到限流或暂时性网络错误 |
 | 迁移（migration） | 将旧的持久化结构升级到当前结构 | reference index 启动时补充缺失列 |
-| 历史兼容（compatibility） | 继续接受旧命令、旧输入或旧数据 | `setup pdf-extract --check` |
+| 历史兼容（compatibility） | 继续接受旧输入或读取旧数据 | reference index 启动时补充缺失列 |
 | 重建（rebuild） | 派生数据无法安全迁移时丢弃并重新生成 | 不兼容的全文 FTS 表 |
 
 回退不是“捕获任意错误后换一个后端”。每条回退必须有明确触发条件，且目标路径必须能够表达原请求。参数错误、权限错误、损坏数据和本地独有能力失败通常不应静默回退。
@@ -32,7 +32,7 @@
 |---|---|---|
 | `find` | 本地暂时不可用；本地不支持且 Web 支持的 `--qmode`、`--include-trashed` | 全文、附件路径、附件健康等 local-only 条件；普通参数错误 |
 | `show` / GetItem | 本地未找到、本地不支持或暂时不可用 | 请求包含 Web 无法补足的本地内容时，由命令层保留能力边界 |
-| `relate` / GetRelated | 本地关系读取失败后可尝试 Web 显式关系 | Web 也无法承接时返回实际错误 |
+| GetRelated | 本地未找到、明确不支持或暂时不可用 | 参数错误、数据损坏及其他意外本地错误 |
 | `stats`、notes、tags、collections | 本地不支持或暂时不可用 | 参数或配置错误 |
 
 实现入口为 `internal/backend/reader.go` 中的 `readWithFallbackUsingPolicy`、`shouldFallbackToWeb` 和 `shouldFallbackFindToWeb`。新增查询选项时，必须同时检查 `SupportsWebFind`，避免把 local-only 请求错误地退到 Web。
@@ -87,7 +87,7 @@ PMC JATS 成功时不会重复请求 Europe PMC references。GROBID 是显式、
 
 ### 笔记写入：local SQLite → Web API
 
-`create-item` 创建 note 时，local/hybrid 在 Zotero 未运行时可以直接写 SQLite；Zotero 正在运行时转到 Web API，避免与桌面端并发修改数据库。
+`item new` 创建 note 时，local/hybrid 在 Zotero 未运行时可以直接写 SQLite；Zotero 正在运行时转到 Web API，避免与桌面端并发修改数据库。
 
 这条回退仍受写入门控、API 凭据和版本前置条件约束。不得因为本地写入失败而绕过权限或乐观锁要求。其他 item type 不自动获得 local 写入能力。
 
@@ -116,28 +116,11 @@ PMC JATS 成功时不会重复请求 Europe PMC references。GROBID 是显式、
 
 ### CLI 入口
 
-所有可执行兼容入口先转换成 canonical argv，再由同一棵 Cobra tree、typed request、应用服务和 renderer 处理。兼容层不会调用旧 handler，warning 只写 stderr，不污染 JSON stdout。
+CLI 不再执行 deprecated alias、redirect-only adapter 或旧参数翻译。旧入口会像其他未知命令一样返回 usage error，脚本必须迁移到 canonical 命令树。
 
-| 旧入口 | canonical 替代 | 状态 |
-|---|---|---|
-| `overview` / `stats` / `changes` / `deleted` | `lib show` / `lib stats` / `lib log` | deprecated alias |
-| `collections` / `tags` / `notes` / `searches` / `groups` | `coll list` / `tag list` / `note list` / `search list` / `group list` | deprecated alias |
-| `trash` / `publications` | `item list --scope trash|pubs` | deprecated alias |
-| `find` / `show` / `export` | `item find` / `item show` / `item export` | 正式高频快捷入口 |
-| `supplements` / `inspect-attachment` | `item supp` / `file show|check` | deprecated alias |
-| `extract-text` / `extract-figures` / `open` | `pdf text` / `pdf figs` / `pdf open` | deprecated alias |
-| `annotations` / `annotate` | `ann list|new|delete` | deprecated alias；旧 `--clear` 翻译成显式 delete |
-| `create-*` / `update-*` / `delete-*` / `add-tag` / `remove-tag` | 对应资源的 `new|edit|delete|tag|untag` | deprecated alias |
-| `ref KEY`、`ref search`、`ref cited-by`、`ref contexts`、`ref retry` | `ref show|find|cited|ctx|build --failed` | deprecated alias |
-| `schema types|fields|creator-types|*-for|template` | `schema list|show` | deprecated alias |
-| 裸 `server` / 裸 `sync` | `server start` / `sync pull` | deprecated alias |
-| `setup` | `config init` | redirect-only |
-| `abstract` | `item show` | redirect-only |
-| `key-info` | `config check` | redirect-only |
-| `select` | 无稳定替代 | redirect-only；平台特定 Desktop bridge |
-| `relate` | 无稳定替代 | redirect-only；实验性关系图语法 |
+仅保留三个正式高频快捷入口：`find`、`show`、`export`，分别进入 `item find`、`item show`、`item export`。它们只接受对应 canonical 命令的参数，不承担旧参数兼容。
 
-translator 位于 `internal/cli/cobra_root.go`；redirect-only adapter 位于 `internal/cli/cobra_legacy.go`。`commandRegistry`、手写 `dispatch` 和旧业务 handler 已删除。
+`config validate`、裸 `server` 和裸 `sync` 也已退出；分别使用 `config check`、`server start`、`sync pull`。
 
 ### 持久化数据
 

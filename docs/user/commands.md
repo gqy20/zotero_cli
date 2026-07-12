@@ -64,7 +64,7 @@ zot search list --json
 zot group list --json
 ```
 
-统一分页参数是 `--limit`、`--offset`、`--sort`、`--order asc|desc`。旧 `--start`、`--direction` 仅由兼容翻译器接受。
+统一分页参数是 `--limit`、`--offset`、`--sort`、`--order asc|desc`。旧 `--start`、`--direction` 已不再接受。
 
 常用 item type 短名会在输入层归一化：`article` → `journalArticle`、`chapter` → `bookSection`、`conf` → `conferencePaper`、`web` → `webpage`、`blog` → `blogPost`。JSON 和持久化数据始终使用 Zotero 官方值。
 
@@ -88,7 +88,7 @@ zot search new --data '{"name":"Recent","conditions":[]}' --json
 
 - `ZOT_ALLOW_WRITE=1` 控制创建和修改。
 - `ZOT_ALLOW_DELETE=1` 控制删除，默认关闭。
-- destructive action 不会因旧命令兼容而绕过确认、权限或版本前置条件。
+- destructive action 始终执行确认、权限和版本前置条件。
 
 ## 附件、PDF 与标注
 
@@ -162,14 +162,8 @@ Schema 响应默认缓存 7 天；`meta.read_source=cache` 表示缓存命中。
 
 completion 支持 `bash`、`zsh`、`fish`、`powershell`，生成过程不会加载配置或访问网络。
 
-## 兼容入口
+## 兼容边界
 
-旧命令会在执行前被翻译成 canonical invocation，并向 stderr 输出一次迁移 warning；JSON stdout 不受污染。详细清单见 [回退与历史兼容](../architecture/fallbacks.md)。
+旧 alias、旧参数翻译和 redirect-only 入口已经移除；旧命令返回 usage error。脚本应直接迁移到 canonical 命令树。详细清单见 [回退与历史兼容](../architecture/fallbacks.md)。
 
-以下入口已是 redirect-only，不再执行旧业务：
-
-- `setup` → `config init`
-- `abstract` → `item show`
-- `key-info` → `config check`
-- `select`：平台特定 Zotero Desktop bridge，不属于 CLI v2
-- `relate`：实验性关系图语法，没有稳定 v2 替代
+仅 `find`、`show`、`export` 是正式快捷入口，分别等价于 `item find`、`item show`、`item export`，并且只接受 canonical 参数。

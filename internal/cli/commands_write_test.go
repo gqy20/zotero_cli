@@ -9,13 +9,13 @@ import (
 	"testing"
 )
 
-func TestCanonicalAndLegacyDeleteCancellation(t *testing.T) {
+func TestDeleteCancellation(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
 	t.Setenv("ZOT_ALLOW_DELETE", "1")
 
-	for _, args := range [][]string{{"item", "delete", "ITEM1", "--if-version", "1"}, {"delete-item", "ITEM1", "--if-unmodified-since-version", "1"}} {
+	for _, args := range [][]string{{"item", "delete", "ITEM1", "--if-version", "1"}} {
 		_, stderr := captureOutput(t)
 		testCLI.stdin = strings.NewReader("n\n")
 		if code := Run(args); code != 130 {
@@ -27,7 +27,7 @@ func TestCanonicalAndLegacyDeleteCancellation(t *testing.T) {
 	}
 }
 
-func TestCanonicalAndLegacyWritesPreserveConflictErrors(t *testing.T) {
+func TestCanonicalWritesPreserveConflictErrors(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -37,7 +37,7 @@ func TestCanonicalAndLegacyWritesPreserveConflictErrors(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"item", "edit", "ITEM1", "--set", "title=New", "--if-version", "1", "--json"},
-		{"update-item", "ITEM1", "--data", `{"title":"New"}`, "--if-unmodified-since-version", "1", "--json"},
+		{"item", "edit", "ITEM1", "--data", `{"title":"New"}`, "--if-version", "1", "--json"},
 	} {
 		stdout, stderr := captureOutput(t)
 		if code := Run(args); code != ExitError {
@@ -59,7 +59,7 @@ func TestRunCreateItemJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"create-item", "--data", `{"itemType":"book","title":"My Book"}`, "--if-unmodified-since-version", "41", "--json"})
+	exitCode := Run([]string{"item", "new", "--data", `{"itemType":"book","title":"My Book"}`, "--if-version", "41", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -83,7 +83,7 @@ func TestRunUpdateItemText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"update-item", "ABCD2345", "--data", `{"title":"Updated Title"}`, "--if-unmodified-since-version", "7"})
+	exitCode := Run([]string{"item", "edit", "ABCD2345", "--data", `{"title":"Updated Title"}`, "--if-version", "7"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -102,7 +102,7 @@ func TestRunDeleteItemText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"delete-item", "ABCD2345", "--if-unmodified-since-version", "8", "--yes"})
+	exitCode := Run([]string{"item", "delete", "ABCD2345", "--if-version", "8", "--yes"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -121,7 +121,7 @@ func TestRunAddTagJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"add-tag", "--items", "ITEMA001,ITEMA002", "--tag", "paper", "--json"})
+	exitCode := Run([]string{"item", "tag", "ITEMA001", "ITEMA002", "--tag", "paper", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -149,7 +149,7 @@ func TestRunRemoveTagText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"remove-tag", "--items", "ITEMA001,ITEMA002", "--tag", "ai"})
+	exitCode := Run([]string{"item", "untag", "ITEMA001", "ITEMA002", "--tag", "ai"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -173,7 +173,7 @@ func TestRunCreateItemFromFileText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"create-item", "--from-file", payloadPath, "--if-unmodified-since-version", "41"})
+	exitCode := Run([]string{"item", "new", "--from", payloadPath, "--if-version", "41"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -198,7 +198,7 @@ func TestRunUpdateItemFromFileJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"update-item", "ABCD2345", "--from-file", payloadPath, "--if-unmodified-since-version", "7", "--json"})
+	exitCode := Run([]string{"item", "edit", "ABCD2345", "--from", payloadPath, "--if-version", "7", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -223,7 +223,7 @@ func TestRunCreateCollectionText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"create-collection", "--data", `{"name":"New Collection"}`, "--if-unmodified-since-version", "10"})
+	exitCode := Run([]string{"coll", "new", "--data", `{"name":"New Collection"}`, "--if-version", "10"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -247,7 +247,7 @@ func TestRunUpdateCollectionFromFileJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"update-collection", "COLL1234", "--from-file", payloadPath, "--json"})
+	exitCode := Run([]string{"coll", "edit", "COLL1234", "--from", payloadPath, "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -272,7 +272,7 @@ func TestRunDeleteCollectionText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"delete-collection", "COLL1234", "--if-unmodified-since-version", "12", "--yes"})
+	exitCode := Run([]string{"coll", "delete", "COLL1234", "--if-version", "12", "--yes"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -291,7 +291,7 @@ func TestRunCreateSearchText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"create-search", "--data", `{"name":"Unread PDFs","conditions":[{"condition":"itemType","operator":"is","value":"attachment"}]}`, "--if-unmodified-since-version", "17"})
+	exitCode := Run([]string{"search", "new", "--data", `{"name":"Unread PDFs","conditions":[{"condition":"itemType","operator":"is","value":"attachment"}]}`, "--if-version", "17"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -315,7 +315,7 @@ func TestRunUpdateSearchFromFileJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"update-search", "SCH12345", "--from-file", payloadPath, "--json"})
+	exitCode := Run([]string{"search", "edit", "SCH12345", "--from", payloadPath, "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -340,7 +340,7 @@ func TestRunDeleteSearchText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"delete-search", "SCH12345", "--if-unmodified-since-version", "22", "--yes"})
+	exitCode := Run([]string{"search", "delete", "SCH12345", "--if-version", "22", "--yes"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

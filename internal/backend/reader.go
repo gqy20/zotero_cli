@@ -367,7 +367,7 @@ func shouldFallbackToWeb(op readOperation, err error) bool {
 	case readOperationListCollections:
 		return errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
 	case readOperationGetRelated:
-		return true
+		return errors.Is(err, ErrItemNotFound) || errors.Is(err, ErrUnsupportedFeature) || errors.Is(err, ErrLocalTemporarilyUnavailable)
 	default:
 		return false
 	}

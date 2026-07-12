@@ -16,7 +16,7 @@ func TestRunSchemaTypesJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"schema", "types", "--json"})
+	exitCode := Run([]string{"schema", "list", "types", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -40,7 +40,7 @@ func TestRunSchemaFieldsText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"schema", "fields"})
+	exitCode := Run([]string{"schema", "list", "fields"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -63,7 +63,7 @@ func TestRunSchemaCreatorTypesText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"schema", "creator-types"})
+	exitCode := Run([]string{"schema", "list", "roles"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -86,7 +86,7 @@ func TestRunSchemaFieldsForJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"schema", "fields-for", "book", "--json"})
+	exitCode := Run([]string{"schema", "list", "fields", "book", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -110,7 +110,7 @@ func TestRunSchemaCreatorTypesForText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"schema", "creator-types-for", "book"})
+	exitCode := Run([]string{"schema", "list", "roles", "book"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -133,7 +133,7 @@ func TestRunSchemaTemplateJSON(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"schema", "template", "book", "--json"})
+	exitCode := Run([]string{"schema", "show", "book", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

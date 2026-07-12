@@ -323,19 +323,3 @@ func TestRunShowLocalAutoDetectsPrefsAndResolvesLinkedAttachmentPaths(t *testing
 		}
 	}
 }
-
-func TestRunRelateLocalJSONShowsExplicitRelations(t *testing.T) {
-	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"relate", "ITEM1234", "--json"})
-	if exitCode != ExitUsage || stdout.Len() != 0 || !strings.Contains(stderr.String(), "experimental relation-graph") {
-		t.Fatalf("unexpected redirect output: code=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
-	}
-}
-
-func TestRunRelateLocalTextOutputShowsDirectionAndTarget(t *testing.T) {
-	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"relate", "ITEM1234"})
-	if exitCode != ExitUsage || stdout.Len() != 0 || !strings.Contains(stderr.String(), "experimental relation-graph") {
-		t.Fatalf("unexpected redirect output: code=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
-	}
-}
