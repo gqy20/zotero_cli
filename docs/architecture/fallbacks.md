@@ -14,8 +14,8 @@
 |---|---|---|
 | 回退（fallback） | 首选路径无法承接请求时，切换到能力已知的次选路径 | hybrid 从 LocalReader 切到 WebReader |
 | 重试（retry） | 同一路径发生暂时性失败后再次执行 | Web API 遇到限流或暂时性网络错误 |
-| 迁移（migration） | 将旧的持久化结构升级到当前结构 | reference index 启动时补充缺失列 |
-| 历史兼容（compatibility） | 继续接受旧输入或读取旧数据 | reference index 启动时补充缺失列 |
+| 迁移（migration） | 将旧的持久化结构升级到当前结构 | reference index 按 `user_version` 执行一次性升级 |
+| 历史兼容（compatibility） | 继续接受旧输入或读取旧数据 | 读取只有 `content.txt` 的全文缓存 |
 | 重建（rebuild） | 派生数据无法安全迁移时丢弃并重新生成 | 不兼容的全文 FTS 表 |
 
 回退不是“捕获任意错误后换一个后端”。每条回退必须有明确触发条件，且目标路径必须能够表达原请求。参数错误、权限错误、损坏数据和本地独有能力失败通常不应静默回退。
@@ -126,9 +126,8 @@ CLI 不再执行 deprecated alias、redirect-only adapter 或旧参数翻译。�
 
 | 数据 | 兼容方式 | 能力边界 |
 |---|---|---|
-| 旧 reference index | `store.init()` 以幂等 `ALTER TABLE` 补列、创建新表并修正派生状态 | `metadata_version` 过旧的成功记录会重新构建，而不是按新格式直接读取 |
+| 旧 reference index | 根据 SQLite `user_version` 在事务中执行一次性迁移 | `metadata_version` 过旧的成功记录会重新构建，而不是按新格式直接读取 |
 | 旧 unsupported/failed reference 记录 | 初始化迁移会按当前状态语义重新分类 | 仅迁移可识别的历史记录 |
-| 旧 NCBI HTTP 缓存键 | 客户端继续识别旧缓存键；新 provider 使用独立命名空间 | Europe PMC 缓存不会与 NCBI 旧键混用 |
 | 旧全文 FTS schema | 可补的普通列使用 `ALTER TABLE`；核心 FTS 表缺少必要列时重建派生索引 | 索引可重建，不承诺保留派生排序状态 |
 | 仅有 `content.txt` 的全文缓存 | 保留整篇文本读取 | 不支持可靠的逐页过滤，需重建生成 `chunks.json` |
 

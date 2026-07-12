@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -67,7 +66,7 @@ func (s SyncService) Sync(ctx context.Context, req SyncRequest) (Result, error) 
 	if err := os.MkdirAll(filepath.Join(dataDir, "storage"), 0o755); err != nil {
 		return Result{}, fmt.Errorf("create data-dir: %w", err)
 	}
-	cleanupStaleSync(dataDir)
+	cleanupStaleSQLiteStaging(dataDir)
 
 	httpClient := s.NewHTTPClient
 	if httpClient == nil {
@@ -215,28 +214,15 @@ func (c *syncClient) getStream(ctx context.Context, path string, offset int64) (
 	return resp.Body, offset > 0 && resp.StatusCode == http.StatusPartialContent, nil
 }
 
-// cleanupStaleSync removes leftovers created by older sync implementations.
-// Current .part-{size}-{mtime} files are intentionally preserved so downloads
-// can resume after interruption.
-func cleanupStaleSync(dataDir string) {
+// cleanupStaleSQLiteStaging removes staging directories left by a process that
+// terminated before its deferred cleanup ran. Resumable .part files remain.
+func cleanupStaleSQLiteStaging(dataDir string) {
 	if entries, err := os.ReadDir(dataDir); err == nil {
 		for _, e := range entries {
 			if e.IsDir() && strings.HasPrefix(e.Name(), ".sqlite-staging-") {
 				_ = os.RemoveAll(filepath.Join(dataDir, e.Name()))
 			}
 		}
-	}
-	for _, sub := range []string{"storage", filepath.Join(".zotero_cli", "fulltext")} {
-		root := filepath.Join(dataDir, sub)
-		_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d == nil {
-				return nil
-			}
-			if !d.IsDir() && strings.HasSuffix(d.Name(), ".tmp") {
-				_ = os.Remove(path)
-			}
-			return nil
-		})
 	}
 }
 

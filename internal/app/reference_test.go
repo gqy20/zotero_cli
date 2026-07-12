@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"strings"
 	"testing"
@@ -56,6 +57,44 @@ func TestReferenceStatusDoesNotCreateMissingIndex(t *testing.T) {
 	}
 	if _, err := os.Stat(referenceStorePath(cfg)); !os.IsNotExist(err) {
 		t.Fatalf("status created index or returned unexpected stat error: %v", err)
+	}
+}
+
+func TestReferenceStatusMigratesOutdatedIndexOnce(t *testing.T) {
+	cfg := config.Config{DataDir: t.TempDir()}
+	store, err := openReferenceStore(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", referenceStorePath(cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`PRAGMA user_version=0`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewReferenceService()
+	service.LoadConfig = func() (config.Config, string, error) { return cfg, "", nil }
+	result, err := service.Status(context.Background(), ReferenceStatusRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Meta["read_mode"] != "migrated" {
+		t.Fatalf("meta = %#v", result.Meta)
+	}
+	second, err := service.Status(context.Background(), ReferenceStatusRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Meta["read_mode"] != "read_only" {
+		t.Fatalf("second meta = %#v", second.Meta)
 	}
 }
 

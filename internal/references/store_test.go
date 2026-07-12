@@ -2,6 +2,7 @@ package references
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -126,16 +127,34 @@ func TestCachedStatusInvalidatesWhenStoreChanges(t *testing.T) {
 func TestStoreMigratesLegacyUnsupportedFailures(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "index.sqlite")
-	store, err := OpenStore(path)
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy := errors.New("item LEGACY has no DOI, PMID, or PMCID usable by NCBI")
-	if err := store.SaveFailure(ctx, "LEGACY", "Legacy", "fp", legacy); err != nil {
+	_, err = db.Exec(`
+CREATE TABLE ref_items (
+  item_key TEXT PRIMARY KEY, title TEXT NOT NULL, fingerprint TEXT NOT NULL,
+  doi TEXT, pmid TEXT, pmcid TEXT, strategy TEXT, status TEXT NOT NULL,
+  reference_count INTEGER NOT NULL DEFAULT 0, error TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL
+);
+CREATE TABLE ref_entries (
+  source_item_key TEXT NOT NULL, ref_index INTEGER NOT NULL, ref_id TEXT, raw TEXT, title TEXT,
+  authors_json TEXT, container TEXT, year TEXT, volume TEXT, issue TEXT, pages TEXT,
+  doi TEXT, pmid TEXT, pmcid TEXT, source TEXT NOT NULL,
+  PRIMARY KEY(source_item_key, ref_index)
+);
+INSERT INTO ref_items(item_key,title,fingerprint,status,error,updated_at)
+VALUES('LEGACY','Legacy','fp','failed','item LEGACY has no DOI, PMID, or PMCID usable by NCBI','2026-01-01T00:00:00Z');
+`)
+	if err != nil {
 		t.Fatal(err)
 	}
-	store.Close()
-	store, err = OpenStore(path)
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := OpenStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,5 +168,9 @@ func TestStoreMigratesLegacyUnsupportedFailures(t *testing.T) {
 	}
 	if fresh, err := store.IsFresh(ctx, "LEGACY", "fp"); err != nil || !fresh {
 		t.Fatalf("fresh=%v err=%v", fresh, err)
+	}
+	var version int
+	if err := store.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != referenceSchemaVersion {
+		t.Fatalf("schema version=%d err=%v", version, err)
 	}
 }

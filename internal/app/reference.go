@@ -228,13 +228,17 @@ func (s ReferenceService) Status(ctx context.Context, req ReferenceStatusRequest
 		readMode = "migrated"
 		return nil
 	}
+	needsMigration, err := store.NeedsMigration()
+	if err != nil {
+		return Result{}, err
+	}
+	if needsMigration {
+		if err := reopenForMigration(); err != nil {
+			return Result{}, err
+		}
+	}
 	if req.Failed {
 		rows, err := store.Failed(ctx)
-		if references.IsSchemaError(err) {
-			if err = reopenForMigration(); err == nil {
-				rows, err = store.Failed(ctx)
-			}
-		}
 		if err != nil {
 			return Result{}, err
 		}
@@ -242,22 +246,12 @@ func (s ReferenceService) Status(ctx context.Context, req ReferenceStatusRequest
 	}
 	if req.Unsupported {
 		rows, err := store.Unsupported(ctx)
-		if references.IsSchemaError(err) {
-			if err = reopenForMigration(); err == nil {
-				rows, err = store.Unsupported(ctx)
-			}
-		}
 		if err != nil {
 			return Result{}, err
 		}
 		return Result{Data: rows, Meta: map[string]any{"total": len(rows), "index_path": store.Path(), "initialized": true, "read_mode": readMode}, Text: failedReferenceText(rows)}, nil
 	}
 	status, cacheHit, err := store.CachedStatus(ctx)
-	if references.IsSchemaError(err) {
-		if err = reopenForMigration(); err == nil {
-			status, cacheHit, err = store.CachedStatus(ctx)
-		}
-	}
 	if err != nil {
 		return Result{}, err
 	}

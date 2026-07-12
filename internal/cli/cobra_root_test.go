@@ -25,30 +25,21 @@ func TestCobraHelpDoesNotLoadConfig(t *testing.T) {
 	}
 }
 
-func TestStageTwoCanonicalCommandsExist(t *testing.T) {
+func TestCanonicalCommandsExist(t *testing.T) {
 	root := testCLI.newRootCommand()
-	for _, path := range [][]string{
+	paths := [][]string{
 		{"lib", "show"}, {"lib", "stats"}, {"lib", "log"},
 		{"item", "list"}, {"coll", "list"}, {"tag", "list"},
 		{"note", "list"}, {"search", "list"}, {"group", "list"},
-	} {
-		cmd, remaining, err := root.Find(path)
-		if err != nil {
-			t.Fatalf("find %v: %v", path, err)
-		}
-		if len(remaining) != 0 || cmd.Name() != path[len(path)-1] {
-			t.Fatalf("find %v = command %q, remaining %v", path, cmd.CommandPath(), remaining)
-		}
-	}
-}
-
-func TestStageThreeCanonicalCommandsExist(t *testing.T) {
-	root := testCLI.newRootCommand()
-	paths := [][]string{
 		{"item", "find"}, {"item", "show"}, {"item", "new"}, {"item", "edit"}, {"item", "delete"}, {"item", "tag"}, {"item", "untag"}, {"item", "supp"}, {"item", "export"},
 		{"coll", "show"}, {"coll", "new"}, {"coll", "edit"}, {"coll", "delete"}, {"coll", "add"}, {"coll", "remove"},
 		{"note", "find"}, {"note", "show"}, {"note", "new"}, {"note", "edit"}, {"note", "delete"},
 		{"search", "show"}, {"search", "new"}, {"search", "edit"}, {"search", "delete"},
+		{"file", "show"}, {"file", "check"}, {"pdf", "text"}, {"pdf", "figs"}, {"pdf", "open"}, {"ann", "list"}, {"ann", "new"}, {"ann", "delete"},
+		{"ref", "show"}, {"ref", "find"}, {"ref", "related"}, {"ref", "cited"}, {"ref", "ctx"}, {"ref", "links"}, {"ref", "entities"}, {"ref", "profile"}, {"ref", "build"}, {"ref", "resolve"}, {"ref", "status"},
+		{"index", "build"}, {"index", "status"}, {"schema", "list"}, {"schema", "show"},
+		{"config", "init"}, {"config", "show"}, {"config", "check"},
+		{"serve"}, {"sync"}, {"completion"}, {"version"},
 	}
 	for _, path := range paths {
 		cmd, remaining, err := root.Find(path)
@@ -58,7 +49,7 @@ func TestStageThreeCanonicalCommandsExist(t *testing.T) {
 	}
 }
 
-func TestFormalShortcutsTranslateWithoutLegacyFlags(t *testing.T) {
+func TestFormalShortcutsExpandToCanonicalArgs(t *testing.T) {
 	tests := []struct {
 		input []string
 		want  []string
@@ -68,9 +59,9 @@ func TestFormalShortcutsTranslateWithoutLegacyFlags(t *testing.T) {
 		{[]string{"export", "ITEM1", "--as", "ris"}, []string{"item", "export", "ITEM1", "--as", "ris"}},
 	}
 	for _, tt := range tests {
-		got, ok := translateStageOneArgs(tt.input)
-		if !ok || strings.Join(got, "\x00") != strings.Join(tt.want, "\x00") {
-			t.Fatalf("translate %v = %v, %t; want %v", tt.input, got, ok, tt.want)
+		got := expandShortcutArgs(tt.input)
+		if strings.Join(got, "\x00") != strings.Join(tt.want, "\x00") {
+			t.Fatalf("expand %v = %v; want %v", tt.input, got, tt.want)
 		}
 	}
 }
@@ -83,26 +74,6 @@ func TestRetiredLegacyCommandsAreUnknown(t *testing.T) {
 		}
 		if !strings.Contains(stderr.String(), "unknown command") {
 			t.Fatalf("%s stderr=%q", name, stderr.String())
-		}
-	}
-}
-
-func TestStageFourCanonicalCommandsExist(t *testing.T) {
-	root := testCLI.newRootCommand()
-	for _, path := range [][]string{{"file", "show"}, {"file", "check"}, {"pdf", "text"}, {"pdf", "figs"}, {"pdf", "open"}, {"ann", "list"}, {"ann", "new"}, {"ann", "delete"}} {
-		cmd, remaining, err := root.Find(path)
-		if err != nil || len(remaining) != 0 || cmd.Name() != path[len(path)-1] {
-			t.Fatalf("find %v = %q remaining=%v err=%v", path, cmd.CommandPath(), remaining, err)
-		}
-	}
-}
-
-func TestStageFiveCanonicalCommandsExist(t *testing.T) {
-	root := testCLI.newRootCommand()
-	for _, path := range [][]string{{"ref", "show"}, {"ref", "find"}, {"ref", "related"}, {"ref", "cited"}, {"ref", "ctx"}, {"ref", "links"}, {"ref", "entities"}, {"ref", "profile"}, {"ref", "build"}, {"ref", "resolve"}, {"ref", "status"}, {"index", "build"}, {"index", "status"}} {
-		cmd, remaining, err := root.Find(path)
-		if err != nil || len(remaining) != 0 || cmd.Name() != path[len(path)-1] {
-			t.Fatalf("find %v = %q remaining=%v err=%v", path, cmd.CommandPath(), remaining, err)
 		}
 	}
 }
@@ -141,25 +112,6 @@ func TestOutputEnvironmentProvidesGlobalDefault(t *testing.T) {
 	}
 }
 
-func TestStageSixCanonicalTree(t *testing.T) {
-	root := testCLI.newRootCommand()
-	for _, path := range [][]string{{"schema", "list"}, {"schema", "show"}, {"serve"}, {"sync"}, {"completion"}, {"version"}} {
-		cmd := root
-		for _, name := range path {
-			found := false
-			for _, child := range cmd.Commands() {
-				if child.Name() == name {
-					cmd, found = child, true
-					break
-				}
-			}
-			if !found {
-				t.Fatalf("missing canonical command path %v", path)
-			}
-		}
-	}
-}
-
 func TestCompletionGeneratesAllSupportedShellsWithoutConfig(t *testing.T) {
 	for _, shell := range []string{"bash", "zsh", "fish", "powershell"} {
 		stdout, stderr := captureOutput(t)
@@ -172,7 +124,7 @@ func TestCompletionGeneratesAllSupportedShellsWithoutConfig(t *testing.T) {
 	}
 }
 
-func TestStageSevenRootUsesOnlyCobraHelp(t *testing.T) {
+func TestRootUsesCobraHelp(t *testing.T) {
 	stdout, stderr := captureOutput(t)
 	if code := Run(nil); code != ExitOK {
 		t.Fatalf("code=%d stderr=%q", code, stderr.String())

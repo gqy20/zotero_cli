@@ -45,8 +45,5 @@ func New() *CLI {
 }
 
 func (c *CLI) Run(args []string) int {
-	if translated, ok := translateStageOneArgs(args); ok {
-		args = translated
-	}
-	return c.runCobra(args)
+	return c.runCobra(expandShortcutArgs(args))
 }

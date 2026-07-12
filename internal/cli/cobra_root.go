@@ -34,27 +34,19 @@ type exitError struct {
 func (e *exitError) Error() string { return e.err.Error() }
 func (e *exitError) Unwrap() error { return e.err }
 
-func translateStageOneArgs(args []string) ([]string, bool) {
+func expandShortcutArgs(args []string) []string {
 	if len(args) == 0 {
-		return args, true
-	}
-	if args[0] == "help" {
-		if len(args) == 1 {
-			return []string{"--help"}, true
-		}
-		target := append(append([]string{}, args[1:]...), "--help")
-		translated, _ := translateStageOneArgs(target)
-		return translated, true
+		return args
 	}
 	switch args[0] {
 	case "find":
-		return append([]string{"item", "find"}, args[1:]...), true
+		return append([]string{"item", "find"}, args[1:]...)
 	case "show":
-		return append([]string{"item", "show"}, args[1:]...), true
+		return append([]string{"item", "show"}, args[1:]...)
 	case "export":
-		return append([]string{"item", "export"}, args[1:]...), true
+		return append([]string{"item", "export"}, args[1:]...)
 	default:
-		return args, true
+		return args
 	}
 }
 

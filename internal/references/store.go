@@ -20,6 +20,8 @@ type Store struct {
 	db   *sql.DB
 }
 
+const referenceSchemaVersion = 1
+
 type Status struct {
 	IndexedItems             int    `json:"indexed_items"`
 	SuccessfulItems          int    `json:"successful_items"`
@@ -95,17 +97,24 @@ func OpenStoreReadOnly(path string) (*Store, error) {
 	return &Store{path: path, db: db}, nil
 }
 
-func IsSchemaError(err error) bool {
-	if err == nil {
-		return false
-	}
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "no such table") || strings.Contains(message, "no such column")
-}
-
 func (s *Store) Close() error { return s.db.Close() }
 
+func (s *Store) NeedsMigration() (bool, error) {
+	var version int
+	if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return false, err
+	}
+	return version < referenceSchemaVersion, nil
+}
+
 func (s *Store) init() error {
+	var existingSchema bool
+	var tableCount int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='ref_items'`).Scan(&tableCount); err != nil {
+		return err
+	}
+	existingSchema = tableCount > 0
+
 	_, err := s.db.Exec(`
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
@@ -166,54 +175,111 @@ CREATE INDEX IF NOT EXISTS idx_ref_contexts_reference ON ref_contexts(source_ite
 	if err != nil {
 		return err
 	}
-	// Upgrade indexes created by versions predating local citation resolution.
-	for _, alter := range []string{
-		`ALTER TABLE ref_entries ADD COLUMN target_item_key TEXT`, `ALTER TABLE ref_entries ADD COLUMN match_method TEXT`,
-		`ALTER TABLE ref_entries ADD COLUMN match_score REAL NOT NULL DEFAULT 0`, `ALTER TABLE ref_entries ADD COLUMN match_status TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE ref_entries ADD COLUMN context_status TEXT NOT NULL DEFAULT 'not_indexed'`, `ALTER TABLE ref_entries ADD COLUMN context_count INTEGER NOT NULL DEFAULT 0`,
-	} {
-		if _, e := s.db.Exec(alter); e != nil && !strings.Contains(strings.ToLower(e.Error()), "duplicate column") {
-			return e
+	if !existingSchema {
+		if _, err := s.db.Exec(fmt.Sprintf(`PRAGMA user_version=%d`, referenceSchemaVersion)); err != nil {
+			return err
+		}
+	} else {
+		var version int
+		if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+			return err
+		}
+		if version < referenceSchemaVersion {
+			if err := s.migrateReferenceSchemaV1(); err != nil {
+				return err
+			}
 		}
 	}
-	for _, alter := range []string{
-		`ALTER TABLE ref_items ADD COLUMN context_status TEXT NOT NULL DEFAULT 'not_indexed'`,
-		`ALTER TABLE ref_items ADD COLUMN context_count INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE ref_items ADD COLUMN references_with_context INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE ref_items ADD COLUMN references_without_context INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE ref_items ADD COLUMN context_coverage REAL NOT NULL DEFAULT 0`,
-		`ALTER TABLE ref_items ADD COLUMN pubmed_metadata_json TEXT NOT NULL DEFAULT '{}'`,
-		`ALTER TABLE ref_items ADD COLUMN metadata_version INTEGER NOT NULL DEFAULT 0`,
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_ref_entries_target ON ref_entries(target_item_key)`); err != nil {
+		return err
+	}
+	return s.syncReferenceFTS()
+}
+
+func (s *Store) migrateReferenceSchemaV1() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, column := range []struct{ name, definition string }{
+		{"target_item_key", "target_item_key TEXT"}, {"match_method", "match_method TEXT"},
+		{"match_score", "match_score REAL NOT NULL DEFAULT 0"}, {"match_status", "match_status TEXT NOT NULL DEFAULT ''"},
+		{"context_status", "context_status TEXT NOT NULL DEFAULT 'not_indexed'"}, {"context_count", "context_count INTEGER NOT NULL DEFAULT 0"},
 	} {
-		if _, e := s.db.Exec(alter); e != nil && !strings.Contains(strings.ToLower(e.Error()), "duplicate column") {
-			return e
+		if err := addColumnIfMissing(tx, "ref_entries", column.name, column.definition); err != nil {
+			return err
 		}
 	}
-	_, err = s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_ref_entries_target ON ref_entries(target_item_key)`)
-	if err == nil {
-		_, err = s.db.Exec(`UPDATE ref_items SET status='unsupported' WHERE status='failed' AND error LIKE 'item % has no DOI, PMID, or PMCID usable by NCBI'`)
+	for _, column := range []struct{ name, definition string }{
+		{"context_status", "context_status TEXT NOT NULL DEFAULT 'not_indexed'"},
+		{"context_count", "context_count INTEGER NOT NULL DEFAULT 0"},
+		{"references_with_context", "references_with_context INTEGER NOT NULL DEFAULT 0"},
+		{"references_without_context", "references_without_context INTEGER NOT NULL DEFAULT 0"},
+		{"context_coverage", "context_coverage REAL NOT NULL DEFAULT 0"},
+		{"pubmed_metadata_json", "pubmed_metadata_json TEXT NOT NULL DEFAULT '{}'"},
+		{"metadata_version", "metadata_version INTEGER NOT NULL DEFAULT 0"},
+	} {
+		if err := addColumnIfMissing(tx, "ref_items", column.name, column.definition); err != nil {
+			return err
+		}
 	}
-	if err == nil {
-		_, err = s.db.Exec(`UPDATE ref_items SET
+	if _, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_ref_entries_target ON ref_entries(target_item_key)`); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`UPDATE ref_items SET status='unsupported' WHERE status='failed' AND error LIKE 'item % has no DOI, PMID, or PMCID usable by NCBI'`); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`UPDATE ref_items SET
 		context_status=CASE WHEN strategy='pubmed' THEN 'not_supported' WHEN strategy='pmc_jats' AND EXISTS(SELECT 1 FROM ref_contexts c WHERE c.source_item_key=ref_items.item_key) THEN 'available' ELSE 'not_indexed' END,
 		context_count=(SELECT COUNT(*) FROM ref_contexts c WHERE c.source_item_key=ref_items.item_key),
 		references_with_context=(SELECT COUNT(DISTINCT reference_index) FROM ref_contexts c WHERE c.source_item_key=ref_items.item_key AND reference_index>0),
 		references_without_context=MAX(reference_count-(SELECT COUNT(DISTINCT reference_index) FROM ref_contexts c WHERE c.source_item_key=ref_items.item_key AND reference_index>0),0),
 		context_coverage=CASE WHEN reference_count>0 THEN CAST((SELECT COUNT(DISTINCT reference_index) FROM ref_contexts c WHERE c.source_item_key=ref_items.item_key AND reference_index>0) AS REAL)/reference_count ELSE 0 END
-		WHERE status='success' AND context_status='not_indexed'`)
+		WHERE status='success' AND context_status='not_indexed'`); err != nil {
+		return err
 	}
-	if err == nil {
-		_, err = s.db.Exec(`UPDATE ref_entries SET
+	if _, err = tx.Exec(`UPDATE ref_entries SET
 		context_count=(SELECT COUNT(*) FROM ref_contexts c WHERE c.source_item_key=ref_entries.source_item_key AND c.reference_index=ref_entries.ref_index),
 		context_status=CASE
 		 WHEN (SELECT context_status FROM ref_items i WHERE i.item_key=ref_entries.source_item_key)='available' AND EXISTS(SELECT 1 FROM ref_contexts c WHERE c.source_item_key=ref_entries.source_item_key AND c.reference_index=ref_entries.ref_index) THEN 'available'
 		 WHEN (SELECT context_status FROM ref_items i WHERE i.item_key=ref_entries.source_item_key)='available' THEN 'not_found'
 		 ELSE COALESCE((SELECT context_status FROM ref_items i WHERE i.item_key=ref_entries.source_item_key),'not_indexed') END
-		WHERE context_status='not_indexed'`)
+		WHERE context_status='not_indexed'`); err != nil {
+		return err
 	}
-	if err == nil {
-		err = s.syncReferenceFTS()
+	if _, err = tx.Exec(fmt.Sprintf(`PRAGMA user_version=%d`, referenceSchemaVersion)); err != nil {
+		return err
 	}
+	return tx.Commit()
+}
+
+func addColumnIfMissing(tx *sql.Tx, table, name, definition string) error {
+	rows, err := tx.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return err
+	}
+	found := false
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var columnName, columnType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &columnName, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			rows.Close()
+			return err
+		}
+		if columnName == name {
+			found = true
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if found {
+		return nil
+	}
+	_, err = tx.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + definition)
 	return err
 }
 

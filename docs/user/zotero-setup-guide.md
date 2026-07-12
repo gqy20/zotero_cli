@@ -242,18 +242,7 @@ Better Notes 是 Zotero 最强大的笔记管理插件，提供完整的笔记�
 
 #### 与 `zot` CLI 的联动
 
-`zot` 的 **`relate`** 命令会读取 Zotero 原生的笔记关联关系（`itemRelations` 表），而 Better Notes 在此基础上进一步增强了笔记间的链接能力。两者配合使用的效果：
-
-- **Better Notes 负责创建和维护** — 通过插件在 Zotero 内建立笔记之间的双向链接和层级关系
-- CLI v2 不再提供实验性的 `zot relate` 关系图读写；使用 `zot item show KEY --json` 查看 Zotero 条目保留的关系元数据，复杂关系分析应在导出后完成。
-
-```powershell
-# 查看某篇文献及其笔记的所有关联（含笔记间的关系）
-.\zot.exe relate ITEMKEY --aggregate --json
-
-# 导出为 DOT 图形文件，可视化关系网络
-.\zot.exe relate ITEMKEY --dot > graph.dot
-```
+Better Notes 负责在 Zotero 内创建和维护笔记之间的双向链接与层级关系。CLI v2 不提供实验性的关系图读写命令；使用 `zot item show ITEMKEY --json` 查看条目详情，需要复杂关系分析时先导出数据再处理。
 
 ### 2.4 Ethereal Style — 界面美化
 

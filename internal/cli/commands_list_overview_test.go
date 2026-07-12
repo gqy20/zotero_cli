@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestRunOverviewJSON(t *testing.T) {
+func TestRunLibShowJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -59,7 +59,7 @@ func TestRunOverviewJSON(t *testing.T) {
 	}
 }
 
-func TestRunOverviewText(t *testing.T) {
+func TestRunLibShowText(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -94,7 +94,7 @@ func TestRunOverviewText(t *testing.T) {
 	}
 }
 
-func TestRunOverviewHelpShowsUsage(t *testing.T) {
+func TestRunLibShowHelpShowsUsage(t *testing.T) {
 	stdout, _ := captureOutput(t)
 	exitCode := Run([]string{"lib", "show", "--help"})
 	if exitCode != 0 {

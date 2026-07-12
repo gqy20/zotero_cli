@@ -8,7 +8,7 @@ import (
 	"zotero_cli/internal/config"
 )
 
-func TestServerStartOwnsLifecycle(t *testing.T) {
+func TestServeOwnsLifecycle(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var stopped atomic.Bool
 	service := NewServerService()
@@ -25,7 +25,7 @@ func TestServerStartOwnsLifecycle(t *testing.T) {
 	}
 }
 
-func TestServerStartRejectsRemoteMode(t *testing.T) {
+func TestServeRejectsRemoteMode(t *testing.T) {
 	service := NewServerService()
 	service.LoadConfig = func() (config.Config, string, error) { return config.Config{Mode: "remote"}, "", nil }
 	if _, err := service.Start(context.Background()); err == nil {

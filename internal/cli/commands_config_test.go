@@ -8,19 +8,6 @@ import (
 	"testing"
 )
 
-func TestRunConfigInitIsCanonical(t *testing.T) {
-	configRoot := t.TempDir()
-	setTestConfigDir(t, configRoot)
-	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"config", "init", "--mode", "web", "--library-type", "user", "--library-id", "123", "--api-key", "secret"})
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "created config at") {
-		t.Fatalf("expected config creation message, got %q", stdout.String())
-	}
-}
-
 func TestRunDeleteItemBlockedWhenDeleteDisabled(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -124,7 +111,7 @@ func TestRunConfigCheckJSON(t *testing.T) {
 	}
 }
 
-func TestRunConfigValidateJSONReportsUnavailableLocalReader(t *testing.T) {
+func TestRunConfigCheckJSONReportsUnavailableLocalReader(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -167,29 +154,5 @@ func TestRunConfigValidateJSONReportsUnavailableLocalReader(t *testing.T) {
 	}
 	if errMsg, _ := meta["local_reader_error"].(string); !strings.Contains(errMsg, "zotero.sqlite") {
 		t.Fatalf("expected local_reader_error to mention zotero.sqlite, got %#v", meta["local_reader_error"])
-	}
-}
-
-func TestRunStatsJSON(t *testing.T) {
-	configRoot := t.TempDir()
-	setTestConfigDir(t, configRoot)
-	writeTestConfig(t, configRoot)
-
-	serverURL, cleanup := newTestAPI(t)
-	defer cleanup()
-	t.Setenv("ZOT_BASE_URL", serverURL)
-
-	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"lib", "stats", "--json"})
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
-	}
-
-	var got map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
-		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
-	}
-	if got["command"] != "lib stats" {
-		t.Fatalf("unexpected command: %#v", got["command"])
 	}
 }

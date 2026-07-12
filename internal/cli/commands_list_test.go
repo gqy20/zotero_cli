@@ -609,32 +609,42 @@ func TestRunTrashText(t *testing.T) {
 	}
 }
 
-func TestRunTrashReadOnlyDoesNotRequireWritePermission(t *testing.T) {
-	configRoot := t.TempDir()
-	setTestConfigDir(t, configRoot)
-	writeTestConfig(t, configRoot)
-
-	envPath := filepath.Join(configRoot, ".zot", ".env")
-	content, err := os.ReadFile(envPath)
-	if err != nil {
-		t.Fatal(err)
+func TestReadOnlyListsIgnoreWriteAndDeleteGates(t *testing.T) {
+	tests := []struct {
+		name    string
+		gate    string
+		args    []string
+		wantOut string
+	}{
+		{"trash", "ZOT_ALLOW_WRITE=1", []string{"item", "list", "--scope", "trash"}, "TRASH123"},
+		{"top collections", "ZOT_ALLOW_DELETE=1", []string{"coll", "list", "--top"}, "COLLTOP1"},
+		{"publications", "ZOT_ALLOW_WRITE=1", []string{"item", "list", "--scope", "pubs"}, "PUB12345"},
 	}
-	updated := strings.ReplaceAll(string(content), "ZOT_ALLOW_WRITE=1", "ZOT_ALLOW_WRITE=0")
-	if err := os.WriteFile(envPath, []byte(updated), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	serverURL, cleanup := newTestAPI(t)
-	defer cleanup()
-	t.Setenv("ZOT_BASE_URL", serverURL)
-
-	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"item", "list", "--scope", "trash"})
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
-	}
-	if got := stdout.String(); !strings.Contains(got, "TRASH123") {
-		t.Fatalf("expected trash output, got %q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configRoot := t.TempDir()
+			setTestConfigDir(t, configRoot)
+			writeTestConfig(t, configRoot)
+			envPath := filepath.Join(configRoot, ".zot", ".env")
+			content, err := os.ReadFile(envPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			updated := strings.ReplaceAll(string(content), tt.gate, strings.Replace(tt.gate, "=1", "=0", 1))
+			if err := os.WriteFile(envPath, []byte(updated), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			serverURL, cleanup := newTestAPI(t)
+			defer cleanup()
+			t.Setenv("ZOT_BASE_URL", serverURL)
+			stdout, stderr := captureOutput(t)
+			if code := Run(tt.args); code != ExitOK {
+				t.Fatalf("code=%d stderr=%q", code, stderr.String())
+			}
+			if got := stdout.String(); !strings.Contains(got, tt.wantOut) {
+				t.Fatalf("output=%q, want %q", got, tt.wantOut)
+			}
+		})
 	}
 }
 
@@ -662,35 +672,6 @@ func TestRunCollectionsTopJSON(t *testing.T) {
 	}
 }
 
-func TestRunCollectionsTopReadOnlyDoesNotRequireDeletePermission(t *testing.T) {
-	configRoot := t.TempDir()
-	setTestConfigDir(t, configRoot)
-	writeTestConfig(t, configRoot)
-
-	envPath := filepath.Join(configRoot, ".zot", ".env")
-	content, err := os.ReadFile(envPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	updated := strings.ReplaceAll(string(content), "ZOT_ALLOW_DELETE=1", "ZOT_ALLOW_DELETE=0")
-	if err := os.WriteFile(envPath, []byte(updated), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	serverURL, cleanup := newTestAPI(t)
-	defer cleanup()
-	t.Setenv("ZOT_BASE_URL", serverURL)
-
-	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"coll", "list", "--top"})
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
-	}
-	if got := stdout.String(); !strings.Contains(got, "COLLTOP1") {
-		t.Fatalf("expected collections-top output, got %q", got)
-	}
-}
-
 func TestRunPublicationsText(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
@@ -711,35 +692,6 @@ func TestRunPublicationsText(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in output %q", want, got)
 		}
-	}
-}
-
-func TestRunPublicationsReadOnlyDoesNotRequireWritePermission(t *testing.T) {
-	configRoot := t.TempDir()
-	setTestConfigDir(t, configRoot)
-	writeTestConfig(t, configRoot)
-
-	envPath := filepath.Join(configRoot, ".zot", ".env")
-	content, err := os.ReadFile(envPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	updated := strings.ReplaceAll(string(content), "ZOT_ALLOW_WRITE=1", "ZOT_ALLOW_WRITE=0")
-	if err := os.WriteFile(envPath, []byte(updated), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	serverURL, cleanup := newTestAPI(t)
-	defer cleanup()
-	t.Setenv("ZOT_BASE_URL", serverURL)
-
-	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"item", "list", "--scope", "pubs"})
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
-	}
-	if got := stdout.String(); !strings.Contains(got, "PUB12345") {
-		t.Fatalf("expected publications output, got %q", got)
 	}
 }
 

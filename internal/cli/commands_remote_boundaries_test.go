@@ -68,7 +68,7 @@ func newRemoteWriteServer(t *testing.T) *httptest.Server {
 	}))
 }
 
-func TestRunAnnotateRemoteUsesServer(t *testing.T) {
+func TestRunAnnNewRemoteUsesServer(t *testing.T) {
 	root := t.TempDir()
 	setTestConfigDir(t, root)
 	writeTestConfig(t, root)
@@ -98,7 +98,7 @@ func TestRunAnnotateRemoteUsesServer(t *testing.T) {
 	}
 }
 
-func TestRunAnnotationsClearRemoteUsesServer(t *testing.T) {
+func TestRunAnnDeleteRemoteUsesServer(t *testing.T) {
 	root := t.TempDir()
 	setTestConfigDir(t, root)
 	writeTestConfig(t, root)
@@ -119,7 +119,7 @@ func TestRunAnnotationsClearRemoteUsesServer(t *testing.T) {
 	}
 }
 
-func TestRunAnnotateBatchRemoteDryRun(t *testing.T) {
+func TestRunAnnNewBatchRemoteDryRun(t *testing.T) {
 	root := t.TempDir()
 	setTestConfigDir(t, root)
 	writeTestConfig(t, root)
