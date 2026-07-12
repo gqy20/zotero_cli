@@ -120,7 +120,7 @@ CLI 不再执行 deprecated alias、redirect-only adapter 或旧参数翻译。�
 
 仅保留三个正式高频快捷入口：`find`、`show`、`export`，分别进入 `item find`、`item show`、`item export`。它们只接受对应 canonical 命令的参数，不承担旧参数兼容。
 
-`config validate`、裸 `server` 和裸 `sync` 也已退出；分别使用 `config check`、`server start`、`sync pull`。
+`config validate`、`server start` 和 `sync pull` 也已退出；分别使用 `config check`、`serve`、`sync`。
 
 ### 持久化数据
 

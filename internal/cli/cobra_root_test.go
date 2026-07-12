@@ -76,7 +76,7 @@ func TestFormalShortcutsTranslateWithoutLegacyFlags(t *testing.T) {
 }
 
 func TestRetiredLegacyCommandsAreUnknown(t *testing.T) {
-	for _, name := range []string{"overview", "setup", "create-item", "extract-text", "key-info"} {
+	for _, name := range []string{"overview", "setup", "create-item", "extract-text", "key-info", "server"} {
 		stdout, stderr := captureOutput(t)
 		if code := Run([]string{name}); code != ExitUsage {
 			t.Fatalf("%s code=%d stdout=%q stderr=%q", name, code, stdout.String(), stderr.String())
@@ -143,7 +143,7 @@ func TestOutputEnvironmentProvidesGlobalDefault(t *testing.T) {
 
 func TestStageSixCanonicalTree(t *testing.T) {
 	root := testCLI.newRootCommand()
-	for _, path := range [][]string{{"schema", "list"}, {"schema", "show"}, {"server", "start"}, {"sync", "pull"}, {"completion"}, {"version"}} {
+	for _, path := range [][]string{{"schema", "list"}, {"schema", "show"}, {"serve"}, {"sync"}, {"completion"}, {"version"}} {
 		cmd := root
 		for _, name := range path {
 			found := false

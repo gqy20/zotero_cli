@@ -17,7 +17,7 @@ func TestServerStartOwnsLifecycle(t *testing.T) {
 		cancel()
 		return func() { stopped.Store(true) }, nil
 	}
-	if _, err := service.Start(ctx, ServerStartRequest{}); err != nil {
+	if _, err := service.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if !stopped.Load() {
@@ -28,7 +28,7 @@ func TestServerStartOwnsLifecycle(t *testing.T) {
 func TestServerStartRejectsRemoteMode(t *testing.T) {
 	service := NewServerService()
 	service.LoadConfig = func() (config.Config, string, error) { return config.Config{Mode: "remote"}, "", nil }
-	if _, err := service.Start(context.Background(), ServerStartRequest{}); err == nil {
+	if _, err := service.Start(context.Background()); err == nil {
 		t.Fatal("expected remote mode error")
 	}
 }

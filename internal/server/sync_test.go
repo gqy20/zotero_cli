@@ -180,6 +180,24 @@ func TestSyncStorageFile(t *testing.T) {
 	}
 }
 
+func TestSyncStorageFileSupportsRange(t *testing.T) {
+	dataDir := t.TempDir()
+	writeSyncFixture(t, dataDir)
+	mux := newSyncMux(t, dataDir)
+
+	req := httptest.NewRequest("GET", "/api/v1/sync/storage/KEY1/paper.pdf", nil)
+	req.Header.Set("Range", "bytes=4-")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusPartialContent {
+		t.Fatalf("expected 206, got %d", rec.Code)
+	}
+	if rec.Body.String() != "BYTES" {
+		t.Fatalf("unexpected range body %q", rec.Body.String())
+	}
+}
+
 func TestSyncStorageFileNotFound(t *testing.T) {
 	dataDir := t.TempDir()
 	writeSyncFixture(t, dataDir)

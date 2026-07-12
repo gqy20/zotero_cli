@@ -117,7 +117,7 @@ func (c *CLI) newRootCommand() *cobra.Command {
 	root.AddCommand(c.newReferenceCommand(opts))
 	root.AddCommand(c.newIndexCommand(opts))
 	root.AddCommand(c.newSchemaCommand(opts))
-	root.AddCommand(c.newServerCommand(opts))
+	root.AddCommand(c.newServeCommand(opts))
 	root.AddCommand(c.newSyncCommand(opts))
 	root.AddCommand(c.newCompletionCommand())
 	return root

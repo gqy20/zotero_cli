@@ -34,8 +34,8 @@ zot
 ├── index build|status
 ├── schema list|show
 ├── config init|show|check
-├── server start
-├── sync pull
+├── serve
+├── sync
 ├── completion
 └── version
 ```
@@ -151,8 +151,8 @@ zot config show --json
 zot config show --path
 zot config check --json
 
-zot server start --port 8021
-zot sync pull --server-addr http://host:8021 --data-dir ~/.zot/sync
+zot serve
+zot sync
 zot completion powershell
 zot completion bash
 zot version

@@ -40,8 +40,8 @@ ref show|find|related|cited|ctx|links|entities|profile|build|resolve|status
 index build|status
 schema list|show
 config init|show|check
-server start
-sync pull
+serve
+sync
 completion
 version
 ```
@@ -169,8 +169,8 @@ zot note new --parent ITEMKEY --text "Reading note" --json
 zot config init
 zot config show --json
 zot config check --json
-zot server start --port 8021
-zot sync pull --server-addr http://host:8021
+zot serve
+zot sync
 zot completion powershell
 ```
 
@@ -179,7 +179,7 @@ zot completion powershell
 - `web`：Zotero Web API
 - `local`：本地 SQLite + storage
 - `hybrid`：本地优先，仅在语义可保持时回退 Web
-- `remote`：通过 `zot server start` 访问远端数据
+- `remote`：通过 `zot serve` 访问远端数据
 
 pure remote 下 `ann list/new/delete` 可由服务端执行；其余 Web 写操作仍需 API key。
 

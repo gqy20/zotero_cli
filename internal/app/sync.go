@@ -18,12 +18,8 @@ import (
 	"zotero_cli/internal/config"
 )
 
-type SyncPullRequest struct {
-	ServerAddr  string
-	DataDir     string
-	Concurrency int
-	Force       bool
-	NoStorage   bool
+type SyncRequest struct {
+	Force bool
 }
 
 type SyncStats struct {
@@ -51,37 +47,23 @@ func NewSyncService() SyncService {
 	return SyncService{LoadConfig: config.Load, DefaultPath: config.DefaultEnvPath, NewHTTPClient: newSyncHTTPClient}
 }
 
-func (s SyncService) Pull(ctx context.Context, req SyncPullRequest) (Result, error) {
-	if req.Concurrency == 0 {
-		req.Concurrency = 8
+func (s SyncService) Sync(ctx context.Context, req SyncRequest) (Result, error) {
+	const concurrency = 8
+	cfg, _, err := s.LoadConfig()
+	if err != nil {
+		return Result{}, err
 	}
-	if req.Concurrency < 1 {
-		return Result{}, fmt.Errorf("concurrency must be at least 1")
-	}
-
-	// Resolve server addr + auth key: flags first, then config (.env + env).
-	serverAddr := req.ServerAddr
-	authKey := ""
-	if cfg, _, cfgErr := s.LoadConfig(); cfgErr == nil {
-		if serverAddr == "" {
-			serverAddr = cfg.ServerAddr
-		}
-		authKey = cfg.ServerAuthKey
-	} else if cfgErr != config.ErrNotFound {
-		return Result{}, cfgErr
-	}
+	serverAddr := cfg.ServerAddr
+	authKey := cfg.ServerAuthKey
 	if serverAddr == "" {
-		return Result{}, fmt.Errorf("no server address: pass --server-addr or set ZOT_SERVER_ADDR")
+		return Result{}, fmt.Errorf("no server address configured; run `zot config init` or set ZOT_SERVER_ADDR")
 	}
 
-	dataDir := req.DataDir
-	if dataDir == "" {
-		envPath, err := s.DefaultPath()
-		if err != nil {
-			return Result{}, fmt.Errorf("resolve default data-dir: %w", err)
-		}
-		dataDir = filepath.Join(filepath.Dir(envPath), "sync")
+	envPath, err := s.DefaultPath()
+	if err != nil {
+		return Result{}, fmt.Errorf("resolve default data-dir: %w", err)
 	}
+	dataDir := filepath.Join(filepath.Dir(envPath), "sync")
 	if err := os.MkdirAll(filepath.Join(dataDir, "storage"), 0o755); err != nil {
 		return Result{}, fmt.Errorf("create data-dir: %w", err)
 	}
@@ -105,20 +87,17 @@ func (s SyncService) Pull(ctx context.Context, req SyncPullRequest) (Result, err
 
 	// fulltext index (.zotero_cli/fulltext) — always synced: small, and lets
 	// full-text search work right away without a local 'zot index build'.
-	ftDownloaded, ftSkipped, ftBytes, err := syncFulltext(ctx, client, manifest.Fulltext, dataDir, req.Force, req.Concurrency, s.Progress)
+	ftDownloaded, ftSkipped, ftBytes, err := syncFulltext(ctx, client, manifest.Fulltext, dataDir, req.Force, concurrency, s.Progress)
 	if err != nil {
 		return Result{}, fmt.Errorf("sync fulltext: %w", err)
 	}
 
-	var downloaded, skipped, bytes int64
-	if !req.NoStorage {
-		downloaded, skipped, bytes, err = syncStorage(ctx, client, manifest.Storage, dataDir, req.Force, req.Concurrency, s.Progress)
-		if err != nil {
-			return Result{}, fmt.Errorf("sync storage: %w", err)
-		}
+	downloaded, skipped, bytes, err := syncStorage(ctx, client, manifest.Storage, dataDir, req.Force, concurrency, s.Progress)
+	if err != nil {
+		return Result{}, fmt.Errorf("sync storage: %w", err)
 	}
 
-	summary := SyncSummary{DataDir: dataDir, SQLiteChanged: sqliteChanged, Fulltext: SyncStats{ftDownloaded, ftSkipped, ftBytes}, Attachments: SyncStats{downloaded, skipped, bytes}, Storage: !req.NoStorage}
+	summary := SyncSummary{DataDir: dataDir, SQLiteChanged: sqliteChanged, Fulltext: SyncStats{ftDownloaded, ftSkipped, ftBytes}, Attachments: SyncStats{downloaded, skipped, bytes}, Storage: true}
 	var text strings.Builder
 	fmt.Fprintf(&text, "Synced to %s\n", dataDir)
 	if sqliteChanged {
@@ -127,9 +106,7 @@ func (s SyncService) Pull(ctx context.Context, req SyncPullRequest) (Result, err
 		fmt.Fprintln(&text, "  zotero.sqlite: unchanged")
 	}
 	fmt.Fprintf(&text, "  fulltext index: %d downloaded, %d unchanged (%s)\n", ftDownloaded, ftSkipped, humanBytes(ftBytes))
-	if !req.NoStorage {
-		fmt.Fprintf(&text, "  attachments: %d downloaded, %d unchanged (%s)\n", downloaded, skipped, humanBytes(bytes))
-	}
+	fmt.Fprintf(&text, "  attachments: %d downloaded, %d unchanged (%s)\n", downloaded, skipped, humanBytes(bytes))
 	fmt.Fprintf(&text, "\nUse it:\n  ZOT_MODE=local ZOT_DATA_DIR=%s zot find ...\n", dataDir)
 	return Result{Data: summary, Text: strings.TrimRight(text.String(), "\n")}, nil
 }
@@ -219,25 +196,28 @@ func (c *syncClient) getManifest(ctx context.Context) (syncManifest, error) {
 	return api.Data, nil
 }
 
-func (c *syncClient) getStream(ctx context.Context, path string) (io.ReadCloser, error) {
+func (c *syncClient) getStream(ctx context.Context, path string, offset int64) (io.ReadCloser, bool, error) {
 	req, err := c.newReq(ctx, http.MethodGet, path)
 	if err != nil {
-		return nil, err
+		return nil, false, err
+	}
+	if offset > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 		resp.Body.Close()
-		return nil, fmt.Errorf("%s: HTTP %d", path, resp.StatusCode)
+		return nil, false, fmt.Errorf("%s: HTTP %d", path, resp.StatusCode)
 	}
-	return resp.Body, nil
+	return resp.Body, offset > 0 && resp.StatusCode == http.StatusPartialContent, nil
 }
 
-// cleanupStaleSync removes leftovers from a previously interrupted sync:
-// .sqlite-staging-* dirs (from syncSQLite) and stray *.tmp files under
-// storage/ and .zotero_cli/fulltext/ (from interrupted downloads).
+// cleanupStaleSync removes leftovers created by older sync implementations.
+// Current .part-{size}-{mtime} files are intentionally preserved so downloads
+// can resume after interruption.
 func cleanupStaleSync(dataDir string) {
 	if entries, err := os.ReadDir(dataDir); err == nil {
 		for _, e := range entries {
@@ -284,7 +264,7 @@ func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta,
 				continue
 			}
 		}
-		body, err := client.getStream(ctx, "/api/v1/sync/sqlite-file/"+url.PathEscape(e.Path))
+		body, _, err := client.getStream(ctx, "/api/v1/sync/sqlite-file/"+url.PathEscape(e.Path), 0)
 		if err != nil {
 			return false, err
 		}
@@ -347,10 +327,10 @@ type fileDownload struct {
 }
 
 // fetchFn opens a download stream for a file by its slash-separated relPath.
-type fetchFn func(ctx context.Context, relPath string) (io.ReadCloser, error)
+type fetchFn func(ctx context.Context, relPath string, offset int64) (io.ReadCloser, bool, error)
 
 // runDownloads fetches files into targetDir with incremental skip (size+mtime),
-// bounded concurrency, atomic write (*.tmp + rename), and mtime restore.
+// bounded concurrency, resumable partial files, atomic rename, and mtime restore.
 // Shared by storage and fulltext syncing.
 func runDownloads(ctx context.Context, targetDir string, files []fileDownload, force bool, concurrency int, progress io.Writer, fetch fetchFn) (downloaded, skipped, bytes int64, err error) {
 	var jobs []fileDownload
@@ -430,29 +410,59 @@ func runDownloads(ctx context.Context, targetDir string, files []fileDownload, f
 }
 
 func downloadOne(ctx context.Context, targetDir string, f fileDownload, fetch fetchFn) error {
-	body, err := fetch(ctx, f.relPath)
-	if err != nil {
-		return err
-	}
-	defer body.Close()
-
 	dest := filepath.Join(targetDir, filepath.FromSlash(f.relPath))
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
-	tmp := dest + ".tmp"
-	out, err := os.Create(tmp)
+	part := fmt.Sprintf("%s.part-%d-%d", dest, f.size, f.mtime)
+	partName := filepath.Base(part)
+	partPrefix := filepath.Base(dest) + ".part-"
+	if entries, err := os.ReadDir(filepath.Dir(dest)); err == nil {
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), partPrefix) && entry.Name() != partName {
+				_ = os.Remove(filepath.Join(filepath.Dir(dest), entry.Name()))
+			}
+		}
+	}
+	offset := int64(0)
+	if fi, err := os.Stat(part); err == nil {
+		if fi.Size() > 0 && fi.Size() < f.size {
+			offset = fi.Size()
+		} else {
+			_ = os.Remove(part)
+		}
+	}
+	body, resumed, err := fetch(ctx, f.relPath, offset)
+	if err != nil {
+		return err
+	}
+	defer body.Close()
+	flags := os.O_CREATE | os.O_WRONLY
+	if resumed {
+		flags |= os.O_APPEND
+	} else {
+		flags |= os.O_TRUNC
+	}
+	out, err := os.OpenFile(part, flags, 0o644)
 	if err != nil {
 		return err
 	}
 	if _, err := io.Copy(out, body); err != nil {
 		out.Close()
-		os.Remove(tmp)
 		return err
 	}
-	out.Close()
-	_ = os.Chtimes(tmp, time.Unix(f.mtime, 0), time.Unix(f.mtime, 0))
-	return os.Rename(tmp, dest)
+	if err := out.Close(); err != nil {
+		return err
+	}
+	fi, err := os.Stat(part)
+	if err != nil {
+		return err
+	}
+	if fi.Size() != f.size {
+		return fmt.Errorf("downloaded %s: got %d bytes, want %d", f.relPath, fi.Size(), f.size)
+	}
+	_ = os.Chtimes(part, time.Unix(f.mtime, 0), time.Unix(f.mtime, 0))
+	return os.Rename(part, dest)
 }
 
 func syncStorage(ctx context.Context, client *syncClient, entries []syncStorageMeta, dataDir string, force bool, concurrency int, progress io.Writer) (downloaded, skipped, bytes int64, err error) {
@@ -462,9 +472,9 @@ func syncStorage(ctx context.Context, client *syncClient, entries []syncStorageM
 			files = append(files, fileDownload{relPath: e.Key + "/" + f.Name, size: f.Size, mtime: f.Mtime})
 		}
 	}
-	fetch := func(ctx context.Context, relPath string) (io.ReadCloser, error) {
+	fetch := func(ctx context.Context, relPath string, offset int64) (io.ReadCloser, bool, error) {
 		key, name, _ := strings.Cut(relPath, "/")
-		return client.getStream(ctx, "/api/v1/sync/storage/"+url.PathEscape(key)+"/"+url.PathEscape(name))
+		return client.getStream(ctx, "/api/v1/sync/storage/"+url.PathEscape(key)+"/"+url.PathEscape(name), offset)
 	}
 	return runDownloads(ctx, filepath.Join(dataDir, "storage"), files, force, concurrency, progress, fetch)
 }
@@ -476,12 +486,12 @@ func syncFulltext(ctx context.Context, client *syncClient, entries []syncPathMet
 	for _, e := range entries {
 		files = append(files, fileDownload{relPath: e.Path, size: e.Size, mtime: e.Mtime})
 	}
-	fetch := func(ctx context.Context, relPath string) (io.ReadCloser, error) {
+	fetch := func(ctx context.Context, relPath string, offset int64) (io.ReadCloser, bool, error) {
 		segs := strings.Split(relPath, "/")
 		for i, s := range segs {
 			segs[i] = url.PathEscape(s)
 		}
-		return client.getStream(ctx, "/api/v1/sync/fulltext/"+strings.Join(segs, "/"))
+		return client.getStream(ctx, "/api/v1/sync/fulltext/"+strings.Join(segs, "/"), offset)
 	}
 	return runDownloads(ctx, filepath.Join(dataDir, ".zotero_cli", "fulltext"), files, force, concurrency, progress, fetch)
 }

@@ -18,7 +18,7 @@
 引用数据 ───────────────→ zot ref show|find|related|cited|ctx|...
 全文索引 ───────────────→ zot index build|status
 配置检查 ───────────────→ zot config check
-远端同步 ───────────────→ zot sync pull
+远端同步 ───────────────→ zot sync
 ```
 
 ## 全局输出与错误
@@ -197,16 +197,16 @@ Hybrid 只在目标 backend 能保持请求语义时回退；全文、附件路�
 
 ```powershell
 # 服务端
-zot server start --port 8021
+zot serve
 
 # 客户端配置
 zot config init --mode remote --server-addr http://HOST:8021
 
 # 一次性拉取到本地镜像
-zot sync pull --server-addr http://HOST:8021 --data-dir ~/.zot/sync
+zot sync
 ```
 
-`sync pull` 同步 SQLite、storage 和全文索引；`--force` 全量重下，`--no-storage` 跳过附件，`--concurrency` 控制并发。
+`sync` 使用配置中的服务器地址和默认镜像目录，同步 SQLite、storage 和全文索引；中断的大文件会自动续传。仅在需要重新下载全部文件时使用 `--force`。
 
 ## 兼容边界
 
@@ -221,7 +221,7 @@ zot sync pull --server-addr http://HOST:8021 --data-dir ~/.zot/sync
 | `extract-text KEY` | `pdf text KEY` |
 | `annotations KEY --clear` | `ann delete KEY --yes` |
 | `schema fields-for journalArticle` | `schema list fields article` |
-| `server` | `server start` |
-| `sync --server-addr URL` | `sync pull --server-addr URL` |
+| `server start` | `serve` |
+| `sync pull` | `sync` |
 | `--start/--direction` | `--offset/--order` |
 | `--if-unmodified-since-version` | `--if-version` |

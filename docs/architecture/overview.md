@@ -11,13 +11,13 @@
 ```
 zotero_cli/
 ├── cmd/zot/
-│   └── main.go                    # 唯一入口：解析参数 → CLI.Run()（含 `zot server` 子命令）
+│   └── main.go                    # 唯一入口：解析参数 → CLI.Run()（含 `zot serve`）
 ├── internal/
 │   ├── backend/                   # 数据访问层
 │   │   ├── reader.go              # Reader 接口 + HybridReader
 │   │   ├── web.go                 # WebReader（Zotero Web API）
 │   │   ├── local.go               # LocalReader（SQLite + storage/）
-│   │   ├── remote.go              # RemoteReader（HTTP client → 远端 `zot server`）
+│   │   ├── remote.go              # RemoteReader（HTTP client → 远端 `zot serve`）
 │   │   ├── local_loaders.go       # SQLite 查询实现
 │   │   ├── local_fulltext.go      # FTS5 全文检索
 │   │   ├── local_export.go        # 本地 CSL-JSON 导出
@@ -87,7 +87,7 @@ type Reader interface {
 | `web` | `WebReader` | Zotero Cloud API | 无 |
 | `local` | `LocalReader` | SQLite + `storage/` | PyMuPDF |
 | `hybrid` | `HybridReader` | 本地优先，Web 回退 | 同 local |
-| `remote` | `RemoteReader` | HTTP → 远端 `zot server` | 同 server 端 |
+| `remote` | `RemoteReader` | HTTP → 远端 `zot serve` | 同服务端 |
 
 ### HybridReader 策略
 
@@ -100,7 +100,7 @@ type Reader interface {
 
 ### RemoteReader
 
-`RemoteReader` 实现同一 `Reader` 接口，将所有调用通过 HTTP 代理到远端 `zot server`（由服务端的 `zot server` 子命令启动）的 `/api/v1/*` 端点。适用于从局域网内其他机器访问本机 Zotero 数据的场景，通过 `ZOT_SERVER_ADDR` 环境变量指定服务端地址。
+`RemoteReader` 实现同一 `Reader` 接口，将所有调用通过 HTTP 代理到远端 `zot serve` 提供的 `/api/v1/*` 端点。适用于从局域网内其他机器访问本机 Zotero 数据的场景，通过 `ZOT_SERVER_ADDR` 环境变量指定服务端地址。
 
 ---
 

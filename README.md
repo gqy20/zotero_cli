@@ -49,7 +49,7 @@
 - **JSON 优先** — 所有命令支持 `--json`，输出结构化数据供 AI 直接解析
 - **Skill 自动发现** — 内置 `.claude/skills/`，Codex/Cursor 等可复用同一套说明文件
 - **安全写操作** — 删除默认禁止、版本号乐观锁，防止 AI 误操作
-- **本地能力优先** — hybrid 模式下本地 SQLite 全文检索、PDF 标注/笔记读写不走网络；remote 模式下 PDF 标注读写由 `zot server` 代理并受服务端写/删权限保护
+- **本地能力优先** — hybrid 模式下本地 SQLite 全文检索、PDF 标注/笔记读写不走网络；remote 模式下 PDF 标注读写由 `zot serve` 代理并受服务端写/删权限保护
 
 ## 快速开始
 
@@ -122,7 +122,7 @@ brew install gqy20/tap/zotcli
 zot version              # 验证安装
 zot config init                 # 交互式配置（mode 选 hybrid）
 
-# 远程模式初始化（连接局域网内一台运行 `zot server` 的机器）
+# 远程模式初始化（连接局域网内一台运行 `zot serve` 的机器）
 zot config init --mode remote --server-addr http://192.168.1.100:8021
 zot config init --mode remote --server-addr http://host:8021 --library-id ID --api-key KEY
 zot config check       # 校验配置
@@ -137,7 +137,7 @@ zot lib show --json        # 一站式库概览
 | `ZOT_LIBRARY_ID` | Zotero 首页 → 右键库 → Advanced → 数字 ID |
 | `ZOT_DATA_DIR` | Zotero → 编辑 → 首选项 → 高级 → 数据目录路径 |
 | `ZOT_MODE` | 推荐 `hybrid`（本地优先 + Web 回退） |
-| `ZOT_SERVER_ADDR` | 远程模式需要，运行 `zot server` 的地址（如 `http://192.168.1.100:8021`） |
+| `ZOT_SERVER_ADDR` | 远程模式需要，运行 `zot serve` 的地址（如 `http://192.168.1.100:8021`） |
 
 > local/hybrid 下 `zot config init` 会询问是否安装 PyMuPDF，也可事后 `zot config init --pdf` 安装或 `zot config init --check-pdf` 诊断。
 >
@@ -148,8 +148,8 @@ zot lib show --json        # 一站式库概览
 ```bash
 git clone https://github.com/gqy20/zotero_cli.git && cd zotero_cli
 go build -o zot.exe ./cmd/zot     # Go 1.26+，无 CGO 依赖
-# 远程模式服务端就是同一个二进制的子命令：
-#   zot server start              # 起服务端（默认 :8021）
+# 远程模式服务端就是同一个二进制：
+#   zot serve                     # 起服务端（默认 :8021）
 # 想要带 Web UI 的版本（需先在 web/ 下 npm run build）：
 #   go build -tags embed -o zot.exe ./cmd/zot
 ```
@@ -335,7 +335,7 @@ zot 不是独立工具，它直接读写你的 **Zotero 本地数据目录**，�
 | `zot ann new KEY` | PyMuPDF 直接写入 PDF | 3 种定位模式写入标注 |
 | `zot ann delete KEY --yes` | 双层删除 | 显式 destructive action，受删除门控和确认保护 |
 
-在 `remote` 模式下，`ann list/new/delete` 会通过远端 `zot server` 在服务器侧读取或修改 PDF；服务端必须以 `local` / `hybrid` / `web` 等非 `remote` 模式运行，并按 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 控制写入和清除。普通 Zotero Web API 写操作（如 `item new`、标签、集合等）在 remote 客户端仍需额外配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID`。
+在 `remote` 模式下，`ann list/new/delete` 会通过远端 `zot serve` 在服务器侧读取或修改 PDF；服务端必须以 `local` / `hybrid` / `web` 等非 `remote` 模式运行，并按 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 控制写入和清除。普通 Zotero Web API 写操作（如 `item new`、标签、集合等）在 remote 客户端仍需额外配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID`。
 
 数据来源：
 
@@ -397,30 +397,30 @@ zot lib log --kind items --since 0 --json  # 版本变更记录
 | `web` | Zotero Cloud API | API key | 远程检索、云端管理 |
 | `local` | 本地 SQLite + storage/ | ZOT_DATA_DIR | 离线操作、PDF 处理、全文搜索 |
 | `hybrid`（推荐） | 本地优先，Web 回退 | 两者都要 | 日常使用，兼顾速度与完整性 |
-| `remote` | HTTP → 远端 `zot server` (port 8021) | ZOT_SERVER_ADDR | 同服务器端模式，局域网访问；PDF 标注读写走服务器 |
+| `remote` | HTTP → 远端 `zot serve` (port 8021) | ZOT_SERVER_ADDR | 同服务器端模式，局域网访问；PDF 标注读写走服务器 |
 
 通过 `ZOT_MODE` 环境变量或 `zot config init` 设置。hybrid 模式下：
 - **读操作**：本地优先（全文检索、PDF 标注读取）不误回退 Web
 - **写操作**（笔记）：Zotero 未运行时走 SQLite 直写（~50ms），运行时自动 fallback Web API
 
 remote 模式下：
-- **读操作**：经由远端 `zot server` 代理
-- **PDF 标注读写**：经由 `zot server` 在服务端执行
+- **读操作**：经由远端 `zot serve` 代理
+- **PDF 标注读写**：经由 `zot serve` 在服务端执行
 
-不想让远程服务一直开着？用 `zot sync pull` 把整库一次性同步到本地，之后断网用 `local` 模式工作：
+不想让远程服务一直开着？用 `zot sync` 把整库一次性同步到本地，之后断网用 `local` 模式工作：
 
 ```bash
 # 服务端：在有 Zotero 数据的机器上起服务
-zot server start                        # 默认 :8021
+zot serve                               # 默认 :8021
 
-# 客户端：同步到 ~/.zot/sync/（sqlite + 所有附件，增量、并发）
-zot sync pull --server-addr http://192.168.1.50:8021
+# 客户端：地址由 config 管理；同步到默认镜像目录（sqlite + 所有附件）
+zot config init --mode remote --server-addr http://192.168.1.50:8021
+zot sync
 # 之后离线使用
 ZOT_MODE=local ZOT_DATA_DIR=~/.zot/sync zot find ...
-zot index build --data-dir ~/.zot/sync  # 可选，建全文索引
 ```
 
-`zot sync pull` 拉取原始 `zotero.sqlite`（数据库）+ `storage/`（PDF/附件）+ `.zotero_cli/fulltext/`（FTS5 全文索引），落到与 Zotero 原生数据隔离的专门目录，同步后 `local` 模式零改动直接可用、`find --fulltext` 立即可用（无需本地 `zot index build`）。再次运行只下载变化的文件。注意：仅同步 `storage/` 下的 imported 附件，`linked_file`（外部路径）附件不同步。
+`zot sync` 拉取原始 `zotero.sqlite`（数据库）+ `storage/`（PDF/附件）+ `.zotero_cli/fulltext/`（FTS5 全文索引），落到与 Zotero 原生数据隔离的专门目录，同步后 `local` 模式零改动直接可用、`find --fulltext` 立即可用。再次运行只下载变化的文件；中断的大附件会从已完成的位置继续。注意：仅同步 `storage/` 下的 imported 附件，`linked_file`（外部路径）附件不同步。
 - **普通 Web API 写操作**：仍需 remote+web 配置（`ZOT_API_KEY` + `ZOT_LIBRARY_ID`）
 
 ## 命令速查
