@@ -80,6 +80,23 @@ type Collection struct {
 	NumItems int    `json:"num_items,omitempty"`
 }
 
+type SavedSearch struct {
+	Key           string            `json:"key"`
+	Name          string            `json:"name"`
+	NumConditions int               `json:"num_conditions,omitempty"`
+	Conditions    []SearchCondition `json:"conditions,omitempty"`
+}
+
+type SearchCondition struct {
+	Condition string `json:"condition"`
+	Operator  string `json:"operator"`
+	Value     string `json:"value"`
+}
+
+type SavedSearchReader interface {
+	ListSavedSearches(ctx context.Context) ([]SavedSearch, error)
+}
+
 type Reader interface {
 	FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error)
 	GetItem(ctx context.Context, key string) (domain.Item, error)
@@ -222,6 +239,30 @@ func (r *HybridReader) ListCollections(ctx context.Context) ([]Collection, error
 			return reader.ListCollections(ctx)
 		},
 	)
+}
+
+func (r *HybridReader) ListSavedSearches(ctx context.Context) ([]SavedSearch, error) {
+	if r.local != nil {
+		if local, ok := r.local.(SavedSearchReader); ok {
+			rows, err := local.ListSavedSearches(ctx)
+			if err == nil {
+				r.lastReadMetadata = consumeReadMetadata(r.local)
+				return rows, nil
+			}
+			if !errors.Is(err, ErrUnsupportedFeature) && !errors.Is(err, ErrLocalTemporarilyUnavailable) {
+				return nil, err
+			}
+		}
+	}
+	web, ok := r.web.(SavedSearchReader)
+	if !ok {
+		return nil, newUnsupportedFeatureError("hybrid", "saved searches")
+	}
+	rows, err := web.ListSavedSearches(ctx)
+	if err == nil {
+		r.lastReadMetadata = consumeReadMetadata(r.web)
+	}
+	return rows, err
 }
 
 func (r *HybridReader) GetAttachmentFile(ctx context.Context, key string) (string, string, error) {

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -29,6 +30,32 @@ func TestReferenceStatusUsesConfiguredStoreLifecycle(t *testing.T) {
 	}
 	if !strings.Contains(result.Text, "Reference index: 1 items") {
 		t.Fatalf("text = %q", result.Text)
+	}
+	if result.Meta["read_mode"] != "read_only" {
+		t.Fatalf("meta = %#v", result.Meta)
+	}
+	second, err := service.Status(context.Background(), ReferenceStatusRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Meta["status_cache_hit"] != true {
+		t.Fatalf("second meta = %#v", second.Meta)
+	}
+}
+
+func TestReferenceStatusDoesNotCreateMissingIndex(t *testing.T) {
+	cfg := config.Config{DataDir: t.TempDir()}
+	service := NewReferenceService()
+	service.LoadConfig = func() (config.Config, string, error) { return cfg, "", nil }
+	result, err := service.Status(context.Background(), ReferenceStatusRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Meta["initialized"] != false || result.Meta["read_mode"] != "none" {
+		t.Fatalf("meta = %#v", result.Meta)
+	}
+	if _, err := os.Stat(referenceStorePath(cfg)); !os.IsNotExist(err) {
+		t.Fatalf("status created index or returned unexpected stat error: %v", err)
 	}
 }
 

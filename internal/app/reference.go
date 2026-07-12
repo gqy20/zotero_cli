@@ -53,15 +53,16 @@ type ReferenceDiscoveryRequest struct {
 }
 
 type ReferenceService struct {
-	LoadConfig func() (config.Config, string, error)
-	NewReader  func(config.Config) (backend.Reader, error)
-	OpenStore  func(config.Config) (*references.Store, error)
-	NewClient  func(config.Config) *references.Client
+	LoadConfig        func() (config.Config, string, error)
+	NewReader         func(config.Config) (backend.Reader, error)
+	OpenStore         func(config.Config) (*references.Store, error)
+	OpenReadOnlyStore func(config.Config) (*references.Store, error)
+	NewClient         func(config.Config) *references.Client
 }
 
 func NewReferenceService() ReferenceService {
 	read := NewReadService()
-	return ReferenceService{LoadConfig: config.Load, NewReader: read.NewReader, OpenStore: openReferenceStore, NewClient: newReferenceClient}
+	return ReferenceService{LoadConfig: config.Load, NewReader: read.NewReader, OpenStore: openReferenceStore, OpenReadOnlyStore: openReferenceStoreReadOnly, NewClient: newReferenceClient}
 }
 
 func (s ReferenceService) config() (config.Config, error) {
@@ -203,31 +204,65 @@ func (s ReferenceService) Status(ctx context.Context, req ReferenceStatusRequest
 	if err != nil {
 		return Result{}, err
 	}
-	store, err := s.OpenStore(cfg)
+	indexPath := referenceStorePath(cfg)
+	store, err := s.OpenReadOnlyStore(cfg)
+	if os.IsNotExist(err) {
+		status := references.Status{}
+		text := fmt.Sprintf("Reference index is not initialized\nPath: %s", indexPath)
+		return Result{Data: status, Meta: map[string]any{"index_path": indexPath, "initialized": false, "read_mode": "none"}, Text: text}, nil
+	}
 	if err != nil {
 		return Result{}, err
 	}
-	defer store.Close()
+	readMode := "read_only"
+	closeStore := func() { _ = store.Close() }
+	defer func() { closeStore() }()
+	reopenForMigration := func() error {
+		closeStore()
+		migrated, openErr := s.OpenStore(cfg)
+		if openErr != nil {
+			return openErr
+		}
+		store = migrated
+		closeStore = func() { _ = store.Close() }
+		readMode = "migrated"
+		return nil
+	}
 	if req.Failed {
 		rows, err := store.Failed(ctx)
+		if references.IsSchemaError(err) {
+			if err = reopenForMigration(); err == nil {
+				rows, err = store.Failed(ctx)
+			}
+		}
 		if err != nil {
 			return Result{}, err
 		}
-		return Result{Data: rows, Meta: map[string]any{"total": len(rows), "index_path": store.Path()}, Text: failedReferenceText(rows)}, nil
+		return Result{Data: rows, Meta: map[string]any{"total": len(rows), "index_path": store.Path(), "initialized": true, "read_mode": readMode}, Text: failedReferenceText(rows)}, nil
 	}
 	if req.Unsupported {
 		rows, err := store.Unsupported(ctx)
+		if references.IsSchemaError(err) {
+			if err = reopenForMigration(); err == nil {
+				rows, err = store.Unsupported(ctx)
+			}
+		}
 		if err != nil {
 			return Result{}, err
 		}
-		return Result{Data: rows, Meta: map[string]any{"total": len(rows), "index_path": store.Path()}, Text: failedReferenceText(rows)}, nil
+		return Result{Data: rows, Meta: map[string]any{"total": len(rows), "index_path": store.Path(), "initialized": true, "read_mode": readMode}, Text: failedReferenceText(rows)}, nil
 	}
-	status, err := store.Status(ctx)
+	status, cacheHit, err := store.CachedStatus(ctx)
+	if references.IsSchemaError(err) {
+		if err = reopenForMigration(); err == nil {
+			status, cacheHit, err = store.CachedStatus(ctx)
+		}
+	}
 	if err != nil {
 		return Result{}, err
 	}
 	text := fmt.Sprintf("Reference index: %d items (%d successful, %d unsupported, %d failed), %d references\nResolved: %d  Unresolved: %d  Contexts: %d\nPath: %s", status.IndexedItems, status.SuccessfulItems, status.UnsupportedItems, status.FailedItems, status.TotalReferences, status.ResolvedReferences, status.UnresolvedReferences, status.CitationContexts, store.Path())
-	return Result{Data: status, Meta: map[string]any{"index_path": store.Path()}, Text: text}, nil
+	return Result{Data: status, Meta: map[string]any{"index_path": store.Path(), "initialized": true, "read_mode": readMode, "status_cache_hit": cacheHit}, Text: text}, nil
 }
 
 func (s ReferenceService) Resolve(ctx context.Context, workers int) (Result, error) {
@@ -410,7 +445,15 @@ func (s ReferenceService) referenceItem(ctx context.Context, key string) (config
 }
 
 func openReferenceStore(cfg config.Config) (*references.Store, error) {
-	return references.OpenStore(filepath.Join(referenceRoot(cfg), "index.sqlite"))
+	return references.OpenStore(referenceStorePath(cfg))
+}
+
+func openReferenceStoreReadOnly(cfg config.Config) (*references.Store, error) {
+	return references.OpenStoreReadOnly(referenceStorePath(cfg))
+}
+
+func referenceStorePath(cfg config.Config) string {
+	return filepath.Join(referenceRoot(cfg), "index.sqlite")
 }
 func referenceRoot(cfg config.Config) string {
 	if cfg.DataDir != "" {

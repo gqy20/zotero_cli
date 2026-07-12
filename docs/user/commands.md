@@ -158,6 +158,8 @@ zot completion bash
 zot version
 ```
 
+Schema 响应默认缓存 7 天；`meta.read_source=cache` 表示缓存命中。使用 `--refresh` 强制联网更新。缓存过期且网络不可用时会返回 stale 缓存，并通过 `meta.stale=true` 和 warning 明确提示。
+
 completion 支持 `bash`、`zsh`、`fish`、`powershell`，生成过程不会加载配置或访问网络。
 
 ## 兼容入口

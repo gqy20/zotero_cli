@@ -51,6 +51,78 @@ func TestStoreResultStatusFailureAndFreshness(t *testing.T) {
 	}
 }
 
+func TestOpenStoreReadOnlyReadsWithoutAllowingWrites(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "index.sqlite")
+	store, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveUnsupported(ctx, "ITEM1", "Paper", "fp", &UnsupportedError{ItemKey: "ITEM1", Reason: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = OpenStoreReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	status, err := store.Status(ctx)
+	if err != nil || status.UnsupportedItems != 1 {
+		t.Fatalf("status=%#v err=%v", status, err)
+	}
+	if _, err := store.db.Exec(`DELETE FROM ref_items`); err == nil {
+		t.Fatal("read-only store accepted a write")
+	}
+}
+
+func TestCachedStatusInvalidatesWhenStoreChanges(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "index.sqlite")
+	store, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveUnsupported(ctx, "ITEM1", "Paper", "fp", &UnsupportedError{ItemKey: "ITEM1", Reason: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = store.Close()
+
+	readOnly, err := OpenStoreReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, hit, err := readOnly.CachedStatus(ctx)
+	if err != nil || hit || status.UnsupportedItems != 1 {
+		t.Fatalf("first status=%#v hit=%v err=%v", status, hit, err)
+	}
+	_, hit, err = readOnly.CachedStatus(ctx)
+	if err != nil || !hit {
+		t.Fatalf("second hit=%v err=%v", hit, err)
+	}
+	_ = readOnly.Close()
+
+	store, err = OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveUnsupported(ctx, "ITEM2", "Paper 2", "fp2", &UnsupportedError{ItemKey: "ITEM2", Reason: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = store.Close()
+	readOnly, err = OpenStoreReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readOnly.Close()
+	status, hit, err = readOnly.CachedStatus(ctx)
+	if err != nil || hit || status.UnsupportedItems != 2 {
+		t.Fatalf("invalidated status=%#v hit=%v err=%v", status, hit, err)
+	}
+}
+
 func TestStoreMigratesLegacyUnsupportedFailures(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "index.sqlite")

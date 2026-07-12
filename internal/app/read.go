@@ -255,15 +255,40 @@ func (s ReadService) ShowNote(ctx context.Context, key string) (Result, error) {
 }
 
 func (s ReadService) Searches(ctx context.Context, opts ListOptions) (Result, error) {
-	_, client, err := s.client()
+	cfg, reader, err := s.reader()
 	if err != nil {
 		return Result{}, err
 	}
-	rows, err := client.ListSearches(ctx)
+	searchReader, ok := reader.(backend.SavedSearchReader)
+	if !ok {
+		client, clientErr := s.NewClient(cfg)
+		if clientErr != nil {
+			return Result{}, fmt.Errorf("configured backend does not support saved searches: %w", clientErr)
+		}
+		raw, clientErr := client.ListSearches(ctx)
+		if clientErr != nil {
+			return Result{}, clientErr
+		}
+		rows := make([]backend.SavedSearch, 0, len(raw))
+		for _, search := range raw {
+			conditions := make([]backend.SearchCondition, 0, len(search.Conditions))
+			for _, condition := range search.Conditions {
+				conditions = append(conditions, backend.SearchCondition{Condition: condition.Condition, Operator: condition.Operator, Value: condition.Value})
+			}
+			rows = append(rows, backend.SavedSearch{Key: search.Key, Name: search.Name, NumConditions: len(conditions), Conditions: conditions})
+		}
+		rows = limitSlice(rows, opts.Limit)
+		return savedSearchResult(rows, map[string]any{"read_source": "web"}), nil
+	}
+	rows, err := searchReader.ListSavedSearches(ctx)
 	if err != nil {
 		return Result{}, err
 	}
 	rows = limitSlice(rows, opts.Limit)
+	return savedSearchResult(rows, readMeta(reader)), nil
+}
+
+func savedSearchResult(rows []backend.SavedSearch, meta map[string]any) Result {
 	var lines []string
 	for _, row := range rows {
 		lines = append(lines, fmt.Sprintf("%-10s  %-24s  conditions=%d", row.Key, row.Name, row.NumConditions))
@@ -272,7 +297,8 @@ func (s ReadService) Searches(ctx context.Context, opts ListOptions) (Result, er
 	if len(rows) == 0 {
 		text = "no saved searches found"
 	}
-	return Result{Data: rows, Meta: map[string]any{"total": len(rows), "read_source": "web"}, Text: text}, nil
+	meta["total"] = len(rows)
+	return Result{Data: rows, Meta: meta, Text: text, Warnings: readWarnings(meta)}
 }
 
 func (s ReadService) ShowSearch(ctx context.Context, key string) (Result, error) {
@@ -280,7 +306,7 @@ func (s ReadService) ShowSearch(ctx context.Context, key string) (Result, error)
 	if err != nil {
 		return Result{}, err
 	}
-	rows, _ := result.Data.([]zoteroapi.Search)
+	rows, _ := result.Data.([]backend.SavedSearch)
 	for _, row := range rows {
 		if row.Key == key {
 			result.Data = row
@@ -293,15 +319,22 @@ func (s ReadService) ShowSearch(ctx context.Context, key string) (Result, error)
 }
 
 func (s ReadService) Groups(ctx context.Context, _ ListOptions) (Result, error) {
-	_, client, err := s.client()
+	cfg, client, err := s.client()
 	if err != nil {
 		return Result{}, err
 	}
-	key, err := client.GetCurrentKeyInfo(ctx)
-	if err != nil {
-		return Result{}, err
+	userID := ""
+	if cfg.LibraryType == "user" {
+		userID = strings.TrimSpace(cfg.LibraryID)
 	}
-	rows, err := client.ListGroupsForUser(ctx, fmt.Sprintf("%d", key.UserID))
+	if userID == "" {
+		key, err := client.GetCurrentKeyInfo(ctx)
+		if err != nil {
+			return Result{}, err
+		}
+		userID = fmt.Sprintf("%d", key.UserID)
+	}
+	rows, err := client.ListGroupsForUser(ctx, userID)
 	if err != nil {
 		return Result{}, err
 	}
@@ -313,7 +346,7 @@ func (s ReadService) Groups(ctx context.Context, _ ListOptions) (Result, error) 
 	if len(rows) == 0 {
 		text = "no groups found for the current api key"
 	}
-	return Result{Data: rows, Meta: map[string]any{"total": len(rows)}, Text: text}, nil
+	return Result{Data: rows, Meta: map[string]any{"total": len(rows), "read_source": "web"}, Text: text}, nil
 }
 
 func (s ReadService) Stats(ctx context.Context) (Result, error) {

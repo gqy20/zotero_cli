@@ -1,4 +1,4 @@
-.PHONY: build clean release fmt fmt-check lint test vet check install-hooks
+.PHONY: build clean release fmt fmt-check lint test vet check bench-cli bench-cli-data install-hooks
 
 BINARY := zot
 EXT := $(shell go env GOEXE)
@@ -56,6 +56,12 @@ check: fmt-check vet test
 	@echo "所有检查通过"
 
 # --- Git Hooks ---
+
+bench-cli: build
+	go run ./cmd/zot-bench --binary ./zot$(EXT) --mode all --tier default
+
+bench-cli-data: build
+	go run ./cmd/zot-bench --binary ./zot$(EXT) --mode all --tier data $(ARGS)
 
 install-hooks:
 	@ln -sf ../../scripts/pre-commit .git/hooks/pre-commit

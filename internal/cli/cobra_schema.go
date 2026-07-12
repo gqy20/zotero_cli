@@ -11,6 +11,8 @@ import (
 
 func (c *CLI) newSchemaCommand(opts *globalOptions) *cobra.Command {
 	service := app.NewSchemaService()
+	var listRefresh bool
+	var showRefresh bool
 	schema := &cobra.Command{
 		Use:   "schema",
 		Short: "Inspect the Zotero metadata schema",
@@ -34,10 +36,11 @@ func (c *CLI) newSchemaCommand(opts *globalOptions) *cobra.Command {
 			}
 			path := app.CommandPath{Resource: "schema", Action: "list"}
 			return c.renderResult(cmd.Context(), opts, path, func(ctx context.Context) (app.Result, error) {
-				return service.List(ctx, args[0], itemType)
+				return service.ListWithOptions(ctx, args[0], itemType, app.SchemaOptions{Refresh: listRefresh})
 			})
 		},
 	}
+	list.Flags().BoolVar(&listRefresh, "refresh", false, "bypass the schema cache")
 	show := &cobra.Command{
 		Use:   "show <item-type>",
 		Short: "Show the creation template for an item type",
@@ -45,10 +48,11 @@ func (c *CLI) newSchemaCommand(opts *globalOptions) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := app.CommandPath{Resource: "schema", Action: "show"}
 			return c.renderResult(cmd.Context(), opts, path, func(ctx context.Context) (app.Result, error) {
-				return service.Show(ctx, args[0])
+				return service.ShowWithOptions(ctx, args[0], app.SchemaOptions{Refresh: showRefresh})
 			})
 		},
 	}
+	show.Flags().BoolVar(&showRefresh, "refresh", false, "bypass the schema cache")
 	schema.AddCommand(list, show)
 	return schema
 }

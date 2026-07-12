@@ -1,0 +1,937 @@
+{
+  "generated_at": "2026-07-12T13:22:12.4380307+08:00",
+  "binary": ".\\zot.exe",
+  "mode": "all",
+  "iterations": 3,
+  "commands": [
+    {
+      "path": "lib show",
+      "capability": "library summary",
+      "necessity": "review",
+      "overlaps": [
+        "lib stats",
+        "item list"
+      ],
+      "replacement": "keep only if one-call summary is materially faster or clearer",
+      "status": "ok",
+      "ms": 117.286
+    },
+    {
+      "path": "lib stats",
+      "capability": "library statistics",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 150.405
+    },
+    {
+      "path": "lib log",
+      "capability": "deleted item log",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 146.261
+    },
+    {
+      "path": "item list",
+      "capability": "browse items",
+      "necessity": "review",
+      "overlaps": [
+        "item find"
+      ],
+      "replacement": "item find with an explicit all-items mode",
+      "status": "ok",
+      "ms": 174.653
+    },
+    {
+      "path": "item find",
+      "capability": "search items",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 160.173
+    },
+    {
+      "path": "item show",
+      "capability": "item detail",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 136.713
+    },
+    {
+      "path": "item new",
+      "capability": "create item",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 124.063
+    },
+    {
+      "path": "item edit",
+      "capability": "edit item",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 121.685
+    },
+    {
+      "path": "item delete",
+      "capability": "delete item",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 132.202
+    },
+    {
+      "path": "item tag",
+      "capability": "add item tags",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 142.855
+    },
+    {
+      "path": "item untag",
+      "capability": "remove item tags",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 121.672
+    },
+    {
+      "path": "item supp",
+      "capability": "supplement discovery",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 174.148
+    },
+    {
+      "path": "item export",
+      "capability": "bibliography export",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 125.952
+    },
+    {
+      "path": "coll list",
+      "capability": "browse collections",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 120.554
+    },
+    {
+      "path": "coll show",
+      "capability": "collection detail",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 123.181
+    },
+    {
+      "path": "coll new",
+      "capability": "create collection",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 133.353
+    },
+    {
+      "path": "coll edit",
+      "capability": "edit collection",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 141.646
+    },
+    {
+      "path": "coll delete",
+      "capability": "delete collection",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 169.888
+    },
+    {
+      "path": "coll add",
+      "capability": "add collection items",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 148.231
+    },
+    {
+      "path": "coll remove",
+      "capability": "remove collection items",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 126.995
+    },
+    {
+      "path": "note list",
+      "capability": "browse notes",
+      "necessity": "review",
+      "overlaps": [
+        "note find"
+      ],
+      "replacement": "note find with an explicit all-notes mode",
+      "status": "ok",
+      "ms": 127.336
+    },
+    {
+      "path": "note show",
+      "capability": "note detail",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 136.078
+    },
+    {
+      "path": "note find",
+      "capability": "search notes",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 114.478
+    },
+    {
+      "path": "note new",
+      "capability": "create note",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 125.176
+    },
+    {
+      "path": "note edit",
+      "capability": "edit note",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 118.552
+    },
+    {
+      "path": "note delete",
+      "capability": "delete note",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 103.89
+    },
+    {
+      "path": "tag list",
+      "capability": "browse tags",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 93.873
+    },
+    {
+      "path": "search list",
+      "capability": "browse saved searches",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 84.184
+    },
+    {
+      "path": "search show",
+      "capability": "saved search detail",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 99.77
+    },
+    {
+      "path": "search new",
+      "capability": "create saved search",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 92.401
+    },
+    {
+      "path": "search edit",
+      "capability": "edit saved search",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 123.44
+    },
+    {
+      "path": "search delete",
+      "capability": "delete saved search",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 114.364
+    },
+    {
+      "path": "group list",
+      "capability": "browse groups",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 89.711
+    },
+    {
+      "path": "file show",
+      "capability": "attachment metadata",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 92.327
+    },
+    {
+      "path": "file check",
+      "capability": "attachment integrity",
+      "necessity": "keep",
+      "overlaps": [
+        "file show"
+      ],
+      "status": "ok",
+      "ms": 101.735
+    },
+    {
+      "path": "pdf text",
+      "capability": "PDF text extraction",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 106.273
+    },
+    {
+      "path": "pdf figs",
+      "capability": "PDF figure extraction",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 85.244
+    },
+    {
+      "path": "pdf open",
+      "capability": "open PDF externally",
+      "necessity": "review",
+      "overlaps": [
+        "file show"
+      ],
+      "replacement": "expose a file path from file show when shell integration is sufficient",
+      "status": "ok",
+      "ms": 101.138
+    },
+    {
+      "path": "ann list",
+      "capability": "list annotations",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 125.051
+    },
+    {
+      "path": "ann new",
+      "capability": "create annotation",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 128.276
+    },
+    {
+      "path": "ann delete",
+      "capability": "delete annotation",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 203.589
+    },
+    {
+      "path": "ref show",
+      "capability": "reference detail",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 136.554
+    },
+    {
+      "path": "ref find",
+      "capability": "reference search",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 128.838
+    },
+    {
+      "path": "ref related",
+      "capability": "related works",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 131.79
+    },
+    {
+      "path": "ref cited",
+      "capability": "citation graph",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 121.992
+    },
+    {
+      "path": "ref ctx",
+      "capability": "citation contexts",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 108.93
+    },
+    {
+      "path": "ref links",
+      "capability": "reference links",
+      "necessity": "review",
+      "overlaps": [
+        "ref related",
+        "ref cited"
+      ],
+      "status": "ok",
+      "ms": 105.545
+    },
+    {
+      "path": "ref entities",
+      "capability": "reference entities",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 105.091
+    },
+    {
+      "path": "ref profile",
+      "capability": "reference profile",
+      "necessity": "review",
+      "overlaps": [
+        "ref show",
+        "ref entities"
+      ],
+      "replacement": "compose only if latency and output remain acceptable",
+      "status": "ok",
+      "ms": 105.591
+    },
+    {
+      "path": "ref build",
+      "capability": "build reference index",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 104.656
+    },
+    {
+      "path": "ref resolve",
+      "capability": "resolve references",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 115.188
+    },
+    {
+      "path": "ref status",
+      "capability": "reference index diagnostics",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 109.637
+    },
+    {
+      "path": "index build",
+      "capability": "build full-text index",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 125.64
+    },
+    {
+      "path": "index status",
+      "capability": "full-text index diagnostics",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 121.711
+    },
+    {
+      "path": "schema list",
+      "capability": "browse schema",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 124.435
+    },
+    {
+      "path": "schema show",
+      "capability": "schema detail",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 95.153
+    },
+    {
+      "path": "config init",
+      "capability": "initialize configuration",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 120.455
+    },
+    {
+      "path": "config show",
+      "capability": "inspect configuration",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 102.784
+    },
+    {
+      "path": "config check",
+      "capability": "validate configuration",
+      "necessity": "keep",
+      "overlaps": [
+        "config show"
+      ],
+      "status": "ok",
+      "ms": 121.705
+    },
+    {
+      "path": "server start",
+      "capability": "remote API server",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 115.213
+    },
+    {
+      "path": "sync pull",
+      "capability": "offline mirror sync",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 121.835
+    },
+    {
+      "path": "completion",
+      "capability": "shell completion generation",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 118.138
+    },
+    {
+      "path": "version",
+      "capability": "version diagnostics",
+      "necessity": "keep",
+      "status": "ok",
+      "ms": 105.881
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "version",
+      "command": "version",
+      "status": "ok",
+      "runs_ms": [
+        131.52,
+        109.868,
+        125.006
+      ],
+      "cold_ms": 111.65,
+      "median_ms": 125.006,
+      "p95_ms": 131.52,
+      "mean_ms": 122.13133333333333,
+      "stdout_bytes": 136
+    },
+    {
+      "id": "config-show",
+      "command": "config show",
+      "status": "ok",
+      "runs_ms": [
+        117.753,
+        167.811,
+        103.993
+      ],
+      "cold_ms": 115.793,
+      "median_ms": 117.753,
+      "p95_ms": 167.811,
+      "mean_ms": 129.85233333333335,
+      "stdout_bytes": 554
+    },
+    {
+      "id": "config-check",
+      "command": "config check",
+      "status": "ok",
+      "runs_ms": [
+        1395.148,
+        1417.734,
+        1314.725
+      ],
+      "cold_ms": 1502.503,
+      "median_ms": 1395.148,
+      "p95_ms": 1417.734,
+      "mean_ms": 1375.869,
+      "net_median_ms": 1270.1419999999998,
+      "stdout_bytes": 307
+    },
+    {
+      "id": "library-show",
+      "command": "lib show",
+      "status": "ok",
+      "runs_ms": [
+        332.754,
+        236.3,
+        298.841
+      ],
+      "cold_ms": 299.835,
+      "median_ms": 298.841,
+      "p95_ms": 332.754,
+      "mean_ms": 289.29833333333335,
+      "net_median_ms": 173.835,
+      "stdout_bytes": 12074,
+      "read_source": "live",
+      "compare": "library-show-mode",
+      "variant": "configured"
+    },
+    {
+      "id": "library-show-local",
+      "command": "lib show",
+      "status": "ok",
+      "runs_ms": [
+        404.64,
+        349.038,
+        358.849
+      ],
+      "cold_ms": 302.852,
+      "median_ms": 358.849,
+      "p95_ms": 404.64,
+      "mean_ms": 370.84233333333333,
+      "net_median_ms": 233.843,
+      "stdout_bytes": 12074,
+      "read_source": "live",
+      "compare": "library-show-mode",
+      "variant": "local"
+    },
+    {
+      "id": "library-stats",
+      "command": "lib stats",
+      "status": "ok",
+      "runs_ms": [
+        152.318,
+        159.24,
+        156.825
+      ],
+      "cold_ms": 120.334,
+      "median_ms": 156.825,
+      "p95_ms": 159.24,
+      "mean_ms": 156.12766666666667,
+      "net_median_ms": 31.81899999999999,
+      "stdout_bytes": 258,
+      "read_source": "live",
+      "compare": "library-stats-mode",
+      "variant": "configured"
+    },
+    {
+      "id": "library-stats-local",
+      "command": "lib stats",
+      "status": "ok",
+      "runs_ms": [
+        154.278,
+        142.854,
+        143.18
+      ],
+      "cold_ms": 145.649,
+      "median_ms": 143.18,
+      "p95_ms": 154.278,
+      "mean_ms": 146.77066666666667,
+      "net_median_ms": 18.174000000000007,
+      "stdout_bytes": 258,
+      "read_source": "live",
+      "compare": "library-stats-mode",
+      "variant": "local"
+    },
+    {
+      "id": "item-list",
+      "command": "item list",
+      "status": "ok",
+      "runs_ms": [
+        317.797,
+        296.699,
+        315.725
+      ],
+      "cold_ms": 321.682,
+      "median_ms": 315.725,
+      "p95_ms": 317.797,
+      "mean_ms": 310.07366666666667,
+      "net_median_ms": 190.71900000000002,
+      "stdout_bytes": 10293,
+      "read_source": "live",
+      "compare": "item-list-mode",
+      "variant": "configured"
+    },
+    {
+      "id": "item-list-local",
+      "command": "item list",
+      "status": "ok",
+      "runs_ms": [
+        431.804,
+        354.588,
+        321.24
+      ],
+      "cold_ms": 352.617,
+      "median_ms": 354.588,
+      "p95_ms": 431.804,
+      "mean_ms": 369.21066666666667,
+      "net_median_ms": 229.58200000000002,
+      "stdout_bytes": 10293,
+      "read_source": "live",
+      "compare": "item-list-mode",
+      "variant": "local"
+    },
+    {
+      "id": "item-find",
+      "command": "item find",
+      "status": "ok",
+      "runs_ms": [
+        460.123,
+        392.917,
+        398.317
+      ],
+      "cold_ms": 455.95,
+      "median_ms": 398.317,
+      "p95_ms": 460.123,
+      "mean_ms": 417.11899999999997,
+      "net_median_ms": 273.31100000000004,
+      "stdout_bytes": 3461,
+      "read_source": "live",
+      "compare": "item-find-mode",
+      "variant": "configured"
+    },
+    {
+      "id": "item-find-local",
+      "command": "item find",
+      "status": "ok",
+      "runs_ms": [
+        458.465,
+        433.944,
+        488.148
+      ],
+      "cold_ms": 578.231,
+      "median_ms": 458.465,
+      "p95_ms": 488.148,
+      "mean_ms": 460.1856666666667,
+      "net_median_ms": 333.45899999999995,
+      "stdout_bytes": 3461,
+      "read_source": "live",
+      "compare": "item-find-mode",
+      "variant": "local"
+    },
+    {
+      "id": "note-list",
+      "command": "note list",
+      "status": "ok",
+      "runs_ms": [
+        146.989,
+        166.554,
+        167.518
+      ],
+      "cold_ms": 163.634,
+      "median_ms": 166.554,
+      "p95_ms": 167.518,
+      "mean_ms": 160.35366666666667,
+      "net_median_ms": 41.548,
+      "stdout_bytes": 2825,
+      "read_source": "live",
+      "compare": "note-list-mode",
+      "variant": "configured"
+    },
+    {
+      "id": "note-list-local",
+      "command": "note list",
+      "status": "ok",
+      "runs_ms": [
+        187.811,
+        136.938,
+        194.696
+      ],
+      "cold_ms": 173.889,
+      "median_ms": 187.811,
+      "p95_ms": 194.696,
+      "mean_ms": 173.14833333333334,
+      "net_median_ms": 62.80500000000001,
+      "stdout_bytes": 2825,
+      "read_source": "live",
+      "compare": "note-list-mode",
+      "variant": "local"
+    },
+    {
+      "id": "note-find",
+      "command": "note find",
+      "status": "ok",
+      "runs_ms": [
+        131.353,
+        156.331,
+        146.853
+      ],
+      "cold_ms": 136.674,
+      "median_ms": 146.853,
+      "p95_ms": 156.331,
+      "mean_ms": 144.8456666666667,
+      "net_median_ms": 21.84700000000001,
+      "stdout_bytes": 6361,
+      "read_source": "live",
+      "compare": "note-find-mode",
+      "variant": "configured"
+    },
+    {
+      "id": "note-find-local",
+      "command": "note find",
+      "status": "ok",
+      "runs_ms": [
+        168.428,
+        138.253,
+        135.913
+      ],
+      "cold_ms": 142.437,
+      "median_ms": 138.253,
+      "p95_ms": 168.428,
+      "mean_ms": 147.53133333333332,
+      "net_median_ms": 13.246999999999986,
+      "stdout_bytes": 6361,
+      "read_source": "live",
+      "compare": "note-find-mode",
+      "variant": "local"
+    },
+    {
+      "id": "collection-list",
+      "command": "coll list",
+      "status": "ok",
+      "runs_ms": [
+        123.178,
+        103.143,
+        128.275
+      ],
+      "cold_ms": 116.034,
+      "median_ms": 123.178,
+      "p95_ms": 128.275,
+      "mean_ms": 118.19866666666667,
+      "stdout_bytes": 604,
+      "read_source": "live"
+    },
+    {
+      "id": "tag-list",
+      "command": "tag list",
+      "status": "ok",
+      "runs_ms": [
+        131.746,
+        142.741,
+        127.932
+      ],
+      "cold_ms": 129.818,
+      "median_ms": 131.746,
+      "p95_ms": 142.741,
+      "mean_ms": 134.13966666666667,
+      "net_median_ms": 6.740000000000009,
+      "stdout_bytes": 436,
+      "read_source": "live"
+    },
+    {
+      "id": "search-list",
+      "command": "search list",
+      "status": "ok",
+      "runs_ms": [
+        150.844,
+        125.321,
+        119.043
+      ],
+      "cold_ms": 131.014,
+      "median_ms": 125.321,
+      "p95_ms": 150.844,
+      "mean_ms": 131.736,
+      "net_median_ms": 0.3149999999999977,
+      "stdout_bytes": 2456,
+      "read_source": "live"
+    },
+    {
+      "id": "search-show",
+      "command": "search show",
+      "status": "skipped",
+      "reason": "tier data not enabled"
+    },
+    {
+      "id": "group-list",
+      "command": "group list",
+      "status": "failed",
+      "reason": "exit status 1",
+      "runs_ms": [
+        1455.157
+      ],
+      "cold_ms": 1365.825,
+      "exit_code": 1,
+      "stdout_bytes": 148
+    },
+    {
+      "id": "index-status",
+      "command": "index status",
+      "status": "ok",
+      "runs_ms": [
+        186.486,
+        200.559,
+        165.955
+      ],
+      "cold_ms": 218.979,
+      "median_ms": 186.486,
+      "p95_ms": 200.559,
+      "mean_ms": 184.33333333333334,
+      "net_median_ms": 61.47999999999999,
+      "stdout_bytes": 285
+    },
+    {
+      "id": "ref-status",
+      "command": "ref status",
+      "status": "ok",
+      "runs_ms": [
+        152.865,
+        134.121,
+        125.045
+      ],
+      "cold_ms": 121.927,
+      "median_ms": 134.121,
+      "p95_ms": 152.865,
+      "mean_ms": 137.34366666666668,
+      "net_median_ms": 9.115000000000009,
+      "stdout_bytes": 866
+    },
+    {
+      "id": "schema-types",
+      "command": "schema list",
+      "status": "ok",
+      "runs_ms": [
+        215.851,
+        221.339,
+        194.887
+      ],
+      "cold_ms": 199.094,
+      "median_ms": 215.851,
+      "p95_ms": 221.339,
+      "mean_ms": 210.69233333333332,
+      "net_median_ms": 90.845,
+      "stdout_bytes": 2875,
+      "read_source": "cache"
+    },
+    {
+      "id": "schema-types-refresh",
+      "command": "schema list",
+      "status": "skipped",
+      "reason": "tier extended not enabled"
+    },
+    {
+      "id": "completion-powershell",
+      "command": "completion",
+      "status": "ok",
+      "runs_ms": [
+        101.812,
+        113.178,
+        128.194
+      ],
+      "cold_ms": 123.851,
+      "median_ms": 113.178,
+      "p95_ms": 128.194,
+      "mean_ms": 114.39466666666665,
+      "stdout_bytes": 10736
+    },
+    {
+      "id": "item-show",
+      "command": "item show",
+      "status": "skipped",
+      "reason": "tier data not enabled"
+    },
+    {
+      "id": "file-show",
+      "command": "file show",
+      "status": "skipped",
+      "reason": "tier data not enabled"
+    },
+    {
+      "id": "file-check",
+      "command": "file check",
+      "status": "skipped",
+      "reason": "tier data not enabled"
+    },
+    {
+      "id": "pdf-text",
+      "command": "pdf text",
+      "status": "skipped",
+      "reason": "tier data not enabled"
+    },
+    {
+      "id": "annotation-list",
+      "command": "ann list",
+      "status": "skipped",
+      "reason": "tier data not enabled"
+    },
+    {
+      "id": "item-new-dry-run",
+      "command": "item new",
+      "status": "skipped",
+      "reason": "tier data not enabled"
+    },
+    {
+      "id": "item-edit-dry-run",
+      "command": "item edit",
+      "status": "skipped",
+      "reason": "tier data not enabled"
+    }
+  ]
+}

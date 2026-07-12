@@ -172,10 +172,26 @@ func (r *LocalReader) findItemsMerged(ctx context.Context, opts FindOptions) ([]
 func (r *LocalReader) findItemsFromMetadata(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
 	opts.FullText = false
 	opts.FullTextOnly = false
+	if localCanUseExactKeyFastPath(opts) {
+		items, err := r.findItemsFromMetadataQuery(ctx, opts, true)
+		if err != nil || len(items) > 0 {
+			return items, err
+		}
+	}
+	return r.findItemsFromMetadataQuery(ctx, opts, false)
+}
 
+func (r *LocalReader) findItemsFromMetadataQuery(ctx context.Context, opts FindOptions, exactKey bool) ([]domain.Item, error) {
+	if exactKey {
+		return r.findItemFromExactKey(ctx, opts)
+	}
 	items := []domain.Item{}
+	paginatedBeforeHydration := false
 	err := r.withReadableDB(ctx, func(db *sql.DB) error {
 		query, args := localFindQuery(opts)
+		if exactKey {
+			query, args = localExactKeyFindQuery(opts)
+		}
 		rows, err := db.QueryContext(ctx, query, args...)
 		if err != nil {
 			return err
@@ -236,6 +252,7 @@ func (r *LocalReader) findItemsFromMetadata(ctx context.Context, opts FindOption
 			}
 			item.Container = firstNonEmptyString(publicationTitle, proceedingsTitle, bookTitle)
 			item.Date = normalizeLocalDate(item.Date)
+			item.SearchScore = metadataFindScore(item, opts.Query)
 			items = append(items, item)
 			itemIDs = append(itemIDs, itemID)
 		}
@@ -243,36 +260,59 @@ func (r *LocalReader) findItemsFromMetadata(ctx context.Context, opts FindOption
 			return err
 		}
 
+		if localCanPaginateInSQL(opts) {
+			paginatedBeforeHydration = true
+		} else if localCanPaginateBeforeHydration(opts) {
+			idByKey := make(map[string]int64, len(itemIDs))
+			for index, item := range items {
+				idByKey[item.Key] = itemIDs[index]
+			}
+			items = localFilterAndOrderItems(items, opts)
+			items = paginateItems(items, opts.Start, opts.Limit)
+			itemIDs = itemIDs[:0]
+			for _, item := range items {
+				itemIDs = append(itemIDs, idByKey[item.Key])
+			}
+			paginatedBeforeHydration = true
+		}
+
 		var (
 			creatorsByItemID      map[int64][]domain.Creator
 			tagsByItemID          map[int64][]string
 			attachmentsByParentID map[int64][]domain.Attachment
-			loadErr               error
+			creatorsErr           error
+			tagsErr               error
+			attachmentsErr        error
 			wg                    sync.WaitGroup
 		)
 		wg.Add(3)
 		go func() {
 			defer wg.Done()
-			creatorsByItemID, loadErr = r.loadCreatorsByItemIDs(ctx, db, itemIDs)
+			creatorsByItemID, creatorsErr = r.loadCreatorsByItemIDs(ctx, db, itemIDs)
 		}()
 		go func() {
 			defer wg.Done()
-			tagsByItemID, loadErr = r.loadTagsByItemIDs(ctx, db, itemIDs)
+			tagsByItemID, tagsErr = r.loadTagsByItemIDs(ctx, db, itemIDs)
 		}()
 		go func() {
 			defer wg.Done()
-			attachmentsByParentID, loadErr = r.loadAttachmentsByParentItemIDs(ctx, db, itemIDs)
+			attachmentsByParentID, attachmentsErr = r.loadAttachmentsByParentItemIDs(ctx, db, itemIDs)
 		}()
 		wg.Wait()
-		if loadErr != nil {
-			return loadErr
+		if creatorsErr != nil {
+			return creatorsErr
+		}
+		if tagsErr != nil {
+			return tagsErr
+		}
+		if attachmentsErr != nil {
+			return attachmentsErr
 		}
 		for index, itemID := range itemIDs {
 			items[index].Creators = creatorsByItemID[itemID]
 			items[index].Tags = tagsByItemID[itemID]
 			items[index].Attachments = attachmentsByParentID[itemID]
 			items[index].MatchedOn = localMatchedOn(items[index], opts)
-			items[index].SearchScore = metadataFindScore(items[index], opts.Query)
 		}
 		return nil
 	})
@@ -283,7 +323,9 @@ func (r *LocalReader) findItemsFromMetadata(ctx context.Context, opts FindOption
 		r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, ReadMetadata{FullTextEngine: "zotero_fulltext"})
 	}
 	items = localFilterAndOrderItems(items, opts)
-	items = paginateItems(items, opts.Start, opts.Limit)
+	if !paginatedBeforeHydration {
+		items = paginateItems(items, opts.Start, opts.Limit)
+	}
 	if !opts.Full && !findFieldIncluded(opts.IncludeFields, "attachments") {
 		for i := range items {
 			items[i].Attachments = nil
@@ -1057,6 +1099,47 @@ func (r *LocalReader) ListCollections(ctx context.Context) ([]Collection, error)
 		return rows.Err()
 	})
 	return collections, err
+}
+
+func (r *LocalReader) ListSavedSearches(ctx context.Context) ([]SavedSearch, error) {
+	var searches []SavedSearch
+	err := r.withReadableDB(ctx, func(db *sql.DB) error {
+		rows, err := db.QueryContext(ctx, `
+			SELECT s.savedSearchID, s.key, s.savedSearchName,
+			       COALESCE(c.condition, ''), COALESCE(c.operator, ''), COALESCE(c.value, '')
+			FROM savedSearches s
+			LEFT JOIN savedSearchConditions c ON c.savedSearchID = s.savedSearchID
+			ORDER BY LOWER(s.savedSearchName), s.savedSearchID, c.searchConditionID
+		`)
+		if err != nil {
+			message := strings.ToLower(err.Error())
+			if strings.Contains(message, "no such table") || strings.Contains(message, "no such column") {
+				return newUnsupportedFeatureError("local", "saved searches schema")
+			}
+			return err
+		}
+		defer rows.Close()
+		byID := map[int64]int{}
+		for rows.Next() {
+			var id int64
+			var key, name, condition, operator, value string
+			if err := rows.Scan(&id, &key, &name, &condition, &operator, &value); err != nil {
+				return err
+			}
+			index, ok := byID[id]
+			if !ok {
+				index = len(searches)
+				byID[id] = index
+				searches = append(searches, SavedSearch{Key: key, Name: name})
+			}
+			if condition != "" {
+				searches[index].Conditions = append(searches[index].Conditions, SearchCondition{Condition: condition, Operator: operator, Value: value})
+				searches[index].NumConditions++
+			}
+		}
+		return rows.Err()
+	})
+	return searches, err
 }
 
 func (r *LocalReader) withReadableDB(_ context.Context, fn func(*sql.DB) error) error {

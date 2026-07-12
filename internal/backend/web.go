@@ -115,6 +115,23 @@ func (r *WebReader) ListCollections(ctx context.Context) ([]Collection, error) {
 	return collections, nil
 }
 
+func (r *WebReader) ListSavedSearches(ctx context.Context) ([]SavedSearch, error) {
+	raw, err := r.client.ListSearches(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.lastReadMetadata = ReadMetadata{ReadSource: "web"}
+	searches := make([]SavedSearch, 0, len(raw))
+	for _, search := range raw {
+		conditions := make([]SearchCondition, 0, len(search.Conditions))
+		for _, condition := range search.Conditions {
+			conditions = append(conditions, SearchCondition{Condition: condition.Condition, Operator: condition.Operator, Value: condition.Value})
+		}
+		searches = append(searches, SavedSearch{Key: search.Key, Name: search.Name, NumConditions: len(conditions), Conditions: conditions})
+	}
+	return searches, nil
+}
+
 func (r *WebReader) GetAttachmentFile(ctx context.Context, key string) (string, string, error) {
 	return "", "", newUnsupportedFeatureErrorWithHint("web", "attachment file", "set ZOT_MODE=local or ZOT_MODE=hybrid to use this feature")
 }

@@ -11,6 +11,18 @@ import (
 )
 
 func localFindQuery(opts FindOptions) (string, []any) {
+	return localFindQueryMode(opts, false)
+}
+
+func localExactKeyFindQuery(opts FindOptions) (string, []any) {
+	return localFindQueryMode(opts, true)
+}
+
+func localFindQueryMode(opts FindOptions, exactKey bool) (string, []any) {
+	matchClause := localQueryMatchClause()
+	if exactKey {
+		matchClause = "i.key = ?"
+	}
 	query := `
 		SELECT
 			i.itemID,
@@ -35,15 +47,76 @@ func localFindQuery(opts FindOptions) (string, []any) {
 		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
 		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
 		WHERE ` + localVisibleItemClause(opts) + `
-		AND ` + localQueryMatchClause() + `
+		AND ` + matchClause + `
 		` + localTagFilterClause(opts) + `
 		` + localCollectionClause(opts) + `
 		` + localDateRangeClause(opts) + `
 		GROUP BY i.itemID, i.key, i.version, it.typeName
-		ORDER BY i.key
+		ORDER BY i.key` + localSQLDirection(opts) + localSQLPagination(opts) + `
 	`
 	args := localFindArgs(opts)
+	if exactKey {
+		args = localExactKeyFindArgs(opts)
+	}
+	if localCanPaginateInSQL(opts) {
+		args = append(args, opts.Limit, opts.Start)
+	}
 	return query, args
+}
+
+func localExactKeyFindArgs(opts FindOptions) []any {
+	all := localFindArgs(opts)
+	return append([]any{strings.TrimSpace(opts.Query)}, all[8:]...)
+}
+
+func looksLikeZoteroItemKey(query string) bool {
+	query = strings.TrimSpace(query)
+	if len(query) != 8 || query != strings.ToUpper(query) {
+		return false
+	}
+	for _, char := range query {
+		if (char < 'A' || char > 'Z') && (char < '0' || char > '9') {
+			return false
+		}
+	}
+	return true
+}
+
+func localCanUseExactKeyFastPath(opts FindOptions) bool {
+	return looksLikeZoteroItemKey(opts.Query) && opts.Limit > 0 && opts.Start == 0 &&
+		opts.Sort == "" && opts.Direction == "" && opts.ItemType == "" && len(opts.Tags) == 0 &&
+		len(opts.Collection) == 0 && len(opts.NoCollection) == 0 && len(opts.TagContains) == 0 &&
+		len(opts.ExcludeTags) == 0 && opts.ExcludeItemType == "" && opts.DateAfter == "" &&
+		opts.DateBefore == "" && opts.DateModifiedAfter == "" && opts.DateAddedAfter == "" &&
+		!hasAttachmentFindFilters(opts)
+}
+
+func localCanPaginateBeforeHydration(opts FindOptions) bool {
+	return opts.Limit > 0 && !hasAttachmentFindFilters(opts)
+}
+
+func localCanPaginateInSQL(opts FindOptions) bool {
+	return opts.Limit > 0 &&
+		strings.TrimSpace(opts.Query) == "" &&
+		strings.TrimSpace(opts.Sort) == "" &&
+		opts.DateAfter == "" && opts.DateBefore == "" &&
+		!opts.HasPDF && !opts.MissingAttachment && !opts.BadAttachmentName &&
+		opts.AttachmentName == "" && opts.AttachmentPath == "" &&
+		opts.AttachmentType == "" && opts.AttachmentHealth == ""
+}
+
+func localSQLDirection(opts FindOptions) string {
+	if localCanPaginateInSQL(opts) && strings.EqualFold(opts.Direction, "desc") {
+		return " DESC"
+	}
+	return ""
+}
+
+func localSQLPagination(opts FindOptions) string {
+	if !localCanPaginateInSQL(opts) {
+		return ""
+	}
+	return "\n\t\tLIMIT ? OFFSET ?"
 }
 
 func localFindArgs(opts FindOptions) []any {

@@ -177,8 +177,8 @@ LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
 
 | 表 | 关键列 | 状态 |
 |----|--------|------|
-| savedSearches | searchID(PK), key, name, version, conditions(JSON) | 稳定 |
-| savedSearchConditions | searchID(FK), conditionID, operator, value, required | 稳定 |
+| savedSearches | savedSearchID(PK), key, savedSearchName, libraryID, version, synced | 稳定 |
+| savedSearchConditions | savedSearchID(FK), searchConditionID, condition, operator, value, required | 稳定 |
 
 ### 9. `itemRelations` / `relationPredicates` — 关系 ✅ 稳定
 
@@ -463,21 +463,23 @@ CREATE TABLE relationPredicates (
 
 -- === 已保存搜索 ===
 CREATE TABLE savedSearches (
-    searchID      INTEGER PRIMARY KEY,
-    key           TEXT NOT NULL DEFAULT '' UNIQUE,
-    name          TEXT NOT NULL,
-    version       INTEGER NOT NULL DEFAULT 0,
-    conditions    TEXT,
-    syncState     INTEGER NOT NULL DEFAULT 0
+    savedSearchID   INTEGER PRIMARY KEY,
+    savedSearchName TEXT NOT NULL,
+    libraryID       INTEGER NOT NULL,
+    key             TEXT NOT NULL,
+    version         INTEGER NOT NULL DEFAULT 0,
+    synced          INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (libraryID, key)
 );
 
 CREATE TABLE savedSearchConditions (
-    searchID      INTEGER NOT NULL REFERENCES savedSearches(searchID),
-    conditionID   INTEGER NOT NULL,
-    operator      TEXT,
-    value         TEXT,
-    required      INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (searchID, conditionID)
+    savedSearchID     INTEGER NOT NULL REFERENCES savedSearches(savedSearchID),
+    searchConditionID INTEGER NOT NULL,
+    condition         TEXT NOT NULL,
+    operator          TEXT,
+    value             TEXT,
+    required          INTEGER,
+    PRIMARY KEY (savedSearchID, searchConditionID)
 );
 
 -- === 全文索引 (Zotero 自研，非 FTS5) ===

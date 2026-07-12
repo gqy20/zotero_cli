@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,6 +72,35 @@ func OpenStore(path string) (*Store, error) {
 		return nil, err
 	}
 	return store, nil
+}
+
+func OpenStoreReadOnly(path string) (*Store, error) {
+	if _, err := os.Stat(path); err != nil {
+		return nil, err
+	}
+	uriPath := filepath.ToSlash(path)
+	if !strings.HasPrefix(uriPath, "/") {
+		uriPath = "/" + uriPath
+	}
+	dsn := (&url.URL{Scheme: "file", Path: uriPath, RawQuery: "mode=ro&_pragma=query_only=1"}).String()
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return &Store{path: path, db: db}, nil
+}
+
+func IsSchemaError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "no such table") || strings.Contains(message, "no such column")
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -498,11 +528,16 @@ func (s *Store) LoadResult(ctx context.Context, itemKey string) (Result, bool, e
 func (s *Store) Status(ctx context.Context) (Status, error) {
 	var status Status
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(status='success'),0),COALESCE(SUM(status='failed'),0),COALESCE(SUM(status='unsupported'),0),COALESCE(SUM(reference_count),0),COALESCE(SUM(strategy='pmc_jats' AND status='success'),0),COALESCE(SUM(strategy='pubmed' AND status='success'),0),COALESCE(SUM(strategy='grobid' AND status='success'),0),COALESCE(MAX(updated_at),'') FROM ref_items`).Scan(&status.IndexedItems, &status.SuccessfulItems, &status.FailedItems, &status.UnsupportedItems, &status.TotalReferences, &status.PMCItems, &status.PubMedItems, &status.GrobidItems, &status.LastIndexedAt)
-	if err == nil {
-		_ = s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(match_status='resolved'),0),COALESCE(SUM(match_status!='resolved'),0) FROM ref_entries`).Scan(&status.ResolvedReferences, &status.UnresolvedReferences)
-		_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM ref_contexts`).Scan(&status.CitationContexts)
-		_ = s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(context_status='available'),0),COALESCE(SUM(context_status='not_supported'),0),COALESCE(SUM(context_status='not_found'),0),COALESCE(SUM(context_status='parse_failed'),0),COALESCE(SUM(context_status='not_indexed'),0),COALESCE(SUM(references_with_context),0),COALESCE(SUM(references_without_context),0) FROM ref_items WHERE status='success'`).Scan(&status.ContextAvailableItems, &status.ContextNotSupportedItems, &status.ContextNotFoundItems, &status.ContextParseFailedItems, &status.ContextNotIndexedItems, &status.ReferencesWithContext, &status.ReferencesWithoutContext)
+	if err != nil {
+		return status, err
 	}
+	if err = s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(match_status='resolved'),0),COALESCE(SUM(match_status!='resolved'),0) FROM ref_entries`).Scan(&status.ResolvedReferences, &status.UnresolvedReferences); err != nil {
+		return status, err
+	}
+	if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM ref_contexts`).Scan(&status.CitationContexts); err != nil {
+		return status, err
+	}
+	err = s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(context_status='available'),0),COALESCE(SUM(context_status='not_supported'),0),COALESCE(SUM(context_status='not_found'),0),COALESCE(SUM(context_status='parse_failed'),0),COALESCE(SUM(context_status='not_indexed'),0),COALESCE(SUM(references_with_context),0),COALESCE(SUM(references_without_context),0) FROM ref_items WHERE status='success'`).Scan(&status.ContextAvailableItems, &status.ContextNotSupportedItems, &status.ContextNotFoundItems, &status.ContextParseFailedItems, &status.ContextNotIndexedItems, &status.ReferencesWithContext, &status.ReferencesWithoutContext)
 	return status, err
 }
 
