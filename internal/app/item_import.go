@@ -34,6 +34,7 @@ type ItemImportResult struct {
 	DryRun             bool                    `json:"dry_run,omitempty"`
 	CollectionKey      string                  `json:"collection_key,omitempty"`
 	CollectionName     string                  `json:"collection_name,omitempty"`
+	CollectionPath     string                  `json:"collection_path,omitempty"`
 	CollectionAssigned bool                    `json:"collection_assigned,omitempty"`
 	DuplicateCleanup   *DuplicateCleanupResult `json:"duplicate_cleanup,omitempty"`
 	ItemKey            string                  `json:"item_key,omitempty"`
@@ -115,10 +116,6 @@ func (s ItemImportService) Import(ctx context.Context, req ItemImportRequest) (R
 	if err != nil {
 		return Result{}, err
 	}
-	client := s.NewClient(cfg)
-	if err := client.Ping(ctx); err != nil {
-		return Result{}, err
-	}
 
 	var collection backend.CollectionTarget
 	var resolver itemImportCollectionResolver
@@ -132,7 +129,11 @@ func (s ItemImportService) Import(ctx context.Context, req ItemImportRequest) (R
 			return Result{}, err
 		}
 	}
-	data := ItemImportResult{File: absPath, Size: info.Size(), DryRun: req.DryRun, CollectionKey: collection.Key, CollectionName: collection.Name}
+	client := s.NewClient(cfg)
+	if err := client.Ping(ctx); err != nil {
+		return Result{}, err
+	}
+	data := ItemImportResult{File: absPath, Size: info.Size(), DryRun: req.DryRun, CollectionKey: collection.Key, CollectionName: collection.Name, CollectionPath: collection.Path}
 	if req.DryRun {
 		return Result{Data: data, Meta: map[string]any{"dry_run": true}, Text: fmt.Sprintf("dry run: %s is ready to import into Zotero desktop", absPath)}, nil
 	}

@@ -2,6 +2,8 @@ package cli
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,6 +76,15 @@ func TestRunConfigCheckJSON(t *testing.T) {
 	serverURL, cleanup := newTestAPI(t)
 	defer cleanup()
 	t.Setenv("ZOT_BASE_URL", serverURL)
+	connector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/connector/ping" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer connector.Close()
+	t.Setenv("ZOT_CONNECTOR_URL", connector.URL)
 
 	stdout, stderr := captureOutput(t)
 	exitCode := Run([]string{"config", "check", "--json"})
@@ -108,6 +119,48 @@ func TestRunConfigCheckJSON(t *testing.T) {
 	}
 	if meta["config_path"] == "" {
 		t.Fatalf("expected config_path meta, got %#v", meta)
+	}
+	if meta["zotero_desktop_connector_available"] != true {
+		t.Fatalf("expected available desktop connector, got %#v", meta)
+	}
+	if meta["zotero_desktop_connector_url"] != connector.URL {
+		t.Fatalf("unexpected desktop connector URL: %#v", meta["zotero_desktop_connector_url"])
+	}
+}
+
+func TestRunConfigCheckKeepsSuccessWhenDesktopConnectorUnavailable(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+	connector := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	connectorURL := connector.URL
+	connector.Close()
+	t.Setenv("ZOT_CONNECTOR_URL", connectorURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"config", "check", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	meta, ok := got["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected meta payload: %#v", got["meta"])
+	}
+	if meta["zotero_desktop_connector_available"] != false {
+		t.Fatalf("expected unavailable desktop connector, got %#v", meta)
+	}
+	errMessage, _ := meta["zotero_desktop_connector_error"].(string)
+	if !strings.Contains(errMessage, "start Zotero and try again") || !strings.Contains(errMessage, connectorURL) {
+		t.Fatalf("unexpected connector error: %q", errMessage)
 	}
 }
 

@@ -17,7 +17,7 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 	var snippet bool
 	findCmd := &cobra.Command{Use: "find QUERY", Short: "Find library items", Args: cobra.ArbitraryArgs}
 	flags := findCmd.Flags()
-	flags.BoolVar(&find.All, "all", false, "list all matching items without a query")
+	flags.BoolVar(&find.All, "all", false, "disable the default result limit; also permits an empty query")
 	flags.BoolVar(&find.FullText, "fulltext", false, "search metadata and full text")
 	flags.BoolVar(&find.FullTextOnly, "fulltext-only", false, "search only full text")
 	flags.BoolVar(&find.MetadataOnly, "metadata-only", false, "search only metadata")
@@ -30,7 +30,7 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 	flags.StringSliceVar(&find.IncludeFields, "include-fields", nil, "extra text fields")
 	flags.StringVar(&find.DateAfter, "date-after", "", "minimum publication date")
 	flags.StringVar(&find.DateBefore, "date-before", "", "maximum publication date")
-	flags.IntVarP(&find.Limit, "limit", "l", 0, "maximum results")
+	flags.IntVarP(&find.Limit, "limit", "l", 0, "maximum results (default 100, or 20 with --snippet/--full; use --all for unlimited)")
 	flags.IntVar(&find.Start, "offset", 0, "result offset")
 	flags.StringVar(&find.Sort, "sort", "", "sort field")
 	flags.StringVar(&find.Direction, "order", "", "asc or desc")
@@ -57,6 +57,9 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 		if find.Limit < 0 || find.Start < 0 {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("--limit and --offset must be non-negative")}
 		}
+		if cmd.Flags().Changed("limit") && find.Limit == 0 {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--limit must be positive; use --all to remove the result limit")}
+		}
 		if find.Direction != "" && find.Direction != "asc" && find.Direction != "desc" {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("--order must be asc or desc")}
 		}
@@ -80,7 +83,11 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 		}
 		path := app.CommandPath{Resource: "item", Action: "find"}
 		return c.runRead(cmd, opts, path, func(ctx context.Context, service app.ReadService) (app.Result, error) {
-			return service.FindItems(ctx, app.ItemFindRequest{Options: find, Snippet: snippet})
+			return service.FindItems(ctx, app.ItemFindRequest{
+				Options:     find,
+				Snippet:     snippet,
+				ExplicitAll: cmd.Flags().Changed("all") && find.All,
+			})
 		})
 	}
 

@@ -276,9 +276,11 @@ zot find --bad-attachment-name --json
 zot find "同源多倍体" --fulltext --snippet --json
 zot find "同源多倍体" --metadata-only --json  # 仅标题/作者/标签等元数据
 zot find "同源多倍体" --fulltext-only --json  # 仅 PDF 正文
-# snippet 默认限制 50 条，需要更多结果时显式指定 --limit
+# 普通检索默认限制 100 条；snippet / --full 默认限制 20 条
 zot find "同源多倍体" --snippet --limit 200 --json
 ```
+
+显式 `--limit N` 始终覆盖默认值；只有显式 `--all` 才取消上限。JSON 的 `meta` 会返回 `returned`、`limit`、`offset`、`has_more` 和可选的 `next_offset`，便于调用方继续翻页。
 
 ### PDF 阅读与标注
 
@@ -444,6 +446,8 @@ ZOT_MODE=local ZOT_DATA_DIR=~/.zot/sync zot find ...
 | **标签** | `item tag` / `item untag` | 批量标签管理 |
 | **收藏夹** | `coll list` / `coll new` | 收藏夹查看与创建 |
 | **配置** | `config init` / `config show` / `config check` | 配置管理 |
+
+`item import --collection` 接受收藏夹 key、唯一名称或完整层级路径（例如 `研究/植物/栗属`）。如果 Zotero 桌面端未启动，导入命令会给出明确的启动提示；`config check` 也会报告桌面 Connector 是否可用。
 | **其他** | `lib stats` / `tag list` / `note list` / `search list` | 库信息查看 |
 
 完整选项说明见 [命令参考](docs/user/commands.md)，AI Agent 使用规范见 [快速入门](docs/user/quickstart.md)，技术架构见 [架构概览](docs/architecture/overview.md)。完整文档导航见 [文档中心](docs/README.md)。

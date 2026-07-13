@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/zoteroapi"
+	"zotero_cli/internal/zoteroconnector"
 )
 
 type ConfigService struct{}
@@ -171,7 +173,22 @@ func (ConfigService) Check(ctx context.Context) (Result, error) {
 		return Result{}, err
 	}
 	meta := ConfigCheckMeta(cfg, path)
-	return Result{Data: access, Meta: meta, Text: "configuration is valid"}, nil
+	connectorURL := strings.TrimSpace(os.Getenv("ZOT_CONNECTOR_URL"))
+	if connectorURL == "" {
+		connectorURL = zoteroconnector.DefaultBaseURL
+	}
+	connectorClient := zoteroconnector.New(connectorURL, &http.Client{Timeout: time.Second})
+	connectorErr := connectorClient.Ping(ctx)
+	meta["zotero_desktop_connector_url"] = connectorURL
+	meta["zotero_desktop_connector_available"] = connectorErr == nil
+	text := "configuration is valid"
+	if connectorErr == nil {
+		text += "\nZotero desktop connector: available"
+	} else {
+		meta["zotero_desktop_connector_error"] = connectorErr.Error()
+		text += "\nZotero desktop connector: unavailable (start Zotero before importing PDFs)"
+	}
+	return Result{Data: access, Meta: meta, Text: text}, nil
 }
 
 func ConfigCheckMeta(cfg config.Config, path string) map[string]any {

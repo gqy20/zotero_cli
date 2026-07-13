@@ -89,32 +89,42 @@ func (c *CLI) newPDFCommand(opts *globalOptions) *cobra.Command {
 
 func (c *CLI) newFileCommand(opts *globalOptions) *cobra.Command {
 	file := &cobra.Command{Use: "file", Short: "Inspect library attachments"}
-	for _, spec := range []struct {
-		name   string
-		health bool
-		short  string
-	}{{"show", false, "Preview a spreadsheet attachment"}, {"check", true, "Check attachment health"}} {
-		var req app.FileRequest
-		cmd := &cobra.Command{Use: spec.name + " [ATTACHMENT_KEY]", Short: spec.short, Args: cobra.MaximumNArgs(1)}
-		cmd.Flags().StringVar(&req.ItemKey, "item", "", "inspect attachments belonging to one item")
-		cmd.Flags().StringVar(&req.Sheet, "sheet", "", "inspect one workbook sheet")
-		cmd.Flags().IntVar(&req.Head, "head", 5, "preview non-empty rows per sheet")
-		cmd.Flags().IntVar(&req.MaxSheets, "max-sheets", 5, "maximum workbook sheets")
-		cmd.Flags().IntVar(&req.MaxColumns, "max-columns", 12, "maximum preview cells per row")
-		health := spec.health
-		cmd.RunE = func(cmd *cobra.Command, args []string) error {
-			if len(args) == 1 {
-				req.AttachmentKey = args[0]
-			}
-			req.Health = health
-			if req.Head <= 0 || req.MaxSheets <= 0 || req.MaxColumns <= 0 {
-				return &exitError{code: ExitUsage, err: fmt.Errorf("--head, --max-sheets, and --max-columns must be positive")}
-			}
-			path := app.CommandPath{Resource: "file", Action: cmd.Name()}
-			return c.runRead(cmd, opts, path, func(ctx context.Context, service app.ReadService) (app.Result, error) { return service.Files(ctx, req) })
+
+	var showReq app.FileRequest
+	show := &cobra.Command{Use: "show [ATTACHMENT_KEY]", Short: "Preview a spreadsheet attachment", Args: cobra.MaximumNArgs(1)}
+	show.Flags().StringVar(&showReq.ItemKey, "item", "", "inspect attachments belonging to one item")
+	show.Flags().StringVar(&showReq.Sheet, "sheet", "", "inspect one workbook sheet")
+	show.Flags().IntVar(&showReq.Head, "head", 5, "preview non-empty rows per sheet")
+	show.Flags().IntVar(&showReq.MaxSheets, "max-sheets", 5, "maximum workbook sheets")
+	show.Flags().IntVar(&showReq.MaxColumns, "max-columns", 12, "maximum preview cells per row")
+	show.RunE = func(cmd *cobra.Command, args []string) error {
+		if len(args) == 1 {
+			showReq.AttachmentKey = args[0]
 		}
-		file.AddCommand(cmd)
+		if showReq.Head <= 0 || showReq.MaxSheets <= 0 || showReq.MaxColumns <= 0 {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--head, --max-sheets, and --max-columns must be positive")}
+		}
+		path := app.CommandPath{Resource: "file", Action: "show"}
+		return c.runRead(cmd, opts, path, func(ctx context.Context, service app.ReadService) (app.Result, error) {
+			return service.Files(ctx, showReq)
+		})
 	}
+
+	var checkReq app.FileRequest
+	check := &cobra.Command{Use: "check [ATTACHMENT_KEY]", Short: "Check attachment health", Args: cobra.MaximumNArgs(1)}
+	check.Flags().StringVar(&checkReq.ItemKey, "item", "", "inspect attachments belonging to one item")
+	check.RunE = func(cmd *cobra.Command, args []string) error {
+		if len(args) == 1 {
+			checkReq.AttachmentKey = args[0]
+		}
+		checkReq.Health = true
+		path := app.CommandPath{Resource: "file", Action: "check"}
+		return c.runRead(cmd, opts, path, func(ctx context.Context, service app.ReadService) (app.Result, error) {
+			return service.Files(ctx, checkReq)
+		})
+	}
+
+	file.AddCommand(show, check)
 	return file
 }
 

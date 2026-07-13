@@ -72,7 +72,7 @@ zot item show ITEMKEY --snippet --json
 - `--fulltext` / `--metadata-only` / `--fulltext-only` / `--fulltext-any`
 - `--snippet`
 
-分页和排序只使用 `--limit`、`--offset`、`--sort`、`--order`。
+分页和排序只使用 `--limit`、`--offset`、`--sort`、`--order`。`item find` 的轻量结果默认限制 100 条，`--snippet` 或 `--full` 默认限制 20 条；只有显式 `--all` 才取消上限。JSON `meta` 提供 `has_more` 和可选的 `next_offset`。
 
 ## Item type alias
 
@@ -107,6 +107,7 @@ zot item edit ITEMKEY --set abstractNote="Updated" --if-version 42 --json
 zot item delete ITEMKEY --if-version 42 --yes --json
 zot item tag KEY1 KEY2 --tag review --json
 zot item untag KEY1 KEY2 --tag review --json
+zot item import ./paper.pdf --collection "研究/植物/栗属" --json
 
 zot coll new --name "Inbox" --json
 zot coll add COLLKEY ITEM1 ITEM2 --json
@@ -116,6 +117,8 @@ zot search new --data '{"name":"Recent","conditions":[]}' --json
 ```
 
 输入统一为 `--set`、`--data`、`--from`。安全参数统一为 `--dry-run`、`--yes`、`--if-version`。
+
+`item import --collection` 接受收藏夹 key、唯一名称或完整层级路径。同名时返回带 key 的完整路径候选；导入依赖 Zotero 桌面端 Connector，并会为最终保留的附件增量建立全文索引。
 
 权限：
 
@@ -128,7 +131,7 @@ zot search new --data '{"name":"Recent","conditions":[]}' --json
 ```powershell
 zot pdf text ITEMKEY --json
 zot pdf text ITEMKEY --pages 3-8 --grep methods --max-chars 12000 --json
-zot pdf text KEY1 KEY2 --workers 4 --output-dir ./markdown --json
+zot pdf text KEY1 KEY2 --output-dir ./markdown --json
 zot pdf figs ITEMKEY --output-dir ./figures --json
 zot pdf open ITEMKEY --page 5
 
@@ -142,6 +145,8 @@ zot ann delete ITEMKEY --type highlight --yes --json
 1. `item find --fulltext --snippet`
 2. `item show --snippet`
 3. `pdf text`
+
+local/hybrid 下，无过滤条件的 `pdf text --json` 返回 `content_path` 和可选的 `chunks_path`，Agent 直接读取缓存文件；`--grep`、`--pages`、`--max-chars` 才返回文本子集。remote 模式仍返回正文。该命令不支持 worker 并发参数。
 
 `ann delete` 是唯一 canonical 删除入口；不要组合 `list/new` 与 `--clear`。
 
@@ -192,6 +197,8 @@ zot schema show article --json
 | `ann list/new/delete` | — | ✅ | ✅ | 由服务端门控 |
 
 Hybrid 只在目标 backend 能保持请求语义时回退；全文、附件路径、附件健康等 local-only 请求不能伪装成 Web 能力。
+
+`config check` 还会报告 `zotero_desktop_connector_available`、Connector 地址及不可用原因。Connector 不可用不影响其他配置项通过，但 `item import` 前必须启动 Zotero 桌面端。
 
 ## Remote
 

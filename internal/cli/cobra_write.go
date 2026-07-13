@@ -160,7 +160,7 @@ func (c *CLI) addItemWriteCommands(item *cobra.Command, opts *globalOptions) {
 	var importCollection string
 	importCmd := &cobra.Command{Use: "import PATH", Short: "Import a PDF into Zotero desktop", Args: cobra.ExactArgs(1)}
 	importCmd.Flags().BoolVar(&importDryRun, "dry-run", false, "validate the PDF and Zotero connection without importing")
-	importCmd.Flags().StringVar(&importCollection, "collection", "", "add the imported item to this collection key")
+	importCmd.Flags().StringVar(&importCollection, "collection", "", "collection key, unique name, or full path")
 	importCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		service := app.NewItemImportService()
 		path := app.CommandPath{Resource: "item", Action: "import"}

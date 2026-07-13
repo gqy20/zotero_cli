@@ -85,8 +85,14 @@ func (c *CLI) runCobra(args []string) int {
 func (c *CLI) newRootCommand() *cobra.Command {
 	opts := &globalOptions{format: defaultOutputFormat()}
 	root := &cobra.Command{
-		Use:           "zot",
-		Short:         "Work with a Zotero library",
+		Use:   "zot",
+		Short: "Work with a Zotero library",
+		Long: `Work with a Zotero library.
+
+Common shortcuts:
+  zot find QUERY       Same as zot item find QUERY
+  zot show KEY         Same as zot item show KEY
+  zot export [KEY...]  Same as zot item export [KEY...]`,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE:          func(cmd *cobra.Command, _ []string) error { return cmd.Help() },

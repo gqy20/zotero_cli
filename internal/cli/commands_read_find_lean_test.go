@@ -328,6 +328,81 @@ func TestFindJSONLeanPreservesMultipleItems(t *testing.T) {
 	}
 }
 
+func TestFindJSONAppliesDefaultLimitAndPaginationMetadata(t *testing.T) {
+	items := make([]domain.Item, 101)
+	for i := range items {
+		items[i] = domain.Item{
+			Key:      fmt.Sprintf("ITEM_%04d", i),
+			ItemType: "journalArticle",
+			Title:    fmt.Sprintf("Result %d", i),
+		}
+	}
+
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	previousNewReader := testCLI.backendNewReader
+	t.Cleanup(func() { testCLI.backendNewReader = previousNewReader })
+	testCLI.backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
+		return leanStubReader{items: items}, nil
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "result", "--metadata-only", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data := got["data"].([]any)
+	if len(data) != 100 {
+		t.Fatalf("returned %d items, want default limit 100", len(data))
+	}
+	meta := got["meta"].(map[string]any)
+	if meta["total"] != float64(100) || meta["returned"] != float64(100) || meta["limit"] != float64(100) || meta["offset"] != float64(0) || meta["has_more"] != true || meta["next_offset"] != float64(100) {
+		t.Fatalf("unexpected pagination meta: %#v", meta)
+	}
+}
+
+func TestFindJSONExplicitAllDisablesDefaultLimit(t *testing.T) {
+	items := make([]domain.Item, 101)
+	for i := range items {
+		items[i] = domain.Item{Key: fmt.Sprintf("ITEM_%04d", i), ItemType: "journalArticle", Title: fmt.Sprintf("Result %d", i)}
+	}
+
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	previousNewReader := testCLI.backendNewReader
+	t.Cleanup(func() { testCLI.backendNewReader = previousNewReader })
+	testCLI.backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
+		return leanStubReader{items: items}, nil
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "--all", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	if data := got["data"].([]any); len(data) != 101 {
+		t.Fatalf("explicit --all returned %d items, want 101", len(data))
+	}
+	meta := got["meta"].(map[string]any)
+	if meta["limit"] != float64(0) || meta["has_more"] != false {
+		t.Fatalf("unexpected unbounded pagination meta: %#v", meta)
+	}
+}
+
 func TestFindJSONLeanPayloadSize(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

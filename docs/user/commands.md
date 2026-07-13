@@ -64,7 +64,7 @@ zot search list --json
 zot group list --json
 ```
 
-统一分页参数是 `--limit`、`--offset`、`--sort`、`--order asc|desc`。旧 `--start`、`--direction` 已不再接受。
+统一分页参数是 `--limit`、`--offset`、`--sort`、`--order asc|desc`。`item find` 的轻量结果默认限制 100 条，`--snippet` 或 `--full` 默认限制 20 条；显式正数 `--limit` 优先，只有显式 `--all` 才取消上限。JSON 分页元数据包含 `returned`、`limit`、`offset`、`has_more` 和可选的 `next_offset`。旧 `--start`、`--direction` 已不再接受。
 
 常用 item type 短名会在输入层归一化：`article` → `journalArticle`、`chapter` → `bookSection`、`conf` → `conferencePaper`、`web` → `webpage`、`blog` → `blogPost`。JSON 和持久化数据始终使用 Zotero 官方值。
 
@@ -79,6 +79,7 @@ zot item untag KEY1 KEY2 --tag review --json
 zot item import ./paper.pdf --dry-run --json
 zot item import ./paper.pdf --json
 zot item import ./paper.pdf --collection COLLKEY --json
+zot item import ./paper.pdf --collection "研究/植物/栗属" --json
 
 # 默认只预览；Go 正则替换支持 $1 等捕获组
 zot tag replace --match '^(SV|SV检测)$' --replace '结构变异' --json
@@ -105,7 +106,7 @@ zot file show ATTACHKEY --json
 zot file check ATTACHKEY --json
 
 zot pdf text ITEMKEY --pages 3-8 --grep methods --max-chars 12000 --json
-zot pdf text ITEM1 ITEM2 --workers 4 --output-dir ./markdown --json
+zot pdf text ITEM1 ITEM2 --output-dir ./markdown --json
 zot pdf figs ITEMKEY --output-dir ./figures --json
 zot pdf open ITEMKEY --page 5
 
@@ -115,6 +116,8 @@ zot ann delete ITEMKEY --type highlight --yes --json
 ```
 
 `item import` 在 Zotero 元数据识别完成后，会定位本次导入最终保留的 PDF 附件并执行增量全文索引；索引失败会作为 warning 返回，不会回滚已成功的 Zotero 导入。`find --snippet` 返回 FTS5 最佳命中块及相邻上下文，并在 `matched_chunk` 中保留页码、附件 key 与坐标。
+
+`item import --collection` 接受收藏夹 key、唯一名称或完整层级路径。名称存在歧义时命令会列出带 key 的候选项，不会自动猜测。`config check` 会额外报告 `zotero_desktop_connector_available`；Connector 不可用不会使配置检查失败，但导入 PDF 前必须启动 Zotero 桌面端。
 
 local/hybrid 下无过滤条件的 `pdf text ITEMKEY --json` 默认返回 `content_path` 和可选的 `chunks_path`，不再把完整正文复制到 JSON；Agent 应直接读取 `content_path`。`--grep`、`--pages`、`--max-chars` 返回计算后的文本子集，`--max-chars` 按 Unicode 字符而非 UTF-8 字节计数。多条目和 `--all` 同样返回缓存路径数组，只有显式 `--output-dir` 才导出 Markdown。remote 模式仍返回正文，因为客户端不能直接读取服务器路径。
 

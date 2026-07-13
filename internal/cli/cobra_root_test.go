@@ -2,6 +2,9 @@ package cli
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -129,9 +132,85 @@ func TestRootUsesCobraHelp(t *testing.T) {
 	if code := Run(nil); code != ExitOK {
 		t.Fatalf("code=%d stderr=%q", code, stderr.String())
 	}
-	for _, want := range []string{"Usage:", "item", "ref", "completion"} {
+	for _, want := range []string{"Usage:", "item", "ref", "completion", "Common shortcuts:", "zot find QUERY", "zot show KEY", "zot export [KEY...]"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("root help missing %q: %q", want, stdout.String())
+		}
+	}
+}
+
+func TestFileCheckOnlyExposesHealthRelevantFlags(t *testing.T) {
+	root := testCLI.newRootCommand()
+	check, _, err := root.Find([]string{"file", "check"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if check.Flags().Lookup("item") == nil {
+		t.Fatal("file check missing --item")
+	}
+	for _, name := range []string{"sheet", "head", "max-sheets", "max-columns"} {
+		if check.Flags().Lookup(name) != nil {
+			t.Fatalf("file check unexpectedly exposes --%s", name)
+		}
+	}
+
+	show, _, err := root.Find([]string{"file", "show"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"item", "sheet", "head", "max-sheets", "max-columns"} {
+		if show.Flags().Lookup(name) == nil {
+			t.Fatalf("file show missing --%s", name)
+		}
+	}
+}
+
+func TestStableDocumentationMatchesCurrentCommandSurface(t *testing.T) {
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", ".."))
+
+	skill, err := os.ReadFile(filepath.Join(root, ".codex", "skills", "zotero-cli", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(skill), "sync pull") {
+		t.Fatal("zotero-cli skill documents retired sync pull command")
+	}
+
+	documentPaths := []string{
+		filepath.Join("docs", "user", "commands.md"),
+		filepath.Join("docs", "user", "quickstart.md"),
+		filepath.Join(".claude", "skills", "zotero-cli", "SKILL.md"),
+		filepath.Join(".claude", "skills", "zotero-cli", "reference.md"),
+	}
+	for _, relativePath := range documentPaths {
+		content, err := os.ReadFile(filepath.Join(root, relativePath))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(content)
+		if strings.Contains(text, "snippet 默认限制 50") || strings.Contains(text, "--snippet` 默认限 50") {
+			t.Fatalf("%s documents retired snippet default of 50", relativePath)
+		}
+		for _, line := range strings.Split(text, "\n") {
+			trimmed := strings.TrimSpace(line)
+			isCommand := strings.HasPrefix(trimmed, "zot ") || strings.HasPrefix(trimmed, `.\zot.exe `)
+			if isCommand && strings.Contains(line, "pdf text") && strings.Contains(line, "--workers") {
+				t.Fatalf("%s documents unsupported pdf text --workers flag: %q", relativePath, line)
+			}
+		}
+	}
+
+	claudeSkill, err := os.ReadFile(filepath.Join(root, ".claude", "skills", "zotero-cli", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"默认限制 100 条", "默认限制 20 条", "item import --collection", "zotero_desktop_connector_available", "content_path"} {
+		if !strings.Contains(string(claudeSkill), required) {
+			t.Fatalf("Claude zotero-cli skill is missing current behavior %q", required)
 		}
 	}
 }

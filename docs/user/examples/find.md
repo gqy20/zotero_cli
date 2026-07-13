@@ -155,6 +155,8 @@ zot find --all --sort dateAdded --order desc --limit 10 --include-fields title,d
 zot find "speciation" --full --json
 ```
 
+未指定 `--limit` 时，普通轻量检索最多返回 100 条，`--snippet` 或 `--full` 最多返回 20 条。只有显式 `--all` 才返回全部匹配项；当 `meta.has_more=true` 时，用 `meta.next_offset` 继续翻页。
+
 `--date-after` / `--date-before` 过滤发表日期，支持 `YYYY` / `YYYY-MM` / `YYYY-MM-DD`。local/hybrid 会兼容 Zotero 常见的部分日期字符串，如 `YYYY-MM-00 YYYY-MM` 和 `MM/YYYY`。
 
 `dateAdded` / `--added-since` 表示加入 Zotero 的时间；它和发表日期不是同一个字段。`--include-fields` 主要用于文本输出，JSON 模式默认返回完整 Item。

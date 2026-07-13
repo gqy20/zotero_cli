@@ -190,7 +190,7 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 - `--metadata-only` — 仅检索标题、作者、标签等元数据
 - `--fulltext-only` — 仅检索 PDF 正文
 - `--fulltext-any` — 任一词匹配
-- `--snippet` — 布尔开关，启用 FTS5 匹配片段预览（未指定 `--limit` 时回退 50 条）
+- `--snippet` — 布尔开关，启用 FTS5 匹配片段预览（未指定 `--limit` 时默认 20 条）
 
 文本模式辅助选项：
 
@@ -265,7 +265,7 @@ CLI 配置存储在 `~/.zot/.env`。
 .\zot.exe config init                    # 一键初始化（推荐，含模式选择和可选 PyMuPDF 安装）
 .\zot.exe config init --mode hybrid --api-key ...  # 非交互模式
 .\zot.exe config init --mode remote --server-addr http://192.168.1.100:8021
-.\zot.exe sync pull --server-addr http://host:8021 # 整库同步到本地 ~/.zot/sync/，之后 ZOT_MODE=local 离线用
+.\zot.exe sync --server-addr http://host:8021 # 整库同步到本地 ~/.zot/sync/，之后 ZOT_MODE=local 离线用
 .\zot.exe config show       # 查看当前配置
 .\zot.exe config check   # 校验配置有效性
 ```
@@ -291,7 +291,7 @@ CLI 配置存储在 `~/.zot/.env`。
 
 ## 性能注意
 
-- `--snippet` 是布尔开关（启用片段预览）；未指定 `--limit` 时回退 50 条
+- `find` 轻量结果未指定 `--limit` 时默认 100 条；`--snippet` 或 `--full` 默认 20 条；仅显式 `--all` 取消上限
 - local/hybrid 下有 query 且 FTS 有数据时自动启用全文检索；`--all` / 纯过滤列表不会自动走全文索引
 - `pdf text` 结果有缓存，重复提取同一 PDF 直接命中；local / hybrid 的无过滤请求默认返回缓存路径
 - 高频脚本遇 `429` 会自动退避+抖动，但仍应主动降速

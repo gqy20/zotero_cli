@@ -95,6 +95,8 @@ go run .\cmd\zot config check
 .\zot.exe ref find "genome assembly" --json
 ```
 
+`config check` 会同时报告 Zotero 桌面 Connector 是否可用。Connector 未启动不会使整体配置检查失败，但导入 PDF 前必须启动 Zotero 桌面端。
+
 完整说明见 [引用索引与文献发现](./references.md)。
 
 详见 [架构文档 - 四种模式](../architecture/overview.md#四种模式)。
@@ -164,18 +166,21 @@ go run .\cmd\zot config check
 ```powershell
 .\zot.exe item tag KEY1 KEY2 --tag "to-read" --json
 .\zot.exe item export --collection COLL1234 --as csljson --json
+.\zot.exe item import .\paper.pdf --collection "研究/植物/栗属" --json
 
 # 正则批量改名：默认预览，加 --yes 才写入
 .\zot.exe tag replace --match '^(Gene Flow|Gene flow|gene flow)$' --replace 'Gene Flow'
 .\zot.exe tag replace --match '^植物/(.+)$' --replace '物种/植物/$1' --yes
 ```
 
+导入的 `--collection` 支持收藏夹 key、唯一名称或完整层级路径。同名时命令会列出带 key 的候选路径，不会自动猜测；导入完成后会为最终保留的附件增量建立全文索引。
+
 ### 全文检索最佳实践
 
 ```powershell
 # local / hybrid 模式下，有 query 且 FTS5 有数据时自动启用全文检索
 .\zot.exe find "同源多倍体" --snippet --json
-# snippet 默认限制 50 条，需要更多结果时显式指定 --limit
+# snippet 默认限制 20 条，需要更多结果时显式指定 --limit
 .\zot.exe find "基因编辑" --snippet --limit 200 --json
 ```
 
@@ -185,7 +190,7 @@ go run .\cmd\zot config check
 
 | 建议 | 说明 |
 |------|------|
-| **`--snippet` 默认限 50 条** | 保护批量提取性能 |
+| **默认分页上限** | 轻量 `find` 默认 100 条，`--snippet` / `--full` 默认 20 条；只有显式 `--all` 才取消上限 |
 | **自动全文检索** | local/hybrid 下有 query 且 FTS5 有数据时可自动走全文路径；`--all` 不自动走全文 |
 | **`--include-fields` 控制文本输出** | 快速人工浏览时只展示指定字段；`--json` 默认返回完整 Item |
 | **优先 `--full`** | 一次获取完整数据比多次往返更高效 |
@@ -209,6 +214,7 @@ go run .\cmd\zot config check
 | `429` | CLI 已重试，高频脚本应降速 |
 | local temporary unavailable | 保留本地错误，不要强行改走 Web |
 | 配置缺失 | 运行 `zot config init` |
+| Zotero Desktop Connector 不可用 | 启动 Zotero 桌面端后重试 `item import` |
 
 ### 结构化错误输出
 

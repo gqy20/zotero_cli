@@ -12,9 +12,15 @@ import (
 )
 
 type ItemFindRequest struct {
-	Options backend.FindOptions
-	Snippet bool
+	Options     backend.FindOptions
+	Snippet     bool
+	ExplicitAll bool
 }
+
+const (
+	defaultFindLimit         = 100
+	defaultDetailedFindLimit = 20
+)
 
 type ItemShowRequest struct {
 	Key     string
@@ -55,6 +61,12 @@ func (s ReadService) FindItems(ctx context.Context, req ItemFindRequest) (Result
 		return Result{}, err
 	}
 	opts := backend.NormalizeFindOptions(req.Options)
+	pageLimit := findResultLimit(req, opts)
+	if pageLimit > 0 {
+		opts.Limit = pageLimit + 1
+	} else {
+		opts.Limit = 0
+	}
 	if !opts.FullText && !opts.MetadataOnly && cfg.Mode != "web" && strings.TrimSpace(opts.Query) != "" && !opts.All && hasFullTextIndex(reader) {
 		opts.FullText = true
 	}
@@ -71,6 +83,10 @@ func (s ReadService) FindItems(ctx context.Context, req ItemFindRequest) (Result
 		return Result{}, err
 	}
 	items = filterItems(items, opts)
+	hasMore := pageLimit > 0 && len(items) > pageLimit
+	if hasMore {
+		items = items[:pageLimit]
+	}
 	for i := range items {
 		enrichJournalRank(&items[i])
 	}
@@ -91,6 +107,13 @@ func (s ReadService) FindItems(ctx context.Context, req ItemFindRequest) (Result
 	}
 	meta := readMeta(reader)
 	meta["total"] = len(items)
+	meta["returned"] = len(items)
+	meta["limit"] = pageLimit
+	meta["offset"] = opts.Start
+	meta["has_more"] = hasMore
+	if hasMore {
+		meta["next_offset"] = opts.Start + len(items)
+	}
 	var data any = items
 	if !opts.Full && !req.Snippet {
 		data = leanItems(items)
@@ -98,7 +121,24 @@ func (s ReadService) FindItems(ctx context.Context, req ItemFindRequest) (Result
 	} else if req.Snippet {
 		data = findSnippetJSONItems(items)
 	}
-	return Result{Data: data, Meta: meta, Text: itemFindText(items, opts.Full || req.Snippet || len(opts.IncludeFields) > 0), Warnings: readWarnings(meta)}, nil
+	text := itemFindText(items, opts.Full || req.Snippet || len(opts.IncludeFields) > 0)
+	if hasMore {
+		text += fmt.Sprintf("\n\nMore results available; use --offset %d", opts.Start+len(items))
+	}
+	return Result{Data: data, Meta: meta, Text: text, Warnings: readWarnings(meta)}, nil
+}
+
+func findResultLimit(req ItemFindRequest, opts backend.FindOptions) int {
+	if opts.Limit > 0 {
+		return opts.Limit
+	}
+	if req.ExplicitAll {
+		return 0
+	}
+	if req.Snippet || opts.Full {
+		return defaultDetailedFindLimit
+	}
+	return defaultFindLimit
 }
 
 func findSnippetJSONItems(items []domain.Item) []domain.Item {

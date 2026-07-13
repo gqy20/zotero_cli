@@ -136,7 +136,7 @@ func TestItemImportAssignsCollection(t *testing.T) {
 		LoadConfig: func() (config.Config, string, error) { return config.Config{AllowWrite: true}, "", nil },
 		NewClient:  func(config.Config) ItemImportConnector { return client },
 		NewResolver: func(config.Config) (itemImportCollectionResolver, error) {
-			return fakeItemImportCollectionResolver{target: backend.CollectionTarget{ID: 23, Key: "COLLKEY", Name: "Genetics"}}, nil
+			return fakeItemImportCollectionResolver{target: backend.CollectionTarget{ID: 23, Key: "COLLKEY", Name: "Genetics", Path: "Research/Genetics"}}, nil
 		},
 	}
 	result, err := service.Import(context.Background(), ItemImportRequest{Path: path, Collection: "COLLKEY"})
@@ -144,7 +144,7 @@ func TestItemImportAssignsCollection(t *testing.T) {
 		t.Fatalf("Import() error=%v", err)
 	}
 	data := result.Data.(ItemImportResult)
-	if data.CollectionKey != "COLLKEY" || data.CollectionName != "Genetics" || !data.CollectionAssigned {
+	if data.CollectionKey != "COLLKEY" || data.CollectionName != "Genetics" || data.CollectionPath != "Research/Genetics" || !data.CollectionAssigned {
 		t.Fatalf("data=%+v", data)
 	}
 	if client.updated.Target != "C23" || client.updated.SessionID == "" || client.updated.SessionID != client.request.SessionID {

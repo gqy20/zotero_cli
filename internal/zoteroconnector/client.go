@@ -55,7 +55,7 @@ func (c *Client) Ping(ctx context.Context) error {
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("connect to Zotero desktop: %w", err)
+		return fmt.Errorf("cannot connect to Zotero desktop; start Zotero and try again (connector: %s): %w", c.baseURL, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

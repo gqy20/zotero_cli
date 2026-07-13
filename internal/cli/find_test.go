@@ -163,6 +163,21 @@ func TestRunFindJSONSupportsItemTypeAndLimit(t *testing.T) {
 	}
 }
 
+func TestRunFindRejectsZeroLimitAndPointsToAll(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	_, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "attention", "--limit", "0"})
+	if exitCode != ExitUsage {
+		t.Fatalf("expected usage exit code %d, got %d", ExitUsage, exitCode)
+	}
+	if got := stderr.String(); !strings.Contains(got, "use --all") {
+		t.Fatalf("expected --all guidance, got %q", got)
+	}
+}
+
 func TestRunFindJSONSupportsPaginationAndSortingFlags(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

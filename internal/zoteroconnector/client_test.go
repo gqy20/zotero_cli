@@ -66,6 +66,23 @@ func TestClientReportsConnectorError(t *testing.T) {
 	}
 }
 
+func TestClientReportsFriendlyUnavailableError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	connectorURL := server.URL
+	client := server.Client()
+	server.Close()
+
+	err := New(connectorURL, client).Ping(context.Background())
+	if err == nil {
+		t.Fatal("Ping() error=nil")
+	}
+	for _, fragment := range []string{"cannot connect to Zotero desktop", "start Zotero and try again", connectorURL} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Fatalf("Ping() error=%q, missing %q", err, fragment)
+		}
+	}
+}
+
 func TestClientUpdatesSessionTarget(t *testing.T) {
 	var got string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

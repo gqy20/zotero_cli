@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -12,6 +13,12 @@ type CollectionTarget struct {
 	ID   int64
 	Key  string
 	Name string
+	Path string
+}
+
+type collectionTargetRow struct {
+	target   CollectionTarget
+	parentID int64
 }
 
 type ImportedAttachment struct {
@@ -57,7 +64,7 @@ func (r *LocalReader) ImportedPDFAttachments(ctx context.Context, sourceURL stri
 	return out, rows.Err()
 }
 
-func (r *LocalReader) CollectionTarget(ctx context.Context, collectionKey string) (CollectionTarget, error) {
+func (r *LocalReader) CollectionTarget(ctx context.Context, selector string) (CollectionTarget, error) {
 	db, cleanup, err := r.openDB()
 	if err != nil {
 		return CollectionTarget{}, err
@@ -65,19 +72,115 @@ func (r *LocalReader) CollectionTarget(ctx context.Context, collectionKey string
 	defer db.Close()
 	defer cleanup()
 
-	var target CollectionTarget
-	err = db.QueryRowContext(ctx, `
-		SELECT collectionID, key, collectionName
-		FROM collections
-		WHERE key = ?
-	`, strings.TrimSpace(collectionKey)).Scan(&target.ID, &target.Key, &target.Name)
-	if err == sql.ErrNoRows {
-		return CollectionTarget{}, fmt.Errorf("collection %q not found in local Zotero library", collectionKey)
-	}
+	rows, err := db.QueryContext(ctx, `SELECT collectionID, key, collectionName, parentCollectionID FROM collections`)
 	if err != nil {
 		return CollectionTarget{}, err
 	}
-	return target, nil
+	defer rows.Close()
+
+	collections := map[int64]collectionTargetRow{}
+	for rows.Next() {
+		var row collectionTargetRow
+		var parent sql.NullInt64
+		if err := rows.Scan(&row.target.ID, &row.target.Key, &row.target.Name, &parent); err != nil {
+			return CollectionTarget{}, err
+		}
+		if parent.Valid {
+			row.parentID = parent.Int64
+		}
+		collections[row.target.ID] = row
+	}
+	if err := rows.Err(); err != nil {
+		return CollectionTarget{}, err
+	}
+
+	value := strings.TrimSpace(selector)
+	for id, row := range collections {
+		path, err := collectionTargetPath(id, collections)
+		if err != nil {
+			return CollectionTarget{}, err
+		}
+		row.target.Path = path
+		collections[id] = row
+		if strings.EqualFold(row.target.Key, value) {
+			return row.target, nil
+		}
+	}
+
+	normalizedPath := normalizeCollectionTargetPath(value)
+	pathMatches := matchingCollectionTargets(collections, func(target CollectionTarget) bool {
+		return strings.EqualFold(target.Path, normalizedPath)
+	})
+	if len(pathMatches) == 1 {
+		return pathMatches[0], nil
+	}
+	if len(pathMatches) > 1 {
+		return CollectionTarget{}, ambiguousCollectionTargetError(selector, pathMatches)
+	}
+
+	nameMatches := matchingCollectionTargets(collections, func(target CollectionTarget) bool {
+		return strings.EqualFold(target.Name, value)
+	})
+	if len(nameMatches) == 1 {
+		return nameMatches[0], nil
+	}
+	if len(nameMatches) > 1 {
+		return CollectionTarget{}, ambiguousCollectionTargetError(selector, nameMatches)
+	}
+	return CollectionTarget{}, fmt.Errorf("collection %q not found; use `zot coll list` to inspect collection keys and names", selector)
+}
+
+func collectionTargetPath(id int64, collections map[int64]collectionTargetRow) (string, error) {
+	parts := []string{}
+	seen := map[int64]bool{}
+	for id != 0 {
+		if seen[id] {
+			return "", fmt.Errorf("collection hierarchy contains a cycle at id %d", id)
+		}
+		seen[id] = true
+		row, ok := collections[id]
+		if !ok {
+			return "", fmt.Errorf("collection hierarchy references missing parent id %d", id)
+		}
+		parts = append(parts, row.target.Name)
+		id = row.parentID
+	}
+	for left, right := 0, len(parts)-1; left < right; left, right = left+1, right-1 {
+		parts[left], parts[right] = parts[right], parts[left]
+	}
+	return strings.Join(parts, "/"), nil
+}
+
+func normalizeCollectionTargetPath(value string) string {
+	parts := strings.FieldsFunc(strings.ReplaceAll(value, `\`, "/"), func(r rune) bool { return r == '/' })
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return strings.Join(parts, "/")
+}
+
+func matchingCollectionTargets(collections map[int64]collectionTargetRow, match func(CollectionTarget) bool) []CollectionTarget {
+	result := []CollectionTarget{}
+	for _, row := range collections {
+		if match(row.target) {
+			result = append(result, row.target)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Path == result[j].Path {
+			return result[i].Key < result[j].Key
+		}
+		return result[i].Path < result[j].Path
+	})
+	return result
+}
+
+func ambiguousCollectionTargetError(selector string, matches []CollectionTarget) error {
+	candidates := make([]string, 0, len(matches))
+	for _, target := range matches {
+		candidates = append(candidates, fmt.Sprintf("%s (%s)", target.Path, target.Key))
+	}
+	return fmt.Errorf("collection %q is ambiguous; use a collection key or full path: %s", selector, strings.Join(candidates, ", "))
 }
 
 func (r *LocalReader) ExportItemsCSLJSON(ctx context.Context, keys []string) ([]map[string]any, error) {

@@ -27,7 +27,7 @@ argument-hint: "<resource> <action> [ITEMKEY...] [options]"
 
 ```text
 lib show|stats|log
-item list|find|show|new|edit|delete|tag|untag|supp|export
+item list|find|show|new|edit|delete|tag|untag|supp|export|import
 coll list|show|new|edit|delete|add|remove
 note list|show|find|new|edit|delete
 tag list
@@ -69,6 +69,8 @@ zot item find --all --added-since 7d --sort dateAdded --order desc --json
 
 统一分页参数为 `--limit`、`--offset`、`--sort`、`--order asc|desc`。
 
+`item find` 未显式指定 `--limit` 时，轻量结果默认限制 100 条，`--snippet` 或 `--full` 默认限制 20 条。显式正数 `--limit` 覆盖默认值，只有显式 `--all` 才取消上限；JSON `meta` 提供 `returned`、`limit`、`offset`、`has_more` 和可选的 `next_offset`。
+
 ## Item type 归一化
 
 CLI 输入接受短 alias，但应用层和 JSON 始终使用 Zotero 官方值：
@@ -102,12 +104,13 @@ zot item show ITEMKEY --snippet --json
 zot pdf text ITEMKEY --pages 3-8 --grep methods --max-chars 12000 --json
 ```
 
-`pdf text` 会优先命中 `.zotero_cli/fulltext` 缓存；只有 cache miss 才重新提取。
+`pdf text` 会优先命中 `.zotero_cli/fulltext` 缓存；只有 cache miss 才重新提取。local/hybrid 下无过滤条件的请求返回 `content_path` 和可选的 `chunks_path`，Agent 直接读取 `content_path`，不要期待 JSON 内嵌整篇正文。只有 `--grep`、`--pages` 或 `--max-chars` 返回文本子集，只有显式 `--output-dir` 才导出 Markdown；remote 模式仍返回正文。
 
 ## PDF、附件与标注
 
 ```powershell
 zot item supp ITEMKEY --json
+zot item import ./paper.pdf --collection "研究/植物/栗属" --json
 zot file show ATTACHKEY --json
 zot file check ATTACHKEY --json
 zot pdf figs ITEMKEY --output-dir .\figures --json
@@ -117,6 +120,8 @@ zot ann list ITEMKEY --type highlight --page 3 --json
 zot ann new ITEMKEY --text "target phrase" --color yellow --json
 zot ann delete ITEMKEY --type highlight --yes --json
 ```
+
+`item import --collection` 接受收藏夹 key、唯一名称或完整层级路径；名称有歧义时会列出带 key 的完整路径候选，不会自动猜测。导入依赖 Zotero 桌面端 Connector，并在识别完成后为最终保留的附件建立增量全文索引。`file check` 只检查附件健康状态；表格预览参数只属于 `file show`。
 
 读取、创建、删除分别使用 `ann list/new/delete`。不要生成 `annotations --clear` 或 `annotate --clear`。
 
@@ -173,6 +178,8 @@ zot serve
 zot sync
 zot completion powershell
 ```
+
+`config check` 会报告 `zotero_desktop_connector_available` 和 Connector 地址。Connector 不可用不会使整个配置检查失败，但执行 `item import` 前必须启动 Zotero 桌面端；导入失败时应优先展示 CLI 给出的启动提示。
 
 模式：
 
