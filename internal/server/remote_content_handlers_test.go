@@ -66,7 +66,7 @@ func (contentReader) ExtractItemAttachmentPageTexts(ctx context.Context, item do
 		}},
 	}, nil
 }
-func (contentReader) ReadItemAnnotations(ctx context.Context, item domain.Item) (backend.ItemAnnotationsResult, error) {
+func (contentReader) ReadItemAnnotations(ctx context.Context, item domain.Item, attachmentKey string) (backend.ItemAnnotationsResult, error) {
 	return backend.ItemAnnotationsResult{
 		ItemKey:       item.Key,
 		AttachmentKey: "ATT1",

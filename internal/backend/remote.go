@@ -150,10 +150,15 @@ func (r *RemoteReader) ExtractItemAttachmentPageTexts(ctx context.Context, item 
 	return resp.Data, nil
 }
 
-func (r *RemoteReader) ReadItemAnnotations(ctx context.Context, item domain.Item) (ItemAnnotationsResult, error) {
+func (r *RemoteReader) ReadItemAnnotations(ctx context.Context, item domain.Item, attachmentKey string) (ItemAnnotationsResult, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.buildURL("/api/v1/items/"+item.Key+"/annotations"), nil)
 	if err != nil {
 		return ItemAnnotationsResult{}, err
+	}
+	if attachmentKey != "" {
+		query := req.URL.Query()
+		query.Set("attachment", attachmentKey)
+		req.URL.RawQuery = query.Encode()
 	}
 	var resp apiResponse[ItemAnnotationsResult]
 	if err := r.doJSON(req, &resp); err != nil {

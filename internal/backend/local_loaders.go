@@ -516,6 +516,7 @@ func (r *LocalReader) loadAnnotations(ctx context.Context, db *sql.DB, parentIte
 	rows, err := db.QueryContext(ctx, `
 		SELECT
 			i.key,
+			p.key,
 			ia.type,
 			COALESCE(ia.authorName, ''),
 			COALESCE(ia.text, ''),
@@ -528,6 +529,7 @@ func (r *LocalReader) loadAnnotations(ctx context.Context, db *sql.DB, parentIte
 			COALESCE(i.dateAdded, '')
 		FROM itemAnnotations ia
 		JOIN items i ON i.itemID = ia.itemID
+		JOIN items p ON p.itemID = ia.parentItemID
 		WHERE ia.parentItemID = ?
 		ORDER BY ia.sortIndex
 	`, parentItemID)
@@ -545,6 +547,7 @@ func (r *LocalReader) loadAnnotations(ctx context.Context, db *sql.DB, parentIte
 
 		if err := rows.Scan(
 			&a.Key,
+			&a.AttachmentKey,
 			&atype,
 			&authorName,
 			&a.Text,
@@ -583,6 +586,7 @@ func (r *LocalReader) loadAnnotationsByItemIDs(ctx context.Context, db *sql.DB, 
 		SELECT
 			ia.parentItemID,
 			i.key,
+			p.key,
 			ia.type,
 			COALESCE(ia.authorName, ''),
 			COALESCE(ia.text, ''),
@@ -595,6 +599,7 @@ func (r *LocalReader) loadAnnotationsByItemIDs(ctx context.Context, db *sql.DB, 
 				COALESCE(i.dateAdded, '')
 		FROM itemAnnotations ia
 		JOIN items i ON i.itemID = ia.itemID
+		JOIN items p ON p.itemID = ia.parentItemID
 		WHERE ia.parentItemID IN (`+placeholders(len(parentItemIDs))+`)
 		ORDER BY ia.parentItemID, ia.sortIndex
 	`, args...)
@@ -613,6 +618,7 @@ func (r *LocalReader) loadAnnotationsByItemIDs(ctx context.Context, db *sql.DB, 
 		if err := rows.Scan(
 			&parentID,
 			&a.Key,
+			&a.AttachmentKey,
 			&atype,
 			&authorName,
 			&a.Text,

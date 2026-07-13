@@ -36,21 +36,31 @@ func pythonVenvExecutable(venvDir string) string {
 }
 
 func findPythonCommand(dataDir string) (string, bool) {
+	return findPythonCommandWithCheck(dataDir, checkPythonHasFitz)
+}
+
+func findPythonCommandWithCheck(dataDir string, hasFitz func(string) bool) (string, bool) {
 	venvDir := pythonVenvDir(dataDir)
 	venvPython := pythonVenvExecutable(venvDir)
 	if _, err := exec.LookPath(venvPython); err == nil {
-		return venvPython, true
+		if hasFitz(venvPython) {
+			return venvPython, true
+		}
 	}
 
 	for _, candidate := range []string{"python3", "python"} {
 		if path, err := exec.LookPath(candidate); err == nil {
-			if checkPythonHasFitz(path) {
+			if hasFitz(path) {
 				return path, true
 			}
 		}
 	}
 
 	return "", false
+}
+
+func pyMuPDFUnavailableError() error {
+	return fmt.Errorf("PyMuPDF is not available; run 'zot config init --pdf' and retry")
 }
 
 func checkPythonHasFitz(pythonPath string) bool {

@@ -308,16 +308,18 @@ zot pdf figs --all --workers 8 --output-dir ./figures --json
 zot ann list KEY --json
 zot ann list KEY --type highlight --page 3 --json   # 按类型/页码过滤
 zot ann list KEY --author "User" --json              # 按作者过滤
+zot ann list KEY --attachment ATTACHMENT_KEY --json # 多 PDF 时精确选择附件
 
 # 写入标注到 PDF（推荐 Mode 1.5：单页搜索，精准定位）
 zot ann new KEY --page 4 --text "GATK" --color red --comment "关键方法"
 zot ann new KEY --text "speciation" --type underline     # 下划线
 zot ann new KEY --page 3 --rect 100,200,350,220         # Mode 2: 精确坐标
+zot ann new KEY --attachment ATTACHMENT_KEY --page 3 --text "GATK"
 
 # 删除前先预览精确候选；必须显式选择来源
 zot ann delete KEY --source zotero --type highlight --dry-run --json
 zot ann delete KEY --source zotero --type highlight --yes --json
-zot ann delete KEY --source pdf --page 5 --author "User" --yes --json
+zot ann delete KEY --source pdf --attachment ATTACHMENT_KEY --page 5 --author "User" --yes --json
 
 # 在 Zotero 阅读器中打开 PDF（跳转到指定页）
 zot pdf open KEY --page 5
@@ -336,10 +338,12 @@ zot 不是独立工具，它直接读写你的 **Zotero 本地数据目录**，�
 |------|----------|------|
 | `zot pdf open KEY` | `zotero://open-pdf` 协议 | 在已运行的 Zotero **阅读器**中打开 PDF，支持页码跳转 |
 | `zot ann list KEY` | SQLite + PyMuPDF 双源读取 | 同时获取 DB 层标注 **和** PDF 文件内嵌入的标注 |
-| `zot ann new KEY` | PyMuPDF 直接写入 PDF | 3 种定位模式写入标注 |
+| `zot ann new KEY` | PyMuPDF 事务式写入 PDF | 在临时副本中完成 3 种定位模式，验证后替换原文件 |
 | `zot ann delete KEY --source zotero|pdf` | 分来源删除 | Zotero 标注按 item key 走 Web API；PDF 标注按 xref 在临时副本中修改并验证 |
 
 在 `remote` 模式下，`ann list/new` 和 `ann delete --source pdf` 会通过远端 `zot serve` 在服务器侧读取或修改 PDF，并受服务端权限门控。`ann delete --source zotero` 使用标准 Zotero Web API，需要客户端配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID`。
+
+条目有多个 PDF 时默认使用第一个 PDF；`ann list/new/delete` 均可通过 `--attachment ATTACHMENT_KEY` 精确选择。`ann new` 非预览写入若没有匹配到文本或有效页码会返回错误，且不会改动原 PDF；`--dry-run` 允许零匹配，用于检查定位条件。
 
 数据来源：
 

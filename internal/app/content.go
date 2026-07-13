@@ -176,9 +176,10 @@ func fileResultsText(results []FileResult) string {
 }
 
 type AnnotationFilter struct {
-	Page   int
-	Type   string
-	Author string
+	AttachmentKey string
+	Page          int
+	Type          string
+	Author        string
 }
 
 type AnnotationTarget struct {
@@ -209,7 +210,7 @@ type annotationDeleteClient interface {
 }
 
 type annotationReader interface {
-	ReadItemAnnotations(context.Context, domain.Item) (backend.ItemAnnotationsResult, error)
+	ReadItemAnnotations(context.Context, domain.Item, string) (backend.ItemAnnotationsResult, error)
 }
 
 type annotationWriter interface {
@@ -247,7 +248,7 @@ func (s AnnotationService) List(ctx context.Context, itemKey string, filter Anno
 	if !ok {
 		return Result{}, fmt.Errorf("annotations are not available for the current backend")
 	}
-	annotations, err := capability.ReadItemAnnotations(ctx, item)
+	annotations, err := capability.ReadItemAnnotations(ctx, item, filter.AttachmentKey)
 	if err != nil {
 		return Result{}, err
 	}
@@ -338,7 +339,7 @@ func (s AnnotationService) Delete(ctx context.Context, itemKey string, filter An
 	if !ok {
 		return Result{}, fmt.Errorf("annotations are not available for the current backend")
 	}
-	annotations, err := readCapability.ReadItemAnnotations(ctx, item)
+	annotations, err := readCapability.ReadItemAnnotations(ctx, item, filter.AttachmentKey)
 	if err != nil {
 		return Result{}, err
 	}
@@ -412,7 +413,7 @@ func (s AnnotationService) Delete(ctx context.Context, itemKey string, filter An
 		}
 		xrefs = append(xrefs, annotation.XRef)
 	}
-	deleted, err := capability.ClearItemAnnotations(ctx, item, backend.DeleteAnnotationsRequest{Page: filter.Page, Type: filter.Type, Author: filter.Author, PDFXRefs: xrefs})
+	deleted, err := capability.ClearItemAnnotations(ctx, item, backend.DeleteAnnotationsRequest{AttachmentKey: filter.AttachmentKey, Page: filter.Page, Type: filter.Type, Author: filter.Author, PDFXRefs: xrefs})
 	if err != nil {
 		return Result{}, err
 	}

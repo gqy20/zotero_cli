@@ -17,13 +17,15 @@ type annotationTestReader struct {
 	result    backend.ItemAnnotationsResult
 	clearReq  backend.DeleteAnnotationsRequest
 	clearCall bool
+	readKey   string
 }
 
 func (r *annotationTestReader) GetItem(context.Context, string) (domain.Item, error) {
 	return r.item, nil
 }
 
-func (r *annotationTestReader) ReadItemAnnotations(context.Context, domain.Item) (backend.ItemAnnotationsResult, error) {
+func (r *annotationTestReader) ReadItemAnnotations(_ context.Context, _ domain.Item, attachmentKey string) (backend.ItemAnnotationsResult, error) {
+	r.readKey = attachmentKey
 	return r.result, nil
 }
 
@@ -136,11 +138,11 @@ func TestAnnotationDeletePDFUsesExactXRefs(t *testing.T) {
 		},
 		NewReader: func(config.Config) (backend.Reader, error) { return reader, nil },
 	}
-	_, err := service.Delete(context.Background(), "ITEM1", AnnotationFilter{Type: "underline"}, "pdf", SafetyOptions{Yes: true})
+	_, err := service.Delete(context.Background(), "ITEM1", AnnotationFilter{AttachmentKey: "ATT2", Type: "underline"}, "pdf", SafetyOptions{Yes: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reader.clearCall || len(reader.clearReq.PDFXRefs) != 1 || reader.clearReq.PDFXRefs[0] != 22 {
+	if reader.readKey != "ATT2" || !reader.clearCall || reader.clearReq.AttachmentKey != "ATT2" || len(reader.clearReq.PDFXRefs) != 1 || reader.clearReq.PDFXRefs[0] != 22 {
 		t.Fatalf("clear request=%#v", reader.clearReq)
 	}
 }

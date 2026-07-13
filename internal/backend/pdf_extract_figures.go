@@ -191,7 +191,7 @@ func CountPDFPages(dataDir string, paths []string) (map[string]int, error) {
 	}
 	pythonCmd, ok := findPythonCommandFunc(dataDir)
 	if !ok {
-		return nil, fmt.Errorf("Python not available")
+		return nil, pyMuPDFUnavailableError()
 	}
 	inputJSON, _ := json.Marshal(paths)
 	cmd := exec.Command(pythonCmd, "-c", pythonCountPagesScript, string(inputJSON))
@@ -674,7 +674,7 @@ func (r *LocalReader) ExtractFigures(ctx context.Context, item domain.Item, outp
 
 	pythonCmd, ok := findPythonCommandFunc(r.DataDir)
 	if !ok {
-		return result, fmt.Errorf("Python not available (data_dir: %s)", r.DataDir)
+		return result, pyMuPDFUnavailableError()
 	}
 
 	type pyFigure struct {

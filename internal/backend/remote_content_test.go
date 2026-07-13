@@ -126,12 +126,15 @@ func TestRemoteReader_ReadItemAnnotations(t *testing.T) {
 		if r.URL.Path != "/api/v1/items/ABC123/annotations" {
 			t.Fatalf("expected annotations path, got %s", r.URL.Path)
 		}
+		if r.URL.Query().Get("attachment") != "ATT1" {
+			t.Fatalf("attachment query=%q", r.URL.Query().Get("attachment"))
+		}
 		writeOK(w, expected)
 	}))
 	defer srv.Close()
 
 	r := NewRemoteReader(srv.URL, srv.Client())
-	got, err := r.ReadItemAnnotations(context.Background(), domain.Item{Key: "ABC123"})
+	got, err := r.ReadItemAnnotations(context.Background(), domain.Item{Key: "ABC123"}, "ATT1")
 	if err != nil {
 		t.Fatalf("ReadItemAnnotations: %v", err)
 	}

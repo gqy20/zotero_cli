@@ -121,3 +121,34 @@ func TestShouldDropFullTextLine_StandalonePageNumbers(t *testing.T) {
 		t.Error("expected year-like '1984' to be kept (4 digits)")
 	}
 }
+
+func TestFindPythonCommandRejectsVenvWithoutPyMuPDF(t *testing.T) {
+	dataDir := t.TempDir()
+	venvPython := pythonVenvExecutable(pythonVenvDir(dataDir))
+	if err := os.MkdirAll(filepath.Dir(venvPython), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(venvPython, []byte("placeholder"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	checkedVenv := false
+	_, ok := findPythonCommandWithCheck(dataDir, func(path string) bool {
+		if path == venvPython {
+			checkedVenv = true
+		}
+		return false
+	})
+	if ok {
+		t.Fatal("expected no Python candidate with PyMuPDF")
+	}
+	if !checkedVenv {
+		t.Fatal("expected the project virtual environment to be checked for PyMuPDF")
+	}
+}
+
+func TestPyMuPDFUnavailableErrorProvidesRepairCommand(t *testing.T) {
+	if got := pyMuPDFUnavailableError().Error(); got != "PyMuPDF is not available; run 'zot config init --pdf' and retry" {
+		t.Fatalf("unexpected error: %q", got)
+	}
+}

@@ -206,13 +206,14 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 # 双源读取标注
 .\zot.exe ann list ITEMKEY --json
 .\zot.exe ann list ITEMKEY --type highlight --page 3 --json
+.\zot.exe ann list ITEMKEY --attachment ATTACHMENT_KEY --json
 # 分来源预览并删除标注
 .\zot.exe ann delete ITEMKEY --source zotero --type highlight --dry-run --json
 .\zot.exe ann delete ITEMKEY --source zotero --type highlight --yes --json
-.\zot.exe ann delete ITEMKEY --source pdf --type highlight --yes --json
+.\zot.exe ann delete ITEMKEY --source pdf --attachment ATTACHMENT_KEY --type highlight --yes --json
 
 # 写入标注到 PDF
-.\zot.exe ann new ITEMKEY --text "关键概念" --color red --comment "重要"
+.\zot.exe ann new ITEMKEY --attachment ATTACHMENT_KEY --text "关键概念" --color red --comment "重要"
 .\zot.exe ann new ITEMKEY --text "speciation" --type underline --color blue
 
 # 与 Zotero 桌面端联动
@@ -241,7 +242,7 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 - `item delete` / `coll delete` / `note delete` / `search delete`
 - `ann delete`
 
-`ann delete` 必须显式使用 `--source zotero|pdf`，并优先执行 `--dry-run`。Zotero 来源按 annotation item key 走 Web API，PDF 来源按 xref 事务式修改文件；不要直接修改 `itemAnnotations`。
+条目有多个 PDF 时，`ann list/new/delete` 默认使用第一个 PDF；应优先用 `--attachment ATTACHMENT_KEY` 精确选择。`ann new` 在临时副本中写入并验证后替换，非 dry-run 零匹配会失败且保留原 PDF。`ann delete` 必须显式使用 `--source zotero|pdf`，并优先执行 `--dry-run`。Zotero 来源按 annotation item key 走 Web API，PDF 来源按 xref 事务式修改文件；不要直接修改 `itemAnnotations`。
 
 执行任何写操作前：
 

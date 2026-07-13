@@ -74,7 +74,7 @@ func (r *LocalReader) ReadPDFAnnotations(ctx context.Context, attachment domain.
 	}
 	pythonCmd, ok := findPythonCommandFunc(r.DataDir)
 	if !ok {
-		return ReadAnnotationsResult{}, fmt.Errorf("python with pymupdf not found")
+		return ReadAnnotationsResult{}, pyMuPDFUnavailableError()
 	}
 
 	script := `
@@ -153,10 +153,10 @@ sys.stdout.buffer.write(payload.encode("utf-8"))
 	}, nil
 }
 
-func (r *LocalReader) ReadItemAnnotations(ctx context.Context, item domain.Item) (ItemAnnotationsResult, error) {
-	att, found := firstPDFAttachment(item.Attachments)
-	if !found {
-		return ItemAnnotationsResult{}, fmt.Errorf("item %s has no PDF attachment", item.Key)
+func (r *LocalReader) ReadItemAnnotations(ctx context.Context, item domain.Item, attachmentKey string) (ItemAnnotationsResult, error) {
+	att, err := selectPDFAttachment(item.Attachments, attachmentKey)
+	if err != nil {
+		return ItemAnnotationsResult{}, fmt.Errorf("item %s: %w", item.Key, err)
 	}
 
 	var pdfAnns []PDFAnnotation
@@ -168,7 +168,12 @@ func (r *LocalReader) ReadItemAnnotations(ctx context.Context, item domain.Item)
 		pdfError = err.Error()
 	}
 
-	dbAnns := append([]domain.Annotation(nil), item.Annotations...)
+	dbAnns := make([]domain.Annotation, 0, len(item.Annotations))
+	for _, annotation := range item.Annotations {
+		if annotation.AttachmentKey == "" || strings.EqualFold(annotation.AttachmentKey, att.Key) {
+			dbAnns = append(dbAnns, annotation)
+		}
+	}
 	return ItemAnnotationsResult{
 		ItemKey:        item.Key,
 		AttachmentKey:  att.Key,
@@ -182,9 +187,9 @@ func (r *LocalReader) ReadItemAnnotations(ctx context.Context, item domain.Item)
 }
 
 func (r *LocalReader) ClearItemAnnotations(ctx context.Context, item domain.Item, req DeleteAnnotationsRequest) (ItemAnnotationClearResult, error) {
-	att, found := firstPDFAttachment(item.Attachments)
-	if !found {
-		return ItemAnnotationClearResult{}, fmt.Errorf("item %s has no PDF attachment", item.Key)
+	att, err := selectPDFAttachment(item.Attachments, req.AttachmentKey)
+	if err != nil {
+		return ItemAnnotationClearResult{}, fmt.Errorf("item %s: %w", item.Key, err)
 	}
 
 	pdfResult, err := r.DeletePDFAnnotations(ctx, att, req)
@@ -201,14 +206,14 @@ func (r *LocalReader) ClearItemAnnotations(ctx context.Context, item domain.Item
 	}, nil
 }
 
-func (r *HybridReader) ReadItemAnnotations(ctx context.Context, item domain.Item) (ItemAnnotationsResult, error) {
+func (r *HybridReader) ReadItemAnnotations(ctx context.Context, item domain.Item, attachmentKey string) (ItemAnnotationsResult, error) {
 	reader, ok := r.local.(interface {
-		ReadItemAnnotations(context.Context, domain.Item) (ItemAnnotationsResult, error)
+		ReadItemAnnotations(context.Context, domain.Item, string) (ItemAnnotationsResult, error)
 	})
 	if !ok {
 		return ItemAnnotationsResult{}, fmt.Errorf("annotations require local or hybrid mode with local data")
 	}
-	result, err := reader.ReadItemAnnotations(ctx, item)
+	result, err := reader.ReadItemAnnotations(ctx, item, attachmentKey)
 	if err != nil {
 		return ItemAnnotationsResult{}, err
 	}
@@ -247,11 +252,12 @@ func (r *HybridReader) ClearItemAnnotations(ctx context.Context, item domain.Ite
 }
 
 type DeleteAnnotationsRequest struct {
-	Page     int    `json:"page,omitempty"`
-	Type     string `json:"type,omitempty"`
-	Author   string `json:"author,omitempty"`
-	PDFXRefs []int  `json:"pdf_xrefs,omitempty"`
-	DryRun   bool   `json:"dry_run,omitempty"`
+	AttachmentKey string `json:"attachment_key,omitempty"`
+	Page          int    `json:"page,omitempty"`
+	Type          string `json:"type,omitempty"`
+	Author        string `json:"author,omitempty"`
+	PDFXRefs      []int  `json:"pdf_xrefs,omitempty"`
+	DryRun        bool   `json:"dry_run,omitempty"`
 }
 
 type DeleteAnnotationsResult struct {
@@ -260,13 +266,23 @@ type DeleteAnnotationsResult struct {
 	Deleted       int    `json:"deleted"`
 }
 
-func firstPDFAttachment(attachments []domain.Attachment) (domain.Attachment, bool) {
+func selectPDFAttachment(attachments []domain.Attachment, attachmentKey string) (domain.Attachment, error) {
 	for _, attachment := range attachments {
-		if strings.EqualFold(strings.TrimSpace(attachment.ContentType), "application/pdf") {
-			return attachment, true
+		if attachmentKey != "" && !strings.EqualFold(attachment.Key, attachmentKey) {
+			continue
 		}
+		if !strings.EqualFold(strings.TrimSpace(attachment.ContentType), "application/pdf") {
+			if attachmentKey != "" {
+				return domain.Attachment{}, fmt.Errorf("attachment %s is not a PDF", attachmentKey)
+			}
+			continue
+		}
+		return attachment, nil
 	}
-	return domain.Attachment{}, false
+	if attachmentKey != "" {
+		return domain.Attachment{}, fmt.Errorf("PDF attachment %s not found", attachmentKey)
+	}
+	return domain.Attachment{}, fmt.Errorf("has no PDF attachment")
 }
 
 func (r *LocalReader) DeletePDFAnnotations(ctx context.Context, attachment domain.Attachment, req DeleteAnnotationsRequest) (DeleteAnnotationsResult, error) {
@@ -278,7 +294,7 @@ func (r *LocalReader) DeletePDFAnnotations(ctx context.Context, attachment domai
 	}
 	pythonCmd, ok := findPythonCommandFunc(r.DataDir)
 	if !ok {
-		return DeleteAnnotationsResult{}, fmt.Errorf("python with pymupdf not found")
+		return DeleteAnnotationsResult{}, pyMuPDFUnavailableError()
 	}
 	reqJSON, err := json.Marshal(req)
 	if err != nil {

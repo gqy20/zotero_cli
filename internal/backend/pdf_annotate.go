@@ -12,14 +12,15 @@ import (
 )
 
 type AnnotateRequest struct {
-	Text    string      `json:"text,omitempty"`
-	Color   string      `json:"color"`
-	Comment string      `json:"comment,omitempty"`
-	Type    string      `json:"type"` // "highlight" | "underline" | "note"
-	Page    int         `json:"page,omitempty"`
-	Rect    *[4]float64 `json:"rect,omitempty"`
-	Point   *[2]float64 `json:"point,omitempty"`
-	DryRun  bool        `json:"dry_run,omitempty"`
+	AttachmentKey string      `json:"attachment_key,omitempty"`
+	Text          string      `json:"text,omitempty"`
+	Color         string      `json:"color"`
+	Comment       string      `json:"comment,omitempty"`
+	Type          string      `json:"type"` // "highlight" | "underline" | "note"
+	Page          int         `json:"page,omitempty"`
+	Rect          *[4]float64 `json:"rect,omitempty"`
+	Point         *[2]float64 `json:"point,omitempty"`
+	DryRun        bool        `json:"dry_run,omitempty"`
 }
 
 type AnnotateMatch struct {
@@ -43,13 +44,25 @@ type annotateMatchRaw struct {
 	Text string    `json:"text"`
 }
 
+var runPDFAnnotationScriptFunc = func(ctx context.Context, pythonCmd, script, pdfPath string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, pythonCmd, "-", pdfPath)
+	cmd.Stdin = strings.NewReader(script)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("annotate failed: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.Bytes(), nil
+}
+
 func (r *LocalReader) AnnotatePDF(ctx context.Context, attachment domain.Attachment, req AnnotateRequest) (AnnotateResult, error) {
 	if !attachment.Resolved || strings.TrimSpace(attachment.ResolvedPath) == "" {
 		return AnnotateResult{}, fmt.Errorf("attachment %s has no resolved path", attachment.Key)
 	}
 	pythonCmd, ok := findPythonCommandFunc(r.DataDir)
 	if !ok {
-		return AnnotateResult{}, fmt.Errorf("python with pymupdf not found")
+		return AnnotateResult{}, pyMuPDFUnavailableError()
 	}
 	reqJSON, err := json.Marshal(req)
 	if err != nil {
@@ -194,24 +207,42 @@ elif req.get("page") and req.get("point") is not None:
 
 if not dry_run:
     doc.save(pdf_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+    doc.close()
+    check = fitz.open(pdf_path)
+    len(check)
+    check.close()
 
 payload = json.dumps({"matches": results, "dry_run": dry_run}, ensure_ascii=False)
 sys.stdout.buffer.write(payload.encode("utf-8"))
 `
-	cmd := exec.CommandContext(ctx, pythonCmd, "-", attachment.ResolvedPath)
-	cmd.Stdin = strings.NewReader(script)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return AnnotateResult{}, fmt.Errorf("annotate failed: %w: %s", err, strings.TrimSpace(stderr.String()))
+	workPath := attachment.ResolvedPath
+	commit := func() error { return nil }
+	cleanup := func() {}
+	if !req.DryRun {
+		workPath, commit, cleanup, err = preparePDFAnnotationMutation(attachment.ResolvedPath)
+		if err != nil {
+			return AnnotateResult{}, err
+		}
+		defer cleanup()
+	}
+	stdout, err := runPDFAnnotationScriptFunc(ctx, pythonCmd, script, workPath)
+	if err != nil {
+		return AnnotateResult{}, err
 	}
 	var rawResult struct {
 		Matches []annotateMatchRaw `json:"matches"`
 		DryRun  bool               `json:"dry_run"`
 	}
-	if err := json.Unmarshal(stdout.Bytes(), &rawResult); err != nil {
+	if err := json.Unmarshal(stdout, &rawResult); err != nil {
 		return AnnotateResult{}, err
+	}
+	if !rawResult.DryRun && len(rawResult.Matches) == 0 {
+		return AnnotateResult{}, fmt.Errorf("annotation target did not match any text or valid page; PDF was not changed")
+	}
+	if !rawResult.DryRun {
+		if err := commit(); err != nil {
+			return AnnotateResult{}, err
+		}
 	}
 	matches := make([]AnnotateMatch, len(rawResult.Matches))
 	for i, m := range rawResult.Matches {
@@ -236,9 +267,9 @@ sys.stdout.buffer.write(payload.encode("utf-8"))
 }
 
 func (r *LocalReader) AnnotateItem(ctx context.Context, item domain.Item, req AnnotateRequest) (AnnotateResult, error) {
-	att, found := firstPDFAttachment(item.Attachments)
-	if !found {
-		return AnnotateResult{}, fmt.Errorf("item %s has no PDF attachment", item.Key)
+	att, err := selectPDFAttachment(item.Attachments, req.AttachmentKey)
+	if err != nil {
+		return AnnotateResult{}, fmt.Errorf("item %s: %w", item.Key, err)
 	}
 	result, err := r.AnnotatePDF(ctx, att, req)
 	if err != nil {

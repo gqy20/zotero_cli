@@ -151,9 +151,10 @@ go run .\cmd\zot config check
 
 # 双源读取标注（DB + PDF 文件内）
 .\zot.exe ann list ITEMKEY --json
+.\zot.exe ann list ITEMKEY --attachment ATTACHMENT_KEY --json  # 多 PDF 时精确选择
 
-# 写入标注到 PDF
-.\zot.exe ann new ITEMKEY --text "关键概念" --color red --comment "重要"
+# 事务式写入标注到 PDF（临时副本验证后替换）
+.\zot.exe ann new ITEMKEY --attachment ATTACHMENT_KEY --text "关键概念" --color red --comment "重要"
 
 # 删除必须选择 Zotero 或 PDF 来源，并建议先预览
 .\zot.exe ann delete ITEMKEY --source zotero --type highlight --dry-run --json

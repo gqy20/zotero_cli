@@ -160,6 +160,7 @@ func (c *CLI) newAnnotationCommand(opts *globalOptions) *cobra.Command {
 	newCmd := &cobra.Command{Use: "new [ITEM_KEY]", Short: "Create annotations", Args: cobra.MaximumNArgs(1)}
 	flags := newCmd.Flags()
 	flags.StringVar(&create.Text, "text", "", "text to locate")
+	flags.StringVar(&create.AttachmentKey, "attachment", "", "target PDF attachment key")
 	flags.StringVar(&create.Color, "color", "yellow", "annotation color")
 	flags.StringVar(&create.Comment, "comment", "", "annotation comment")
 	flags.StringVar(&create.Type, "type", "highlight", "highlight, underline, or note")
@@ -219,21 +220,23 @@ func (c *CLI) newAnnotationCommand(opts *globalOptions) *cobra.Command {
 }
 
 func addAnnotationFilterFlags(cmd *cobra.Command, filter *app.AnnotationFilter) {
+	cmd.Flags().StringVar(&filter.AttachmentKey, "attachment", "", "target PDF attachment key")
 	cmd.Flags().IntVar(&filter.Page, "page", 0, "one-based page number")
 	cmd.Flags().StringVar(&filter.Type, "type", "", "annotation type")
 	cmd.Flags().StringVar(&filter.Author, "author", "", "annotation author")
 }
 
 type annotationFileEntry struct {
-	ItemKey string    `json:"item_key"`
-	Text    string    `json:"text"`
-	Color   string    `json:"color"`
-	Comment string    `json:"comment"`
-	Type    string    `json:"type"`
-	Page    int       `json:"page"`
-	Rect    []float64 `json:"rect"`
-	Point   []float64 `json:"point"`
-	DryRun  *bool     `json:"dry_run"`
+	ItemKey       string    `json:"item_key"`
+	AttachmentKey string    `json:"attachment_key"`
+	Text          string    `json:"text"`
+	Color         string    `json:"color"`
+	Comment       string    `json:"comment"`
+	Type          string    `json:"type"`
+	Page          int       `json:"page"`
+	Rect          []float64 `json:"rect"`
+	Point         []float64 `json:"point"`
+	DryRun        *bool     `json:"dry_run"`
 }
 
 func annotationTargets(defaultKey string, defaults backend.AnnotateRequest, from string) ([]app.AnnotationTarget, error) {
@@ -262,6 +265,9 @@ func annotationTargets(defaultKey string, defaults backend.AnnotateRequest, from
 			key = defaultKey
 		}
 		request := defaults
+		if entry.AttachmentKey != "" {
+			request.AttachmentKey = entry.AttachmentKey
+		}
 		if entry.Text != "" {
 			request.Text = entry.Text
 		}

@@ -55,7 +55,7 @@ type attachmentPageTextReader interface {
 }
 
 type itemAnnotationsReader interface {
-	ReadItemAnnotations(context.Context, domain.Item) (backend.ItemAnnotationsResult, error)
+	ReadItemAnnotations(context.Context, domain.Item, string) (backend.ItemAnnotationsResult, error)
 }
 
 type itemAnnotator interface {
@@ -215,7 +215,7 @@ func (h *Handler) getItemAnnotations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, fmt.Errorf("annotations not available on this server"))
 		return
 	}
-	result, err := reader.ReadItemAnnotations(r.Context(), item)
+	result, err := reader.ReadItemAnnotations(r.Context(), item, r.URL.Query().Get("attachment"))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return

@@ -193,15 +193,28 @@ func TestAnnotationCreateValidationMatchesPhysicalPDFTypes(t *testing.T) {
 
 func TestAnnotationBatchInfersNoteForPointTarget(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "annotations.json")
-	if err := os.WriteFile(path, []byte(`[{"page":2,"point":[10,20],"comment":"note"}]`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`[{"attachment_key":"ATT2","page":2,"point":[10,20],"comment":"note"}]`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	targets, err := annotationTargets("ITEM1", backend.AnnotateRequest{Type: "highlight", Color: "yellow"}, path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(targets) != 1 || targets[0].Request.Type != "note" {
+	if len(targets) != 1 || targets[0].Request.Type != "note" || targets[0].Request.AttachmentKey != "ATT2" {
 		t.Fatalf("targets=%#v", targets)
+	}
+}
+
+func TestAnnotationCommandsExposeAttachmentSelector(t *testing.T) {
+	root := testCLI.newRootCommand()
+	for _, path := range [][]string{{"ann", "list"}, {"ann", "new"}, {"ann", "delete"}} {
+		command, _, err := root.Find(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if command.Flags().Lookup("attachment") == nil {
+			t.Fatalf("%s is missing --attachment", strings.Join(path, " "))
+		}
 	}
 }
 

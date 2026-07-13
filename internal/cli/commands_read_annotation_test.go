@@ -158,6 +158,9 @@ func TestLoadAnnotationsReturnsAllTypes(t *testing.T) {
 	for _, a := range item.Annotations {
 		if a.Text == "Key finding about genome assembly" {
 			foundHighlightNote = true
+			if a.AttachmentKey != "ATTACHPDF" {
+				t.Errorf("unexpected attachment key: %q", a.AttachmentKey)
+			}
 			if a.Type != "note" {
 				t.Errorf("expected type=note for highlight-note annotation, got %s", a.Type)
 			}
