@@ -156,6 +156,19 @@ func (c *CLI) addObjectWriteCommands(resource *cobra.Command, opts *globalOption
 
 func (c *CLI) addItemWriteCommands(item *cobra.Command, opts *globalOptions) {
 	c.addObjectWriteCommands(item, opts, "item")
+	var importDryRun bool
+	var importCollection string
+	importCmd := &cobra.Command{Use: "import PATH", Short: "Import a PDF into Zotero desktop", Args: cobra.ExactArgs(1)}
+	importCmd.Flags().BoolVar(&importDryRun, "dry-run", false, "validate the PDF and Zotero connection without importing")
+	importCmd.Flags().StringVar(&importCollection, "collection", "", "add the imported item to this collection key")
+	importCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		service := app.NewItemImportService()
+		path := app.CommandPath{Resource: "item", Action: "import"}
+		return c.renderResult(cmd.Context(), opts, path, func(ctx context.Context) (app.Result, error) {
+			return service.Import(ctx, app.ItemImportRequest{Path: args[0], Collection: importCollection, DryRun: importDryRun})
+		})
+	}
+	item.AddCommand(importCmd)
 	for _, spec := range []struct {
 		name string
 		add  bool

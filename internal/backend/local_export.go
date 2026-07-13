@@ -3,9 +3,82 @@ package backend
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strconv"
 	"strings"
 )
+
+type CollectionTarget struct {
+	ID   int64
+	Key  string
+	Name string
+}
+
+type ImportedAttachment struct {
+	Key       string
+	ParentKey string
+	LinkMode  int
+	Path      string
+}
+
+func (r *LocalReader) ImportedPDFAttachments(ctx context.Context, sourceURL string) ([]ImportedAttachment, error) {
+	db, cleanup, err := r.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	defer cleanup()
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT a.key, COALESCE(p.key, ''), COALESCE(ia.linkMode, 0), COALESCE(ia.path, '')
+		FROM itemAttachments ia
+		JOIN items a ON a.itemID = ia.itemID
+		LEFT JOIN items p ON p.itemID = ia.parentItemID
+		LEFT JOIN itemData d ON d.itemID = a.itemID
+		LEFT JOIN itemDataValues v ON v.valueID = d.valueID
+		LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
+		WHERE COALESCE(ia.contentType, '') = 'application/pdf'
+		GROUP BY a.itemID, a.key, p.key, ia.linkMode, ia.path
+		HAVING MAX(CASE WHEN f.fieldName = 'url' THEN v.value END) = ?
+		ORDER BY a.key
+	`, sourceURL)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ImportedAttachment
+	for rows.Next() {
+		var attachment ImportedAttachment
+		if err := rows.Scan(&attachment.Key, &attachment.ParentKey, &attachment.LinkMode, &attachment.Path); err != nil {
+			return nil, err
+		}
+		out = append(out, attachment)
+	}
+	return out, rows.Err()
+}
+
+func (r *LocalReader) CollectionTarget(ctx context.Context, collectionKey string) (CollectionTarget, error) {
+	db, cleanup, err := r.openDB()
+	if err != nil {
+		return CollectionTarget{}, err
+	}
+	defer db.Close()
+	defer cleanup()
+
+	var target CollectionTarget
+	err = db.QueryRowContext(ctx, `
+		SELECT collectionID, key, collectionName
+		FROM collections
+		WHERE key = ?
+	`, strings.TrimSpace(collectionKey)).Scan(&target.ID, &target.Key, &target.Name)
+	if err == sql.ErrNoRows {
+		return CollectionTarget{}, fmt.Errorf("collection %q not found in local Zotero library", collectionKey)
+	}
+	if err != nil {
+		return CollectionTarget{}, err
+	}
+	return target, nil
+}
 
 func (r *LocalReader) ExportItemsCSLJSON(ctx context.Context, keys []string) ([]map[string]any, error) {
 	db, cleanup, err := r.openDB()

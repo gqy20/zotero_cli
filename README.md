@@ -438,7 +438,7 @@ ZOT_MODE=local ZOT_DATA_DIR=~/.zot/sync zot find ...
 | **标注** | `ann list` / `ann new` / `ann delete` | 读取、写入和删除 PDF 标注 |
 | **PDF** | `pdf open` | 在 Zotero 阅读器中打开 |
 | **导出** | `export` | BibTeX / RIS / CSL-JSON |
-| **写操作** | `item new` / `item edit` / `item delete` | 条目 CRUD（笔记支持 hybrid 本地写入） |
+| **写操作** | `item new` / `item edit` / `item delete` / `item import` | 条目 CRUD；通过本机 Zotero 导入 PDF |
 | **标签** | `item tag` / `item untag` | 批量标签管理 |
 | **收藏夹** | `coll list` / `coll new` | 收藏夹查看与创建 |
 | **配置** | `config init` / `config show` / `config check` | 配置管理 |

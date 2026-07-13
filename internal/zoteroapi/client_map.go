@@ -3,6 +3,7 @@ package zoteroapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"html"
 	"net/http"
 	"sort"
@@ -104,7 +105,9 @@ func (c *Client) fetchAllNotes(ctx context.Context, relativePath string, opts Fi
 
 func (c *Client) fetchAllTags(ctx context.Context, relativePath string) ([]apiTagResponse, error) {
 	all := make([]apiTagResponse, 0)
-	opts := FindOptions{}
+	const pageSize = 100
+	const maxTags = 100000
+	opts := FindOptions{Limit: pageSize}
 
 	for {
 		resp, err := c.doRequest(ctx, relativePath, opts, nil)
@@ -112,14 +115,20 @@ func (c *Client) fetchAllTags(ctx context.Context, relativePath string) ([]apiTa
 			return nil, err
 		}
 
-		page, total, err := decodeResponseWithTotal[apiTagResponse](resp)
+		page, _, err := decodeResponseWithTotal[apiTagResponse](resp)
 		if err != nil {
 			return nil, err
 		}
 
 		all = append(all, page...)
-		if !shouldContinuePagination(len(page), len(all), total, 0) {
+		// The Web API can under-report Total-Results for /tags, so ending
+		// pagination based on that header silently drops later tags. A short
+		// page is the only reliable completion signal for this endpoint.
+		if len(page) < pageSize {
 			return all, nil
+		}
+		if len(all) >= maxTags {
+			return nil, fmt.Errorf("tag pagination exceeded safety limit of %d results", maxTags)
 		}
 
 		opts.Start += len(page)

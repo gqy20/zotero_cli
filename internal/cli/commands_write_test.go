@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,6 +71,41 @@ func TestRunCreateItemJSON(t *testing.T) {
 	}
 	if got["command"] != "item new" {
 		t.Fatalf("unexpected command: %#v", got["command"])
+	}
+}
+
+func TestRunItemImportDryRunJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	pdfPath := filepath.Join(t.TempDir(), "paper.pdf")
+	if err := os.WriteFile(pdfPath, []byte("%PDF-test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/connector/ping" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	t.Setenv("ZOT_CONNECTOR_URL", server.URL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"item", "import", pdfPath, "--dry-run", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("exit code=%d stderr=%q", exitCode, stderr.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
+	}
+	if got["command"] != "item import" {
+		t.Fatalf("command=%#v", got["command"])
+	}
+	meta := got["meta"].(map[string]any)
+	if meta["dry_run"] != true {
+		t.Fatalf("meta=%#v", meta)
 	}
 }
 

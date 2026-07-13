@@ -21,7 +21,7 @@ JSON 响应统一使用 `{ok, command, data, meta}`；`command` 始终是 canoni
 ```text
 zot
 ├── lib show|stats|log
-├── item list|find|show|new|edit|delete|tag|untag|supp|export
+├── item list|find|show|new|edit|delete|tag|untag|import|supp|export
 ├── coll list|show|new|edit|delete|add|remove
 ├── note list|show|find|new|edit|delete
 ├── tag list|replace
@@ -76,6 +76,9 @@ zot item edit ITEMKEY --set title="New title" --if-version 42 --json
 zot item delete ITEMKEY --yes --if-version 42 --json
 zot item tag KEY1 KEY2 --tag review --json
 zot item untag KEY1 KEY2 --tag review --json
+zot item import ./paper.pdf --dry-run --json
+zot item import ./paper.pdf --json
+zot item import ./paper.pdf --collection COLLKEY --json
 
 # 默认只预览；Go 正则替换支持 $1 等捕获组
 zot tag replace --match '^(SV|SV检测)$' --replace '结构变异' --json

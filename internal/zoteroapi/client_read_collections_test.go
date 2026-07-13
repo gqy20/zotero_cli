@@ -3,6 +3,7 @@ package zoteroapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -180,6 +181,45 @@ func TestClientListTags(t *testing.T) {
 	}
 	if tags[0].Name != "transformers" || tags[0].NumItems != 4 {
 		t.Fatalf("unexpected tag: %#v", tags[0])
+	}
+}
+
+func TestClientListTagsIgnoresUndercountedTotalResults(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123/tags" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("limit"); got != "100" {
+			t.Fatalf("limit = %q, want 100", got)
+		}
+		start, _ := strconv.Atoi(r.URL.Query().Get("start"))
+		w.Header().Set("Total-Results", "50") // Zotero can undercount this endpoint.
+		page := make([]map[string]any, 0, 100)
+		switch start {
+		case 0:
+			for i := 0; i < 100; i++ {
+				page = append(page, map[string]any{"tag": fmt.Sprintf("tag-%03d", i), "meta": map[string]any{"numItems": 1}})
+			}
+		case 100:
+			page = append(page, map[string]any{"tag": "late-tag", "meta": map[string]any{"numItems": 7}})
+		default:
+			t.Fatalf("unexpected start: %d", start)
+		}
+		if err := json.NewEncoder(w).Encode(page); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{LibraryType: "user", LibraryID: "123", APIKey: "secret"}, server.URL, server.Client())
+	tags, err := client.ListTags(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tags) != 101 || tags[100].Name != "late-tag" || tags[100].NumItems != 7 {
+		t.Fatalf("unexpected tags: len=%d last=%#v", len(tags), tags[len(tags)-1])
 	}
 }
 
