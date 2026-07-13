@@ -34,12 +34,12 @@ func (c *CLI) pdfService() app.PDFService {
 func (c *CLI) newPDFCommand(opts *globalOptions) *cobra.Command {
 	pdf := &cobra.Command{Use: "pdf", Short: "Extract and open PDF content"}
 	var textReq app.PDFTextRequest
-	textCmd := &cobra.Command{Use: "text [ITEM_KEY...]", Short: "Extract PDF full text", Args: cobra.ArbitraryArgs}
-	textCmd.Flags().BoolVar(&textReq.All, "all", false, "extract every item with a PDF")
+	textCmd := &cobra.Command{Use: "text [ITEM_KEY...]", Short: "Prepare PDF full-text cache paths or filtered text", Args: cobra.ArbitraryArgs}
+	textCmd.Flags().BoolVar(&textReq.All, "all", false, "prepare every item with a PDF")
 	textCmd.Flags().StringVarP(&textReq.OutputDir, "output-dir", "o", "", "write Markdown files to this directory")
 	textCmd.Flags().StringVar(&textReq.Pages, "pages", "", "page ranges such as 1-3,7")
 	textCmd.Flags().IntVar(&textReq.MaxChars, "max-chars", 0, "maximum returned characters")
-	textCmd.Flags().StringVar(&textReq.Grep, "grep", "", "retain lines containing text")
+	textCmd.Flags().StringVar(&textReq.Grep, "grep", "", "return matching text with adjacent context")
 	textCmd.Flags().StringVar(&textReq.AttachmentKey, "attachment", "", "extract one attachment")
 	textCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		textReq.Keys = args

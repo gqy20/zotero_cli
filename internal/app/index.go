@@ -16,8 +16,10 @@ import (
 )
 
 type IndexBuildRequest struct {
-	Force   bool
-	Workers int
+	Force          bool
+	Workers        int
+	ItemKeys       []string
+	AttachmentKeys []string
 }
 
 type IndexBuildResult struct {
@@ -88,9 +90,13 @@ func (s IndexService) Build(ctx context.Context, req IndexBuildRequest) (Result,
 	entries, hasEntries := reader.(indexEntryChecker)
 	marker, hasMarker := reader.(indexFailureMarker)
 	started := time.Now()
-	items, err := reader.FindItems(ctx, backend.FindOptions{HasPDF: true, IncludeFields: []string{"attachments"}})
+	items, err := indexBuildItems(ctx, reader, req.ItemKeys)
 	if err != nil {
 		return Result{}, err
+	}
+	attachmentKeys := make(map[string]struct{}, len(req.AttachmentKeys))
+	for _, key := range req.AttachmentKeys {
+		attachmentKeys[key] = struct{}{}
 	}
 	type task struct {
 		item       domain.Item
@@ -102,6 +108,11 @@ func (s IndexService) Build(ctx context.Context, req IndexBuildRequest) (Result,
 		for _, attachment := range item.Attachments {
 			if attachment.ContentType != "application/pdf" {
 				continue
+			}
+			if len(attachmentKeys) > 0 {
+				if _, ok := attachmentKeys[attachment.Key]; !ok {
+					continue
+				}
 			}
 			result.TotalAttachments++
 			if !req.Force && hasCache && cache.IsFullTextCached(attachment) && (!hasEntries || entries.IsFullTextIndexed(attachment)) {
@@ -174,6 +185,26 @@ func (s IndexService) Build(ctx context.Context, req IndexBuildRequest) (Result,
 	result.Elapsed = time.Since(started).Seconds()
 	text := fmt.Sprintf("Index complete: %d indexed, %d skipped, %d failed in %.1fs", result.Indexed, result.Skipped, result.Failed, result.Elapsed)
 	return Result{Data: result, Meta: map[string]any{"elapsed": result.Elapsed, "workers": req.Workers}, Text: text}, nil
+}
+
+func indexBuildItems(ctx context.Context, reader backend.Reader, keys []string) ([]domain.Item, error) {
+	if len(keys) == 0 {
+		return reader.FindItems(ctx, backend.FindOptions{HasPDF: true, IncludeFields: []string{"attachments"}})
+	}
+	items := make([]domain.Item, 0, len(keys))
+	seen := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		item, err := reader.GetItem(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
 }
 
 func (s IndexService) Status(_ context.Context) (Result, error) {

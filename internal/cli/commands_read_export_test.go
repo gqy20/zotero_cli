@@ -443,15 +443,18 @@ func TestRunExtractTextLocalJSON(t *testing.T) {
 			text: "full extracted text",
 			attachments: []backend.AttachmentFullText{
 				{
-					Attachment: domain.Attachment{Key: "ATT123", Title: "Paper PDF", ContentType: "application/pdf", ResolvedPath: "D:/paper.pdf", Resolved: true},
-					Text:       "full extracted text",
-					Source:     "pdfium",
+					Attachment:  domain.Attachment{Key: "ATT123", Title: "Paper PDF", ContentType: "application/pdf", ResolvedPath: "D:/paper.pdf", Resolved: true},
+					Text:        "full extracted text",
+					Source:      "pdfium",
+					ContentPath: "D:/cache/ATT123/content.txt",
+					ChunksPath:  "D:/cache/ATT123/chunks.json",
 				},
 				{
-					Attachment: domain.Attachment{Key: "ATT456", Title: "Supplementary PDF", ContentType: "application/pdf", ResolvedPath: "D:/supplement.pdf", Resolved: true},
-					Text:       "supplement extracted text",
-					Source:     "zotero_ft_cache",
-					CacheHit:   true,
+					Attachment:  domain.Attachment{Key: "ATT456", Title: "Supplementary PDF", ContentType: "application/pdf", ResolvedPath: "D:/supplement.pdf", Resolved: true},
+					Text:        "supplement extracted text",
+					Source:      "zotero_ft_cache",
+					CacheHit:    true,
+					ContentPath: "D:/cache/ATT456/content.txt",
 				},
 			},
 			meta: backend.ReadMetadata{ReadSource: "live", FullTextSource: "pdfium", FullTextAttachmentKey: "ATT123"},
@@ -476,8 +479,11 @@ func TestRunExtractTextLocalJSON(t *testing.T) {
 		t.Fatalf("unexpected meta payload: %#v", got["meta"])
 	}
 	data, ok := got["data"].(map[string]any)
-	if !ok || data["text"] != "full extracted text" {
+	if !ok || data["content_path"] != "D:/cache/ATT123/content.txt" || data["chunks_path"] != "D:/cache/ATT123/chunks.json" {
 		t.Fatalf("unexpected data payload: %#v", got["data"])
+	}
+	if _, exists := data["text"]; exists {
+		t.Fatalf("default local response must not inline full text: %#v", data)
 	}
 	if data["primary_attachment_key"] != "ATT123" {
 		t.Fatalf("unexpected primary_attachment_key: %#v", data["primary_attachment_key"])
@@ -487,11 +493,11 @@ func TestRunExtractTextLocalJSON(t *testing.T) {
 		t.Fatalf("unexpected attachments payload: %#v", data["attachments"])
 	}
 	first, ok := attachments[0].(map[string]any)
-	if !ok || first["attachment_key"] != "ATT123" || first["text"] != "full extracted text" {
+	if !ok || first["attachment_key"] != "ATT123" || first["content_path"] != "D:/cache/ATT123/content.txt" || first["total_chars"] != float64(19) {
 		t.Fatalf("unexpected first attachment payload: %#v", attachments[0])
 	}
 	second, ok := attachments[1].(map[string]any)
-	if !ok || second["attachment_key"] != "ATT456" || second["text"] != "supplement extracted text" || second["full_text_cache_hit"] != true {
+	if !ok || second["attachment_key"] != "ATT456" || second["content_path"] != "D:/cache/ATT456/content.txt" || second["full_text_cache_hit"] != true {
 		t.Fatalf("unexpected second attachment payload: %#v", attachments[1])
 	}
 }
@@ -548,15 +554,15 @@ func TestRunExtractTextLocalJSONOutputControls(t *testing.T) {
 		t.Fatalf("unexpected filters: %#v", filters)
 	}
 	data := got["data"].(map[string]any)
-	if data["text"] != "Methods: supplementa" {
-		t.Fatalf("unexpected truncated text: %#v", data["text"])
+	if _, exists := data["text"]; exists {
+		t.Fatalf("top-level text must not duplicate attachment text: %#v", data)
 	}
 	attachments := data["attachments"].([]any)
 	if len(attachments) != 1 {
 		t.Fatalf("expected one filtered attachment, got %#v", attachments)
 	}
 	attachment := attachments[0].(map[string]any)
-	if attachment["attachment_key"] != "ATT456" || attachment["truncated"] != true {
+	if attachment["attachment_key"] != "ATT456" || attachment["text"] != "intro\nMethods: suppl" || attachment["truncated"] != true {
 		t.Fatalf("unexpected attachment payload: %#v", attachment)
 	}
 }
@@ -614,13 +620,13 @@ func TestRunExtractTextLocalJSONPagesOutputControls(t *testing.T) {
 		t.Fatalf("unexpected returned_pages: %#v", meta["returned_pages"])
 	}
 	data := got["data"].(map[string]any)
-	if data["text"] != "methods page t" {
-		t.Fatalf("unexpected data text: %#v", data["text"])
+	if _, exists := data["text"]; exists {
+		t.Fatalf("top-level text must not duplicate page text: %#v", data)
 	}
 	attachments := data["attachments"].([]any)
 	attachment := attachments[0].(map[string]any)
 	pages := attachment["pages"].([]any)
-	if len(pages) != 1 || pages[0].(map[string]any)["page"] != float64(2) {
+	if len(pages) != 1 || pages[0].(map[string]any)["page"] != float64(2) || pages[0].(map[string]any)["text"] != "methods page t" {
 		t.Fatalf("unexpected pages payload: %#v", pages)
 	}
 }

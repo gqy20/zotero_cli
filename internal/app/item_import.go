@@ -36,6 +36,9 @@ type ItemImportResult struct {
 	CollectionName     string                  `json:"collection_name,omitempty"`
 	CollectionAssigned bool                    `json:"collection_assigned,omitempty"`
 	DuplicateCleanup   *DuplicateCleanupResult `json:"duplicate_cleanup,omitempty"`
+	ItemKey            string                  `json:"item_key,omitempty"`
+	AttachmentKey      string                  `json:"attachment_key,omitempty"`
+	FullTextIndexed    bool                    `json:"full_text_indexed,omitempty"`
 }
 
 type DuplicateCleanupResult struct {
@@ -61,11 +64,17 @@ type itemImportDeleteClient interface {
 	DeleteItems(context.Context, []string, int) (zoteroapi.BatchWriteResult, error)
 }
 
+type itemImportIndexBuilder interface {
+	Build(context.Context, IndexBuildRequest) (Result, error)
+}
+
 type ItemImportService struct {
 	LoadConfig      func() (config.Config, string, error)
 	NewClient       func(config.Config) ItemImportConnector
 	NewResolver     func(config.Config) (itemImportCollectionResolver, error)
 	NewDeleteClient func(config.Config) (itemImportDeleteClient, error)
+	NewIndexBuilder func() itemImportIndexBuilder
+	PollInterval    time.Duration
 }
 
 func NewItemImportService() ItemImportService {
@@ -85,6 +94,11 @@ func NewItemImportService() ItemImportService {
 			read := NewReadService()
 			return read.NewClient(cfg)
 		},
+		NewIndexBuilder: func() itemImportIndexBuilder {
+			service := NewIndexService()
+			return service
+		},
+		PollInterval: 400 * time.Millisecond,
 	}
 }
 
@@ -162,23 +176,107 @@ func (s ItemImportService) Import(ctx context.Context, req ItemImportRequest) (R
 		if _, recognized, waitErr := client.WaitForRecognizedItem(ctx, sessionID); waitErr != nil {
 			result.Warnings = append(result.Warnings, Warning{Code: "recognition_wait_failed", Message: waitErr.Error()})
 		} else if recognized {
-			time.Sleep(2 * time.Second)
 			if resolver == nil {
 				resolver, err = s.NewResolver(cfg)
 			}
 			if err != nil {
 				result.Warnings = append(result.Warnings, Warning{Code: "duplicate_cleanup_failed", Message: err.Error()})
 			} else {
+				attachments, waitAttachmentsErr := s.waitForImportedAttachments(ctx, resolver, importFileURL(absPath))
+				if waitAttachmentsErr != nil {
+					result.Warnings = append(result.Warnings, Warning{Code: "import_attachment_wait_failed", Message: waitAttachmentsErr.Error()})
+				}
 				cleanup, cleanupErr := s.cleanupDuplicateAttachments(ctx, cfg, resolver, importFileURL(absPath))
 				data.DuplicateCleanup = cleanup
+				data.ItemKey, data.AttachmentKey = importedAttachmentTarget(attachments, cleanup)
 				result.Data = data
 				if cleanupErr != nil {
 					result.Warnings = append(result.Warnings, Warning{Code: "duplicate_cleanup_failed", Message: cleanupErr.Error()})
+				}
+				if data.ItemKey != "" && data.AttachmentKey != "" && s.NewIndexBuilder != nil {
+					indexed, indexErr := s.NewIndexBuilder().Build(ctx, IndexBuildRequest{Workers: 1, ItemKeys: []string{data.ItemKey}, AttachmentKeys: []string{data.AttachmentKey}})
+					if indexErr != nil {
+						result.Warnings = append(result.Warnings, Warning{Code: "full_text_index_failed", Message: indexErr.Error()})
+					} else if indexResult, ok := indexed.Data.(IndexBuildResult); ok {
+						data.FullTextIndexed = indexResult.Indexed+indexResult.Skipped > 0 && indexResult.Failed == 0
+						result.Data = data
+					}
 				}
 			}
 		}
 	}
 	return result, nil
+}
+
+func (s ItemImportService) waitForImportedAttachments(ctx context.Context, resolver itemImportCollectionResolver, sourceURL string) ([]backend.ImportedAttachment, error) {
+	interval := s.PollInterval
+	if interval <= 0 {
+		interval = 400 * time.Millisecond
+	}
+	var previous string
+	var latest []backend.ImportedAttachment
+	for attempt := 0; attempt < 20; attempt++ {
+		attachments, err := resolver.ImportedPDFAttachments(ctx, sourceURL)
+		if err != nil {
+			return nil, err
+		}
+		if importedAttachmentsReady(attachments) {
+			signature := importedAttachmentSignature(attachments)
+			latest = attachments
+			if signature == previous {
+				return latest, nil
+			}
+			previous = signature
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(interval):
+		}
+	}
+	if len(latest) > 0 {
+		return latest, nil
+	}
+	return nil, fmt.Errorf("Zotero did not expose the imported PDF attachment before timeout")
+}
+
+func importedAttachmentsReady(attachments []backend.ImportedAttachment) bool {
+	for _, attachment := range attachments {
+		if attachment.Key != "" && attachment.ParentKey != "" && attachment.Path != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func importedAttachmentSignature(attachments []backend.ImportedAttachment) string {
+	parts := make([]string, 0, len(attachments))
+	for _, attachment := range attachments {
+		parts = append(parts, attachment.Key+"\x00"+attachment.ParentKey+"\x00"+attachment.Path)
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, "\x01")
+}
+
+func importedAttachmentTarget(attachments []backend.ImportedAttachment, cleanup *DuplicateCleanupResult) (string, string) {
+	keep := ""
+	if cleanup != nil {
+		keep = cleanup.Kept
+	}
+	candidates := append([]backend.ImportedAttachment(nil), attachments...)
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].LinkMode != candidates[j].LinkMode {
+			return candidates[i].LinkMode == 2
+		}
+		return candidates[i].Key < candidates[j].Key
+	})
+	for _, attachment := range candidates {
+		if attachment.ParentKey == "" || attachment.Path == "" || (keep != "" && attachment.Key != keep) {
+			continue
+		}
+		return attachment.ParentKey, attachment.Key
+	}
+	return "", ""
 }
 
 func (s ItemImportService) cleanupDuplicateAttachments(ctx context.Context, cfg config.Config, resolver itemImportCollectionResolver, sourceURL string) (*DuplicateCleanupResult, error) {

@@ -103,6 +103,26 @@ func (r *LocalReader) FullTextPreview(ctx context.Context, item domain.Item) (st
 }
 
 func (r *LocalReader) FullTextSnippet(ctx context.Context, item domain.Item, query string) (string, error) {
+	if item.MatchedChunk != nil && strings.TrimSpace(item.MatchedChunk.Context) != "" {
+		for _, attachment := range item.Attachments {
+			if attachment.Key != item.MatchedChunk.AttachmentKey {
+				continue
+			}
+			doc, ok, err := newFullTextCache(r.FullTextCacheDir).Load(attachment)
+			if err != nil {
+				return "", err
+			}
+			if ok {
+				r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, ReadMetadata{
+					FullTextSource:        doc.Meta.Extractor,
+					FullTextAttachmentKey: attachment.Key,
+					FullTextCacheHit:      true,
+				})
+			}
+			break
+		}
+		return item.MatchedChunk.Context, nil
+	}
 	doc, ok, err := r.loadFullTextDocument(ctx, item, query)
 	if err != nil {
 		return "", err

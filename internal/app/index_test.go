@@ -22,8 +22,44 @@ func (r *stubIndexReader) FindItems(context.Context, backend.FindOptions) ([]dom
 	return append([]domain.Item(nil), r.items...), nil
 }
 
-func (r *stubIndexReader) GetItem(context.Context, string) (domain.Item, error) {
+func (r *stubIndexReader) GetItem(_ context.Context, key string) (domain.Item, error) {
+	for _, item := range r.items {
+		if item.Key == key {
+			return item, nil
+		}
+	}
 	return domain.Item{}, nil
+}
+
+func TestIndexBuildTargetsSingleImportedAttachment(t *testing.T) {
+	reader := &stubIndexReader{
+		items: []domain.Item{{
+			Key: "ITEM123",
+			Attachments: []domain.Attachment{
+				{Key: "MAIN", ContentType: "application/pdf", Resolved: true},
+				{Key: "SUPP", ContentType: "application/pdf", Resolved: true},
+			},
+		}},
+		docs: map[string]backend.FullTextDocument{
+			"MAIN": {Text: "main text"},
+			"SUPP": {Text: "supplement text"},
+		},
+	}
+	service := IndexService{
+		LoadConfig: func() (config.Config, string, error) { return config.Config{}, "", nil },
+		NewReader:  func(config.Config) (backend.Reader, error) { return reader, nil },
+	}
+	value, err := service.Build(context.Background(), IndexBuildRequest{Workers: 1, ItemKeys: []string{"ITEM123"}, AttachmentKeys: []string{"MAIN"}})
+	if err != nil {
+		t.Fatalf("IndexService.Build() error=%v", err)
+	}
+	result := value.Data.(IndexBuildResult)
+	if result.TotalItems != 1 || result.TotalAttachments != 1 || result.Indexed != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(reader.savedDocs) != 1 || reader.savedDocs[0].Text != "main text" {
+		t.Fatalf("savedDocs=%+v", reader.savedDocs)
+	}
 }
 
 func (r *stubIndexReader) GetRelated(context.Context, string) ([]domain.Relation, error) {

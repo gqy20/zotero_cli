@@ -95,6 +95,33 @@ func TestFullTextCacheSaveAndLoad(t *testing.T) {
 	}
 }
 
+func TestFullTextEvidenceWindowIncludesAdjacentChunks(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "evidence.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE fulltext_chunks (attachment_key TEXT, chunk_index INTEGER, page INTEGER, body TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		index int
+		page  int
+		body  string
+	}{{0, 2, "context before"}, {1, 3, "matched evidence"}, {2, 3, "context after"}, {3, 4, "outside"}} {
+		if _, err := db.Exec(`INSERT INTO fulltext_chunks VALUES ('ATT1', ?, ?, ?)`, row.index, row.page, row.body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	text, pageEnd, err := fullTextEvidenceWindow(db, "ATT1", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text != "context before\nmatched evidence\ncontext after" || pageEnd != 3 {
+		t.Fatalf("text=%q pageEnd=%d", text, pageEnd)
+	}
+}
+
 func TestFullTextCacheLoadRejectsStaleEntry(t *testing.T) {
 	rootDir := t.TempDir()
 	cache := newFullTextCache(rootDir)
@@ -1004,6 +1031,12 @@ func TestLocalExtractItemAttachmentTextsIncludesAllPDFAttachments(t *testing.T) 
 	}
 	if result.Attachments[0].Attachment.Key != "ATT123" || result.Attachments[0].Text != "ATT123 text" {
 		t.Fatalf("unexpected first attachment result: %#v", result.Attachments[0])
+	}
+	if result.Attachments[0].ContentPath == "" {
+		t.Fatalf("expected cache content path: %#v", result.Attachments[0])
+	}
+	if _, err := os.Stat(result.Attachments[0].ContentPath); err != nil {
+		t.Fatalf("cache content path is not readable: %v", err)
 	}
 	if result.Attachments[1].Attachment.Key != "ATT456" || result.Attachments[1].Text != "ATT456 text" {
 		t.Fatalf("unexpected second attachment result: %#v", result.Attachments[1])

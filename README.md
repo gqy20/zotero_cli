@@ -284,7 +284,7 @@ zot find "同源多倍体" --snippet --limit 200 --json
 
 ```bash
 # 提取 PDF 正文供 AI 分析（PyMuPDF 优先 → ft-cache 回退 → pdfium WASM 兜底）
-zot pdf text KEY --json
+zot pdf text KEY --json                         # 默认返回 content.txt / chunks.json 缓存路径
 zot pdf text KEY --json --pages 3-8 --grep methods --max-chars 12000
 zot pdf text KEY -o ./markdown
 zot pdf text --all -o ./markdown --json
@@ -323,6 +323,8 @@ zot pdf open KEY --page 5
 # 在 Zotero 主界面选中该条目
 # `select` 是已退出稳定 CLI 的桌面端专用入口；请在 Zotero Desktop 中定位条目
 ```
+
+PDF 导入完成后会对本次最终保留的附件执行增量全文索引，因此新文献无需再次运行全库 `index build` 即可参与全文检索。全文 snippet 和 `pdf text --grep` 会保留命中位置的相邻上下文；JSON 的 `matched_chunk` 包含页码、附件 key 和坐标。local/hybrid 下无过滤条件的 `pdf text` 默认只返回项目全文缓存的 `content_path` 和可选 `chunks_path`，调用方直接读取该文件；只有 `--grep`、`--pages`、`--max-chars` 才返回文本子集，只有显式 `--output-dir` 才生成 Markdown。remote 模式因客户端无法访问服务端本地路径，仍返回正文。
 
 #### 与 Zotero 桌面端联动
 

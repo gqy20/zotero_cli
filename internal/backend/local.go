@@ -440,7 +440,9 @@ func (r *LocalReader) findItemsFromFullTextIndex(ctx context.Context, opts FindO
 			if match.ChunkIndex >= 0 && match.Body != "" {
 				item.MatchedChunk = &domain.MatchedChunkInfo{
 					Text:          match.Body,
+					Context:       match.ContextBody,
 					Page:          match.ChunkPage,
+					PageEnd:       match.ContextPageEnd,
 					BBox:          match.ChunkBBox,
 					AttachmentKey: match.AttachmentKey,
 				}

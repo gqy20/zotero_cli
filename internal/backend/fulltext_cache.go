@@ -69,6 +69,8 @@ type fullTextIndexMatch struct {
 	ChunkIndex      int
 	ChunkPage       int
 	ChunkBBox       [4]float64
+	ContextBody     string
+	ContextPageEnd  int
 }
 
 type fullTextIndexStatus struct {
@@ -947,7 +949,62 @@ func (c fullTextCache) searchChunks(db *sql.DB, matchExpr string, query string, 
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return rankAndDedupeFullTextMatches(rawMatches, query, limit), nil
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	matches := rankAndDedupeFullTextMatches(rawMatches, query, limit)
+	for i := range matches {
+		body, pageEnd, err := fullTextEvidenceWindow(db, matches[i].AttachmentKey, matches[i].ChunkIndex)
+		if err != nil {
+			return nil, err
+		}
+		matches[i].ContextBody = body
+		matches[i].ContextPageEnd = pageEnd
+	}
+	return matches, nil
+}
+
+func fullTextEvidenceWindow(db *sql.DB, attachmentKey string, chunkIndex int) (string, int, error) {
+	rows, err := db.Query(
+		`SELECT body, page FROM fulltext_chunks
+		 WHERE attachment_key = ? AND CAST(chunk_index AS INTEGER) BETWEEN ? AND ?
+		 ORDER BY CAST(chunk_index AS INTEGER)`,
+		attachmentKey, chunkIndex-1, chunkIndex+1,
+	)
+	if err != nil {
+		return "", 0, err
+	}
+	defer rows.Close()
+	var parts []string
+	pageEnd := 0
+	for rows.Next() {
+		var body string
+		var page int
+		if err := rows.Scan(&body, &page); err != nil {
+			return "", 0, err
+		}
+		if strings.TrimSpace(body) != "" {
+			parts = append(parts, strings.TrimSpace(body))
+		}
+		if page > pageEnd {
+			pageEnd = page
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", 0, err
+	}
+	return limitRunes(strings.Join(parts, "\n"), 1200), pageEnd, nil
+}
+
+func limitRunes(value string, limit int) string {
+	if limit <= 0 {
+		return value
+	}
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit])
 }
 
 func parseBBoxString(s string, bbox *[4]float64) {

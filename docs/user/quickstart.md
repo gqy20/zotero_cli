@@ -135,7 +135,7 @@ go run .\cmd\zot config check
 
 ```powershell
 # 提取文本（PyMuPDF → ft-cache → pdfium WASM）
-.\zot.exe pdf text ITEMKEY --json
+.\zot.exe pdf text ITEMKEY --json  # 返回本地全文缓存路径，直接读取 content_path
 .\zot.exe pdf text ITEMKEY --json --pages 3-8 --grep methods --max-chars 12000
 
 # 查找本地已保存的 Supplementary / Source data / 表格数据附件

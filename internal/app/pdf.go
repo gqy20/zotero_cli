@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/config"
@@ -96,11 +97,9 @@ func (s PDFService) Text(ctx context.Context, req PDFTextRequest) (Result, error
 	if err != nil {
 		return Result{}, err
 	}
-	fileOutput := req.OutputDir != "" || req.All || len(items) > 1
+	fileOutput := req.OutputDir != ""
+	pathOnly := shouldReturnPDFCachePaths(cfg.Mode, req)
 	outputDir := req.OutputDir
-	if fileOutput && outputDir == "" {
-		outputDir = filepath.Join(cfg.DataDir, ".zotero_cli", "markdown")
-	}
 	if fileOutput {
 		outputDir, err = filepath.Abs(outputDir)
 		if err != nil {
@@ -113,7 +112,7 @@ func (s PDFService) Text(ctx context.Context, req PDFTextRequest) (Result, error
 	results := make([]map[string]any, 0, len(items))
 	var singleText string
 	for _, item := range items {
-		entry, text, err := extractPDFText(ctx, reader, item, req, ranges)
+		entry, text, err := extractPDFText(ctx, reader, item, req, ranges, pathOnly)
 		if err != nil {
 			if len(items) == 1 {
 				return Result{}, err
@@ -155,6 +154,9 @@ func (s PDFService) Text(ctx context.Context, req PDFTextRequest) (Result, error
 		meta["output_dir"] = outputDir
 		return Result{Data: results, Meta: meta, Text: fmt.Sprintf("wrote %d Markdown full-text file(s) to %s", len(results), outputDir), Warnings: readWarnings(meta)}, nil
 	}
+	if len(results) > 1 || req.All {
+		return Result{Data: results, Meta: meta, Text: fmt.Sprintf("prepared full-text cache paths for %d item(s)", len(results)), Warnings: readWarnings(meta)}, nil
+	}
 	if total, ok := results[0]["total"]; ok {
 		meta["total"] = total
 	}
@@ -168,6 +170,10 @@ func (s PDFService) Text(ctx context.Context, req PDFTextRequest) (Result, error
 		meta["returned_pages"] = pages
 	}
 	return Result{Data: results[0], Meta: meta, Text: singleText, Warnings: readWarnings(meta)}, nil
+}
+
+func shouldReturnPDFCachePaths(mode string, req PDFTextRequest) bool {
+	return mode != "remote" && req.OutputDir == "" && req.Pages == "" && req.Grep == "" && req.MaxChars == 0
 }
 
 func pdfItems(ctx context.Context, reader backend.Reader, keys []string, all bool) ([]domain.Item, error) {
@@ -185,7 +191,7 @@ func pdfItems(ctx context.Context, reader backend.Reader, keys []string, all boo
 	return items, nil
 }
 
-func extractPDFText(ctx context.Context, reader backend.Reader, item domain.Item, req PDFTextRequest, ranges []pdfPageRange) (map[string]any, string, error) {
+func extractPDFText(ctx context.Context, reader backend.Reader, item domain.Item, req PDFTextRequest, ranges []pdfPageRange, pathOnly bool) (map[string]any, string, error) {
 	if req.Pages != "" {
 		extractor, ok := reader.(pageTextExtractor)
 		if !ok {
@@ -212,7 +218,7 @@ func extractPDFText(ctx context.Context, reader backend.Reader, item domain.Item
 				text, total, truncated := filterPDFText(page.Text, req.Grep, req.MaxChars)
 				totalChars += total
 				truncatedAny = truncatedAny || truncated
-				pages = append(pages, map[string]any{"page": page.Page, "text": text, "total": total, "returned_chars": len(text), "truncated": truncated})
+				pages = append(pages, map[string]any{"page": page.Page, "text": text, "total": total, "returned_chars": utf8.RuneCountInString(text), "truncated": truncated})
 				combined = append(combined, text)
 				returnedPages = append(returnedPages, page.Page)
 			}
@@ -222,7 +228,7 @@ func extractPDFText(ctx context.Context, reader backend.Reader, item domain.Item
 			return nil, "", fmt.Errorf("attachment %s not found on item %s", req.AttachmentKey, item.Key)
 		}
 		text := strings.Join(combined, "\n")
-		return map[string]any{"item_key": item.Key, "text": text, "attachments": attachments, "total": totalChars, "returned_chars": len(text), "truncated": truncatedAny, "returned_pages": returnedPages}, text, nil
+		return map[string]any{"item_key": item.Key, "attachments": attachments, "total": totalChars, "returned_chars": utf8.RuneCountInString(text), "truncated": truncatedAny, "returned_pages": returnedPages}, text, nil
 	}
 	var result backend.ItemFullTextResult
 	if extractor, ok := reader.(attachmentTextExtractor); ok {
@@ -240,6 +246,9 @@ func extractPDFText(ctx context.Context, reader backend.Reader, item domain.Item
 	} else {
 		return nil, "", fmt.Errorf("pdf text requires full-text extraction support")
 	}
+	if pathOnly {
+		return pdfTextCachePathEntry(item, result, req.AttachmentKey)
+	}
 	text := result.Text
 	if req.AttachmentKey != "" {
 		text = ""
@@ -254,7 +263,7 @@ func extractPDFText(ctx context.Context, reader backend.Reader, item domain.Item
 		}
 	}
 	filtered, total, truncated := filterPDFText(text, req.Grep, req.MaxChars)
-	entry := map[string]any{"item_key": item.Key, "text": filtered, "total": total, "returned_chars": len(filtered), "truncated": truncated}
+	entry := map[string]any{"item_key": item.Key, "total": total, "returned_chars": utf8.RuneCountInString(filtered), "truncated": truncated}
 	if result.PrimaryAttachmentKey != "" {
 		entry["primary_attachment_key"] = result.PrimaryAttachmentKey
 	}
@@ -264,33 +273,123 @@ func extractPDFText(ctx context.Context, reader backend.Reader, item domain.Item
 			continue
 		}
 		value, attachmentTotal, attachmentTruncated := filterPDFText(attachment.Text, req.Grep, req.MaxChars)
-		attachments = append(attachments, map[string]any{"attachment_key": attachment.Attachment.Key, "text": value, "total": attachmentTotal, "returned_chars": len(value), "truncated": attachmentTruncated, "full_text_source": attachment.Source, "full_text_cache_hit": attachment.CacheHit})
+		attachments = append(attachments, map[string]any{"attachment_key": attachment.Attachment.Key, "text": value, "total": attachmentTotal, "returned_chars": utf8.RuneCountInString(value), "truncated": attachmentTruncated, "full_text_source": attachment.Source, "full_text_cache_hit": attachment.CacheHit})
 	}
 	if len(attachments) > 0 {
 		entry["attachments"] = attachments
+	} else {
+		entry["text"] = filtered
 	}
 	return entry, filtered, nil
 }
 
-func filterPDFText(text, grep string, maxChars int) (string, int, bool) {
-	total := len(text)
-	if grep != "" {
-		lines := strings.Split(text, "\n")
-		matched := lines[:0]
-		needle := strings.ToLower(grep)
-		for _, line := range lines {
-			if strings.Contains(strings.ToLower(line), needle) {
-				matched = append(matched, line)
-			}
+func pdfTextCachePathEntry(item domain.Item, result backend.ItemFullTextResult, attachmentKey string) (map[string]any, string, error) {
+	selected := make([]backend.AttachmentFullText, 0, len(result.Attachments))
+	for _, attachment := range result.Attachments {
+		if attachmentKey != "" && !strings.EqualFold(attachment.Attachment.Key, attachmentKey) {
+			continue
 		}
-		text = strings.Join(matched, "\n")
+		selected = append(selected, attachment)
+	}
+	if attachmentKey != "" && len(selected) == 0 {
+		return nil, "", fmt.Errorf("attachment %s not found on item %s", attachmentKey, item.Key)
+	}
+	if len(selected) == 0 {
+		return nil, "", fmt.Errorf("full-text cache path is unavailable for item %s", item.Key)
+	}
+	attachments := make([]map[string]any, 0, len(selected))
+	primaryPath := ""
+	primaryChunksPath := ""
+	primaryKey := result.PrimaryAttachmentKey
+	if attachmentKey != "" {
+		primaryKey = selected[0].Attachment.Key
+	}
+	for _, attachment := range selected {
+		if strings.TrimSpace(attachment.ContentPath) == "" {
+			return nil, "", fmt.Errorf("full-text cache path is unavailable for attachment %s", attachment.Attachment.Key)
+		}
+		entry := map[string]any{
+			"attachment_key":      attachment.Attachment.Key,
+			"content_path":        attachment.ContentPath,
+			"total_chars":         utf8.RuneCountInString(attachment.Text),
+			"full_text_source":    attachment.Source,
+			"full_text_cache_hit": attachment.CacheHit,
+		}
+		if attachment.ChunksPath != "" {
+			entry["chunks_path"] = attachment.ChunksPath
+		}
+		attachments = append(attachments, entry)
+		if attachment.Attachment.Key == primaryKey {
+			primaryPath = attachment.ContentPath
+			primaryChunksPath = attachment.ChunksPath
+		}
+	}
+	if primaryPath == "" {
+		primaryKey = selected[0].Attachment.Key
+		primaryPath = selected[0].ContentPath
+		primaryChunksPath = selected[0].ChunksPath
+	}
+	entry := map[string]any{
+		"item_key":               item.Key,
+		"primary_attachment_key": primaryKey,
+		"content_path":           primaryPath,
+		"attachments":            attachments,
+	}
+	if primaryChunksPath != "" {
+		entry["chunks_path"] = primaryChunksPath
+	}
+	return entry, primaryPath, nil
+}
+
+func filterPDFText(text, grep string, maxChars int) (string, int, bool) {
+	total := utf8.RuneCountInString(text)
+	if grep != "" {
+		text = pdfTextEvidenceWindows(text, grep)
 	}
 	truncated := false
-	if maxChars > 0 && len(text) > maxChars {
-		text = text[:maxChars]
+	runes := []rune(text)
+	if maxChars > 0 && len(runes) > maxChars {
+		text = string(runes[:maxChars])
 		truncated = true
 	}
 	return text, total, truncated
+}
+
+func pdfTextEvidenceWindows(text, query string) string {
+	lines := strings.Split(text, "\n")
+	needle := strings.ToLower(strings.TrimSpace(query))
+	if needle == "" {
+		return text
+	}
+	selected := make(map[int]struct{})
+	for index, line := range lines {
+		if !strings.Contains(strings.ToLower(line), needle) {
+			continue
+		}
+		for neighbor := index - 1; neighbor <= index+1; neighbor++ {
+			if neighbor >= 0 && neighbor < len(lines) {
+				selected[neighbor] = struct{}{}
+			}
+		}
+	}
+	if len(selected) == 0 {
+		return ""
+	}
+	indexes := make([]int, 0, len(selected))
+	for index := range selected {
+		indexes = append(indexes, index)
+	}
+	sort.Ints(indexes)
+	parts := make([]string, 0, len(indexes))
+	previous := -2
+	for _, index := range indexes {
+		if previous >= 0 && index > previous+1 {
+			parts = append(parts, "…")
+		}
+		parts = append(parts, lines[index])
+		previous = index
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n"))
 }
 
 type pdfPageRange struct{ Start, End int }

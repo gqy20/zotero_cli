@@ -29,8 +29,10 @@ type Item struct {
 }
 
 type MatchedChunkInfo struct {
-	Text          string     `json:"text"`
+	Text          string     `json:"-"`
+	Context       string     `json:"context,omitempty"`
 	Page          int        `json:"page"`
+	PageEnd       int        `json:"page_end,omitempty"`
 	BBox          [4]float64 `json:"bbox"`
 	AttachmentKey string     `json:"attachment_key"`
 }

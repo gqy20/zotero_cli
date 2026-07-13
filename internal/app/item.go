@@ -95,8 +95,20 @@ func (s ReadService) FindItems(ctx context.Context, req ItemFindRequest) (Result
 	if !opts.Full && !req.Snippet {
 		data = leanItems(items)
 		appendLeanMetadata(meta)
+	} else if req.Snippet {
+		data = findSnippetJSONItems(items)
 	}
 	return Result{Data: data, Meta: meta, Text: itemFindText(items, opts.Full || req.Snippet || len(opts.IncludeFields) > 0), Warnings: readWarnings(meta)}, nil
+}
+
+func findSnippetJSONItems(items []domain.Item) []domain.Item {
+	result := append([]domain.Item(nil), items...)
+	for i := range result {
+		if result[i].MatchedChunk != nil && strings.TrimSpace(result[i].MatchedChunk.Context) != "" {
+			result[i].FullTextPreview = ""
+		}
+	}
+	return result
 }
 
 func (s ReadService) ShowItem(ctx context.Context, req ItemShowRequest) (Result, error) {

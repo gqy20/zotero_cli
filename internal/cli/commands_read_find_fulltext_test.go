@@ -189,12 +189,15 @@ func TestRunFindLocalJSONUsesMatchedSnippetForFullTextQuery(t *testing.T) {
 		t.Fatalf("unexpected data payload: %#v", got["data"])
 	}
 	item := data[0].(map[string]any)
-	preview, ok := item["full_text_preview"].(string)
-	if !ok || !strings.Contains(preview, "speciation genome patterns in plants") {
-		t.Fatalf("unexpected full_text_preview: %#v", item["full_text_preview"])
+	if _, exists := item["full_text_preview"]; exists {
+		t.Fatalf("matched context must not be duplicated as full_text_preview: %#v", item)
 	}
-	if strings.Contains(preview, "Mixed survey full text preview from zotero cache.") {
-		t.Fatalf("expected matched snippet instead of leading preview: %q", preview)
+	matched, ok := item["matched_chunk"].(map[string]any)
+	if !ok || matched["page"] != float64(1) || !strings.Contains(matched["context"].(string), "speciation genome") {
+		t.Fatalf("unexpected matched evidence: %#v", item["matched_chunk"])
+	}
+	if _, exists := matched["text"]; exists {
+		t.Fatalf("raw matched chunk must not be serialized with its context: %#v", matched)
 	}
 }
 
@@ -242,9 +245,12 @@ func TestRunFindLocalJSONSupportsFullTextIndex(t *testing.T) {
 	if itemData["key"] != "ART67890" {
 		t.Fatalf("unexpected item payload: %#v", itemData)
 	}
-	preview, ok := itemData["full_text_preview"].(string)
-	if !ok || !strings.Contains(preview, "speciation genome patterns in plants") {
-		t.Fatalf("unexpected full_text_preview: %#v", itemData["full_text_preview"])
+	if _, exists := itemData["full_text_preview"]; exists {
+		t.Fatalf("matched context must not be duplicated as full_text_preview: %#v", itemData)
+	}
+	matched, ok := itemData["matched_chunk"].(map[string]any)
+	if !ok || !strings.Contains(matched["context"].(string), "speciation genome patterns in plants") {
+		t.Fatalf("unexpected matched evidence: %#v", itemData["matched_chunk"])
 	}
 	meta, ok := got["meta"].(map[string]any)
 	if !ok || meta["full_text_source"] != "zotero_ft_cache" || meta["full_text_engine"] != "index_sqlite" {

@@ -97,6 +97,8 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 .\zot.exe pdf text ITEMKEY --json
 ```
 
+local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `content_path` / `chunks_path`；Agent 直接读取 `content_path`，不要期待 JSON 内嵌整篇正文。只有使用 `--grep`、`--pages` 或 `--max-chars` 时才返回文本子集；只有显式 `--output-dir` 才导出 Markdown。remote 模式因客户端无法访问服务端路径，仍返回正文。
+
 适用场景：
 
 - 明确要求“读取全文/整篇正文”
@@ -291,7 +293,7 @@ CLI 配置存储在 `~/.zot/.env`。
 
 - `--snippet` 是布尔开关（启用片段预览）；未指定 `--limit` 时回退 50 条
 - local/hybrid 下有 query 且 FTS 有数据时自动启用全文检索；`--all` / 纯过滤列表不会自动走全文索引
-- `pdf text` 结果有缓存，重复提取同一 PDF 直接命中
+- `pdf text` 结果有缓存，重复提取同一 PDF 直接命中；local / hybrid 的无过滤请求默认返回缓存路径
 - 高频脚本遇 `429` 会自动退避+抖动，但仍应主动降速
 
 ## 参考文档

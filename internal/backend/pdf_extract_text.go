@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"unicode"
@@ -11,15 +12,19 @@ import (
 )
 
 type AttachmentFullText struct {
-	Attachment domain.Attachment
-	Text       string
-	Source     string
-	CacheHit   bool
+	Attachment  domain.Attachment
+	Text        string
+	Source      string
+	CacheHit    bool
+	ContentPath string `json:"-"`
+	ChunksPath  string `json:"-"`
 }
 
 type ItemFullTextResult struct {
 	Text                 string
 	PrimaryAttachmentKey string
+	PrimaryContentPath   string `json:"-"`
+	PrimaryChunksPath    string `json:"-"`
 	Attachments          []AttachmentFullText
 }
 
@@ -78,10 +83,14 @@ func (r *LocalReader) ExtractItemAttachmentTexts(ctx context.Context, item domai
 		}
 		if ok && strings.TrimSpace(doc.Text) != "" {
 			entry := AttachmentFullText{
-				Attachment: attachment,
-				Text:       doc.Text,
-				Source:     doc.Meta.Extractor,
-				CacheHit:   doc.CacheHit,
+				Attachment:  attachment,
+				Text:        doc.Text,
+				Source:      doc.Meta.Extractor,
+				CacheHit:    doc.CacheHit,
+				ContentPath: cache.contentPath(attachment.Key),
+			}
+			if _, err := os.Stat(cache.chunksPath(attachment.Key)); err == nil {
+				entry.ChunksPath = cache.chunksPath(attachment.Key)
 			}
 			result.Attachments = append(result.Attachments, entry)
 			score := primaryFullTextAttachmentScore(item, attachment, doc.Text)
@@ -89,6 +98,8 @@ func (r *LocalReader) ExtractItemAttachmentTexts(ctx context.Context, item domai
 				bestScore = score
 				result.Text = entry.Text
 				result.PrimaryAttachmentKey = entry.Attachment.Key
+				result.PrimaryContentPath = entry.ContentPath
+				result.PrimaryChunksPath = entry.ChunksPath
 				r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, ReadMetadata{
 					FullTextSource:        entry.Source,
 					FullTextAttachmentKey: entry.Attachment.Key,
