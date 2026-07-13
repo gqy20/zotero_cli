@@ -32,7 +32,7 @@ zot ann new ITEMKEY --page 4 --text "GATK VariantFiltration" --comment "方法�
 
 ```powershell
 zot ann new ITEMKEY --page 3 --rect 100,200,350,220 --color red --json
-zot ann new ITEMKEY --page 5 --point 300,400 --comment "重要发现" --json
+zot ann new ITEMKEY --page 5 --point 300,400 --type note --comment "重要发现" --json
 ```
 
 批量输入：
@@ -46,18 +46,20 @@ zot ann new ITEMKEY --from annotations.json --json
 
 ## 删除标注
 
-删除是显式 destructive action：
+删除是显式 destructive action，必须区分 Zotero 原生标注和 PDF 内嵌标注：
 
 ```powershell
-zot ann delete ITEMKEY --type highlight --yes --json
-zot ann delete ITEMKEY --page 3 --yes --json
+zot ann delete ITEMKEY --source zotero --type highlight --dry-run --json
+zot ann delete ITEMKEY --source zotero --type highlight --yes --json
+zot ann delete ITEMKEY --source pdf --page 3 --dry-run --json
+zot ann delete ITEMKEY --source pdf --page 3 --yes --json
 ```
 
-删除操作受 `ZOT_ALLOW_DELETE` 控制。省略 `--yes` 时，交互终端会要求确认；自动化流程必须显式提供 `--yes`。
+`--dry-run` 返回即将删除的精确 key 或 PDF xref。Zotero 来源使用标准 Web API 删除 annotation items，不直接写 SQLite；PDF 来源先修改同目录临时副本，验证成功后才替换原文件。删除操作受 `ZOT_ALLOW_DELETE` 控制。省略 `--yes` 时，交互终端会要求确认。
 
 ## Remote 模式
 
-在 remote 模式下，`ann list/new/delete` 由运行 `zot serve` 的机器执行，因此 PDF 文件不需要复制到客户端。服务端写入和删除仍分别受 `ZOT_ALLOW_WRITE` 与 `ZOT_ALLOW_DELETE` 控制。
+在 remote 模式下，`ann list/new` 与 `ann delete --source pdf` 由运行 `zot serve` 的机器执行，因此 PDF 文件不需要复制到客户端。`ann delete --source zotero` 仍需要客户端 Web API 凭据。
 
 ## 常见错误
 
@@ -65,6 +67,6 @@ zot ann delete ITEMKEY --page 3 --yes --json
 |---|---|
 | `annotations ITEMKEY` | `ann list ITEMKEY` |
 | `annotate ITEMKEY ...` | `ann new ITEMKEY ...` |
-| `annotations ITEMKEY --clear` | `ann delete ITEMKEY --yes` |
+| `annotations ITEMKEY --clear` | `ann delete ITEMKEY --source zotero --dry-run` |
 
 旧入口已经移除，不会再被自动翻译。

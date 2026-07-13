@@ -137,7 +137,9 @@ zot pdf open ITEMKEY --page 5
 
 zot ann list ITEMKEY --type highlight --page 3 --json
 zot ann new ITEMKEY --page 4 --text "GATK" --color red --json
-zot ann delete ITEMKEY --type highlight --yes --json
+zot ann delete ITEMKEY --source zotero --type highlight --dry-run --json
+zot ann delete ITEMKEY --source zotero --type highlight --yes --json
+zot ann delete ITEMKEY --source pdf --type highlight --yes --json
 ```
 
 全文路由优先级：
@@ -148,7 +150,7 @@ zot ann delete ITEMKEY --type highlight --yes --json
 
 local/hybrid 下，无过滤条件的 `pdf text --json` 返回 `content_path` 和可选的 `chunks_path`，Agent 直接读取缓存文件；`--grep`、`--pages`、`--max-chars` 才返回文本子集。remote 模式仍返回正文。该命令不支持 worker 并发参数。
 
-`ann delete` 是唯一 canonical 删除入口；不要组合 `list/new` 与 `--clear`。
+`ann delete` 是唯一 canonical 删除入口，必须显式选择 `--source zotero|pdf`。Zotero 来源按 annotation item key 走 Web API，PDF 来源按 xref 在临时副本中修改并验证后替换；不要组合 `list/new` 与 `--clear`。
 
 ## Reference
 
@@ -226,7 +228,7 @@ zot sync
 | `export --item-key KEY --format bibtex` | `item export KEY --as bibtex` |
 | `add-tag --items A,B --tag T` | `item tag A B --tag T` |
 | `extract-text KEY` | `pdf text KEY` |
-| `annotations KEY --clear` | `ann delete KEY --yes` |
+| `annotations KEY --clear` | `ann delete KEY --source zotero --dry-run` |
 | `schema fields-for journalArticle` | `schema list fields article` |
 | `server start` | `serve` |
 | `sync pull` | `sync` |

@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"zotero_cli/internal/backend"
 )
 
 func TestCobraHelpDoesNotLoadConfig(t *testing.T) {
@@ -165,6 +167,44 @@ func TestFileCheckOnlyExposesHealthRelevantFlags(t *testing.T) {
 	}
 }
 
+func TestAnnotationCreateValidationMatchesPhysicalPDFTypes(t *testing.T) {
+	valid := []backend.AnnotateRequest{
+		{Type: "highlight", Text: "target"},
+		{Type: "underline", Page: 2, Rect: &[4]float64{1, 2, 3, 4}},
+		{Type: "note", Page: 3, Point: &[2]float64{10, 20}},
+	}
+	for _, request := range valid {
+		if err := validateAnnotationRequest(request); err != nil {
+			t.Fatalf("valid request %#v rejected: %v", request, err)
+		}
+	}
+	invalid := []backend.AnnotateRequest{
+		{Type: "image", Text: "target"},
+		{Type: "note", Text: "target"},
+		{Type: "highlight", Page: 3, Point: &[2]float64{10, 20}},
+		{Type: "highlight", Text: "target", Page: 2, Rect: &[4]float64{1, 2, 3, 4}},
+	}
+	for _, request := range invalid {
+		if err := validateAnnotationRequest(request); err == nil {
+			t.Fatalf("invalid request %#v was accepted", request)
+		}
+	}
+}
+
+func TestAnnotationBatchInfersNoteForPointTarget(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "annotations.json")
+	if err := os.WriteFile(path, []byte(`[{"page":2,"point":[10,20],"comment":"note"}]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	targets, err := annotationTargets("ITEM1", backend.AnnotateRequest{Type: "highlight", Color: "yellow"}, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 || targets[0].Request.Type != "note" {
+		t.Fatalf("targets=%#v", targets)
+	}
+}
+
 func TestStableDocumentationMatchesCurrentCommandSurface(t *testing.T) {
 	_, currentFile, _, ok := runtime.Caller(0)
 	if !ok {
@@ -181,8 +221,11 @@ func TestStableDocumentationMatchesCurrentCommandSurface(t *testing.T) {
 	}
 
 	documentPaths := []string{
+		"README.md",
 		filepath.Join("docs", "user", "commands.md"),
 		filepath.Join("docs", "user", "quickstart.md"),
+		filepath.Join("docs", "user", "examples", "annotations.md"),
+		filepath.Join(".codex", "skills", "zotero-cli", "SKILL.md"),
 		filepath.Join(".claude", "skills", "zotero-cli", "SKILL.md"),
 		filepath.Join(".claude", "skills", "zotero-cli", "reference.md"),
 	}
@@ -200,6 +243,9 @@ func TestStableDocumentationMatchesCurrentCommandSurface(t *testing.T) {
 			isCommand := strings.HasPrefix(trimmed, "zot ") || strings.HasPrefix(trimmed, `.\zot.exe `)
 			if isCommand && strings.Contains(line, "pdf text") && strings.Contains(line, "--workers") {
 				t.Fatalf("%s documents unsupported pdf text --workers flag: %q", relativePath, line)
+			}
+			if isCommand && strings.Contains(line, "ann delete") && !strings.Contains(line, "--source") {
+				t.Fatalf("%s documents unsafe ann delete without --source: %q", relativePath, line)
 			}
 		}
 	}

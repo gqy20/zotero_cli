@@ -162,7 +162,7 @@ func (c *CLI) newAnnotationCommand(opts *globalOptions) *cobra.Command {
 	flags.StringVar(&create.Text, "text", "", "text to locate")
 	flags.StringVar(&create.Color, "color", "yellow", "annotation color")
 	flags.StringVar(&create.Comment, "comment", "", "annotation comment")
-	flags.StringVar(&create.Type, "type", "highlight", "highlight, underline, note, or image")
+	flags.StringVar(&create.Type, "type", "highlight", "highlight, underline, or note")
 	flags.IntVar(&create.Page, "page", 0, "one-based page number")
 	flags.StringVar(&rect, "rect", "", "x0,y0,x1,y1 rectangle")
 	flags.StringVar(&point, "point", "", "x,y note point")
@@ -182,6 +182,9 @@ func (c *CLI) newAnnotationCommand(opts *globalOptions) *cobra.Command {
 				return &exitError{code: ExitUsage, err: fmt.Errorf("invalid --point: %w", err)}
 			}
 			create.Point = &[2]float64{values[0], values[1]}
+			if !flags.Changed("type") {
+				create.Type = "note"
+			}
 		}
 		defaultKey := ""
 		if len(args) == 1 {
@@ -198,13 +201,17 @@ func (c *CLI) newAnnotationCommand(opts *globalOptions) *cobra.Command {
 
 	var deleteFilter app.AnnotationFilter
 	var safety app.SafetyOptions
+	var deleteSource string
 	deleteCmd := &cobra.Command{Use: "delete ITEM_KEY", Short: "Permanently delete annotations", Args: cobra.ExactArgs(1)}
 	addAnnotationFilterFlags(deleteCmd, &deleteFilter)
+	deleteCmd.Flags().StringVar(&deleteSource, "source", "", "required annotation source: zotero or pdf")
+	deleteCmd.Flags().BoolVar(&safety.DryRun, "dry-run", false, "preview exact deletion candidates")
+	deleteCmd.Flags().IntVar(&safety.IfVersion, "if-version", 0, "expected Zotero library version (zotero source)")
 	deleteCmd.Flags().BoolVarP(&safety.Yes, "yes", "y", false, "confirm destructive operation")
 	deleteCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		safety.Confirm = c.confirm
 		return c.runAnnotation(cmd, opts, app.CommandPath{Resource: "ann", Action: "delete"}, func(ctx context.Context, service app.AnnotationService) (app.Result, error) {
-			return service.Delete(ctx, args[0], deleteFilter, safety)
+			return service.Delete(ctx, args[0], deleteFilter, deleteSource, safety)
 		})
 	}
 	ann.AddCommand(list, newCmd, deleteCmd)
@@ -234,6 +241,7 @@ func annotationTargets(defaultKey string, defaults backend.AnnotateRequest, from
 		if defaultKey == "" {
 			return nil, fmt.Errorf("ITEM_KEY or --from is required")
 		}
+		defaults.Type = strings.ToLower(strings.TrimSpace(defaults.Type))
 		if err := validateAnnotationRequest(defaults); err != nil {
 			return nil, err
 		}
@@ -280,6 +288,9 @@ func annotationTargets(defaultKey string, defaults backend.AnnotateRequest, from
 				return nil, fmt.Errorf("annotation %d point must contain 2 numbers", i+1)
 			}
 			request.Point = &[2]float64{entry.Point[0], entry.Point[1]}
+			if entry.Type == "" && request.Type == "highlight" {
+				request.Type = "note"
+			}
 		}
 		if entry.DryRun != nil {
 			request.DryRun = *entry.DryRun
@@ -290,6 +301,7 @@ func annotationTargets(defaultKey string, defaults backend.AnnotateRequest, from
 		if key == "" {
 			return nil, fmt.Errorf("annotation %d is missing item_key", i+1)
 		}
+		request.Type = strings.ToLower(strings.TrimSpace(request.Type))
 		if err := validateAnnotationRequest(request); err != nil {
 			return nil, fmt.Errorf("annotation %d: %w", i+1, err)
 		}
@@ -302,6 +314,10 @@ func annotationTargets(defaultKey string, defaults backend.AnnotateRequest, from
 }
 
 func validateAnnotationRequest(req backend.AnnotateRequest) error {
+	req.Type = strings.ToLower(strings.TrimSpace(req.Type))
+	if req.Type != "highlight" && req.Type != "underline" && req.Type != "note" {
+		return fmt.Errorf("unsupported annotation type %q; choose highlight, underline, or note", req.Type)
+	}
 	hasText := strings.TrimSpace(req.Text) != ""
 	hasRect := req.Page > 0 && req.Rect != nil
 	hasPoint := req.Page > 0 && req.Point != nil
@@ -311,8 +327,17 @@ func validateAnnotationRequest(req backend.AnnotateRequest) error {
 	if req.Rect != nil && req.Point != nil {
 		return fmt.Errorf("--rect and --point are mutually exclusive")
 	}
+	if hasText && (req.Rect != nil || req.Point != nil) {
+		return fmt.Errorf("--text, --rect, and --point target modes are mutually exclusive")
+	}
 	if req.Page < 0 {
 		return fmt.Errorf("--page must be non-negative")
+	}
+	if req.Type == "note" && !hasPoint {
+		return fmt.Errorf("note annotations require --page and --point")
+	}
+	if req.Type != "note" && hasPoint {
+		return fmt.Errorf("--point creates a note annotation; use --type note")
 	}
 	return nil
 }

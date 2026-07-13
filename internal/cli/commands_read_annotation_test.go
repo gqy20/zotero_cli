@@ -86,7 +86,7 @@ func buildLocalAnnotationFixture(t *testing.T, sqlitePath string, storageDir str
 		`INSERT INTO itemNotes(itemID, parentItemID, note, title) VALUES (3, 1, '<p>A regular note</p>', 'Note');`,
 		// === Annotations on the PDF attachment (parentItemID = 2, the PDF's itemID) ===
 		// Annotation 1: highlight with comment on page 2
-		`INSERT INTO itemAnnotations(itemID, parentItemID, type, authorName, text, comment, color, pageLabel, sortIndex, position, isExternal) VALUES (10, 2, 1, '', 'Key finding about genome assembly', 'This is important for the discussion section', '#ffd400', '2', '00001|00000|00000', '{"pageIndex":1,"rects":[{"left":100,"top":200,"right":500,"bottom":250}]}', 0)`,
+		`INSERT INTO itemAnnotations(itemID, parentItemID, type, authorName, text, comment, color, pageLabel, sortIndex, position, isExternal) VALUES (10, 2, 1, 'Alice', 'Key finding about genome assembly', 'This is important for the discussion section', '#ffd400', '2', '00001|00000|00000', '{"pageIndex":1,"rects":[{"left":100,"top":200,"right":500,"bottom":250}]}', 0)`,
 		// Annotation 2: note-only on page 3
 		`INSERT INTO itemAnnotations(itemID, parentItemID, type, authorName, text, comment, color, pageLabel, sortIndex, position, isExternal) VALUES (11, 2, 1, '', 'Another highlighted passage', 'Need to verify this claim', '#ff6666', '3', '00002|00000|00000', '{"pageIndex":2,"rects":[{"left":50,"top":300,"right":450,"bottom":330}]}', 0)`,
 		// Annotation 3: highlight without comment on page 5
@@ -163,6 +163,9 @@ func TestLoadAnnotationsReturnsAllTypes(t *testing.T) {
 			}
 			if a.Comment != "This is important for the discussion section" {
 				t.Errorf("unexpected comment: %q", a.Comment)
+			}
+			if a.Author != "Alice" {
+				t.Errorf("unexpected author: %q", a.Author)
 			}
 			if a.Color != "#ffd400" {
 				t.Errorf("unexpected color: %q", a.Color)
@@ -281,7 +284,7 @@ func TestShowLocalJSONIncludesAnnotations(t *testing.T) {
 
 	// Verify first annotation structure
 	first := annos[0].(map[string]any)
-	requiredFields := []string{"key", "type", "text", "comment", "color", "page_label", "page_index", "position", "is_external"}
+	requiredFields := []string{"key", "type", "author", "text", "comment", "color", "page_label", "page_index", "position", "is_external"}
 	existingKeys := make([]string, 0, len(first))
 	for k := range first {
 		existingKeys = append(existingKeys, k)
@@ -290,6 +293,39 @@ func TestShowLocalJSONIncludesAnnotations(t *testing.T) {
 		if _, exists := first[f]; !exists {
 			t.Errorf("annotation missing required field %q; available keys: %v", f, existingKeys)
 		}
+	}
+}
+
+func TestAnnotationDeleteDryRunSelectsExactZoteroCandidates(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalAnnotationFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"ann", "delete", "ITEM1234", "--source", "zotero", "--author", "alice", "--dry-run", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	data := got["data"].(map[string]any)
+	if data["source"] != "zotero" || data["selected"] != float64(1) || data["dry_run"] != true {
+		t.Fatalf("unexpected dry-run data: %#v", data)
+	}
+	candidates := data["zotero_candidates"].([]any)
+	if len(candidates) != 1 || candidates[0].(map[string]any)["author"] != "Alice" {
+		t.Fatalf("unexpected candidates: %#v", candidates)
 	}
 }
 

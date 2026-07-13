@@ -560,6 +560,7 @@ func (r *LocalReader) loadAnnotations(ctx context.Context, db *sql.DB, parentIte
 		}
 
 		a.Type = annotationTypeString(atype)
+		a.Author = authorName
 		a.IsExternal = isExternal != 0
 		a.PageIndex = extractAnnotationPageIndex(a.Position)
 
@@ -627,6 +628,7 @@ func (r *LocalReader) loadAnnotationsByItemIDs(ctx context.Context, db *sql.DB, 
 		}
 
 		a.Type = annotationTypeString(atype)
+		a.Author = authorName
 		a.IsExternal = isExternal != 0
 		a.PageIndex = extractAnnotationPageIndex(a.Position)
 

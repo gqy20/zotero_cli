@@ -10,6 +10,7 @@ import (
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
+	"zotero_cli/internal/zoteroapi"
 )
 
 type FileRequest struct {
@@ -186,13 +187,25 @@ type AnnotationTarget struct {
 }
 
 type AnnotationService struct {
-	LoadConfig func() (config.Config, string, error)
-	NewReader  func(config.Config) (backend.Reader, error)
+	LoadConfig      func() (config.Config, string, error)
+	NewReader       func(config.Config) (backend.Reader, error)
+	NewDeleteClient func(config.Config) (annotationDeleteClient, error)
 }
 
 func NewAnnotationService() AnnotationService {
 	read := NewReadService()
-	return AnnotationService{LoadConfig: config.Load, NewReader: read.NewReader}
+	return AnnotationService{
+		LoadConfig: config.Load,
+		NewReader:  read.NewReader,
+		NewDeleteClient: func(cfg config.Config) (annotationDeleteClient, error) {
+			return read.NewClient(cfg)
+		},
+	}
+}
+
+type annotationDeleteClient interface {
+	GetLibraryStats(context.Context) (zoteroapi.LibraryStats, error)
+	DeleteItems(context.Context, []string, int) (zoteroapi.BatchWriteResult, error)
 }
 
 type annotationReader interface {
@@ -244,7 +257,12 @@ func (s AnnotationService) List(ctx context.Context, itemKey string, filter Anno
 	meta := readMeta(reader)
 	meta["total_pdf"] = len(pdf)
 	meta["total_db"] = len(db)
-	return Result{Data: data, Meta: meta, Text: annotationListText(item, annotations.PDFPath, pdf, db), Warnings: readWarnings(meta)}, nil
+	warnings := readWarnings(meta)
+	if annotations.PDFError != "" {
+		data["pdf_error"] = annotations.PDFError
+		warnings = append(warnings, Warning{Code: "pdf_annotation_read_failed", Message: annotations.PDFError})
+	}
+	return Result{Data: data, Meta: meta, Text: annotationListText(item, annotations.PDFPath, pdf, db), Warnings: warnings}, nil
 }
 
 func (s AnnotationService) Create(ctx context.Context, targets []AnnotationTarget) (Result, error) {
@@ -290,16 +308,23 @@ func (s AnnotationService) Create(ctx context.Context, targets []AnnotationTarge
 	return Result{Data: results, Meta: meta, Text: fmt.Sprintf("%d annotations processed (%d ok, %d failed)", len(results), len(results)-failed, failed), Warnings: readWarnings(meta)}, nil
 }
 
-func (s AnnotationService) Delete(ctx context.Context, itemKey string, filter AnnotationFilter, safety SafetyOptions) (Result, error) {
+func (s AnnotationService) Delete(ctx context.Context, itemKey string, filter AnnotationFilter, source string, safety SafetyOptions) (Result, error) {
+	source, err := normalizeAnnotationDeleteSource(source)
+	if err != nil {
+		return Result{}, err
+	}
+	if err := validateAnnotationFilter(filter); err != nil {
+		return Result{}, err
+	}
+	if source == "zotero" && safety.IfVersion < 0 {
+		return Result{}, fmt.Errorf("--if-version must be non-negative")
+	}
 	cfg, err := s.loadConfig()
 	if err != nil {
 		return Result{}, err
 	}
-	if cfg.Mode != "remote" && !cfg.AllowDelete {
+	if !safety.DryRun && (cfg.Mode != "remote" || source == "zotero") && !cfg.AllowDelete {
 		return Result{}, fmt.Errorf("delete operations are disabled; set ZOT_ALLOW_DELETE=1")
-	}
-	if !safety.Yes && (safety.Confirm == nil || !safety.Confirm(fmt.Sprintf("delete annotations from %s", itemKey))) {
-		return Result{}, ErrCancelled
 	}
 	reader, err := s.NewReader(cfg)
 	if err != nil {
@@ -309,21 +334,125 @@ func (s AnnotationService) Delete(ctx context.Context, itemKey string, filter An
 	if err != nil {
 		return Result{}, err
 	}
-	capability, ok := reader.(annotationDeleter)
+	readCapability, ok := reader.(annotationReader)
 	if !ok {
-		return Result{}, fmt.Errorf("annotation deletion is not available for the current backend")
+		return Result{}, fmt.Errorf("annotations are not available for the current backend")
 	}
-	deleted, err := capability.ClearItemAnnotations(ctx, item, backend.DeleteAnnotationsRequest{Page: filter.Page, Type: filter.Type, Author: filter.Author})
+	annotations, err := readCapability.ReadItemAnnotations(ctx, item)
 	if err != nil {
 		return Result{}, err
 	}
-	data := map[string]any{"item_key": itemKey, "attachment_key": deleted.AttachmentKey, "pdf_path": deleted.PDFPath, "pdf_deleted": deleted.PDFDeleted, "db_deleted": deleted.DBDeleted, "deleted": deleted.Deleted}
-	warnings := []Warning{}
-	if deleted.DBError != "" {
-		data["db_error"] = deleted.DBError
-		warnings = append(warnings, Warning{Code: "db_delete_failed", Message: "could not delete DB annotations: " + deleted.DBError})
+	if source == "pdf" && annotations.PDFError != "" {
+		return Result{}, fmt.Errorf("cannot safely select embedded PDF annotations: %s", annotations.PDFError)
 	}
-	return Result{Data: data, Meta: map[string]any{"deleted": deleted.Deleted}, Text: fmt.Sprintf("Deleted %d annotation(s) from %s", deleted.Deleted, itemKey), Warnings: warnings}, nil
+	pdfCandidates := filterPDFAnnotations(annotations.PDFAnnotations, filter)
+	zoteroCandidates := filterDBAnnotations(annotations.DBAnnotations, filter)
+	data := map[string]any{
+		"item_key": itemKey, "source": source, "attachment_key": annotations.AttachmentKey,
+		"pdf_candidates": pdfCandidates, "zotero_candidates": zoteroCandidates,
+		"total_pdf_candidates": len(pdfCandidates), "total_zotero_candidates": len(zoteroCandidates),
+	}
+	selected := len(pdfCandidates)
+	if source == "zotero" {
+		selected = len(zoteroCandidates)
+	}
+	data["selected"] = selected
+	if safety.DryRun {
+		data["dry_run"] = true
+		return Result{Data: data, Meta: map[string]any{"dry_run": true, "selected": selected}, Text: fmt.Sprintf("dry run: %d %s annotation(s) selected from %s", selected, source, itemKey)}, nil
+	}
+	if selected == 0 {
+		return Result{Data: data, Meta: map[string]any{"deleted": 0}, Text: fmt.Sprintf("no matching %s annotations found for %s", source, itemKey)}, nil
+	}
+	if !safety.Yes && (safety.Confirm == nil || !safety.Confirm(fmt.Sprintf("delete %d %s annotation(s) from %s", selected, source, itemKey))) {
+		return Result{}, ErrCancelled
+	}
+
+	if source == "zotero" {
+		client, err := s.NewDeleteClient(cfg)
+		if err != nil {
+			return Result{}, fmt.Errorf("safe Zotero annotation deletion requires Web API access: %w", err)
+		}
+		version := safety.IfVersion
+		if version == 0 {
+			stats, err := client.GetLibraryStats(ctx)
+			if err != nil {
+				return Result{}, fmt.Errorf("resolve current library version: %w", err)
+			}
+			version = stats.LastLibraryVersion
+			if version <= 0 {
+				return Result{}, fmt.Errorf("library did not provide a usable current version")
+			}
+		}
+		keys := make([]string, 0, len(zoteroCandidates))
+		for _, annotation := range zoteroCandidates {
+			keys = append(keys, annotation.Key)
+		}
+		batch, err := client.DeleteItems(ctx, keys, version)
+		if err != nil {
+			return Result{}, err
+		}
+		if len(batch.Failed) > 0 {
+			return Result{}, fmt.Errorf("delete Zotero annotations failed for %d item(s)", len(batch.Failed))
+		}
+		data["deleted"] = len(keys)
+		data["deleted_keys"] = keys
+		data["last_modified_version"] = batch.LastModifiedVersion
+		return Result{Data: data, Meta: map[string]any{"deleted": len(keys), "delete_source": "zotero_web_api"}, Text: fmt.Sprintf("deleted %d Zotero annotation(s) from %s", len(keys), itemKey)}, nil
+	}
+
+	capability, ok := reader.(annotationDeleter)
+	if !ok {
+		return Result{}, fmt.Errorf("PDF annotation deletion is not available for the current backend")
+	}
+	xrefs := make([]int, 0, len(pdfCandidates))
+	for _, annotation := range pdfCandidates {
+		if annotation.XRef <= 0 {
+			return Result{}, fmt.Errorf("PDF annotation on page %d has no stable xref; refusing deletion", annotation.Page)
+		}
+		xrefs = append(xrefs, annotation.XRef)
+	}
+	deleted, err := capability.ClearItemAnnotations(ctx, item, backend.DeleteAnnotationsRequest{Page: filter.Page, Type: filter.Type, Author: filter.Author, PDFXRefs: xrefs})
+	if err != nil {
+		return Result{}, err
+	}
+	data["pdf_path"] = deleted.PDFPath
+	data["deleted"] = deleted.PDFDeleted
+	data["deleted_xrefs"] = xrefs
+	return Result{Data: data, Meta: map[string]any{"deleted": deleted.PDFDeleted, "delete_source": "pdf_embedded"}, Text: fmt.Sprintf("deleted %d embedded PDF annotation(s) from %s", deleted.PDFDeleted, itemKey)}, nil
+}
+
+func normalizeAnnotationDeleteSource(source string) (string, error) {
+	source = strings.ToLower(strings.TrimSpace(source))
+	if source == "" {
+		return "", fmt.Errorf("--source is required; choose zotero or pdf")
+	}
+	if source != "zotero" && source != "pdf" {
+		return "", fmt.Errorf("unsupported annotation source %q; choose zotero or pdf", source)
+	}
+	return source, nil
+}
+
+func validateAnnotationFilter(filter AnnotationFilter) error {
+	if filter.Page < 0 {
+		return fmt.Errorf("--page must be non-negative")
+	}
+	if filter.Type == "" {
+		return nil
+	}
+	valid := map[string]bool{
+		"highlight": true, "note": true, "image": true, "ink": true, "area": true,
+		"underline": true, "link": true, "freetext": true, "line": true, "square": true,
+		"circle": true, "polygon": true, "polyline": true, "stamp": true, "caret": true,
+		"attachment": true, "screen": true, "strikeout": true, "squiggly": true,
+		"redact": true, "popup": true, "sound": true, "movie": true, "richmedia": true,
+		"widget": true, "printermark": true, "trapnet": true, "watermark": true,
+		"3d": true, "projection": true,
+	}
+	if !valid[strings.ToLower(strings.TrimSpace(filter.Type))] {
+		return fmt.Errorf("unsupported annotation type %q", filter.Type)
+	}
+	return nil
 }
 
 func filterPDFAnnotations(values []backend.PDFAnnotation, filter AnnotationFilter) []backend.PDFAnnotation {
@@ -333,6 +462,9 @@ func filterPDFAnnotations(values []backend.PDFAnnotation, filter AnnotationFilte
 			continue
 		}
 		if filter.Type != "" && !strings.EqualFold(value.Type, filter.Type) {
+			continue
+		}
+		if filter.Author != "" && !strings.EqualFold(value.Author, filter.Author) {
 			continue
 		}
 		result = append(result, value)
@@ -347,6 +479,9 @@ func filterDBAnnotations(values []domain.Annotation, filter AnnotationFilter) []
 			continue
 		}
 		if filter.Type != "" && !strings.EqualFold(value.Type, filter.Type) {
+			continue
+		}
+		if filter.Author != "" && !strings.EqualFold(value.Author, filter.Author) {
 			continue
 		}
 		result = append(result, value)

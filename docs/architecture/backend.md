@@ -55,9 +55,9 @@ local backend 不再是单个 `local.go`，而是按职责拆分：
 | `web` | 支持 | → Web API | 支持 |
 | `hybrid` | 支持（本地优先） | **Zotero 未运行 → local SQLite；运行中 → Web API** | 支持 |
 | `local` | 支持 | **Zotero 未运行 → local SQLite；运行中 → Web API fallback** | 显式拒绝 |
-| `remote` | 支持（经由 server 转发） | `ann new` / `ann delete` 走 server；其余需 API key（remote+web） | 其余需 API key（走 remote+web） |
+| `remote` | 支持（经由 server 转发） | `ann new` / `ann delete --source pdf` 走 server；Zotero 标注删除需 API key | 其余需 API key（走 remote+web） |
 
-> 写操作安全规则不变：删除默认禁止、版本号乐观锁。local 写入仅在 Zotero 未运行时启用，避免与桌面端冲突。remote 下的 PDF 标注写入/删除由服务端 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 门控。
+> 写操作安全规则不变：删除默认禁止、版本号乐观锁。Zotero 原生标注删除按 item key 走 Web API，不直接修改 SQLite；PDF 标注按 xref 在临时副本中完成并验证。remote 下的 PDF 标注写入/删除由服务端 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 门控。
 
 ---
 

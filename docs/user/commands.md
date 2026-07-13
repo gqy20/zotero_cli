@@ -112,7 +112,9 @@ zot pdf open ITEMKEY --page 5
 
 zot ann list ITEMKEY --type highlight --page 3 --json
 zot ann new ITEMKEY --text "target phrase" --color yellow --json
-zot ann delete ITEMKEY --type highlight --yes --json
+zot ann delete ITEMKEY --source zotero --type highlight --dry-run --json
+zot ann delete ITEMKEY --source zotero --type highlight --yes --json
+zot ann delete ITEMKEY --source pdf --page 3 --yes --json
 ```
 
 `item import` 在 Zotero 元数据识别完成后，会定位本次导入最终保留的 PDF 附件并执行增量全文索引；索引失败会作为 warning 返回，不会回滚已成功的 Zotero 导入。`find --snippet` 返回 FTS5 最佳命中块及相邻上下文，并在 `matched_chunk` 中保留页码、附件 key 与坐标。
@@ -121,7 +123,7 @@ zot ann delete ITEMKEY --type highlight --yes --json
 
 local/hybrid 下无过滤条件的 `pdf text ITEMKEY --json` 默认返回 `content_path` 和可选的 `chunks_path`，不再把完整正文复制到 JSON；Agent 应直接读取 `content_path`。`--grep`、`--pages`、`--max-chars` 返回计算后的文本子集，`--max-chars` 按 Unicode 字符而非 UTF-8 字节计数。多条目和 `--all` 同样返回缓存路径数组，只有显式 `--output-dir` 才导出 Markdown。remote 模式仍返回正文，因为客户端不能直接读取服务器路径。
 
-`ann list`、`ann new`、`ann delete` 明确区分读取、创建和删除。canonical 语法不接受 `annotations --clear` 或 `annotate --clear`。
+`ann list`、`ann new`、`ann delete` 明确区分读取、创建和删除。删除必须用 `--source zotero|pdf` 选择来源，建议先用 `--dry-run` 查看精确候选。Zotero 原生标注按 annotation item key 通过 Web API 删除，不再直接修改 SQLite；PDF 内嵌标注按 xref 在临时副本中修改并验证后替换。canonical 语法不接受 `annotations --clear` 或 `annotate --clear`。
 
 ## Reference 与全文索引
 

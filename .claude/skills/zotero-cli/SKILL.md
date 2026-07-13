@@ -118,12 +118,14 @@ zot pdf open ITEMKEY --page 5
 
 zot ann list ITEMKEY --type highlight --page 3 --json
 zot ann new ITEMKEY --text "target phrase" --color yellow --json
-zot ann delete ITEMKEY --type highlight --yes --json
+zot ann delete ITEMKEY --source zotero --type highlight --dry-run --json
+zot ann delete ITEMKEY --source zotero --type highlight --yes --json
+zot ann delete ITEMKEY --source pdf --type highlight --yes --json
 ```
 
 `item import --collection` 接受收藏夹 key、唯一名称或完整层级路径；名称有歧义时会列出带 key 的完整路径候选，不会自动猜测。导入依赖 Zotero 桌面端 Connector，并在识别完成后为最终保留的附件建立增量全文索引。`file check` 只检查附件健康状态；表格预览参数只属于 `file show`。
 
-读取、创建、删除分别使用 `ann list/new/delete`。不要生成 `annotations --clear` 或 `annotate --clear`。
+读取、创建、删除分别使用 `ann list/new/delete`。删除必须显式选择 `--source zotero|pdf`，并优先用 `--dry-run` 查看精确候选；不要生成 `annotations --clear` 或 `annotate --clear`，也不要直接修改 `itemAnnotations`。
 
 ## Reference
 

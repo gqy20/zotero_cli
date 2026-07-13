@@ -51,15 +51,36 @@ func newRemoteWriteServer(t *testing.T) *httptest.Server {
 					},
 				},
 			})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/items/ITEM123/annotations":
+			writeTestJSON(w, map[string]any{
+				"ok": true,
+				"data": map[string]any{
+					"item_key":       "ITEM123",
+					"attachment_key": "PDF123",
+					"pdf_annotations": []map[string]any{
+						{"xref": 42, "page": 1, "type": "highlight", "text": "hello"},
+					},
+					"db_annotations": []map[string]any{},
+					"total_pdf":      1,
+					"total_db":       0,
+				},
+			})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/items/ITEM123/annotations/clear":
+			var req backend.DeleteAnnotationsRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode clear request: %v", err)
+			}
+			if len(req.PDFXRefs) != 1 || req.PDFXRefs[0] != 42 {
+				t.Fatalf("unexpected exact PDF candidates: %#v", req.PDFXRefs)
+			}
 			writeTestJSON(w, map[string]any{
 				"ok": true,
 				"data": map[string]any{
 					"attachment_key": "PDF123",
 					"pdf_path":       "",
 					"pdf_deleted":    1,
-					"db_deleted":     1,
-					"deleted":        2,
+					"db_deleted":     0,
+					"deleted":        1,
 				},
 			})
 		default:
@@ -110,7 +131,7 @@ func TestRunAnnDeleteRemoteUsesServer(t *testing.T) {
 	t.Setenv("ZOT_SERVER_ADDR", srv.URL)
 
 	_, stderr := captureOutput(t)
-	exitCode := Run([]string{"ann", "delete", "ITEM123", "--yes"})
+	exitCode := Run([]string{"ann", "delete", "ITEM123", "--source", "pdf", "--yes"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d, stderr=%q", exitCode, stderr.String())
 	}

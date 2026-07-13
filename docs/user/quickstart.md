@@ -155,6 +155,10 @@ go run .\cmd\zot config check
 # 写入标注到 PDF
 .\zot.exe ann new ITEMKEY --text "关键概念" --color red --comment "重要"
 
+# 删除必须选择 Zotero 或 PDF 来源，并建议先预览
+.\zot.exe ann delete ITEMKEY --source zotero --type highlight --dry-run --json
+.\zot.exe ann delete ITEMKEY --source zotero --type highlight --yes --json
+
 # remote 模式下以上两条也可用，但实际执行发生在 zot server 所在机器
 
 # 在 Zotero 阅读器中打开

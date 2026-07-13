@@ -37,7 +37,7 @@
 | Europe PMC 增强 | `zot ref cited ITEMKEY --external`；`zot ref entities ITEMKEY`；`ref links` 自动合并两套资源 |
 | 开放科学画像 | `zot ref profile ITEMKEY --json` 查看预印本/正式版本、评价、基金、OA 和许可证 |
 | 复制粘贴 BibTeX / RIS | `zot item export KEY --as bibtex` → AI 直接消费标准导出 |
-| 标注散落在各处无法汇总 | `zot ann list KEY --json` → 双源（DB+PDF）统一输出，支持按类型/页码/作者过滤，双层清除 |
+| 标注散落在各处无法汇总 | `zot ann list KEY --json` → 双源（Zotero+PDF）统一输出，支持按类型/页码/作者过滤和分来源安全删除 |
 | 批量打标签靠手点 | `zot item tag --items K1,K2,K3 --tag "to-read"` | 一条命令 |
 
 > `ref` 的正式支持核心是 PMC/PubMed（NCBI）。`ref grobid` 仅为实验性、显式调用的 PDF 后备，不属于默认构建流程；公共演示端点不提供稳定性或配额保证。
@@ -314,10 +314,10 @@ zot ann new KEY --page 4 --text "GATK" --color red --comment "关键方法"
 zot ann new KEY --text "speciation" --type underline     # 下划线
 zot ann new KEY --page 3 --rect 100,200,350,220         # Mode 2: 精确坐标
 
-# 清除标注（双层删除：PDF 文件 + Zotero DB，DB 删除非阻断）
-zot ann delete KEY --yes                              # 删除全部
-zot ann delete KEY --type highlight --yes             # 按类型删
-zot ann delete KEY --page 5 --author "User" --yes     # 组合条件删
+# 删除前先预览精确候选；必须显式选择来源
+zot ann delete KEY --source zotero --type highlight --dry-run --json
+zot ann delete KEY --source zotero --type highlight --yes --json
+zot ann delete KEY --source pdf --page 5 --author "User" --yes --json
 
 # 在 Zotero 阅读器中打开 PDF（跳转到指定页）
 zot pdf open KEY --page 5
@@ -337,9 +337,9 @@ zot 不是独立工具，它直接读写你的 **Zotero 本地数据目录**，�
 | `zot pdf open KEY` | `zotero://open-pdf` 协议 | 在已运行的 Zotero **阅读器**中打开 PDF，支持页码跳转 |
 | `zot ann list KEY` | SQLite + PyMuPDF 双源读取 | 同时获取 DB 层标注 **和** PDF 文件内嵌入的标注 |
 | `zot ann new KEY` | PyMuPDF 直接写入 PDF | 3 种定位模式写入标注 |
-| `zot ann delete KEY --yes` | 双层删除 | 显式 destructive action，受删除门控和确认保护 |
+| `zot ann delete KEY --source zotero|pdf` | 分来源删除 | Zotero 标注按 item key 走 Web API；PDF 标注按 xref 在临时副本中修改并验证 |
 
-在 `remote` 模式下，`ann list/new/delete` 会通过远端 `zot serve` 在服务器侧读取或修改 PDF；服务端必须以 `local` / `hybrid` / `web` 等非 `remote` 模式运行，并按 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE` 控制写入和清除。普通 Zotero Web API 写操作（如 `item new`、标签、集合等）在 remote 客户端仍需额外配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID`。
+在 `remote` 模式下，`ann list/new` 和 `ann delete --source pdf` 会通过远端 `zot serve` 在服务器侧读取或修改 PDF，并受服务端权限门控。`ann delete --source zotero` 使用标准 Zotero Web API，需要客户端配置 `ZOT_API_KEY` + `ZOT_LIBRARY_ID`。
 
 数据来源：
 
