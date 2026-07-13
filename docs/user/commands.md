@@ -24,7 +24,7 @@ zot
 ├── item list|find|show|new|edit|delete|tag|untag|supp|export
 ├── coll list|show|new|edit|delete|add|remove
 ├── note list|show|find|new|edit|delete
-├── tag list
+├── tag list|replace
 ├── search list|show|new|edit|delete
 ├── group list
 ├── file show|check
@@ -77,6 +77,10 @@ zot item delete ITEMKEY --yes --if-version 42 --json
 zot item tag KEY1 KEY2 --tag review --json
 zot item untag KEY1 KEY2 --tag review --json
 
+# 默认只预览；Go 正则替换支持 $1 等捕获组
+zot tag replace --match '^(SV|SV检测)$' --replace '结构变异' --json
+zot tag replace --match '^植物/(.+)$' --replace '物种/植物/$1' --yes --json
+
 zot coll new --name "Reviews" --json
 zot coll add COLLKEY ITEM1 ITEM2 --json
 zot coll remove COLLKEY ITEM1 --json
@@ -84,7 +88,7 @@ zot note new --parent ITEMKEY --text "Reading note" --json
 zot search new --data '{"name":"Recent","conditions":[]}' --json
 ```
 
-写入统一接受 `--set FIELD=VALUE`、`--data JSON`、`--from PATH`；`--from -` 表示 stdin。安全选项统一为 `--dry-run`、`--yes/-y`、`--if-version`。
+写入统一接受 `--set FIELD=VALUE`、`--data JSON`、`--from PATH`；`--from -` 表示 stdin。安全选项统一为 `--dry-run`、`--yes/-y`、`--if-version`。`tag replace` 是例外：不带 `--yes` 时默认只生成预览。
 
 - `ZOT_ALLOW_WRITE=1` 控制创建和修改。
 - `ZOT_ALLOW_DELETE=1` 控制删除，默认关闭。

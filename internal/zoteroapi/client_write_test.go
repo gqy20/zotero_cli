@@ -576,7 +576,7 @@ func TestClientGetItemsByKeys(t *testing.T) {
 					"itemType": "book",
 					"title":    "Book One",
 					"tags": []map[string]any{
-						{"tag": "ai"},
+						{"tag": "ai", "type": 1},
 					},
 				},
 			},
@@ -609,5 +609,8 @@ func TestClientGetItemsByKeys(t *testing.T) {
 	}
 	if len(items) != 2 || items[0].Version != 52 || len(items[1].Tags) != 1 || items[1].Tags[0] != "ml" {
 		t.Fatalf("unexpected items: %#v", items)
+	}
+	if len(items[0].TagObjects) != 1 || items[0].TagObjects[0].Type == nil || *items[0].TagObjects[0].Type != 1 {
+		t.Fatalf("automatic tag type was not preserved: %#v", items[0].TagObjects)
 	}
 }

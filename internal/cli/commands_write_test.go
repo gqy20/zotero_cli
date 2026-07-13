@@ -153,8 +153,34 @@ func TestRunRemoveTagText(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
-	if got := stdout.String(); !strings.Contains(got, `removed tag "ai" on 2 items at library version 53`) {
+	if got := stdout.String(); !strings.Contains(got, `removed tag "ai" on 2 item(s), 0 unchanged, at library version 53`) {
 		t.Fatalf("unexpected output: %q", got)
+	}
+}
+
+func TestRunTagReplacePreviewJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"tag", "replace", "--match", `^(ai|transformers)$`, "--replace", `topic/$1`, "--json"})
+	if exitCode != ExitOK {
+		t.Fatalf("code=%d stderr=%q", exitCode, stderr.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if got["command"] != "tag replace" {
+		t.Fatalf("command = %#v", got["command"])
+	}
+	meta := got["meta"].(map[string]any)
+	if meta["preview"] != true || meta["matched_tags"] != float64(2) {
+		t.Fatalf("meta = %#v", meta)
 	}
 }
 

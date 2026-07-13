@@ -165,12 +165,21 @@ type Item struct {
 	DOI         string              `json:"doi,omitempty"`
 	URL         string              `json:"url,omitempty"`
 	Tags        []string            `json:"tags,omitempty"`
+	TagObjects  []ItemTag           `json:"-"`
 	Collections []string            `json:"collections,omitempty"`
 	Attachments []Attachment        `json:"attachments,omitempty"`
 	Notes       []Note              `json:"notes,omitempty"`
 	Relations   map[string][]string `json:"relations,omitempty"`
 	DateAdded   string              `json:"date_added,omitempty"`
 	Abstract    string              `json:"abstract,omitempty"`
+}
+
+// ItemTag is the editable Zotero tag representation. Type 1 identifies an
+// automatic tag; a missing type identifies a manual tag. Write paths must
+// preserve this distinction for tags they do not modify.
+type ItemTag struct {
+	Tag  string `json:"tag"`
+	Type *int   `json:"type,omitempty"`
 }
 
 type Creator struct {
@@ -211,7 +220,7 @@ type apiItemData struct {
 	Issue            string                     `json:"issue"`
 	Pages            string                     `json:"pages"`
 	Creators         []apiCreator               `json:"creators"`
-	Tags             []apiTag                   `json:"tags"`
+	Tags             []ItemTag                  `json:"tags"`
 	Collections      []string                   `json:"collections"`
 	Note             string                     `json:"note"`
 	Relations        map[string]json.RawMessage `json:"relations,omitempty"`
@@ -222,10 +231,6 @@ type apiCreator struct {
 	Name        string `json:"name"`
 	FirstName   string `json:"firstName"`
 	LastName    string `json:"lastName"`
-}
-
-type apiTag struct {
-	Tag string `json:"tag"`
 }
 
 type apiCitationResponse struct {

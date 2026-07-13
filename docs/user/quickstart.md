@@ -164,6 +164,10 @@ go run .\cmd\zot config check
 ```powershell
 .\zot.exe item tag KEY1 KEY2 --tag "to-read" --json
 .\zot.exe item export --collection COLL1234 --as csljson --json
+
+# 正则批量改名：默认预览，加 --yes 才写入
+.\zot.exe tag replace --match '^(Gene Flow|Gene flow|gene flow)$' --replace 'Gene Flow'
+.\zot.exe tag replace --match '^植物/(.+)$' --replace '物种/植物/$1' --yes
 ```
 
 ### 全文检索最佳实践

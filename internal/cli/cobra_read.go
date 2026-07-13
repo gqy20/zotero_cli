@@ -123,6 +123,19 @@ func (c *CLI) newTagCommand(opts *globalOptions) *cobra.Command {
 	}}
 	addListFlags(cmd, &list)
 	tag.AddCommand(cmd)
+	var replace app.TagReplaceRequest
+	replaceCmd := &cobra.Command{Use: "replace", Short: "Preview or apply a regular-expression tag replacement", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		return c.runWrite(cmd, opts, app.CommandPath{Resource: "tag", Action: "replace"}, func(ctx context.Context, s app.WriteService) (app.Result, error) {
+			return s.ReplaceTags(ctx, replace)
+		})
+	}}
+	replaceCmd.Flags().StringVar(&replace.Match, "match", "", "regular expression matched against tag names")
+	replaceCmd.Flags().StringVar(&replace.Replace, "replace", "", "Go regular-expression replacement, including $1 captures")
+	replaceCmd.Flags().BoolVarP(&replace.Safety.Yes, "yes", "y", false, "apply the replacement; omitted previews only")
+	replaceCmd.Flags().IntVar(&replace.Safety.IfVersion, "if-version", 0, "require this library version when applying")
+	_ = replaceCmd.MarkFlagRequired("match")
+	_ = replaceCmd.MarkFlagRequired("replace")
+	tag.AddCommand(replaceCmd)
 	return tag
 }
 func (c *CLI) newNoteListCommand(opts *globalOptions) *cobra.Command {

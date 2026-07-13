@@ -227,6 +227,7 @@ func mapItem(item apiItem) Item {
 		DOI:         item.Data.DOI,
 		URL:         item.Data.URL,
 		Tags:        mapTags(item.Data.Tags),
+		TagObjects:  append([]ItemTag(nil), item.Data.Tags...),
 		Collections: append([]string(nil), item.Data.Collections...),
 		Relations:   parseRelationMap(item.Data.Relations),
 	}
@@ -282,7 +283,7 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func mapTags(tags []apiTag) []string {
+func mapTags(tags []ItemTag) []string {
 	out := make([]string, 0, len(tags))
 	for _, tag := range tags {
 		if tag.Tag != "" {

@@ -45,6 +45,8 @@ type MembershipRequest struct {
 
 type WriteClient interface {
 	GetLibraryStats(context.Context) (zoteroapi.LibraryStats, error)
+	ListTags(context.Context) ([]zoteroapi.Tag, error)
+	FindItems(context.Context, zoteroapi.FindOptions) ([]zoteroapi.Item, error)
 	CreateItem(context.Context, map[string]any, int) (zoteroapi.WriteResult, error)
 	UpdateItem(context.Context, string, map[string]any, int) (zoteroapi.WriteResult, error)
 	DeleteItems(context.Context, []string, int) (zoteroapi.BatchWriteResult, error)
@@ -346,22 +348,47 @@ func (s WriteService) Tags(ctx context.Context, req TagWriteRequest) (Result, er
 	}
 	payload := make([]map[string]any, 0, len(items))
 	for _, item := range items {
-		tags := updateStringSet(item.Tags, req.Tag, req.Add)
-		apiTags := make([]map[string]string, 0, len(tags))
-		for _, tag := range tags {
-			apiTags = append(apiTags, map[string]string{"tag": tag})
-		}
-		payload = append(payload, map[string]any{"key": item.Key, "version": item.Version, "tags": apiTags})
+		tags := updateItemTags(item, req.Tag, req.Add)
+		payload = append(payload, map[string]any{"key": item.Key, "version": item.Version, "tags": tags})
 	}
 	result, err := client.UpdateItems(ctx, payload, version)
 	if err != nil {
 		return Result{}, err
 	}
+	if len(result.Failed) > 0 {
+		return Result{Data: result}, fmt.Errorf("update item tags failed for %d item(s)", len(result.Failed))
+	}
 	action := "added"
 	if !req.Add {
 		action = "removed"
 	}
-	return Result{Data: result, Text: fmt.Sprintf("%s tag %q on %d items at library version %d", action, req.Tag, len(req.Keys), result.LastModifiedVersion)}, nil
+	return Result{Data: result, Text: fmt.Sprintf("%s tag %q on %d item(s), %d unchanged, at library version %d", action, req.Tag, len(result.Successful), len(result.Unchanged), result.LastModifiedVersion)}, nil
+}
+
+func updateItemTags(item zoteroapi.Item, target string, add bool) []zoteroapi.ItemTag {
+	tags := append([]zoteroapi.ItemTag(nil), item.TagObjects...)
+	if len(tags) == 0 && len(item.Tags) > 0 {
+		tags = make([]zoteroapi.ItemTag, 0, len(item.Tags))
+		for _, tag := range item.Tags {
+			tags = append(tags, zoteroapi.ItemTag{Tag: tag})
+		}
+	}
+
+	result := make([]zoteroapi.ItemTag, 0, len(tags)+1)
+	found := false
+	for _, tag := range tags {
+		if tag.Tag == target {
+			found = true
+			if !add {
+				continue
+			}
+		}
+		result = append(result, tag)
+	}
+	if add && !found {
+		result = append(result, zoteroapi.ItemTag{Tag: target})
+	}
+	return result
 }
 
 func (s WriteService) Membership(ctx context.Context, req MembershipRequest) (Result, error) {

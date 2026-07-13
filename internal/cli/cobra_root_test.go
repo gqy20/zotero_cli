@@ -29,7 +29,7 @@ func TestCanonicalCommandsExist(t *testing.T) {
 	root := testCLI.newRootCommand()
 	paths := [][]string{
 		{"lib", "show"}, {"lib", "stats"}, {"lib", "log"},
-		{"item", "list"}, {"coll", "list"}, {"tag", "list"},
+		{"item", "list"}, {"coll", "list"}, {"tag", "list"}, {"tag", "replace"},
 		{"note", "list"}, {"search", "list"}, {"group", "list"},
 		{"item", "find"}, {"item", "show"}, {"item", "new"}, {"item", "edit"}, {"item", "delete"}, {"item", "tag"}, {"item", "untag"}, {"item", "supp"}, {"item", "export"},
 		{"coll", "show"}, {"coll", "new"}, {"coll", "edit"}, {"coll", "delete"}, {"coll", "add"}, {"coll", "remove"},
