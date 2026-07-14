@@ -255,6 +255,7 @@ func (c *Client) ListTags(ctx context.Context) ([]Tag, error) {
 		tags = append(tags, Tag{
 			Name:     tag.Tag,
 			NumItems: tag.Meta.NumItems,
+			Type:     tag.Meta.Type,
 		})
 	}
 

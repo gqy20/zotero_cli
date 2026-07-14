@@ -9,11 +9,12 @@ import (
 )
 
 type Envelope struct {
-	OK      bool           `json:"ok"`
-	Command string         `json:"command"`
-	Data    any            `json:"data"`
-	Meta    map[string]any `json:"meta,omitempty"`
-	Code    int            `json:"code,omitempty"`
+	OK       bool           `json:"ok"`
+	Command  string         `json:"command"`
+	Data     any            `json:"data"`
+	Meta     map[string]any `json:"meta,omitempty"`
+	Warnings []app.Warning  `json:"warnings,omitempty"`
+	Code     int            `json:"code,omitempty"`
 }
 
 type ErrorData struct {
@@ -36,7 +37,7 @@ func (r Renderer) Result(path app.CommandPath, result app.Result, opts app.Outpu
 	if opts.Format == "json" {
 		enc := json.NewEncoder(r.Out)
 		enc.SetIndent("", "  ")
-		return enc.Encode(Envelope{OK: true, Command: path.String(), Data: result.Data, Meta: result.Meta})
+		return enc.Encode(Envelope{OK: true, Command: path.String(), Data: result.Data, Meta: result.Meta, Warnings: result.Warnings})
 	}
 	if result.Text != "" && !opts.Quiet {
 		_, err := fmt.Fprintln(r.Out, result.Text)

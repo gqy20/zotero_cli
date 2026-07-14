@@ -17,7 +17,10 @@ func (c *Client) CreateItem(ctx context.Context, data map[string]any, ifUnmodifi
 }
 
 func (c *Client) UpdateItem(ctx context.Context, key string, data map[string]any, ifUnmodifiedSinceVersion int) (WriteResult, error) {
-	resp, err := c.doWriteRequest(ctx, http.MethodPut, path.Join("items", key), data, ifUnmodifiedSinceVersion)
+	// Item edits are partial updates. Zotero's PUT endpoint expects the
+	// complete editable item JSON and removes omitted fields, while PATCH
+	// preserves fields that are not present in data.
+	resp, err := c.doWriteRequest(ctx, http.MethodPatch, path.Join("items", key), data, ifUnmodifiedSinceVersion)
 	if err != nil {
 		return WriteResult{}, err
 	}

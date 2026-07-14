@@ -61,6 +61,7 @@ type Note struct {
 type Tag struct {
 	Name     string `json:"name"`
 	NumItems int    `json:"num_items,omitempty"`
+	Type     int    `json:"type"`
 }
 
 type Search struct {
@@ -272,6 +273,7 @@ type apiTagResponse struct {
 
 type apiTagMeta struct {
 	NumItems int `json:"numItems"`
+	Type     int `json:"type"`
 }
 
 type apiSearch struct {
@@ -357,6 +359,8 @@ func (e *APIError) Error() string {
 		return formatAPIError("zotero api forbidden (403)", e.Body)
 	case http.StatusNotFound:
 		return "zotero api not found (404)"
+	case http.StatusBadRequest:
+		return formatAPIError("zotero api bad request (400)", e.Body)
 	case http.StatusConflict:
 		return formatAPIError("zotero api conflict (409): request conflicts with existing data", e.Body)
 	case http.StatusPreconditionFailed:

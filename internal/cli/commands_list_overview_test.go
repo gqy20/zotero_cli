@@ -39,7 +39,7 @@ func TestRunLibShowJSON(t *testing.T) {
 	}
 
 	// Verify data sections exist
-	for _, key := range []string{"stats", "collections", "tags", "recent_items"} {
+	for _, key := range []string{"stats", "collections", "tags", "recent_items", "taste"} {
 		if data[key] == nil {
 			t.Fatalf("missing data section: %s", key)
 		}
@@ -56,6 +56,9 @@ func TestRunLibShowJSON(t *testing.T) {
 	}
 	if meta["index_status"] == nil {
 		t.Fatal("meta missing index_status")
+	}
+	if meta["taste_exists"] != false || meta["taste_path"] == nil {
+		t.Fatalf("unexpected taste meta: %#v", meta)
 	}
 }
 

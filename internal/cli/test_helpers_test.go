@@ -61,7 +61,7 @@ func newTestAPI(t *testing.T) (string, func()) {
 			writeVersionedNoContent(w, "54")
 			return
 		}
-		if r.Method == http.MethodPut && r.URL.Path == "/users/123456/items/ABCD2345" {
+		if r.Method == http.MethodPatch && r.URL.Path == "/users/123456/items/ABCD2345" {
 			writeVersionedNoContent(w, "8")
 			return
 		}

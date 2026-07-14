@@ -71,7 +71,7 @@ func TestClientUpdateItem(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut {
+		if r.Method != http.MethodPatch {
 			t.Fatalf("unexpected method: %s", r.Method)
 		}
 		if r.URL.Path != "/users/123/items/ABCD2345" {

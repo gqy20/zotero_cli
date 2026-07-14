@@ -69,6 +69,7 @@ type ReadMetadata struct {
 type Tag struct {
 	Name     string `json:"name"`
 	NumItems int    `json:"num_items,omitempty"`
+	Type     int    `json:"type"`
 }
 
 type Collection struct {

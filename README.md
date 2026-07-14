@@ -380,6 +380,7 @@ zot item export KEY --as csljson --json
 ```bash
 zot coll list --json         # 收藏夹列表
 zot tag list --json                # 所有标签
+zot tag clean --match '^[\x00-\x7F]+$' --max-items 1 --json  # 预览低频自动英文标签
 zot lib stats --json               # 库统计
 zot lib log --kind items --since 0 --json  # 版本变更记录
 ```

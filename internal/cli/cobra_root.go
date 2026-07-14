@@ -38,6 +38,14 @@ func expandShortcutArgs(args []string) []string {
 	if len(args) == 0 {
 		return args
 	}
+	if len(args) >= 3 && args[0] == "lib" && args[1] == "taste" {
+		switch args[2] {
+		case "init":
+			return append([]string{"lib", "taste", "--init"}, args[3:]...)
+		case "path":
+			return append([]string{"lib", "taste", "--path"}, args[3:]...)
+		}
+	}
 	switch args[0] {
 	case "find":
 		return append([]string{"item", "find"}, args[1:]...)
@@ -92,7 +100,12 @@ func (c *CLI) newRootCommand() *cobra.Command {
 Common shortcuts:
   zot find QUERY       Same as zot item find QUERY
   zot show KEY         Same as zot item show KEY
-  zot export [KEY...]  Same as zot item export [KEY...]`,
+  zot export [KEY...]  Same as zot item export [KEY...]
+
+Library preferences:
+  zot lib taste        Show the current library taste
+  zot lib taste init   Create a starter taste.md
+  zot lib taste path   Show the resolved taste.md path`,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE:          func(cmd *cobra.Command, _ []string) error { return cmd.Help() },

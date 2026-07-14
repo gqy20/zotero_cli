@@ -190,7 +190,11 @@ func (s ReadService) Tags(ctx context.Context, opts ListOptions) (Result, error)
 	meta["total"] = len(rows)
 	var lines []string
 	for _, row := range rows {
-		lines = append(lines, fmt.Sprintf("%-20s  items=%d", row.Name, row.NumItems))
+		tagType := "manual"
+		if row.Type == 1 {
+			tagType = "automatic"
+		}
+		lines = append(lines, fmt.Sprintf("%-20s  items=%d  type=%s", row.Name, row.NumItems, tagType))
 	}
 	text := strings.Join(lines, "\n")
 	if len(rows) == 0 {
@@ -404,12 +408,27 @@ func (s ReadService) Overview(ctx context.Context) (Result, error) {
 			indexStatus = "data_dir_missing"
 		}
 	}
-	data := map[string]any{"stats": a.stats, "collections": a.collections, "tags": a.tags, "recent_items": a.items}
+	_, configPath, _ := s.LoadConfig()
+	taste, tasteErr := LoadLibraryTaste(cfg, configPath)
+	if tasteErr != nil {
+		return Result{}, tasteErr
+	}
+	tasteStatus := LibraryTaste{Path: taste.Path, Exists: taste.Exists}
+	data := map[string]any{"stats": a.stats, "collections": a.collections, "tags": a.tags, "recent_items": a.items, "taste": tasteStatus}
 	meta := readMeta(reader)
 	meta["index_status"] = indexStatus
 	meta["total_items"] = a.stats.TotalItems
+	meta["taste_path"] = taste.Path
+	meta["taste_exists"] = taste.Exists
 	text := overviewText(a.stats, a.collections, a.tags, a.items, indexStatus)
-	return Result{Data: data, Meta: meta, Text: text, Warnings: readWarnings(meta)}, nil
+	warnings := readWarnings(meta)
+	if taste.Exists {
+		text += "\nTaste: configured (" + taste.Path + ")"
+	} else {
+		text += "\nTaste: not configured\nCreate: zot lib taste init\nPath: " + taste.Path
+		warnings = append(warnings, Warning{Code: "taste_missing", Message: "library taste is not configured; run `zot lib taste init`"})
+	}
+	return Result{Data: data, Meta: meta, Text: text, Warnings: warnings}, nil
 }
 
 func (s ReadService) Items(ctx context.Context, opts ListOptions) (Result, error) {

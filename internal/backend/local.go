@@ -1027,10 +1027,10 @@ func (r *LocalReader) ListTags(ctx context.Context) ([]Tag, error) {
 	var tags []Tag
 	err := r.withReadableDB(ctx, func(db *sql.DB) error {
 		rows, err := db.QueryContext(ctx, `
-			SELECT t.name, COUNT(it.itemID) as cnt
+			SELECT t.name, COALESCE(it.type, 0), COUNT(it.itemID) as cnt
 			FROM tags t
 			JOIN itemTags it ON it.tagID = t.tagID
-			GROUP BY t.name
+			GROUP BY t.name, COALESCE(it.type, 0)
 			ORDER BY cnt DESC, t.name
 		`)
 		if err != nil {
@@ -1039,7 +1039,7 @@ func (r *LocalReader) ListTags(ctx context.Context) ([]Tag, error) {
 		defer rows.Close()
 		for rows.Next() {
 			var t Tag
-			if err := rows.Scan(&t.Name, &t.NumItems); err != nil {
+			if err := rows.Scan(&t.Name, &t.Type, &t.NumItems); err != nil {
 				return err
 			}
 			tags = append(tags, t)

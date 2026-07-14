@@ -97,7 +97,7 @@ func (r *WebReader) ListTags(ctx context.Context) ([]Tag, error) {
 	r.lastReadMetadata = ReadMetadata{ReadSource: "web"}
 	tags := make([]Tag, 0, len(raw))
 	for _, t := range raw {
-		tags = append(tags, Tag{Name: t.Name, NumItems: t.NumItems})
+		tags = append(tags, Tag{Name: t.Name, NumItems: t.NumItems, Type: t.Type})
 	}
 	return tags, nil
 }

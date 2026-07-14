@@ -151,6 +151,7 @@ func TestClientListTags(t *testing.T) {
 				"tag": "transformers",
 				"meta": map[string]any{
 					"numItems": 4,
+					"type":     1,
 				},
 			},
 			{
@@ -179,7 +180,7 @@ func TestClientListTags(t *testing.T) {
 	if len(tags) != 2 {
 		t.Fatalf("expected 2 tags, got %d", len(tags))
 	}
-	if tags[0].Name != "transformers" || tags[0].NumItems != 4 {
+	if tags[0].Name != "transformers" || tags[0].NumItems != 4 || tags[0].Type != 1 {
 		t.Fatalf("unexpected tag: %#v", tags[0])
 	}
 }

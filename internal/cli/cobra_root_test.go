@@ -33,8 +33,8 @@ func TestCobraHelpDoesNotLoadConfig(t *testing.T) {
 func TestCanonicalCommandsExist(t *testing.T) {
 	root := testCLI.newRootCommand()
 	paths := [][]string{
-		{"lib", "show"}, {"lib", "stats"}, {"lib", "log"},
-		{"item", "list"}, {"coll", "list"}, {"tag", "list"}, {"tag", "replace"},
+		{"lib", "show"}, {"lib", "stats"}, {"lib", "taste"}, {"lib", "log"},
+		{"item", "list"}, {"coll", "list"}, {"tag", "list"}, {"tag", "replace"}, {"tag", "clean"},
 		{"note", "list"}, {"search", "list"}, {"group", "list"},
 		{"item", "find"}, {"item", "show"}, {"item", "new"}, {"item", "edit"}, {"item", "delete"}, {"item", "tag"}, {"item", "untag"}, {"item", "supp"}, {"item", "export"},
 		{"coll", "show"}, {"coll", "new"}, {"coll", "edit"}, {"coll", "delete"}, {"coll", "add"}, {"coll", "remove"},
@@ -62,6 +62,8 @@ func TestFormalShortcutsExpandToCanonicalArgs(t *testing.T) {
 		{[]string{"find", "crispr", "--type", "article"}, []string{"item", "find", "crispr", "--type", "article"}},
 		{[]string{"show", "ITEM1"}, []string{"item", "show", "ITEM1"}},
 		{[]string{"export", "ITEM1", "--as", "ris"}, []string{"item", "export", "ITEM1", "--as", "ris"}},
+		{[]string{"lib", "taste", "init", "--json"}, []string{"lib", "taste", "--init", "--json"}},
+		{[]string{"lib", "taste", "path"}, []string{"lib", "taste", "--path"}},
 	}
 	for _, tt := range tests {
 		got := expandShortcutArgs(tt.input)
@@ -134,7 +136,7 @@ func TestRootUsesCobraHelp(t *testing.T) {
 	if code := Run(nil); code != ExitOK {
 		t.Fatalf("code=%d stderr=%q", code, stderr.String())
 	}
-	for _, want := range []string{"Usage:", "item", "ref", "completion", "Common shortcuts:", "zot find QUERY", "zot show KEY", "zot export [KEY...]"} {
+	for _, want := range []string{"Usage:", "item", "ref", "completion", "Common shortcuts:", "zot find QUERY", "zot show KEY", "zot export [KEY...]", "zot lib taste init"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("root help missing %q: %q", want, stdout.String())
 		}

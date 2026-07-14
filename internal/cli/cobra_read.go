@@ -37,6 +37,29 @@ func (c *CLI) newLibCommand(opts *globalOptions) *cobra.Command {
 	stats := &cobra.Command{Use: "stats", Short: "Show library counters", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return c.runRead(cmd, opts, app.CommandPath{Resource: "lib", Action: "stats"}, func(ctx context.Context, s app.ReadService) (app.Result, error) { return s.Stats(ctx) })
 	}}
+	var tasteInit, tastePath, tasteForce bool
+	taste := &cobra.Command{Use: "taste", Short: "Show or initialize library management preferences", Args: cobra.NoArgs}
+	taste.RunE = func(cmd *cobra.Command, _ []string) error {
+		if tasteInit && tastePath {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--init and --path are mutually exclusive")}
+		}
+		if tasteForce && !tasteInit {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--force requires --init")}
+		}
+		return c.runRead(cmd, opts, app.CommandPath{Resource: "lib", Action: "taste"}, func(ctx context.Context, s app.ReadService) (app.Result, error) {
+			switch {
+			case tasteInit:
+				return s.InitTaste(ctx, tasteForce)
+			case tastePath:
+				return s.TastePath(ctx)
+			default:
+				return s.Taste(ctx)
+			}
+		})
+	}
+	taste.Flags().BoolVar(&tasteInit, "init", false, "create a starter taste.md")
+	taste.Flags().BoolVar(&tastePath, "path", false, "print the resolved taste.md path")
+	taste.Flags().BoolVar(&tasteForce, "force", false, "overwrite an existing taste.md with --init")
 	var logOpts app.LogOptions
 	logCmd := &cobra.Command{Use: "log", Short: "Show changed or deleted objects", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		if !logOpts.Deleted && logOpts.Kind == "" {
@@ -58,7 +81,7 @@ func (c *CLI) newLibCommand(opts *globalOptions) *cobra.Command {
 	logCmd.Flags().BoolVar(&logOpts.Deleted, "deleted", false, "show deleted object keys")
 	logCmd.Flags().BoolVar(&logOpts.IncludeTrashed, "include-trashed", false, "include trashed items")
 	logCmd.Flags().IntVar(&logOpts.IfModifiedVersion, "if-modified-version", 0, "conditional request version")
-	lib.AddCommand(show, stats, logCmd)
+	lib.AddCommand(show, stats, taste, logCmd)
 	return lib
 }
 
@@ -136,12 +159,25 @@ func (c *CLI) newTagCommand(opts *globalOptions) *cobra.Command {
 	_ = replaceCmd.MarkFlagRequired("match")
 	_ = replaceCmd.MarkFlagRequired("replace")
 	tag.AddCommand(replaceCmd)
+	var clean app.TagCleanRequest
+	clean.MaxItems = 1
+	cleanCmd := &cobra.Command{Use: "clean", Short: "Preview or remove low-frequency automatic tags", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		return c.runWrite(cmd, opts, app.CommandPath{Resource: "tag", Action: "clean"}, func(ctx context.Context, s app.WriteService) (app.Result, error) {
+			return s.CleanAutomaticTags(ctx, clean)
+		})
+	}}
+	cleanCmd.Flags().StringVar(&clean.Match, "match", "", "regular expression matched against automatic tag names")
+	cleanCmd.Flags().IntVar(&clean.MaxItems, "max-items", 1, "only remove automatic tags used by at most this many items")
+	cleanCmd.Flags().BoolVarP(&clean.Safety.Yes, "yes", "y", false, "apply the cleanup; omitted previews only")
+	cleanCmd.Flags().IntVar(&clean.Safety.IfVersion, "if-version", 0, "require this library version when applying")
+	_ = cleanCmd.MarkFlagRequired("match")
+	tag.AddCommand(cleanCmd)
 	var applyFrom string
 	var applySafety app.SafetyOptions
 	applyCmd := &cobra.Command{
 		Use:   "apply",
 		Short: "Apply multiple item tag changes in batched Web API requests",
-		Long: "Apply an item-centric JSON array in one operation. Each entry has keys plus add and/or remove arrays.\n" +
+		Long: "Apply an item-centric JSON array in one operation. Each entry has keys plus add, remove, and/or remove_automatic arrays.\n" +
 			`Example: [{"keys":["ITEMA001","ITEMA002"],"add":["进化","综述"]},{"keys":["ITEMA001"],"remove":["旧标签"]}]`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {

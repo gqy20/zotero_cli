@@ -12,6 +12,16 @@ argument-hint: "<resource> <action> [ITEMKEY...] [options]"
 
 # Zotero CLI v2
 
+## Library taste（文献管理偏好）
+
+涉及标签、收藏夹、分类层级、命名、合并或其他需要判断用户文献管理偏好的任务时，必须先运行：
+
+```powershell
+.\zot.exe lib taste --json
+```
+
+当 `data.exists=true` 时，完整读取 `data.content`，并按“当前用户指令 > taste.md > 工具默认行为”的优先级执行。文件不存在时，提示用户运行 `.\zot.exe lib taste init`，但不要阻塞其他安全操作。
+
 优先调用仓库中的 `zot`/`zot.exe`，源码验证时使用 `go run .\cmd\zot`。不要自行重写 Zotero API 调用。
 
 ## 执行原则
@@ -26,11 +36,11 @@ argument-hint: "<resource> <action> [ITEMKEY...] [options]"
 ## Canonical 命令树
 
 ```text
-lib show|stats|log
+lib show|stats|taste|log
 item list|find|show|new|edit|delete|tag|untag|supp|export|import
 coll list|show|new|edit|delete|add|remove
 note list|show|find|new|edit|delete
-tag list
+tag list|replace|apply|clean
 search list|show|new|edit|delete
 group list
 file show|check

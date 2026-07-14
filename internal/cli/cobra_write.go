@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"zotero_cli/internal/app"
+	"zotero_cli/internal/config"
 )
 
 type payloadFlags struct {
@@ -51,11 +52,36 @@ func (c *CLI) resolvePayload(flags payloadFlags, defaults map[string]any) (map[s
 }
 
 func (c *CLI) runWrite(cmd *cobra.Command, opts *globalOptions, path app.CommandPath, run func(context.Context, app.WriteService) (app.Result, error)) error {
-	err := c.renderResult(cmd.Context(), opts, path, func(ctx context.Context) (app.Result, error) { return run(ctx, c.writeService()) })
+	tasteWarning := libraryTasteWriteWarning(path)
+	err := c.renderResult(cmd.Context(), opts, path, func(ctx context.Context) (app.Result, error) {
+		result, err := run(ctx, c.writeService())
+		if err == nil && tasteWarning != nil {
+			result.Warnings = append(result.Warnings, *tasteWarning)
+		}
+		return result, err
+	})
 	if errors.Is(err, app.ErrCancelled) {
 		return &exitError{code: 130, err: app.ErrCancelled}
 	}
 	return err
+}
+
+func libraryTasteWriteWarning(path app.CommandPath) *app.Warning {
+	relevant := path.Resource == "tag" ||
+		(path.Resource == "item" && (path.Action == "tag" || path.Action == "untag")) ||
+		(path.Resource == "coll" && path.Action != "delete")
+	if !relevant {
+		return nil
+	}
+	cfg, configPath, err := config.Load()
+	if err != nil {
+		return nil
+	}
+	taste, err := app.LoadLibraryTaste(cfg, configPath)
+	if err != nil || taste.Exists {
+		return nil
+	}
+	return &app.Warning{Code: "taste_missing", Message: "library taste is not configured; run `zot lib taste init` before classification changes"}
 }
 
 func (c *CLI) addObjectWriteCommands(resource *cobra.Command, opts *globalOptions, kind string) {

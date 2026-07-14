@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"zotero_cli/internal/app"
@@ -12,7 +13,10 @@ import (
 func TestRendererJSONContract(t *testing.T) {
 	var out, errOut bytes.Buffer
 	r := Renderer{Out: &out, Err: &errOut}
-	err := r.Result(app.CommandPath{Resource: "config", Action: "show"}, app.Result{Data: map[string]any{"ok": true}, Meta: map[string]any{"source": "test"}}, app.OutputOptions{Format: "json"})
+	err := r.Result(app.CommandPath{Resource: "config", Action: "show"}, app.Result{
+		Data: map[string]any{"ok": true}, Meta: map[string]any{"source": "test"},
+		Warnings: []app.Warning{{Code: "test_warning", Message: "test warning"}},
+	}, app.OutputOptions{Format: "json"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +27,10 @@ func TestRendererJSONContract(t *testing.T) {
 	if !got.OK || got.Command != "config show" {
 		t.Fatalf("envelope = %#v", got)
 	}
-	if errOut.Len() != 0 {
+	if len(got.Warnings) != 1 || got.Warnings[0].Code != "test_warning" {
+		t.Fatalf("warnings = %#v", got.Warnings)
+	}
+	if !strings.Contains(errOut.String(), "test warning") {
 		t.Fatalf("stderr = %q", errOut.String())
 	}
 }

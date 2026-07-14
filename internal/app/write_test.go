@@ -315,6 +315,59 @@ func TestWriteServiceReplaceTagsDefaultsToPreview(t *testing.T) {
 	}
 }
 
+func TestWriteServiceCleanAutomaticTagsDefaultsToPreview(t *testing.T) {
+	client := &fakeWriteClient{tags: []zoteroapi.Tag{
+		{Name: "auto-one", NumItems: 1, Type: 1},
+		{Name: "auto-many", NumItems: 2, Type: 1},
+		{Name: "manual-one", NumItems: 1, Type: 0},
+	}}
+	service := WriteService{
+		LoadConfig: func() (config.Config, string, error) { return config.Config{}, "", nil },
+		NewClient:  func(config.Config) (WriteClient, error) { return client, nil },
+	}
+
+	result, err := service.CleanAutomaticTags(context.Background(), TagCleanRequest{Match: `^auto`, MaxItems: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := result.Data.(TagCleanReport)
+	if report.Applied || report.MatchedTags != 1 || report.MatchedAssignments != 1 || report.Candidates[0].Name != "auto-one" {
+		t.Fatalf("report = %#v", report)
+	}
+}
+
+func TestWriteServiceCleanAutomaticTagsPreservesManualNames(t *testing.T) {
+	automatic := 1
+	autoItem := zoteroapi.Item{Key: "ITEMA001", Version: 6, TagObjects: []zoteroapi.ItemTag{{Tag: "same", Type: &automatic}, {Tag: "keep", Type: &automatic}}}
+	manualItem := zoteroapi.Item{Key: "ITEMA002", Version: 6, TagObjects: []zoteroapi.ItemTag{{Tag: "same"}}}
+	client := &fakeWriteClient{
+		stats:       zoteroapi.LibraryStats{LastLibraryVersion: 7},
+		tags:        []zoteroapi.Tag{{Name: "same", NumItems: 1, Type: 1}, {Name: "same", NumItems: 1, Type: 0}},
+		findResults: map[string][]zoteroapi.Item{"same": {autoItem, manualItem}},
+		itemsByKey:  map[string]zoteroapi.Item{"ITEMA001": autoItem, "ITEMA002": manualItem},
+		stateful:    true,
+	}
+	service := WriteService{
+		LoadConfig: func() (config.Config, string, error) { return config.Config{AllowWrite: true}, "", nil },
+		NewClient:  func(config.Config) (WriteClient, error) { return client, nil },
+	}
+
+	result, err := service.CleanAutomaticTags(context.Background(), TagCleanRequest{Match: `^same$`, MaxItems: 1, Safety: SafetyOptions{Yes: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := result.Data.(TagCleanReport)
+	if !report.Applied || report.AffectedItems != 2 || report.UpdatedItems != 1 || report.VerifiedItems != 2 {
+		t.Fatalf("report = %#v", report)
+	}
+	if got := client.itemsByKey["ITEMA001"].TagObjects; len(got) != 1 || got[0].Tag != "keep" || got[0].Type == nil {
+		t.Fatalf("automatic item tags = %#v", got)
+	}
+	if got := client.itemsByKey["ITEMA002"].TagObjects; len(got) != 1 || got[0].Tag != "same" || got[0].Type != nil {
+		t.Fatalf("manual item tags = %#v", got)
+	}
+}
+
 func TestWriteServiceReplaceTagsAppliesAndVerifies(t *testing.T) {
 	automatic := 1
 	item := zoteroapi.Item{
@@ -464,6 +517,42 @@ func TestWriteServiceApplyTagsCombinesChangesAndVerifies(t *testing.T) {
 	got := client.itemsByKey["ITEMA001"].TagObjects
 	if len(got) != 3 || got[0].Tag != "keep" || got[0].Type == nil || got[1].Tag != "进化" || got[2].Tag != "综述" {
 		t.Fatalf("tags = %#v", got)
+	}
+}
+
+func TestWriteServiceApplyTagsRemovesOnlyAutomaticTags(t *testing.T) {
+	automatic := 1
+	client := &fakeWriteClient{
+		stats: zoteroapi.LibraryStats{LastLibraryVersion: 20},
+		itemsByKey: map[string]zoteroapi.Item{
+			"ITEMA001": {Key: "ITEMA001", Version: 19, TagObjects: []zoteroapi.ItemTag{{Tag: "auto-only", Type: &automatic}, {Tag: "promote", Type: &automatic}, {Tag: "manual"}}},
+			"ITEMA002": {Key: "ITEMA002", Version: 19, TagObjects: []zoteroapi.ItemTag{{Tag: "manual"}}},
+		},
+		stateful: true,
+	}
+	service := WriteService{
+		LoadConfig: func() (config.Config, string, error) { return config.Config{AllowWrite: true}, "", nil },
+		NewClient:  func(config.Config) (WriteClient, error) { return client, nil },
+	}
+
+	result, err := service.ApplyTags(context.Background(), TagApplyRequest{Operations: []TagApplyOperation{
+		{Keys: []string{"ITEMA001"}, Add: []string{"promote"}, RemoveAutomatic: []string{"auto-only", "promote"}},
+		{Keys: []string{"ITEMA002"}, RemoveAutomatic: []string{"manual"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := result.Data.(TagApplyReport)
+	if report.RemoveAutomaticAssignments != 3 || report.UpdatedItems != 1 || report.UnchangedItems != 1 || report.VerifiedItems != 2 {
+		t.Fatalf("report = %#v", report)
+	}
+	first := client.itemsByKey["ITEMA001"].TagObjects
+	if len(first) != 2 || first[0].Tag != "manual" || first[1].Tag != "promote" || first[1].Type != nil {
+		t.Fatalf("first tags = %#v", first)
+	}
+	second := client.itemsByKey["ITEMA002"].TagObjects
+	if len(second) != 1 || second[0].Tag != "manual" {
+		t.Fatalf("manual tag was removed: %#v", second)
 	}
 }
 

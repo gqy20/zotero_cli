@@ -12,9 +12,10 @@ import (
 )
 
 type TagApplyOperation struct {
-	Keys   []string `json:"keys"`
-	Add    []string `json:"add,omitempty"`
-	Remove []string `json:"remove,omitempty"`
+	Keys            []string `json:"keys"`
+	Add             []string `json:"add,omitempty"`
+	Remove          []string `json:"remove,omitempty"`
+	RemoveAutomatic []string `json:"remove_automatic,omitempty"`
 }
 
 type TagApplyRequest struct {
@@ -23,23 +24,26 @@ type TagApplyRequest struct {
 }
 
 type TagApplyReport struct {
-	Operations         int                        `json:"operations"`
-	Items              int                        `json:"items"`
-	AddAssignments     int                        `json:"add_assignments"`
-	RemoveAssignments  int                        `json:"remove_assignments"`
-	UpdatedItems       int                        `json:"updated_items"`
-	UnchangedItems     int                        `json:"unchanged_items"`
-	VerifiedItems      int                        `json:"verified_items"`
-	LastLibraryVersion int                        `json:"last_library_version,omitempty"`
-	DryRun             bool                       `json:"dry_run"`
-	WriteResult        zoteroapi.BatchWriteResult `json:"write_result,omitempty"`
+	Operations                 int                        `json:"operations"`
+	Items                      int                        `json:"items"`
+	AddAssignments             int                        `json:"add_assignments"`
+	RemoveAssignments          int                        `json:"remove_assignments"`
+	RemoveAutomaticAssignments int                        `json:"remove_automatic_assignments"`
+	UpdatedItems               int                        `json:"updated_items"`
+	UnchangedItems             int                        `json:"unchanged_items"`
+	VerifiedItems              int                        `json:"verified_items"`
+	LastLibraryVersion         int                        `json:"last_library_version,omitempty"`
+	DryRun                     bool                       `json:"dry_run"`
+	WriteResult                zoteroapi.BatchWriteResult `json:"write_result,omitempty"`
 }
 
 type normalizedTagChange struct {
-	add       []string
-	remove    []string
-	addSet    map[string]struct{}
-	removeSet map[string]struct{}
+	add                []string
+	remove             []string
+	removeAutomatic    []string
+	addSet             map[string]struct{}
+	removeSet          map[string]struct{}
+	removeAutomaticSet map[string]struct{}
 }
 
 func ResolveTagApplyOperations(from string, stdin io.Reader) ([]TagApplyOperation, error) {
@@ -80,7 +84,7 @@ func (s WriteService) ApplyTags(ctx context.Context, req TagApplyRequest) (Resul
 	}
 	if req.Safety.DryRun {
 		report.DryRun = true
-		return Result{Data: report, Meta: map[string]any{"dry_run": true, "items": report.Items}, Text: fmt.Sprintf("dry run: %d item(s), %d tag addition(s), %d tag removal(s)", report.Items, report.AddAssignments, report.RemoveAssignments)}, nil
+		return Result{Data: report, Meta: map[string]any{"dry_run": true, "items": report.Items}, Text: fmt.Sprintf("dry run: %d item(s), %d tag addition(s), %d tag removal(s), %d automatic tag removal(s)", report.Items, report.AddAssignments, report.RemoveAssignments, report.RemoveAutomaticAssignments)}, nil
 	}
 
 	items, err := getItemsByKeysInBatches(ctx, client, keys)
@@ -140,13 +144,13 @@ func normalizeTagApplyOperations(operations []TagApplyOperation) ([]string, map[
 		if err != nil || len(operationKeys) == 0 {
 			return nil, nil, report, fmt.Errorf("operation %d requires non-empty keys", index)
 		}
-		if len(operation.Add) == 0 && len(operation.Remove) == 0 {
-			return nil, nil, report, fmt.Errorf("operation %d requires add or remove tags", index)
+		if len(operation.Add) == 0 && len(operation.Remove) == 0 && len(operation.RemoveAutomatic) == 0 {
+			return nil, nil, report, fmt.Errorf("operation %d requires add, remove, or remove_automatic tags", index)
 		}
 		for _, key := range operationKeys {
 			change, exists := changes[key]
 			if !exists {
-				change = &normalizedTagChange{addSet: map[string]struct{}{}, removeSet: map[string]struct{}{}}
+				change = &normalizedTagChange{addSet: map[string]struct{}{}, removeSet: map[string]struct{}{}, removeAutomaticSet: map[string]struct{}{}}
 				changes[key] = change
 				keys = append(keys, key)
 			}
@@ -160,14 +164,34 @@ func normalizeTagApplyOperations(operations []TagApplyOperation) ([]string, map[
 					return nil, nil, report, fmt.Errorf("operation %d item %s: %w", index, key, err)
 				}
 			}
+			for _, tag := range operation.RemoveAutomatic {
+				if err := change.addAutomaticRemoval(strings.TrimSpace(tag)); err != nil {
+					return nil, nil, report, fmt.Errorf("operation %d item %s: %w", index, key, err)
+				}
+			}
 		}
 	}
 	report.Items = len(keys)
 	for _, change := range changes {
 		report.AddAssignments += len(change.add)
 		report.RemoveAssignments += len(change.remove)
+		report.RemoveAutomaticAssignments += len(change.removeAutomatic)
 	}
 	return keys, changes, report, nil
+}
+
+func (c *normalizedTagChange) addAutomaticRemoval(tag string) error {
+	if tag == "" {
+		return fmt.Errorf("tag names must not be empty")
+	}
+	if _, conflict := c.removeSet[tag]; conflict {
+		return fmt.Errorf("tag %q cannot be both removed and removed only when automatic", tag)
+	}
+	if _, exists := c.removeAutomaticSet[tag]; !exists {
+		c.removeAutomaticSet[tag] = struct{}{}
+		c.removeAutomatic = append(c.removeAutomatic, tag)
+	}
+	return nil
 }
 
 func (c *normalizedTagChange) addTag(tag string, add bool) error {
@@ -187,6 +211,9 @@ func (c *normalizedTagChange) addTag(tag string, add bool) error {
 	if _, conflict := c.addSet[tag]; conflict {
 		return fmt.Errorf("tag %q cannot be both added and removed", tag)
 	}
+	if _, conflict := c.removeAutomaticSet[tag]; conflict {
+		return fmt.Errorf("tag %q cannot be both removed and removed only when automatic", tag)
+	}
 	if _, exists := c.removeSet[tag]; !exists {
 		c.removeSet[tag] = struct{}{}
 		c.remove = append(c.remove, tag)
@@ -201,6 +228,10 @@ func applyItemTagChanges(item zoteroapi.Item, change *normalizedTagChange) ([]zo
 	changed := false
 	for _, tag := range original {
 		if _, remove := change.removeSet[tag.Tag]; remove {
+			changed = true
+			continue
+		}
+		if _, remove := change.removeAutomaticSet[tag.Tag]; remove && tag.Type != nil && *tag.Type == 1 {
 			changed = true
 			continue
 		}

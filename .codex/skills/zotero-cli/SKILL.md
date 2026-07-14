@@ -5,6 +5,16 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 
 # Zotero CLI
 
+## Library taste（文献管理偏好）
+
+涉及标签、收藏夹、分类层级、命名、合并或其他需要判断用户文献管理偏好的任务时，必须先运行：
+
+```powershell
+.\zot.exe lib taste --json
+```
+
+当 `data.exists=true` 时，完整读取 `data.content`，并按“当前用户指令 > taste.md > 工具默认行为”的优先级执行。文件不存在时，提示用户运行 `.\zot.exe lib taste init`，但不要阻塞其他安全操作。
+
 优先使用本地 CLI，不要自行实现 Zotero API 调用。
 
 ## 工作流程
@@ -19,7 +29,10 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 
 ```powershell
 .\zot.exe lib show --json                   # 一站式库概览（Agent 入口推荐）
+.\zot.exe lib taste --json                  # 读取当前文献库的长期管理偏好
 .\zot.exe lib stats --json
+.\zot.exe tag list --json                   # JSON 包含 type：0=手动，1=自动
+.\zot.exe tag clean --match '^[\x00-\x7F]+$' --max-items 1 --json # 默认仅预览低频自动英文标签
 .\zot.exe find --all --json
 .\zot.exe find --all --sort dateAdded --order desc --limit 10 --json  # 最近入库
 .\zot.exe find "query" --json
@@ -236,6 +249,7 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 以下命令属于**写操作**：
 
 - `item new` / `item edit` / `item tag` / `item untag`
+- `tag replace` / `tag apply` / `tag clean --yes`
 - `coll new` / `coll edit` / `coll add` / `coll remove`
 - `note new` / `note edit`
 - `search new` / `search edit`
