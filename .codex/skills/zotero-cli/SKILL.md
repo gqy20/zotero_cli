@@ -1,5 +1,6 @@
 ---
 name: zotero-cli
+version: "0.1.0"
 description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查看、导出、配置校验和安全写操作。当需要通过 `zot.exe` 或 `go run .\\cmd\\zot` 操作 Zotero 数据时使用，适用于 `find`、`show`、`export`、stats、元数据查询、批量标签、PDF 操作和受保护的写/删工作流。支持 web/local/hybrid/remote 四种模式。
 ---
 

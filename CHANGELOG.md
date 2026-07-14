@@ -6,7 +6,16 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-14
+
+0.1.0 完成 CLI v2、引用知识库和可离线工作的同步镜像。该版本收敛了命令语法与 JSON 契约，并移除旧兼容入口；升级脚本前请按当前 `zot --help` 和 `docs/user/commands.md` 检查调用方式。
+
 ### 新增
+- **引用索引与文献发现**：新增结构化本地引用库及 FTS5 检索，覆盖 PubMed、PMC 与 Europe PMC；支持参考文献、相关文献、内外部被引、引用上下文、实体关系、开放科学画像和资源链接，并可将解析结果批量关联回本地 Zotero 条目。`ref build/status` 提供 pending、failed、contexts 与显式 GROBID 后备队列。
+- **Zotero 桌面 PDF 导入**：新增 `zot item import`，通过 Zotero Connector 完成 PDF 元数据识别、收藏夹定位、重复附件清理和最终附件全文索引；支持 dry-run、收藏夹 key/唯一名称/完整层级路径，索引失败以 warning 返回且不回滚成功导入。
+- **批量标签治理与 Library taste**：新增 `tag replace/apply/clean` 批量工作流，支持安全正则替换、预览、样例限制、版本前置条件和批量写入；新增 `lib taste`，用仓库外的 `taste.md` 保存长期文献管理偏好。
+- **安全 PDF 标注工作流**：`ann list/new/delete` 统一支持 attachment key 精确选择；删除必须显式指定 `zotero|pdf` 来源，PDF 修改在临时副本中完成并验证后替换，零匹配不会破坏原文件。
+- **检索分页与证据输出**：metadata 检索支持无 QUERY 过滤、稳定 offset/limit 与 `has_more/next_offset`；全文 snippet 返回围绕真实命中的轻量证据、页码、附件 key 和坐标，并与完整条目输出明确分离。
 - **完整附件离线镜像**：`zot sync` 除 `storage/` imported 附件外，新增可解析 `linked_file` 外部附件的安全清单与下载协议；客户端按 attachment key 保存覆盖映射，复制后的 SQLite 无需改写即可读取 PDF。源文件缺失不会中止同步，已有本地副本继续保留为 stale。
 - **`sync status` 一体化诊断**：新增 `zot sync status` 快速检查本地 SQLite 与最近同步状态，`--full` 额外执行完整 SQLite integrity check、上次 manifest 文件核对和未完成下载扫描；成功同步会原子记录状态与 manifest。
 - **限定语料的正则全文取证**：`pdf text --grep` 默认按不区分大小写的 Go 正则解析，支持用 `|` 一次检索多个关键词；新增 `--collection`，接受收藏夹 key、唯一名称或完整层级路径。有分页全文缓存时，JSON 按附件和命中页返回 `match_count`、页码与相邻上下文，检索保持只读。
@@ -21,11 +30,15 @@
 - **附件健康检查**：`inspect-attachment` 新增 `--health`，可诊断本地附件路径未解析、文件缺失、路径是目录、文件名过长、非法字符、异常空格、PDF 缺 `.pdf` 后缀和泛化命名等问题；`find` 新增 `--missing-attachment`、`--bad-attachment-name`、`--attachment-health critical|error|warning|info` 用于批量定位异常附件。
 
 ### 修复
+- **标注来源与附件选择安全**：修复删除来源含混、多 PDF 条目选择不稳定、写入零匹配仍替换原文件等风险；Zotero 标注删除统一走 Web API，PDF 内嵌标注按 xref 事务式处理。
+- **导入结果与全文索引衔接**：导入后以最终保留的附件 key 完成重复附件清理、收藏夹归属和增量全文索引，避免对临时或已删除附件建立缓存。
 - **同步后本地模式衔接**：全局 `--mode` 现在真正覆盖单次命令配置；`--mode local` 在没有显式 `data_dir` 时自动识别 `~/.zot/sync`。同步全文缓存的源路径跨机器变化后，仍可按附件 key、mtime 和 size 正确校验。
 - **单向同步一致性与超时**：SQLite WAL/SHM/journal sidecar 不再像历史附件一样保留，远端已不存在时会从本地副本移除；全局 `--timeout` 现在会真正约束命令执行时间。
 - **`extract-figures` 跨页同尺寸误去重**：跨页 dedup 仅用于小面积/页边且无 caption 的重复元素，避免 BMC/Nature 风格正文大图因宽高相近被当作页眉页脚重复图过滤。
 
 ### 变更
+- **CLI v2 稳定语法与 JSON 契约**：命令统一为“资源 + 动作”，Cobra 成为唯一执行内核；高频快捷入口仅保留 `find/show/export`。JSON 成功与错误统一使用 canonical `command`、结构化 `data/meta/warnings/error`，旧命令、旧参数翻译和 redirect-only adapter 不再作为兼容层保留。
+- **0.1.0 升级边界**：移除 `setup/select/abstract/relate/key-info` 等旧入口、旧复数/别名命令和重复筛选参数；自动化调用应迁移到 `item/coll/note/search/file/pdf/ann/ref/index/config` 等 canonical 路径。
 - **明确 sync 单向语义**：附件和全文缓存保持只增不删，远端删除不会清理本地历史副本；sync 的机器可读输出使用 `--json`。
 - **查询范围参数去布尔堆积**：`ref build` 使用 `--scope pending|failed|contexts|grobid`，`ref status` 使用 `--view summary|failed|unsupported|grobid`。`item find --all` 仅取消结果上限并与 `--limit` 互斥；metadata 范围可省略 QUERY，过滤和排序不再借用内部 `All/ExplicitAll` 状态。
 - **查询与导出接口收敛**：`item find` 用单一 `--in metadata|fulltext` 取代四个全文布尔参数，避免把两套不同查询语言伪装成可合并范围；`ref find` 用 `--in all|references|contexts|metadata` 取代三个范围布尔参数。全文与引用 QUERY 原样交给 SQLite FTS5。`note find` 统一为不区分大小写的 Go 正则，`note list` 不再承担查询。`item export` 只接受明确 key 或 `--from PATH|-` 的结构化选择结果，不再内置第二套筛选器。
@@ -33,6 +46,8 @@
 - **PDF 提取参数收敛**：移除 `extract-text --markdown/--md` 兼容入口，文件输出统一由 `-o/--output-dir` 或 `--all` 触发；`extract-figures --max-per-page` 保留为高级调参项，不再出现在主用法路径中。
 
 ### 性能
+- **引用构建与解析并行化**：引用解析、PMC 上下文补建和本地关系回写使用受控 worker 并发，减少大型文献库的串行等待。
+- **批量写入与 CLI 热路径优化**：标签批处理复用批量写请求与 library version，CLI v2 读路径经过基准测试并减少重复配置、renderer 和 fallback 开销。
 
 ### 移除
 - 删除没有稳定语义且仅为兼容保留的全局 `--quiet/-q`；需要机器可读输出时统一使用 `--json`。
@@ -43,8 +58,10 @@
 - 删除阶段 4 对应的附件预览、PDF 提取/打开、标注读写旧 handler 与手写参数解析器；旧 `--clear` 仅翻译为 canonical `ann delete`。
 
 ### 工具链
+- **发布与质量门禁**：发布流程继续覆盖五个平台架构、校验和、GitHub Release、Homebrew 与七牛 CDN；pre-commit/commit-msg 统一执行格式、vet、测试和 Conventional Commits 校验。
 
 ### 文档
+- **CLI v2 与引用工作流文档**：README、命令参考、引用索引说明及 `.claude`/`.codex` skills 已按 canonical 命令、PDF 导入、标签治理、安全标注、离线同步和结构化 JSON 更新。
 
 ## [0.0.11] - 2026-07-08
 

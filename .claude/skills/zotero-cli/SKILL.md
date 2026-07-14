@@ -1,6 +1,6 @@
 ---
 name: zotero-cli
-version: "0.0.11"
+version: "0.1.0"
 description: >
   Zotero 文献管理 CLI（zot）v2。使用资源+动作命令检索、查看、导出和安全修改
   Zotero 文献库，读取 PDF/标注、构建引用与全文索引，并支持 web/local/hybrid/remote。
