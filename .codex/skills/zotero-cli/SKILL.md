@@ -153,7 +153,7 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 .\zot.exe find --sort dateAdded --order desc --limit 10 --include-fields title,date_added,container
 ```
 
-注意：`--include-fields` 主要影响文本模式；`--json` 默认返回完整 Item 结构。
+注意：`--include-fields` 主要影响文本模式。默认 `find/show --json` 返回轻量结构（`creator_summary`、`collection_names`）；完整 Item 必须显式使用 `--full`。`find --snippet` 与 `--full` 互斥，只返回轻量元数据和以真实命中为中心、最多约 1200 字符的 `matched_chunk` 证据。
 
 ### 发表时间范围
 
@@ -195,7 +195,7 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 - `--attachment-path TEXT` — 附件路径匹配
 
 **输出控制：**
-- `--include-fields url,doi,version` — 文本模式指定额外字段；JSON 默认返回完整 Item
+- `--include-fields url,doi,version` — 文本模式指定额外字段；JSON 完整 Item 使用 `--full`
 - `--full` — 完整字段 + 附件详情
 - `--sort FIELD` + `--order asc|desc` — 排序
 - `--offset N` + `--limit N` — 分页
@@ -310,11 +310,12 @@ CLI 配置存储在 `~/.zot/.env`。
 | `ZOT_ALLOW_DELETE` | 允许删除操作 | `0` |
 | `ZOT_RETRY_MAX_ATTEMPTS` | 最大重试次数 | `5` |
 | `ZOT_RETRY_BASE_DELAY_MS` | 重试基础延迟 ms | `1000` |
-| `ZOT_JSON_ERRORS` | 错误以 JSON 输出到 stdout（agent 解析用） | `0` |
+| `ZOT_OUTPUT` | 默认输出格式：`text` 或 `json` | `text` |
 
 ## 性能注意
 
 - `find` 轻量结果未指定 `--limit` 时默认 100 条；`--snippet` 或 `--full` 默认 20 条；`--all` 仅取消上限并与 `--limit` 互斥，metadata 范围可省略 QUERY
+- 帮助页和 shell completion 是纯文本产物，不加 `--json`；`config init --json` 不会交互，必须传齐当前模式所需参数
 - local/hybrid 下必须显式使用 `--in fulltext` 才查询全文索引；默认 `metadata` 不会根据索引状态改变查询语义
 - `pdf text` 结果有缓存，重复提取同一 PDF 直接命中；local / hybrid 的无过滤请求默认返回缓存路径
 - 高频脚本遇 `429` 会自动退避+抖动，但仍应主动降速

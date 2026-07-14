@@ -131,6 +131,46 @@ func TestCompletionGeneratesAllSupportedShellsWithoutConfig(t *testing.T) {
 	}
 }
 
+func TestTextOnlyCommandsRejectJSONWithEnvelope(t *testing.T) {
+	for _, args := range [][]string{{"--json"}, {"item", "--json"}, {"completion", "powershell", "--json"}} {
+		stdout, stderr := captureOutput(t)
+		if code := Run(args); code != ExitUsage {
+			t.Fatalf("%v code=%d stdout=%q stderr=%q", args, code, stdout.String(), stderr.String())
+		}
+		var got map[string]any
+		if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+			t.Fatalf("%v did not return JSON: %v\n%s", args, err, stdout.String())
+		}
+		errorData, _ := got["error"].(map[string]any)
+		if got["ok"] != false || errorData["type"] != "usage" {
+			t.Fatalf("%v envelope = %#v", args, got)
+		}
+		if stderr.Len() != 0 {
+			t.Fatalf("%v stderr=%q, want empty", args, stderr.String())
+		}
+	}
+}
+
+func TestConfigInitJSONNeverPrompts(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	stdout, stderr := captureOutput(t)
+	if code := Run([]string{"config", "init", "--json"}); code != ExitUsage {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not a single JSON document: %v\n%s", err, stdout.String())
+	}
+	errorData, _ := got["error"].(map[string]any)
+	if errorData["type"] != "usage" {
+		t.Fatalf("error = %#v", errorData)
+	}
+	if strings.Contains(stdout.String(), "Mode") || strings.Contains(stdout.String(), "Library") || stderr.Len() != 0 {
+		t.Fatalf("JSON init leaked prompt output: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
 func TestRootUsesCobraHelp(t *testing.T) {
 	stdout, stderr := captureOutput(t)
 	if code := Run(nil); code != ExitOK {
@@ -446,4 +486,22 @@ func TestCanonicalCommandTreeHasAtMostResourceAndActionDepth(t *testing.T) {
 		}
 	}
 	walk(root, 0)
+}
+
+func TestRunnableCommandTreeInheritsStructuredOutputFlags(t *testing.T) {
+	root := testCLI.newRootCommand()
+	var walk func(*cobra.Command)
+	walk = func(cmd *cobra.Command) {
+		if !cmd.Hidden && (cmd.Run != nil || cmd.RunE != nil) {
+			for _, name := range []string{"json", "format"} {
+				if cmd.Flags().Lookup(name) == nil && cmd.InheritedFlags().Lookup(name) == nil && cmd.PersistentFlags().Lookup(name) == nil {
+					t.Fatalf("runnable command %q does not expose --%s", cmd.CommandPath(), name)
+				}
+			}
+		}
+		for _, child := range cmd.Commands() {
+			walk(child)
+		}
+	}
+	walk(root)
 }

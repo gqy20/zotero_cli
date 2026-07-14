@@ -448,13 +448,24 @@ func TestNormalizeFullTextTextRepairsCommonJoinedWords(t *testing.T) {
 }
 
 func TestBuildFullTextSnippetCentersMatch(t *testing.T) {
-	text := "Preface words. Mixed survey full text preview from zotero cache. Core section discusses speciation genome patterns in plants and gene flow. Ending notes."
+	text := strings.Repeat("preface context ", 100) + "Core section discusses speciation genome patterns in plants and gene flow. " + strings.Repeat("ending context ", 100)
 	got := buildFullTextSnippet(text, "speciation genome")
 	if !strings.Contains(got, "speciation genome patterns in plants") {
 		t.Fatalf("buildFullTextSnippet() = %q, want centered match", got)
 	}
-	if strings.Contains(got, "Preface words.") && strings.Contains(got, "Ending notes.") {
-		t.Fatalf("buildFullTextSnippet() = %q, want trimmed snippet instead of full preview", got)
+	if len([]rune(got)) > 1206 {
+		t.Fatalf("buildFullTextSnippet() length = %d, want about 1200 runes", len([]rune(got)))
+	}
+}
+
+func TestCenterHighlightedEvidenceKeepsActualHit(t *testing.T) {
+	value := strings.Repeat("before ", 300) + fullTextHitStart + "target phrase" + fullTextHitEnd + strings.Repeat(" after", 300)
+	got := centerHighlightedEvidence(value, 1200)
+	if !strings.Contains(got, "target phrase") {
+		t.Fatalf("centerHighlightedEvidence() omitted hit: %q", got)
+	}
+	if strings.Contains(got, fullTextHitStart) || strings.Contains(got, fullTextHitEnd) {
+		t.Fatalf("centerHighlightedEvidence() leaked markers: %q", got)
 	}
 }
 

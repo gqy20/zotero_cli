@@ -3,7 +3,7 @@
 ## 命令
 
 ```bash
-zot show ABC123DE --json
+zot show ABC123DE --full --json
 ```
 
 ## 输出
@@ -11,7 +11,7 @@ zot show ABC123DE --json
 ```json
 {
   "ok": true,
-  "command": "show",
+  "command": "item show",
   "data": {
     "key": "ABC123DE",
     "version": 1234,

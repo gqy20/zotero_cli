@@ -57,6 +57,9 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 		if find.All && cmd.Flags().Changed("limit") {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("--all and --limit are mutually exclusive")}
 		}
+		if find.Full && snippet {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--full and --snippet are mutually exclusive")}
+		}
 		if cmd.Flags().Changed("limit") && find.Limit == 0 {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("--limit must be positive; use --all to remove the result limit")}
 		}

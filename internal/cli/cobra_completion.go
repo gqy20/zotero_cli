@@ -4,9 +4,11 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"zotero_cli/internal/app"
 )
 
-func (c *CLI) newCompletionCommand() *cobra.Command {
+func (c *CLI) newCompletionCommand(opts *globalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:                   "completion <bash|zsh|fish|powershell>",
 		Short:                 "Generate shell completion",
@@ -14,6 +16,9 @@ func (c *CLI) newCompletionCommand() *cobra.Command {
 		DisableFlagsInUseLine: true,
 		ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if jsonOutputRequested(opts) {
+				return &exitError{code: ExitUsage, err: app.NewUsageError("completion output is a shell script and is only available in text mode")}
+			}
 			switch args[0] {
 			case "bash":
 				return cmd.Root().GenBashCompletion(cmd.OutOrStdout())

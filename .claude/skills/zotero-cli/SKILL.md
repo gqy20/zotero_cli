@@ -27,7 +27,7 @@ argument-hint: "<resource> <action> [ITEMKEY...] [options]"
 ## 执行原则
 
 1. 在仓库根目录工作。
-2. Agent 默认加 `--json`，JSON 的 `command` 是 canonical path，例如 `item find`。
+2. Agent 默认加 `--json`，JSON 的 `command` 是 canonical path，例如 `item find`。帮助页与 `completion` 是纯文本产物，不要附加 `--json`；`config init --json` 不会交互，必须传齐当前模式所需参数。
 3. 首次使用先运行 `zot config check --json`。
 4. 不确定参数时运行 `zot <resource> <action> --help`；help 不加载配置或网络。
 5. 写入前确认用户意图，并检查 `ZOT_ALLOW_WRITE` / `ZOT_ALLOW_DELETE`。
@@ -80,6 +80,8 @@ zot item find --all --added-since 7d --sort dateAdded --order desc --json
 统一分页参数为 `--limit`、`--offset`、`--sort`、`--order asc|desc`。
 
 `item find` 未显式指定 `--limit` 时，轻量结果默认限制 100 条，`--snippet` 或 `--full` 默认限制 20 条。`--all` 仅取消结果上限，并与 `--limit` 互斥；metadata 范围可省略 QUERY。JSON `meta` 提供 `returned`、`limit`、`offset`、`has_more` 和可选的 `next_offset`。
+
+默认 `find/show --json` 使用轻量结构：`creator_summary` 是字符串，`collection_names` 是名称数组。完整 Item 必须显式使用 `--full`，其中 `creators` / `collections` 是对象数组。`find --snippet` 与 `--full` 互斥，只返回轻量元数据和以真实命中为中心、最多约 1200 字符的 `matched_chunk` 证据。
 
 ## Item type 归一化
 

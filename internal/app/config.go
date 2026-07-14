@@ -83,7 +83,7 @@ func (ConfigService) Init(ctx context.Context, req ConfigInitRequest) (Result, e
 		(cfg.Mode == "remote" && provided["server_addr"] && (!provided["api_key"] || (provided["library_id"] && provided["api_key"])))
 	if !(nonInteractive && (cfg.Mode == "web" || cfg.Mode == "remote" || provided["data_dir"])) {
 		if req.Prompt == nil {
-			return Result{}, fmt.Errorf("interactive configuration requires a prompt adapter")
+			return Result{}, NewUsageError("config init requires complete flags in JSON mode; provide --mode and the fields required by that mode")
 		}
 		cfg, err = req.Prompt(cfg, provided)
 		if err != nil {

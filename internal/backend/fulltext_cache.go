@@ -66,12 +66,19 @@ type fullTextIndexMatch struct {
 	AttachmentTitle string
 	AttachmentName  string
 	Body            string
+	HighlightedBody string
 	ChunkIndex      int
 	ChunkPage       int
 	ChunkBBox       [4]float64
 	ContextBody     string
 	ContextPageEnd  int
 }
+
+const (
+	fullTextHitStart      = "[[[ZOT_HIT_START]]]"
+	fullTextHitEnd        = "[[[ZOT_HIT_END]]]"
+	fullTextEvidenceLimit = 1200
+)
 
 type fullTextIndexStatus struct {
 	TextHash        string
@@ -905,6 +912,7 @@ func (c fullTextCache) searchChunks(db *sql.DB, matchExpr string, limit int) ([]
 		        COALESCE(fm.attachment_title, ''),
 		        COALESCE(fm.attachment_name, ''),
 		        COALESCE(fc.body, ''),
+		        highlight(fulltext_chunks, 5, ?, ?),
 		        fc.chunk_index,
 		        fc.page,
 		        fc.bbox
@@ -915,7 +923,7 @@ func (c fullTextCache) searchChunks(db *sql.DB, matchExpr string, limit int) ([]
 		          fc.parent_item_key,
 		          fc.attachment_key,
 		          CAST(fc.chunk_index AS INTEGER)`,
-		matchExpr,
+		fullTextHitStart, fullTextHitEnd, matchExpr,
 	)
 	if err != nil {
 		return nil, err
@@ -936,6 +944,7 @@ func (c fullTextCache) searchChunks(db *sql.DB, matchExpr string, limit int) ([]
 			&match.AttachmentTitle,
 			&match.AttachmentName,
 			&match.Body,
+			&match.HighlightedBody,
 			&match.ChunkIndex,
 			&match.ChunkPage,
 			&bboxStr,
@@ -970,14 +979,55 @@ func (c fullTextCache) searchChunks(db *sql.DB, matchExpr string, limit int) ([]
 		return nil, err
 	}
 	for i := range matches {
-		body, pageEnd, err := fullTextEvidenceWindow(db, matches[i].AttachmentKey, matches[i].ChunkIndex)
-		if err != nil {
-			return nil, err
-		}
-		matches[i].ContextBody = body
-		matches[i].ContextPageEnd = pageEnd
+		matches[i].ContextBody = centerHighlightedEvidence(matches[i].HighlightedBody, fullTextEvidenceLimit)
+		matches[i].ContextPageEnd = matches[i].ChunkPage
 	}
 	return matches, nil
+}
+
+func centerHighlightedEvidence(value string, limit int) string {
+	startByte := strings.Index(value, fullTextHitStart)
+	endByte := -1
+	if startByte >= 0 {
+		endByte = strings.Index(value[startByte+len(fullTextHitStart):], fullTextHitEnd)
+		if endByte >= 0 {
+			endByte += startByte + len(fullTextHitStart)
+		}
+	}
+	clean := strings.ReplaceAll(strings.ReplaceAll(value, fullTextHitStart, ""), fullTextHitEnd, "")
+	cleanRunes := []rune(clean)
+	if limit <= 0 || len(cleanRunes) <= limit {
+		return strings.Join(strings.Fields(clean), " ")
+	}
+	center := len(cleanRunes) / 2
+	if startByte >= 0 {
+		cleanPrefix := strings.ReplaceAll(strings.ReplaceAll(value[:startByte], fullTextHitStart, ""), fullTextHitEnd, "")
+		matchStart := len([]rune(cleanPrefix))
+		matchEnd := matchStart
+		if endByte >= 0 {
+			matched := value[startByte+len(fullTextHitStart) : endByte]
+			matchEnd += len([]rune(strings.ReplaceAll(strings.ReplaceAll(matched, fullTextHitStart, ""), fullTextHitEnd, "")))
+		}
+		center = (matchStart + matchEnd) / 2
+	}
+	windowStart := center - limit/2
+	if windowStart < 0 {
+		windowStart = 0
+	}
+	windowEnd := windowStart + limit
+	if windowEnd > len(cleanRunes) {
+		windowEnd = len(cleanRunes)
+		windowStart = windowEnd - limit
+	}
+	result := strings.TrimSpace(string(cleanRunes[windowStart:windowEnd]))
+	result = strings.Join(strings.Fields(result), " ")
+	if windowStart > 0 {
+		result = "..." + result
+	}
+	if windowEnd < len(cleanRunes) {
+		result += "..."
+	}
+	return result
 }
 
 func fullTextIndexedSourceFresh(sourcePath string, sourceMtimeUnix, sourceMtimeNano, sourceSize int64) bool {

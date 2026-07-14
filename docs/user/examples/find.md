@@ -3,7 +3,7 @@
 ## 命令
 
 ```bash
-zot find "hybrid speciation" --json
+zot find "hybrid speciation" --full --json
 ```
 
 ## 输出
@@ -11,7 +11,7 @@ zot find "hybrid speciation" --json
 ```json
 {
   "ok": true,
-  "command": "find",
+  "command": "item find",
   "data": [
     {
       "key": "ABC123DE",
@@ -159,6 +159,6 @@ zot find "speciation" --full --json
 
 `--date-after` / `--date-before` 过滤发表日期，支持 `YYYY` / `YYYY-MM` / `YYYY-MM-DD`。local/hybrid 会兼容 Zotero 常见的部分日期字符串，如 `YYYY-MM-00 YYYY-MM` 和 `MM/YYYY`。
 
-`dateAdded` / `--added-since` 表示加入 Zotero 的时间；它和发表日期不是同一个字段。`--include-fields` 主要用于文本输出，JSON 模式默认返回完整 Item。
+`dateAdded` / `--added-since` 表示加入 Zotero 的时间；它和发表日期不是同一个字段。示例使用 `--full`，因此展示完整 Item。默认 JSON 是轻量结构，作者摘要和收藏夹名称分别使用 `creator_summary`、`collection_names`；`--snippet` 则只增加 `matched_chunk` 命中证据。
 
 附件健康筛选需要 local/hybrid/remote 服务端具备本地附件访问能力。`--missing-attachment` 会匹配路径未解析或文件缺失的附件；`--bad-attachment-name` 会匹配泛化或不安全文件名；`--attachment-health critical|error|warning|info` 按严重度筛选存在问题的附件。

@@ -603,14 +603,19 @@ func buildFullTextSnippet(text string, query string) string {
 	if bestIdx < 0 {
 		return normalizeFullTextPreview(normalized)
 	}
-	const contextRadius = 60
-	start := bestIdx - contextRadius
+	const snippetLimit = 1200
+	center := bestIdx + bestLen/2
+	start := center - snippetLimit/2
 	if start < 0 {
 		start = 0
 	}
-	end := bestIdx + bestLen + contextRadius
+	end := start + snippetLimit
 	if end > len(textRunes) {
 		end = len(textRunes)
+		start = end - snippetLimit
+		if start < 0 {
+			start = 0
+		}
 	}
 	snippet := string(textRunes[start:end])
 	snippet = strings.TrimSpace(snippet)

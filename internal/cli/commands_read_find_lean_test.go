@@ -156,19 +156,25 @@ func TestFindJSONDefaultIsLean(t *testing.T) {
 		t.Errorf("doi = %q, want %q", data["doi"], "10.1038/nrg.2024.001")
 	}
 
-	// Creators must be folded string, not array
-	creators, ok := data["creators"].(string)
+	// Lean creator data has a stable field name distinct from full creators.
+	creators, ok := data["creator_summary"].(string)
 	if !ok {
-		t.Fatalf("creators should be string, got %T: %#v", data["creators"], data["creators"])
+		t.Fatalf("creator_summary should be string, got %T: %#v", data["creator_summary"], data["creator_summary"])
 	}
 	if creators != "Zhang, Feng et al." {
 		t.Errorf("creators = %q, want %q", creators, "Zhang, Feng et al.")
 	}
 
 	// Collections must be names only, no keys
-	colls, ok := data["collections"].([]any)
+	colls, ok := data["collection_names"].([]any)
 	if !ok || len(colls) != 2 {
-		t.Fatalf("collections should be 2-element string array, got: %#v", data["collections"])
+		t.Fatalf("collection_names should be 2-element string array, got: %#v", data["collection_names"])
+	}
+	if _, exists := data["creators"]; exists {
+		t.Error("lean output must not reuse the full creators field")
+	}
+	if _, exists := data["collections"]; exists {
+		t.Error("lean output must not reuse the full collections field")
 	}
 	if colls[0] != "Genomics Methods" || colls[1] != "Review Articles" {
 		t.Errorf("collections = %v, want [Genomics Methods Review Articles]", colls)

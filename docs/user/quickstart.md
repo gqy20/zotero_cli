@@ -39,7 +39,7 @@ go run .\cmd\zot config check
 .\zot.exe find "hybrid speciation" --full
 ```
 
-`--json` 已返回完整 Item 结构；`--include-fields` 和 `--full` 主要增强文本模式。
+默认 `find/show --json` 返回稳定的轻量结构：作者摘要使用 `creator_summary`，收藏夹名称使用 `collection_names`。只有显式 `--full` 才返回完整 Item（其中 `creators`、`collections` 为对象数组）；`--snippet` 返回轻量元数据和 `matched_chunk` 证据，不能与 `--full` 同时使用。
 
 ### 3. 全库扫描时显式表达
 
@@ -210,7 +210,7 @@ go run .\cmd\zot config check
 |------|------|
 | **默认分页上限** | 轻量 `find` 默认 100 条，`--snippet` / `--full` 默认 20 条；只有显式 `--all` 才取消上限 |
 | **显式全文检索** | local/hybrid 下使用 `--in fulltext` 查询 FTS5；默认元数据查询不隐式切换路径 |
-| **`--include-fields` 控制文本输出** | 快速人工浏览时只展示指定字段；`--json` 默认返回完整 Item |
+| **`--include-fields` 控制文本输出** | 快速人工浏览时只展示指定字段；JSON 需要完整 Item 时显式使用 `--full` |
 | **优先 `--full`** | 一次获取完整数据比多次往返更高效 |
 
 ### API 调优环境变量
@@ -236,10 +236,10 @@ go run .\cmd\zot config check
 
 ### 结构化错误输出
 
-设置 `ZOT_JSON_ERRORS=1` 后所有错误以 JSON 输出到 stdout：
+命令使用 `--json`（或 `--format json` / `ZOT_OUTPUT=json`）时，错误也以 JSON 输出到 stdout；文本模式错误写入 stderr：
 
 ```json
-{"ok": false, "command": "show", "data": "item not found: ABCD", "code": 1}
+{"ok":false,"command":"item show","error":{"type":"not_found","message":"item not found: ABCD"},"code":1}
 ```
 
 - `code`: `1`=运行时错误, `2`=用法错误, `3`=配置错误

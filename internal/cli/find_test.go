@@ -645,7 +645,7 @@ func TestRunFindLocalTextOutputIncludesFullTextPreviewWhenSnippetRequested(t *te
 	for _, want := range []string{
 		"Key: ART67890",
 		"Title: Mixed Survey",
-		"Full Text Preview:",
+		"Evidence [ATTA1111 page 1]:",
 		"speciation genome patterns",
 	} {
 		if !strings.Contains(got, want) {
@@ -654,6 +654,53 @@ func TestRunFindLocalTextOutputIncludesFullTextPreviewWhenSnippetRequested(t *te
 	}
 	if strings.Contains(got, "Attachments:") {
 		t.Fatalf("did not expect attachments block in snippet-only output %q", got)
+	}
+}
+
+func TestRunFindSnippetJSONIsEvidenceFocused(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+	buildGlobalFTSCacheForTest(t, dataDir, []ftsCacheRow{{"ATTA1111", "ART67890", "Mixed Survey", "mixed.pdf", "Core section discusses speciation genome patterns in plants and gene flow."}})
+
+	stdout, stderr := captureOutput(t)
+	if code := Run([]string{"find", "speciation", "--in", "fulltext", "--snippet", "--json"}); code != ExitOK {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	data := got["data"].([]any)[0].(map[string]any)
+	for _, forbidden := range []string{"abstract", "creators", "collections", "attachments", "notes", "annotations", "full_text_preview"} {
+		if _, exists := data[forbidden]; exists {
+			t.Errorf("snippet output contains verbose field %q", forbidden)
+		}
+	}
+	chunk, ok := data["matched_chunk"].(map[string]any)
+	if !ok || !strings.Contains(chunk["context"].(string), "speciation genome patterns") {
+		t.Fatalf("matched_chunk = %#v", data["matched_chunk"])
+	}
+}
+
+func TestRunFindRejectsFullWithSnippet(t *testing.T) {
+	stdout, stderr := captureOutput(t)
+	if code := Run([]string{"find", "term", "--in", "fulltext", "--full", "--snippet", "--json"}); code != ExitUsage {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["error"].(map[string]any)["type"] != "usage" {
+		t.Fatalf("error = %#v", got["error"])
 	}
 }
 

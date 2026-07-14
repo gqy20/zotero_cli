@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"strings"
 	"testing"
 
 	"zotero_cli/internal/app"
@@ -30,8 +29,8 @@ func TestRendererJSONContract(t *testing.T) {
 	if len(got.Warnings) != 1 || got.Warnings[0].Code != "test_warning" {
 		t.Fatalf("warnings = %#v", got.Warnings)
 	}
-	if !strings.Contains(errOut.String(), "test warning") {
-		t.Fatalf("stderr = %q", errOut.String())
+	if errOut.Len() != 0 {
+		t.Fatalf("JSON warnings must not be duplicated on stderr: %q", errOut.String())
 	}
 }
 
@@ -47,5 +46,8 @@ func TestRendererErrorUsesCanonicalPath(t *testing.T) {
 	}
 	if got.OK || got.Command != "config check" || got.Code != 3 {
 		t.Fatalf("envelope = %#v", got)
+	}
+	if got.Data != nil || got.Error == nil || got.Error.Type != "config" || got.Error.Message != "boom" {
+		t.Fatalf("error envelope = %#v", got)
 	}
 }

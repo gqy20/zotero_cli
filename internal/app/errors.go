@@ -9,11 +9,26 @@ import (
 	"zotero_cli/internal/zoteroapi"
 )
 
+type UsageError struct {
+	Message string
+}
+
+func (e *UsageError) Error() string { return e.Message }
+
+func NewUsageError(message string) error { return &UsageError{Message: message} }
+
+func IsUsageError(err error) bool {
+	var target *UsageError
+	return errors.As(err, &target)
+}
+
 func ClassifyError(err error) string {
 	if err == nil {
 		return ""
 	}
 	switch {
+	case IsUsageError(err):
+		return "usage"
 	case errors.Is(err, config.ErrNotFound):
 		return "config_not_found"
 	case errors.Is(err, backend.ErrItemNotFound):

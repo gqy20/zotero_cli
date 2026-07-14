@@ -30,7 +30,7 @@ type LeanItem struct {
 	ItemType        string   `json:"item_type"`
 	Title           string   `json:"title"`
 	Date            string   `json:"date,omitempty"`
-	CreatorsSummary string   `json:"creators"`
+	CreatorsSummary string   `json:"creator_summary,omitempty"`
 	Container       string   `json:"container,omitempty"`
 	Volume          string   `json:"volume,omitempty"`
 	Issue           string   `json:"issue,omitempty"`
@@ -38,10 +38,23 @@ type LeanItem struct {
 	DOI             string   `json:"doi,omitempty"`
 	URL             string   `json:"url,omitempty"`
 	Tags            []string `json:"tags,omitempty"`
-	Collections     []string `json:"collections,omitempty"`
+	Collections     []string `json:"collection_names,omitempty"`
 	DateAdded       string   `json:"date_added,omitempty"`
 	MatchedOn       []string `json:"matched_on,omitempty"`
 	RelevanceScore  int      `json:"relevance_score,omitempty"`
+}
+
+type FindSnippetItem struct {
+	Key             string                   `json:"key"`
+	ItemType        string                   `json:"item_type"`
+	Title           string                   `json:"title"`
+	Date            string                   `json:"date,omitempty"`
+	CreatorsSummary string                   `json:"creator_summary,omitempty"`
+	Container       string                   `json:"container,omitempty"`
+	DOI             string                   `json:"doi,omitempty"`
+	MatchedOn       []string                 `json:"matched_on,omitempty"`
+	RelevanceScore  int                      `json:"relevance_score,omitempty"`
+	MatchedChunk    *domain.MatchedChunkInfo `json:"matched_chunk,omitempty"`
 }
 
 type itemSnippetReader interface {
@@ -118,7 +131,10 @@ func (s ReadService) FindItems(ctx context.Context, req ItemFindRequest) (Result
 	} else if req.Snippet {
 		data = findSnippetJSONItems(items)
 	}
-	text := itemFindText(items, opts.Full || req.Snippet || len(opts.IncludeFields) > 0)
+	text := itemFindText(items, opts.Full || len(opts.IncludeFields) > 0)
+	if req.Snippet {
+		text = itemSnippetText(items)
+	}
 	if hasMore {
 		text += fmt.Sprintf("\n\nMore results available; use --offset %d", opts.Start+len(items))
 	}
@@ -138,12 +154,18 @@ func findResultLimit(req ItemFindRequest, opts backend.FindOptions) int {
 	return defaultFindLimit
 }
 
-func findSnippetJSONItems(items []domain.Item) []domain.Item {
-	result := append([]domain.Item(nil), items...)
-	for i := range result {
-		if result[i].MatchedChunk != nil && strings.TrimSpace(result[i].MatchedChunk.Context) != "" {
-			result[i].FullTextPreview = ""
+func findSnippetJSONItems(items []domain.Item) []FindSnippetItem {
+	result := make([]FindSnippetItem, 0, len(items))
+	for _, item := range items {
+		matchedChunk := item.MatchedChunk
+		if matchedChunk == nil && strings.TrimSpace(item.FullTextPreview) != "" {
+			matchedChunk = &domain.MatchedChunkInfo{Context: item.FullTextPreview}
 		}
+		result = append(result, FindSnippetItem{
+			Key: item.Key, ItemType: item.ItemType, Title: item.Title, Date: item.Date,
+			CreatorsSummary: creatorSummary(item.Creators), Container: item.Container, DOI: item.DOI,
+			MatchedOn: item.MatchedOn, RelevanceScore: item.SearchScore, MatchedChunk: matchedChunk,
+		})
 	}
 	return result
 }
@@ -261,6 +283,42 @@ func itemFindText(items []domain.Item, detailed bool) string {
 		fmt.Fprintf(&b, "%-10s  %-16s  %-10s  %-10s  %-18s  %s", item.Key, item.ItemType, shortYear(item.DateAdded), shortYear(item.Date), creatorSummary(item.Creators), item.Title)
 		if i < len(items)-1 {
 			b.WriteByte('\n')
+		}
+	}
+	return b.String()
+}
+
+func itemSnippetText(items []domain.Item) string {
+	if len(items) == 0 {
+		return "no items found"
+	}
+	var b strings.Builder
+	for i, item := range items {
+		fmt.Fprintf(&b, "Key: %s\nTitle: %s\nType: %s", item.Key, item.Title, item.ItemType)
+		if creators := creatorSummary(item.Creators); creators != "" {
+			fmt.Fprintf(&b, "\nCreators: %s", creators)
+		}
+		if len(item.MatchedOn) > 0 {
+			fmt.Fprintf(&b, "\nMatched On: %s", strings.Join(item.MatchedOn, ", "))
+		}
+		if chunk := item.MatchedChunk; chunk != nil {
+			location := chunk.AttachmentKey
+			if chunk.Page > 0 {
+				location += fmt.Sprintf(" page %d", chunk.Page)
+				if chunk.PageEnd > chunk.Page {
+					location += fmt.Sprintf("-%d", chunk.PageEnd)
+				}
+			}
+			if location != "" {
+				fmt.Fprintf(&b, "\nEvidence [%s]: %s", location, chunk.Context)
+			} else {
+				fmt.Fprintf(&b, "\nEvidence: %s", chunk.Context)
+			}
+		} else if strings.TrimSpace(item.FullTextPreview) != "" {
+			fmt.Fprintf(&b, "\nEvidence: %s", item.FullTextPreview)
+		}
+		if i < len(items)-1 {
+			b.WriteString("\n\n")
 		}
 	}
 	return b.String()

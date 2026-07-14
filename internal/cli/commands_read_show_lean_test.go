@@ -65,9 +65,9 @@ func TestShowJSONDefaultIsLean(t *testing.T) {
 	}
 
 	// Creators must be folded string
-	creators, ok := data["creators"].(string)
+	creators, ok := data["creator_summary"].(string)
 	if !ok {
-		t.Fatalf("creators should be string in lean mode, got %T: %#v", data["creators"], data["creators"])
+		t.Fatalf("creator_summary should be string in lean mode, got %T: %#v", data["creator_summary"], data["creator_summary"])
 	}
 	if creators != "Zhang, Feng et al." {
 		t.Errorf("creators = %q, want 'Zhang, Feng et al.'", creators)
@@ -182,9 +182,9 @@ func TestShowJSONLeanCollectionsNamesOnly(t *testing.T) {
 	json.Unmarshal(stdout.Bytes(), &got)
 	data := got["data"].(map[string]any)
 
-	colls, ok := data["collections"].([]any)
+	colls, ok := data["collection_names"].([]any)
 	if !ok || len(colls) != 3 {
-		t.Fatalf("collections should be 3 strings, got: %#v", data["collections"])
+		t.Fatalf("collection_names should be 3 strings, got: %#v", data["collection_names"])
 	}
 	wantNames := []string{"Bioinformatics", "Systems Biology", "Genomics"}
 	for i, name := range wantNames {

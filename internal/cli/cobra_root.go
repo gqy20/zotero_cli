@@ -108,7 +108,12 @@ Library preferences:
   zot lib taste path   Show the resolved taste.md path`,
 		SilenceErrors: true,
 		SilenceUsage:  true,
-		RunE:          func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if jsonOutputRequested(opts) {
+				return &exitError{code: ExitUsage, err: app.NewUsageError("root help is text-only; run `zot --help` without JSON output")}
+			}
+			return cmd.Help()
+		},
 	}
 	root.SetIn(c.stdin)
 	root.SetOut(c.stdout)
@@ -130,8 +135,29 @@ Library preferences:
 	root.AddCommand(c.newSchemaCommand(opts))
 	root.AddCommand(c.newServeCommand(opts))
 	root.AddCommand(c.newSyncCommand(opts))
-	root.AddCommand(c.newCompletionCommand())
+	root.AddCommand(c.newCompletionCommand(opts))
+	installGroupHelpRunners(root, opts)
 	return root
+}
+
+func jsonOutputRequested(opts *globalOptions) bool {
+	output, err := outputOptions(opts)
+	return err == nil && output.Format == "json"
+}
+
+func installGroupHelpRunners(root *cobra.Command, opts *globalOptions) {
+	for _, cmd := range root.Commands() {
+		installGroupHelpRunners(cmd, opts)
+		if !cmd.HasSubCommands() || cmd.Run != nil || cmd.RunE != nil {
+			continue
+		}
+		cmd.RunE = func(current *cobra.Command, _ []string) error {
+			if jsonOutputRequested(opts) {
+				return &exitError{code: ExitUsage, err: app.NewUsageError(current.CommandPath() + " help is text-only; use --help without JSON output")}
+			}
+			return current.Help()
+		}
+	}
 }
 
 func defaultOutputFormat() string {
@@ -166,6 +192,8 @@ func (c *CLI) renderResult(ctx context.Context, opts *globalOptions, path app.Co
 			err = fmt.Errorf("%w.\nrequired fields: library_type, library_id, api_key\nrun `zot init` to set them up interactively in ~/.zot/.env", err)
 		} else if strings.Contains(err.Error(), "config already exists") {
 			code = ExitConfig
+		} else if app.IsUsageError(err) {
+			code = ExitUsage
 		}
 		return &exitError{code: code, err: err}
 	}
@@ -197,12 +225,20 @@ func (c *CLI) newConfigCommand(opts *globalOptions) *cobra.Command {
 		Short: "Initialize ~/.zot/.env",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			reader := bufio.NewReader(cmd.InOrStdin())
-			initReq.Prompt = func(cfg config.Config, provided map[string]bool) (config.Config, error) {
-				return c.promptInitSetup(cfg, provided, reader)
+			output, err := outputOptions(opts)
+			if err != nil {
+				return err
 			}
-			initReq.ConfirmPDF = func() (bool, error) {
-				return c.promptBool(reader, "Set up PyMuPDF for PDF extraction now? [Y/n]: ", true)
+			initReq.Prompt = nil
+			initReq.ConfirmPDF = nil
+			if output.Format != "json" {
+				reader := bufio.NewReader(cmd.InOrStdin())
+				initReq.Prompt = func(cfg config.Config, provided map[string]bool) (config.Config, error) {
+					return c.promptInitSetup(cfg, provided, reader)
+				}
+				initReq.ConfirmPDF = func() (bool, error) {
+					return c.promptBool(reader, "Set up PyMuPDF for PDF extraction now? [Y/n]: ", true)
+				}
 			}
 			path := app.CommandPath{Resource: "config", Action: "init"}
 			return c.renderResult(cmd.Context(), opts, path, func(ctx context.Context) (app.Result, error) {

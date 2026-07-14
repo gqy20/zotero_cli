@@ -1,62 +1,27 @@
 # error — 错误响应
 
-CLI 默认把错误写到 **stderr**。设置 `ZOT_JSON_ERRORS=1` 后，错误也以 JSON 形式输出到 stdout（Agent 解析用），结构与成功响应同形。
-
-## 文本模式（默认）
-
-```
-error: zotero api not found (404): no such item: ABCD1234
-```
-
-退出码见 [Exit Code 规范](#exit-code-规范)。
-
-## JSON 模式（`ZOT_JSON_ERRORS=1`）
-
-`error` 字段嵌套在 `data` 下，另有机器可读的 `type` 类别与 `code` 退出码：
+文本模式把错误写到 stderr。使用 `--json`、`--format json` 或 `ZOT_OUTPUT=json` 时，stdout 始终是一个 JSON envelope，stderr 保持为空。
 
 ```json
 {
   "ok": false,
-  "command": "find",
-  "data": {
-    "error": "human-readable message",
-    "type": "forbidden",
-    "code": 1
+  "command": "item find",
+  "error": {
+    "type": "usage",
+    "message": "--full and --snippet are mutually exclusive"
   },
-  "code": 1
+  "code": 2
 }
 ```
 
-`type` 取值（与 [exit code](#exit-code-规范) 正交，方便分支处理）：
+错误响应不包含 `data`，退出码只在顶层 `code` 出现一次。常见 `type` 包括 `usage`、`config`、`not_found`、`unauthorized`、`forbidden`、`conflict`、`precondition_failed`、`rate_limited`、`unsupported_feature`、`temporarily_unavailable` 和 `server_error_*`。
 
-| type | 触发场景 |
-|------|----------|
-| `not_found` | 条目 / 收藏夹 / 搜索不存在 |
-| `unauthorized` | HTTP 401 |
-| `forbidden` | HTTP 403（API key 无权限） |
-| `conflict` | HTTP 409（key 冲突） |
-| `precondition_failed` | HTTP 412（`--if-version` 不满足） |
-| `rate_limited` | HTTP 429（带 Retry-After） |
-| `unsupported_feature` | 当前 mode 不支持该能力 |
-| `temporarily_unavailable` | SQLite 被锁 / 模式降级 |
-| `bad_request` / `payload_too_large` / `method_not_allowed` | HTTP 4xx |
-| `server_error` / `server_error_500` ... | HTTP 5xx |
-| `unknown` | 兜底 |
+| Code | 含义 |
+|---|---|
+| 0 | 成功 |
+| 1 | 运行时错误 |
+| 2 | 参数或用法错误 |
+| 3 | 配置错误 |
+| 130 | 操作被取消 |
 
-## Exit Code 规范
-
-| Code | 含义 | AI 处理建议 |
-|------|------|-------------|
-| **0** | 成功 | 正常消费 data |
-| **1** | 运行时错误 | 向用户报告 error 内容；按 `type` 决定是否重试 |
-| **2** | 参数/用法错误 | 显示 usage 信息，提示正确参数 |
-| **3** | 配置错误 | 引导用户运行 `zot config init` 或检查环境变量 |
-
-## AI Agent 错误处理建议
-
-```
-1. 解析 ok 字段：false → 有错误
-2. 读取 data.error：向用户展示具体原因
-3. 读取 data.type：决定分支（precondition_failed → 拉新 version 重试；rate_limited → 退避后重试；not_found → 不重试）
-4. 读不到 type 时回退到 code：1=运行时错误/重试边界由调用者决定；2=参数错误/不重试；3=配置错误/不重试
-```
+帮助页和 shell completion 是纯文本产物；不要给它们添加 `--json`。`config init --json` 不会显示交互提示，必须一次传齐当前模式需要的参数。
