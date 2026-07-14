@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -18,7 +19,6 @@ import (
 type globalOptions struct {
 	format  string
 	json    bool
-	quiet   bool
 	verbose bool
 	noColor bool
 	mode    string
@@ -121,7 +121,6 @@ Library preferences:
 	flags := root.PersistentFlags()
 	flags.StringVar(&opts.format, "format", opts.format, "output format: text or json")
 	flags.BoolVar(&opts.json, "json", false, "output JSON")
-	flags.BoolVarP(&opts.quiet, "quiet", "q", false, "suppress non-result output")
 	flags.BoolVarP(&opts.verbose, "verbose", "v", false, "show diagnostics")
 	flags.BoolVar(&opts.noColor, "no-color", false, "disable colored output")
 	flags.StringVar(&opts.mode, "mode", "", "override configured mode for this invocation")
@@ -176,13 +175,40 @@ func outputOptions(opts *globalOptions) (app.OutputOptions, error) {
 	if format != "text" && format != "json" {
 		return app.OutputOptions{}, &exitError{code: ExitUsage, err: fmt.Errorf("invalid output format %q", format)}
 	}
-	return app.OutputOptions{Format: format, Quiet: opts.quiet, Verbose: opts.verbose, Color: !opts.noColor}, nil
+	return app.OutputOptions{Format: format, Verbose: opts.verbose, Color: !opts.noColor}, nil
 }
 
 func (c *CLI) renderResult(ctx context.Context, opts *globalOptions, path app.CommandPath, run func(context.Context) (app.Result, error)) error {
 	output, err := outputOptions(opts)
 	if err != nil {
 		return err
+	}
+	if rawMode := strings.ToLower(strings.TrimSpace(opts.mode)); rawMode != "" {
+		switch rawMode {
+		case "web", "local", "hybrid", "remote":
+		default:
+			return &exitError{code: ExitUsage, err: fmt.Errorf("invalid mode %q; expected web, local, hybrid, or remote", rawMode)}
+		}
+		oldMode, hadMode := os.LookupEnv("ZOT_MODE")
+		if err := os.Setenv("ZOT_MODE", rawMode); err != nil {
+			return err
+		}
+		defer func() {
+			if hadMode {
+				_ = os.Setenv("ZOT_MODE", oldMode)
+			} else {
+				_ = os.Unsetenv("ZOT_MODE")
+			}
+		}()
+	}
+	if raw := strings.TrimSpace(opts.timeout); raw != "" {
+		timeout, parseErr := time.ParseDuration(raw)
+		if parseErr != nil || timeout <= 0 {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("invalid timeout %q; use a positive duration such as 30s or 10m", raw)}
+		}
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
 	}
 	result, err := run(ctx)
 	if err != nil {

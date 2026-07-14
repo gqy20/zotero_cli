@@ -14,6 +14,7 @@ import (
 
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
+	"zotero_cli/internal/syncmirror"
 
 	_ "modernc.org/sqlite"
 )
@@ -974,6 +975,27 @@ func TestResolveAttachmentPathSupportsAbsolutePaths(t *testing.T) {
 	}
 	if got != path {
 		t.Fatalf("resolveAttachmentPath() = %q, want %q", got, path)
+	}
+}
+
+func TestResolveAttachmentPathPrefersSyncedMirror(t *testing.T) {
+	dataDir := t.TempDir()
+	mirrored := filepath.Join(dataDir, syncmirror.MetadataDir, syncmirror.LinkedDir, "ATTACH1", "paper.pdf")
+	if err := os.MkdirAll(filepath.Dir(mirrored), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mirrored, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reader := &LocalReader{
+		DataDir: dataDir,
+		AttachmentMirror: map[string]syncmirror.AttachmentEntry{
+			"ATTACH1": {Key: "ATTACH1", RelativePath: syncmirror.LinkedRelativePath("ATTACH1", "paper.pdf")},
+		},
+	}
+	got, ok := reader.resolveAttachmentPath("ATTACH1", `C:\missing\paper.pdf`, "paper.pdf")
+	if !ok || filepath.Clean(got) != filepath.Clean(mirrored) {
+		t.Fatalf("resolveAttachmentPath() = %q, %v; want %q, true", got, ok, mirrored)
 	}
 }
 

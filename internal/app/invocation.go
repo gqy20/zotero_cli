@@ -14,7 +14,6 @@ func (p CommandPath) String() string {
 
 type OutputOptions struct {
 	Format  string
-	Quiet   bool
 	Verbose bool
 	Color   bool
 }

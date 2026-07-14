@@ -7,8 +7,10 @@
 ## [Unreleased]
 
 ### 新增
+- **完整附件离线镜像**：`zot sync` 除 `storage/` imported 附件外，新增可解析 `linked_file` 外部附件的安全清单与下载协议；客户端按 attachment key 保存覆盖映射，复制后的 SQLite 无需改写即可读取 PDF。源文件缺失不会中止同步，已有本地副本继续保留为 stale。
+- **`sync status` 一体化诊断**：新增 `zot sync status` 快速检查本地 SQLite 与最近同步状态，`--full` 额外执行完整 SQLite integrity check、上次 manifest 文件核对和未完成下载扫描；成功同步会原子记录状态与 manifest。
 - **限定语料的正则全文取证**：`pdf text --grep` 默认按不区分大小写的 Go 正则解析，支持用 `|` 一次检索多个关键词；新增 `--collection`，接受收藏夹 key、唯一名称或完整层级路径。有分页全文缓存时，JSON 按附件和命中页返回 `match_count`、页码与相邻上下文，检索保持只读。
-- **CLI v2 阶段 6 长尾命令与运行时能力**：迁移 `schema list/show`、`server start`、`sync pull`，加入 bash/zsh/fish/PowerShell completion；旧 schema 变体、裸 `server` 与裸 `sync` 统一翻译为 canonical invocation，sync 下载生命周期下沉至应用层。
+- **CLI v2 阶段 6 长尾命令与运行时能力**：迁移 `schema list/show`、`serve`、`sync`，加入 bash/zsh/fish/PowerShell completion；旧 `server start`、`sync pull` 与 schema 变体已退出，sync 下载生命周期下沉至应用层。
 - **CLI v2 阶段 5 Reference 与 Index**：迁移 `ref show/find/related/cited/ctx/links/entities/profile/build/resolve/status` 与 `index build/status`，Reference/Index 的 store、client、reader 和构建生命周期下沉至应用层。
 - **CLI v2 阶段 1 基础设施**：引入 Cobra 命令树、canonical Invocation、应用服务 Result 与统一 JSON/text/error renderer；`version`、`config init/show/check` 已迁移，旧 `zot init`、`config validate/path` 通过参数翻译进入同一实现。
 - **CLI v2 阶段 2 只读资源切片**：迁移 `lib show/stats/log`、`item list --scope trash|pubs`、`coll/tag/note/search/group list`；所有入口统一经过 typed request、应用服务和 renderer，旧命令仅翻译参数并返回 canonical JSON command。
@@ -19,9 +21,12 @@
 - **附件健康检查**：`inspect-attachment` 新增 `--health`，可诊断本地附件路径未解析、文件缺失、路径是目录、文件名过长、非法字符、异常空格、PDF 缺 `.pdf` 后缀和泛化命名等问题；`find` 新增 `--missing-attachment`、`--bad-attachment-name`、`--attachment-health critical|error|warning|info` 用于批量定位异常附件。
 
 ### 修复
+- **同步后本地模式衔接**：全局 `--mode` 现在真正覆盖单次命令配置；`--mode local` 在没有显式 `data_dir` 时自动识别 `~/.zot/sync`。同步全文缓存的源路径跨机器变化后，仍可按附件 key、mtime 和 size 正确校验。
+- **单向同步一致性与超时**：SQLite WAL/SHM/journal sidecar 不再像历史附件一样保留，远端已不存在时会从本地副本移除；全局 `--timeout` 现在会真正约束命令执行时间。
 - **`extract-figures` 跨页同尺寸误去重**：跨页 dedup 仅用于小面积/页边且无 caption 的重复元素，避免 BMC/Nature 风格正文大图因宽高相近被当作页眉页脚重复图过滤。
 
 ### 变更
+- **明确 sync 单向语义**：附件和全文缓存保持只增不删，远端删除不会清理本地历史副本；sync 的机器可读输出使用 `--json`。
 - **查询范围参数去布尔堆积**：`ref build` 使用 `--scope pending|failed|contexts|grobid`，`ref status` 使用 `--view summary|failed|unsupported|grobid`。`item find --all` 仅取消结果上限并与 `--limit` 互斥；metadata 范围可省略 QUERY，过滤和排序不再借用内部 `All/ExplicitAll` 状态。
 - **查询与导出接口收敛**：`item find` 用单一 `--in metadata|fulltext` 取代四个全文布尔参数，避免把两套不同查询语言伪装成可合并范围；`ref find` 用 `--in all|references|contexts|metadata` 取代三个范围布尔参数。全文与引用 QUERY 原样交给 SQLite FTS5。`note find` 统一为不区分大小写的 Go 正则，`note list` 不再承担查询。`item export` 只接受明确 key 或 `--from PATH|-` 的结构化选择结果，不再内置第二套筛选器。
 - **CLI v2 阶段 7 完成**：Cobra tree 成为唯一执行内核；旧命令只在纯 argv translator 中映射到 canonical invocation，`setup/select/abstract/relate/key-info` 收敛为隐藏的 redirect-only adapter，主帮助、completion、JSON command 和用户文档统一使用 v2 语法。
@@ -30,6 +35,7 @@
 ### 性能
 
 ### 移除
+- 删除没有稳定语义且仅为兼容保留的全局 `--quiet/-q`；需要机器可读输出时统一使用 `--json`。
 - 删除 `commandRegistry`、手写 `dispatch`、旧 usage 常量、通用旧参数解析器、CLI 内重复 JSON/text renderer，以及已迁移或退出稳定语法的旧业务 handler。
 - 删除阶段 5 的 reference/index 旧业务 handler，以及阶段 6 的 server/sync 手写参数解析与 CLI 内业务编排。
 - 删除阶段 2 对应的旧只读 handler、旧 dispatch 分支与 `changes` 手写参数解析器，避免新旧两套业务逻辑并存。

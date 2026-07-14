@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"zotero_cli/internal/domain"
+	"zotero_cli/internal/syncmirror"
 )
 
 func (r *LocalReader) loadItemRefByKey(ctx context.Context, db *sql.DB, key string) (domain.ItemRef, int64, error) {
@@ -699,6 +700,15 @@ func extractAnnotationPageIndex(positionJSON string) int {
 }
 
 func (r *LocalReader) resolveAttachmentPath(key string, zoteroPath string, filename string) (string, bool) {
+	if entry, ok := r.AttachmentMirror[key]; ok {
+		if resolved, ok := syncmirror.Resolve(r.DataDir, entry); ok {
+			return resolved, true
+		}
+	}
+	return r.resolveAttachmentPathWithoutMirror(key, zoteroPath, filename)
+}
+
+func (r *LocalReader) resolveAttachmentPathWithoutMirror(key string, zoteroPath string, filename string) (string, bool) {
 	if zoteroPath == "" {
 		return "", false
 	}

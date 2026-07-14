@@ -288,10 +288,14 @@ CLI 配置存储在 `~/.zot/.env`。
 .\zot.exe config init                    # 一键初始化（推荐，含模式选择和可选 PyMuPDF 安装）
 .\zot.exe config init --mode hybrid --api-key ...  # 非交互模式
 .\zot.exe config init --mode remote --server-addr http://192.168.1.100:8021
-.\zot.exe sync --server-addr http://host:8021 # 整库同步到本地 ~/.zot/sync/，之后 ZOT_MODE=local 离线用
-.\zot.exe config show       # 查看当前配置
+.\zot.exe sync                              # 单向增量拉取到本地 ~/.zot/sync/
+.\zot.exe sync status --full                # 状态 + SQLite/manifest 完整校验
+.\zot.exe --mode local find "query"          # 同步后直接使用本地镜像
+.\zot.exe config show                       # 查看当前配置
 .\zot.exe config check   # 校验配置有效性
 ```
+
+`sync` 同时复制 `storage/` imported 附件和可解析的 `linked_file` 外部附件。外链文件使用 attachment key 镜像映射，不改写 SQLite；源文件缺失不会中止整库同步，已有旧副本保留。远端附件删除不传播到本地。未显式配置 `data_dir` 时，`--mode local` 自动识别 `~/.zot/sync`。
 
 配置缺失时，主动初始化而不是绕过错误。
 

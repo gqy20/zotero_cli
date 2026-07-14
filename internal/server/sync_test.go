@@ -1,13 +1,36 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"zotero_cli/internal/backend"
 )
+
+type linkedSyncReader struct {
+	mockReader
+	path string
+}
+
+func (r *linkedSyncReader) ListSyncLinkedAttachments(context.Context) ([]backend.SyncLinkedAttachment, error) {
+	info, err := os.Stat(r.path)
+	if err != nil {
+		return nil, err
+	}
+	return []backend.SyncLinkedAttachment{
+		{Key: "LINK1", Name: filepath.Base(r.path), Size: info.Size(), Mtime: info.ModTime().Unix(), Available: true},
+		{Key: "MISSING", Name: "missing.pdf", Error: "source file is unavailable"},
+	}, nil
+}
+
+func (r *linkedSyncReader) GetAttachmentFile(context.Context, string) (string, string, error) {
+	return r.path, "application/pdf", nil
+}
 
 // newSyncMux builds a Handler rooted at a temp dataDir and returns its mux.
 func newSyncMux(t *testing.T, dataDir string) http.Handler {
@@ -94,6 +117,38 @@ func TestSyncManifest(t *testing.T) {
 	}
 	if !ftPaths["index.sqlite"] || !ftPaths["cache/KEY1/content.txt"] {
 		t.Fatalf("expected fulltext index.sqlite + cache/KEY1/content.txt, got %v", ftPaths)
+	}
+}
+
+func TestSyncLinkedAttachmentManifestAndDownload(t *testing.T) {
+	dataDir := t.TempDir()
+	writeSyncFixture(t, dataDir)
+	linkedPath := filepath.Join(t.TempDir(), "linked.pdf")
+	mustWrite(t, linkedPath, "LINKED PDF")
+	mux := http.NewServeMux()
+	NewHandlerWithDir(&linkedSyncReader{path: linkedPath}, dataDir).RegisterRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/sync/manifest", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("manifest: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Data syncManifest `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Data.Linked) != 2 || !response.Data.Linked[0].Available || response.Data.Linked[1].Available {
+		t.Fatalf("unexpected linked manifest: %#v", response.Data.Linked)
+	}
+
+	rec = httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/v1/sync/linked/LINK1/linked.pdf", nil)
+	req.Header.Set("Range", "bytes=7-")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusPartialContent || rec.Body.String() != "PDF" {
+		t.Fatalf("linked range response: code=%d body=%q", rec.Code, rec.Body.String())
 	}
 }
 

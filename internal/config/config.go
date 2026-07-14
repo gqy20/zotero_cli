@@ -58,6 +58,14 @@ func DefaultEnvPath() (string, error) {
 	return filepath.Join(home, ".zot", ".env"), nil
 }
 
+func DefaultSyncDataDir() (string, error) {
+	path, err := DefaultEnvPath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(path), "sync"), nil
+}
+
 func Load() (Config, string, error) {
 	path, err := DefaultEnvPath()
 	if err != nil {

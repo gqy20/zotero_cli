@@ -18,7 +18,8 @@ import (
 )
 
 type fullTextCache struct {
-	rootDir string
+	rootDir        string
+	sourceResolver func(attachmentKey, attachmentName string) (string, bool)
 }
 
 type fullTextCacheMeta struct {
@@ -599,11 +600,8 @@ func (c fullTextCache) IsFresh(meta fullTextCacheMeta, attachment domain.Attachm
 	if strings.TrimSpace(meta.ContentType) != strings.TrimSpace(attachment.ContentType) {
 		return false
 	}
-	sourcePath, info, ok := fullTextAttachmentSourceInfo(attachment)
+	_, info, ok := fullTextAttachmentSourceInfo(attachment)
 	if !ok {
-		return false
-	}
-	if filepath.Clean(meta.ResolvedPath) != filepath.Clean(sourcePath) {
 		return false
 	}
 	if meta.SourceMtimeNano > 0 {
@@ -1060,6 +1058,11 @@ func (c fullTextCache) indexedAttachmentFresh(attachmentKey string, attachment *
 	}
 	if attachment != nil {
 		return c.IsFresh(meta, *attachment)
+	}
+	if c.sourceResolver != nil {
+		if resolved, ok := c.sourceResolver(attachmentKey, meta.AttachmentName); ok {
+			return fullTextIndexedSourceFresh(resolved, meta.SourceMtimeUnix, meta.SourceMtimeNano, meta.SourceSize)
+		}
 	}
 	return fullTextIndexedSourceFresh(meta.ResolvedPath, meta.SourceMtimeUnix, meta.SourceMtimeNano, meta.SourceSize)
 }

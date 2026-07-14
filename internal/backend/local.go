@@ -19,6 +19,7 @@ import (
 
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
+	"zotero_cli/internal/syncmirror"
 )
 
 type LocalReader struct {
@@ -30,6 +31,7 @@ type LocalReader struct {
 	FullTextCacheDir  string
 	SnapshotCacheDir  string
 	AttachmentBaseDir string
+	AttachmentMirror  map[string]syncmirror.AttachmentEntry
 	lastReadMetadata  ReadMetadata
 	fullTextIndexMu   sync.Mutex
 	fullTextIndex     map[string]fullTextIndexStatus
@@ -39,12 +41,17 @@ type LocalReader struct {
 }
 
 func NewLocalReader(cfg config.Config) (*LocalReader, error) {
-	prefs, _, err := loadMatchingZoteroPrefs(cfg.DataDir, findZoteroPrefs)
+	dataDirInput := cfg.DataDir
+	if dataDirInput == "" && cfg.Mode == "local" {
+		if syncDir, syncErr := config.DefaultSyncDataDir(); syncErr == nil && isLocalDataDir(syncDir) {
+			dataDirInput = syncDir
+		}
+	}
+	prefs, _, err := loadMatchingZoteroPrefs(dataDirInput, findZoteroPrefs)
 	if err != nil {
 		return nil, err
 	}
 
-	dataDirInput := cfg.DataDir
 	if dataDirInput == "" {
 		dataDirInput = prefs.DataDir
 	}
@@ -79,6 +86,10 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 			return nil, err
 		}
 	}
+	attachmentMirror, _, err := syncmirror.Load(dataDir)
+	if err != nil {
+		return nil, fmt.Errorf("load synced attachment map: %w", err)
+	}
 
 	return &LocalReader{
 		LibraryType:       cfg.LibraryType,
@@ -89,14 +100,100 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 		FullTextCacheDir:  filepath.Join(dataDir, ".zotero_cli", "fulltext"),
 		SnapshotCacheDir:  filepath.Join(dataDir, ".zotero_cli", "snapshot"),
 		AttachmentBaseDir: attachmentBaseDir,
+		AttachmentMirror:  attachmentMirror.Attachments,
 		openSQLiteDB:      openSQLiteDB,
 		createSnapshot:    createSQLiteSnapshot,
 		findZoteroPrefs:   findZoteroPrefs,
 	}, nil
 }
 
-func (r *LocalReader) IsFullTextCached(attachment domain.Attachment) bool {
+func isLocalDataDir(path string) bool {
+	if info, err := os.Stat(filepath.Join(path, "zotero.sqlite")); err != nil || info.IsDir() {
+		return false
+	}
+	if info, err := os.Stat(filepath.Join(path, "storage")); err != nil || !info.IsDir() {
+		return false
+	}
+	return true
+}
+
+func (r *LocalReader) fullTextCache() fullTextCache {
 	cache := newFullTextCache(r.FullTextCacheDir)
+	cache.sourceResolver = func(key, name string) (string, bool) {
+		if entry, ok := r.AttachmentMirror[key]; ok {
+			if resolved, ok := syncmirror.Resolve(r.DataDir, entry); ok {
+				return resolved, true
+			}
+		}
+		name = filepath.Base(strings.TrimSpace(name))
+		if name == "" || name == "." {
+			return "", false
+		}
+		path := filepath.Join(r.StorageDir, key, name)
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return path, true
+		}
+		return "", false
+	}
+	return cache
+}
+
+// ListSyncLinkedAttachments enumerates linked-file attachments (linkMode=2)
+// and resolves them on the server host. Missing sources are represented in the
+// manifest instead of failing the entire sync.
+func (r *LocalReader) ListSyncLinkedAttachments(ctx context.Context) ([]SyncLinkedAttachment, error) {
+	var attachments []SyncLinkedAttachment
+	err := r.withReadableDB(ctx, func(db *sql.DB) error {
+		rows, err := db.QueryContext(ctx, `
+			SELECT i.key, COALESCE(ia.path, ''),
+			       COALESCE(MAX(CASE WHEN f.fieldName = 'filename' THEN v.value END), '')
+			FROM itemAttachments ia
+			JOIN items i ON i.itemID = ia.itemID
+			LEFT JOIN itemData d ON d.itemID = i.itemID
+			LEFT JOIN itemDataValues v ON v.valueID = d.valueID
+			LEFT JOIN fieldsCombined f ON f.fieldID = d.fieldID
+			WHERE ia.linkMode = 2
+			GROUP BY i.itemID, i.key, ia.path
+			ORDER BY i.key
+		`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var key, zoteroPath, filename string
+			if err := rows.Scan(&key, &zoteroPath, &filename); err != nil {
+				return err
+			}
+			if filename == "" {
+				filename = filepath.Base(filepath.FromSlash(zoteroPath))
+			}
+			entry := SyncLinkedAttachment{Key: key, Name: filename}
+			resolved, ok := r.resolveAttachmentPathWithoutMirror(key, zoteroPath, filename)
+			if !ok {
+				entry.Error = "source file is unavailable"
+				attachments = append(attachments, entry)
+				continue
+			}
+			info, statErr := os.Stat(resolved)
+			if statErr != nil || info.IsDir() {
+				entry.Error = "source file is unavailable"
+				attachments = append(attachments, entry)
+				continue
+			}
+			entry.Name = filepath.Base(resolved)
+			entry.Size = info.Size()
+			entry.Mtime = info.ModTime().Unix()
+			entry.Available = true
+			attachments = append(attachments, entry)
+		}
+		return rows.Err()
+	})
+	return attachments, err
+}
+
+func (r *LocalReader) IsFullTextCached(attachment domain.Attachment) bool {
+	cache := r.fullTextCache()
 	_, ok, err := cache.Load(attachment)
 	return err == nil && ok
 }
@@ -105,7 +202,7 @@ func (r *LocalReader) IsFullTextIndexed(attachment domain.Attachment) bool {
 	r.fullTextIndexMu.Lock()
 	defer r.fullTextIndexMu.Unlock()
 	if r.fullTextIndex == nil {
-		statuses, err := newFullTextCache(r.FullTextCacheDir).IndexStatuses()
+		statuses, err := r.fullTextCache().IndexStatuses()
 		if err != nil {
 			return false
 		}
@@ -113,15 +210,15 @@ func (r *LocalReader) IsFullTextIndexed(attachment domain.Attachment) bool {
 	}
 	status, ok := r.fullTextIndex[attachment.Key]
 	return ok && status.TextHash != "" && status.IndexedTextHash == status.TextHash &&
-		newFullTextCache(r.FullTextCacheDir).indexedAttachmentFresh(attachment.Key, &attachment)
+		r.fullTextCache().indexedAttachmentFresh(attachment.Key, &attachment)
 }
 
 func (r *LocalReader) IsMarkedFailed(key string) bool {
-	return newFullTextCache(r.FullTextCacheDir).IsMarkedFailed(key)
+	return r.fullTextCache().IsMarkedFailed(key)
 }
 
 func (r *LocalReader) MarkExtractFailed(key string) error {
-	return newFullTextCache(r.FullTextCacheDir).MarkFailed(key)
+	return r.fullTextCache().MarkFailed(key)
 }
 
 func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
@@ -300,7 +397,7 @@ func metadataFindScore(item domain.Item, query string) int {
 
 func (r *LocalReader) findItemsFromFullTextIndex(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
 	candidateLimit := fullTextCandidateLimit(opts)
-	matches, err := newFullTextCache(r.FullTextCacheDir).Search(opts.Query, candidateLimit)
+	matches, err := r.fullTextCache().Search(opts.Query, candidateLimit)
 	if err != nil {
 		return nil, err
 	}

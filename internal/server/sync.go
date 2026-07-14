@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"zotero_cli/internal/backend"
 )
 
 // Sync endpoints let a client pull the raw Zotero data files (zotero.sqlite +
@@ -31,10 +33,20 @@ type syncPathEntry struct {
 	Mtime int64  `json:"mtime"`
 }
 
+type syncLinkedEntry struct {
+	Key       string `json:"key"`
+	Name      string `json:"name,omitempty"`
+	Size      int64  `json:"size,omitempty"`
+	Mtime     int64  `json:"mtime,omitempty"`
+	Available bool   `json:"available"`
+	Error     string `json:"error,omitempty"`
+}
+
 type syncManifest struct {
 	SQLite   []syncPathEntry    `json:"sqlite"`
 	Storage  []syncStorageEntry `json:"storage"`
 	Fulltext []syncPathEntry    `json:"fulltext"`
+	Linked   []syncLinkedEntry  `json:"linked,omitempty"`
 }
 
 const sqliteFileName = "zotero.sqlite"
@@ -101,7 +113,50 @@ func (h *Handler) syncManifest(w http.ResponseWriter, r *http.Request) {
 	fulltextDir := filepath.Join(h.dataDir, ".zotero_cli", "fulltext")
 	manifest.Fulltext = collectTree(fulltextDir, fulltextDir)
 
+	if lister, ok := h.reader.(backend.SyncLinkedAttachmentLister); ok {
+		linked, err := lister.ListSyncLinkedAttachments(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Errorf("list linked attachments: %w", err))
+			return
+		}
+		manifest.Linked = make([]syncLinkedEntry, 0, len(linked))
+		for _, entry := range linked {
+			manifest.Linked = append(manifest.Linked, syncLinkedEntry{
+				Key: entry.Key, Name: entry.Name, Size: entry.Size, Mtime: entry.Mtime,
+				Available: entry.Available, Error: entry.Error,
+			})
+		}
+	}
+
 	writeJSON(w, http.StatusOK, manifest, Meta{})
+}
+
+// syncLinkedFile serves a linked-file attachment through the reader so its
+// original absolute/base-directory path never crosses the wire.
+func (h *Handler) syncLinkedFile(w http.ResponseWriter, r *http.Request) {
+	if h.reader == nil {
+		writeError(w, http.StatusServiceUnavailable, fmt.Errorf("server has no local reader; cannot sync linked attachments"))
+		return
+	}
+	key := strings.TrimSpace(r.PathValue("key"))
+	name := r.PathValue("file")
+	if key == "" || name == "" || filepath.Base(name) != name {
+		writeError(w, http.StatusNotFound, fmt.Errorf("invalid linked attachment path"))
+		return
+	}
+	filePath, contentType, err := h.reader.GetAttachmentFile(r.Context(), key)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	if filepath.Base(filePath) != name {
+		writeError(w, http.StatusNotFound, fmt.Errorf("linked attachment filename does not match"))
+		return
+	}
+	if contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+	http.ServeFile(w, r, filePath)
 }
 
 // collectTree walks dir recursively and returns every regular file as a

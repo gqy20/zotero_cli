@@ -28,7 +28,6 @@
 ```text
 --format text|json
 --json
---quiet, -q
 --verbose, -v
 --no-color
 --mode MODE
@@ -216,9 +215,12 @@ zot config init --mode remote --server-addr http://HOST:8021
 
 # 一次性拉取到本地镜像
 zot sync
+zot sync status
+zot sync status --full
+zot --mode local find "query"
 ```
 
-`sync` 使用配置中的服务器地址和默认镜像目录，同步 SQLite、storage 和全文索引；中断的大文件会自动续传。仅在需要重新下载全部文件时使用 `--force`。
+`sync` 使用配置中的服务器地址和默认镜像目录，单向增量拉取 SQLite、storage、可解析的 linked_file 外部附件和全文索引；外链文件通过 attachment key 覆盖层供复制后的 SQLite 使用。远端删除不会清理本地附件或全文缓存，SQLite sidecar 除外；缺失的外链源文件不会中止同步，已有本地副本继续保留。同步后 `--mode local` 自动识别 `~/.zot/sync`。中断的大文件会自动续传，仅在需要重新下载全部文件时使用 `--force`。`sync status` 合并状态与校验；`--full` 会执行完整 SQLite 和上次 manifest 校验。
 
 ## 兼容边界
 

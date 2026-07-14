@@ -90,6 +90,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/sync/manifest", h.syncManifest)
 	mux.HandleFunc("GET /api/v1/sync/sqlite-file/{name}", h.syncSqliteFile)
 	mux.HandleFunc("GET /api/v1/sync/storage/{key}/{file}", h.syncStorageFile)
+	mux.HandleFunc("GET /api/v1/sync/linked/{key}/{file}", h.syncLinkedFile)
 	mux.HandleFunc("GET /api/v1/sync/fulltext/{path...}", h.syncFulltextFile)
 }
 

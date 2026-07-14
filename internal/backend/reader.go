@@ -95,6 +95,22 @@ type SavedSearchReader interface {
 	ListSavedSearches(ctx context.Context) ([]SavedSearch, error)
 }
 
+// SyncLinkedAttachment describes a Zotero linked-file attachment that can be
+// copied into a portable sync mirror. Imported attachments are handled by the
+// normal storage/ sync section and therefore do not appear here.
+type SyncLinkedAttachment struct {
+	Key       string
+	Name      string
+	Size      int64
+	Mtime     int64
+	Available bool
+	Error     string
+}
+
+type SyncLinkedAttachmentLister interface {
+	ListSyncLinkedAttachments(ctx context.Context) ([]SyncLinkedAttachment, error)
+}
+
 type Reader interface {
 	FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error)
 	GetItem(ctx context.Context, key string) (domain.Item, error)
@@ -285,6 +301,17 @@ func (r *HybridReader) GetAttachmentFile(ctx context.Context, key string) (strin
 		return r.local.GetAttachmentFile(ctx, key)
 	}
 	return "", "", fmt.Errorf("no local reader available")
+}
+
+func (r *HybridReader) ListSyncLinkedAttachments(ctx context.Context) ([]SyncLinkedAttachment, error) {
+	if r.local == nil {
+		return nil, nil
+	}
+	lister, ok := r.local.(SyncLinkedAttachmentLister)
+	if !ok {
+		return nil, nil
+	}
+	return lister.ListSyncLinkedAttachments(ctx)
 }
 
 // ExtractFigures delegates to the local reader if available.

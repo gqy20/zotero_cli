@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,7 +11,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"zotero_cli/internal/app"
 	"zotero_cli/internal/backend"
+	"zotero_cli/internal/config"
 )
 
 func TestCobraHelpDoesNotLoadConfig(t *testing.T) {
@@ -44,7 +47,7 @@ func TestCanonicalCommandsExist(t *testing.T) {
 		{"ref", "show"}, {"ref", "find"}, {"ref", "related"}, {"ref", "cited"}, {"ref", "ctx"}, {"ref", "links"}, {"ref", "entities"}, {"ref", "profile"}, {"ref", "build"}, {"ref", "resolve"}, {"ref", "status"},
 		{"index", "build"}, {"index", "status"}, {"schema", "list"}, {"schema", "show"},
 		{"config", "init"}, {"config", "show"}, {"config", "check"},
-		{"serve"}, {"sync"}, {"completion"}, {"version"},
+		{"serve"}, {"sync"}, {"sync", "status"}, {"completion"}, {"version"},
 	}
 	for _, path := range paths {
 		cmd, remaining, err := root.Find(path)
@@ -116,6 +119,61 @@ func TestOutputEnvironmentProvidesGlobalDefault(t *testing.T) {
 	}
 	if got["command"] != "version" {
 		t.Fatalf("command = %#v", got["command"])
+	}
+}
+
+func TestInvalidGlobalTimeoutIsRejected(t *testing.T) {
+	stdout, stderr := captureOutput(t)
+	if code := Run([]string{"version", "--timeout", "eventually"}); code != ExitUsage {
+		t.Fatalf("code = %d, stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "invalid timeout") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestQuietFlagIsRemoved(t *testing.T) {
+	stdout, stderr := captureOutput(t)
+	if code := Run([]string{"version", "--quiet"}); code != ExitUsage {
+		t.Fatalf("code = %d, stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "unknown flag: --quiet") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestGlobalTimeoutCancelsCommandContext(t *testing.T) {
+	err := testCLI.renderResult(context.Background(), &globalOptions{format: "text", timeout: "1ms"}, app.CommandPath{Resource: "test"}, func(ctx context.Context) (app.Result, error) {
+		<-ctx.Done()
+		return app.Result{}, ctx.Err()
+	})
+	if err == nil || !strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestGlobalModeOverridesConfigForInvocation(t *testing.T) {
+	root := t.TempDir()
+	setTestConfigDir(t, root)
+	oldMode, hadMode := os.LookupEnv("ZOT_MODE")
+	if err := config.Save(config.Config{Mode: "web", LibraryType: "user", LibraryID: "1", APIKey: "key"}); err != nil {
+		t.Fatal(err)
+	}
+	err := testCLI.renderResult(context.Background(), &globalOptions{format: "text", mode: "local"}, app.CommandPath{Resource: "test"}, func(context.Context) (app.Result, error) {
+		cfg, _, err := config.Load()
+		if err != nil {
+			return app.Result{}, err
+		}
+		if cfg.Mode != "local" {
+			t.Fatalf("mode = %q, want local", cfg.Mode)
+		}
+		return app.Result{Text: "ok"}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, exists := os.LookupEnv("ZOT_MODE"); got != oldMode || exists != hadMode {
+		t.Fatalf("ZOT_MODE was not restored: got %q/%v, want %q/%v", got, exists, oldMode, hadMode)
 	}
 }
 

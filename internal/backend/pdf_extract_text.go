@@ -70,7 +70,7 @@ func (r *HybridReader) ExtractItemFullText(ctx context.Context, item domain.Item
 }
 
 func (r *LocalReader) ExtractItemAttachmentTexts(ctx context.Context, item domain.Item) (ItemFullTextResult, error) {
-	cache := newFullTextCache(r.FullTextCacheDir)
+	cache := r.fullTextCache()
 	result := ItemFullTextResult{}
 	bestScore := -1 << 30
 	for _, attachment := range item.Attachments {
@@ -130,7 +130,7 @@ func (r *HybridReader) ExtractItemAttachmentTexts(ctx context.Context, item doma
 }
 
 func (r *LocalReader) ExtractItemAttachmentPageTexts(ctx context.Context, item domain.Item) (ItemPageTextResult, error) {
-	cache := newFullTextCache(r.FullTextCacheDir)
+	cache := r.fullTextCache()
 	result := ItemPageTextResult{}
 	bestScore := -1 << 30
 	for _, attachment := range item.Attachments {

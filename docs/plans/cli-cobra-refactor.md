@@ -136,7 +136,7 @@ type Result struct {
 - warning 到 stderr
 - JSON error envelope
 - exit code
-- quiet/verbose/color 策略
+- verbose/color 策略
 
 业务服务不得调用 `fmt.Fprint` 或 `writeJSON`。
 
@@ -467,7 +467,6 @@ ann delete
 ```text
 --format text|json
 --json                 --format json 的快捷方式
---quiet
 --verbose / -v
 --no-color
 --mode MODE            可选的单次调用覆盖

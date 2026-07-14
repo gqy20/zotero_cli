@@ -86,6 +86,17 @@ func ServeFromConfig(cfg config.Config) (func(), error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create reader: %w", err)
 	}
+	dataDir := cfg.DataDir
+	if dataDir == "" {
+		switch typed := reader.(type) {
+		case *backend.LocalReader:
+			dataDir = typed.DataDir
+		case *backend.HybridReader:
+			if local := typed.LocalReader(); local != nil {
+				dataDir = local.DataDir
+			}
+		}
+	}
 
 	logLevel := os.Getenv("ZOT_SERVER_LOG_LEVEL")
 	if logLevel == "" {
@@ -96,7 +107,7 @@ func ServeFromConfig(cfg config.Config) (func(), error) {
 	if port := os.Getenv("ZOT_SERVER_PORT"); port != "" {
 		addr = ":" + port
 	}
-	s := NewServerWithPermissionsAndLogger(reader, addr, cfg.DataDir, cfg.AllowWrite, cfg.AllowDelete, logger)
+	s := NewServerWithPermissionsAndLogger(reader, addr, dataDir, cfg.AllowWrite, cfg.AllowDelete, logger)
 	go func() {
 		if err := s.Start(); err != nil && err != http.ErrServerClosed {
 			logger.Error("server fatal error", "err", err)

@@ -426,11 +426,13 @@ zot serve                               # 默认 :8021
 # 客户端：地址由 config 管理；同步到默认镜像目录（sqlite + 所有附件）
 zot config init --mode remote --server-addr http://192.168.1.50:8021
 zot sync
-# 之后离线使用
-ZOT_MODE=local ZOT_DATA_DIR=~/.zot/sync zot find ...
+zot sync status             # 快速检查本地副本和 SQLite
+zot sync status --full      # 完整 SQLite + 上次 manifest 校验
+# 之后离线使用；默认自动识别 ~/.zot/sync
+zot --mode local find ...
 ```
 
-`zot sync` 拉取原始 `zotero.sqlite`（数据库）+ `storage/`（PDF/附件）+ `.zotero_cli/fulltext/`（FTS5 全文索引），落到与 Zotero 原生数据隔离的专门目录，同步后 `local` 模式零改动直接可用、`find --in fulltext` 立即可用。再次运行只下载变化的文件；中断的大附件会从已完成的位置继续。注意：仅同步 `storage/` 下的 imported 附件，`linked_file`（外部路径）附件不同步。
+`zot sync` 是单向增量拉取：拉取原始 `zotero.sqlite`（数据库）、`storage/` 中的 imported PDF/附件、可解析的 `linked_file` 外部附件，以及 `.zotero_cli/fulltext/` 全文索引。外链附件复制到隔离的镜像目录，并通过 attachment key 映射供复制后的 SQLite 无感读取，不改写数据库中的原始路径。新增和变化的文件会下载；远端删除不会清理本地历史附件或全文缓存，SQLite 的 WAL/SHM/journal sidecar 则始终按当前远端数据库状态精确处理。源端暂时缺失的外链文件会被标记为 unavailable；若本地已有旧副本，继续保留并标记 stale。同步后可直接运行 `zot --mode local ...`，全文检索和 PDF 操作均使用镜像；中断的大附件会续传。
 - **普通 Web API 写操作**：仍需 remote+web 配置（`ZOT_API_KEY` + `ZOT_LIBRARY_ID`）
 
 ## 命令速查

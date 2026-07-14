@@ -13,8 +13,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"zotero_cli/internal/config"
+	"zotero_cli/internal/syncmirror"
 )
 
 type SyncRequest struct {
@@ -28,11 +30,13 @@ type SyncStats struct {
 }
 
 type SyncSummary struct {
-	DataDir       string    `json:"data_dir"`
-	SQLiteChanged bool      `json:"sqlite_changed"`
-	Fulltext      SyncStats `json:"fulltext"`
-	Attachments   SyncStats `json:"attachments"`
-	Storage       bool      `json:"storage"`
+	DataDir           string    `json:"data_dir"`
+	SQLiteChanged     bool      `json:"sqlite_changed"`
+	Fulltext          SyncStats `json:"fulltext"`
+	Attachments       SyncStats `json:"attachments"`
+	LinkedAttachments SyncStats `json:"linked_attachments"`
+	LinkedUnavailable int64     `json:"linked_unavailable"`
+	Storage           bool      `json:"storage"`
 }
 
 type SyncService struct {
@@ -46,9 +50,9 @@ func NewSyncService() SyncService {
 	return SyncService{LoadConfig: config.Load, DefaultPath: config.DefaultEnvPath, NewHTTPClient: newSyncHTTPClient}
 }
 
-func (s SyncService) Sync(ctx context.Context, req SyncRequest) (Result, error) {
+func (s SyncService) Sync(ctx context.Context, req SyncRequest) (result Result, err error) {
 	const concurrency = 8
-	cfg, _, err := s.LoadConfig()
+	cfg, dataDir, err := s.loadSyncConfig()
 	if err != nil {
 		return Result{}, err
 	}
@@ -58,15 +62,31 @@ func (s SyncService) Sync(ctx context.Context, req SyncRequest) (Result, error) 
 		return Result{}, fmt.Errorf("no server address configured; run `zot config init` or set ZOT_SERVER_ADDR")
 	}
 
-	envPath, err := s.DefaultPath()
-	if err != nil {
-		return Result{}, fmt.Errorf("resolve default data-dir: %w", err)
-	}
-	dataDir := filepath.Join(filepath.Dir(envPath), "sync")
 	if err := os.MkdirAll(filepath.Join(dataDir, "storage"), 0o755); err != nil {
 		return Result{}, fmt.Errorf("create data-dir: %w", err)
 	}
 	cleanupStaleSQLiteStaging(dataDir)
+
+	state, _, stateErr := readSyncState(dataDir)
+	if stateErr != nil {
+		return Result{}, fmt.Errorf("read sync state: %w", stateErr)
+	}
+	state.Version = syncStateVersion
+	state.ServerAddr = serverAddr
+	state.Status = syncStateRunning
+	state.LastAttemptAt = time.Now().UTC()
+	state.LastError = ""
+	if stateErr := writeSyncState(dataDir, state); stateErr != nil {
+		return Result{}, fmt.Errorf("write sync state: %w", stateErr)
+	}
+	defer func() {
+		if err == nil {
+			return
+		}
+		state.Status = syncStateFailed
+		state.LastError = err.Error()
+		_ = writeSyncState(dataDir, state)
+	}()
 
 	httpClient := s.NewHTTPClient
 	if httpClient == nil {
@@ -83,6 +103,9 @@ func (s SyncService) Sync(ctx context.Context, req SyncRequest) (Result, error) 
 	if err != nil {
 		return Result{}, fmt.Errorf("sync sqlite: %w", err)
 	}
+	if err := checkSQLite(ctx, filepath.Join(dataDir, sqliteFileName), "quick_check"); err != nil {
+		return Result{}, fmt.Errorf("validate synced sqlite: %w", err)
+	}
 
 	// fulltext index (.zotero_cli/fulltext) — always synced: small, and lets
 	// full-text search work right away without a local 'zot index build'.
@@ -95,8 +118,28 @@ func (s SyncService) Sync(ctx context.Context, req SyncRequest) (Result, error) 
 	if err != nil {
 		return Result{}, fmt.Errorf("sync storage: %w", err)
 	}
+	linkedDownloaded, linkedSkipped, linkedBytes, linkedUnavailable, err := syncLinkedAttachments(ctx, client, manifest.Linked, dataDir, req.Force, concurrency, s.Progress)
+	if err != nil {
+		return Result{}, fmt.Errorf("sync linked attachments: %w", err)
+	}
 
-	summary := SyncSummary{DataDir: dataDir, SQLiteChanged: sqliteChanged, Fulltext: SyncStats{ftDownloaded, ftSkipped, ftBytes}, Attachments: SyncStats{downloaded, skipped, bytes}, Storage: true}
+	summary := SyncSummary{
+		DataDir: dataDir, SQLiteChanged: sqliteChanged,
+		Fulltext:          SyncStats{ftDownloaded, ftSkipped, ftBytes},
+		Attachments:       SyncStats{downloaded, skipped, bytes},
+		LinkedAttachments: SyncStats{linkedDownloaded, linkedSkipped, linkedBytes},
+		LinkedUnavailable: linkedUnavailable, Storage: true,
+	}
+	if err := writeSyncManifest(dataDir, manifest); err != nil {
+		return Result{}, fmt.Errorf("write sync manifest: %w", err)
+	}
+	state.Status = syncStateSuccess
+	state.LastSuccessAt = time.Now().UTC()
+	state.LastError = ""
+	state.Summary = &summary
+	if err := writeSyncState(dataDir, state); err != nil {
+		return Result{}, fmt.Errorf("write sync state: %w", err)
+	}
 	var text strings.Builder
 	fmt.Fprintf(&text, "Synced to %s\n", dataDir)
 	if sqliteChanged {
@@ -106,7 +149,8 @@ func (s SyncService) Sync(ctx context.Context, req SyncRequest) (Result, error) 
 	}
 	fmt.Fprintf(&text, "  fulltext index: %d downloaded, %d unchanged (%s)\n", ftDownloaded, ftSkipped, humanBytes(ftBytes))
 	fmt.Fprintf(&text, "  attachments: %d downloaded, %d unchanged (%s)\n", downloaded, skipped, humanBytes(bytes))
-	fmt.Fprintf(&text, "\nUse it:\n  ZOT_MODE=local ZOT_DATA_DIR=%s zot find ...\n", dataDir)
+	fmt.Fprintf(&text, "  linked attachments: %d downloaded, %d unchanged (%s), %d unavailable\n", linkedDownloaded, linkedSkipped, humanBytes(linkedBytes), linkedUnavailable)
+	fmt.Fprintf(&text, "\nUse it:\n  zot --mode local find ...\n")
 	return Result{Data: summary, Text: strings.TrimRight(text.String(), "\n")}, nil
 }
 
@@ -129,10 +173,20 @@ type syncPathMeta struct {
 	Mtime int64  `json:"mtime"`
 }
 
+type syncLinkedMeta struct {
+	Key       string `json:"key"`
+	Name      string `json:"name,omitempty"`
+	Size      int64  `json:"size,omitempty"`
+	Mtime     int64  `json:"mtime,omitempty"`
+	Available bool   `json:"available"`
+	Error     string `json:"error,omitempty"`
+}
+
 type syncManifest struct {
 	SQLite   []syncPathMeta    `json:"sqlite"`
 	Storage  []syncStorageMeta `json:"storage"`
 	Fulltext []syncPathMeta    `json:"fulltext"`
+	Linked   []syncLinkedMeta  `json:"linked,omitempty"`
 }
 
 // --- sync client ---
@@ -234,6 +288,16 @@ const sqliteFileName = "zotero.sqlite"
 // last) so an interrupted sync never leaves a mismatched main db + wal. Under
 // WAL mode this usually means only the small -wal is re-fetched.
 func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta, dataDir string, force bool, progress io.Writer) (changed bool, err error) {
+	hasMain := false
+	for _, entry := range entries {
+		if entry.Path == sqliteFileName {
+			hasMain = true
+			break
+		}
+	}
+	if !hasMain {
+		return false, fmt.Errorf("manifest does not contain %s", sqliteFileName)
+	}
 	staging, err := os.MkdirTemp(dataDir, ".sqlite-staging-*")
 	if err != nil {
 		return false, err
@@ -242,7 +306,9 @@ func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta,
 
 	var toSwap []string
 	var downloaded, skipped int
+	present := make(map[string]bool, len(entries))
 	for _, e := range entries {
+		present[e.Path] = true
 		local := filepath.Join(dataDir, e.Path)
 		if !force {
 			if fi, perr := os.Stat(local); perr == nil && fi.Size() == e.Size && fi.ModTime().Unix() == e.Mtime {
@@ -274,11 +340,31 @@ func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta,
 		downloaded++
 	}
 
-	if len(toSwap) == 0 {
+	var obsolete []string
+	for _, name := range []string{sqliteFileName + "-wal", sqliteFileName + "-shm", sqliteFileName + "-journal"} {
+		if present[name] {
+			continue
+		}
+		if _, statErr := os.Stat(filepath.Join(dataDir, name)); statErr == nil {
+			obsolete = append(obsolete, name)
+		} else if !os.IsNotExist(statErr) {
+			return false, statErr
+		}
+	}
+
+	if len(toSwap) == 0 && len(obsolete) == 0 {
 		if progress != nil {
 			fmt.Fprintf(progress, "  sqlite: %d files up to date\n", skipped)
 		}
 		return false, nil
+	}
+	// SQLite sidecars are part of the current database generation rather than
+	// retained library content. Remove sidecars absent from the server manifest;
+	// storage and fulltext files intentionally remain additive-only.
+	for _, name := range obsolete {
+		if err := os.Remove(filepath.Join(dataDir, name)); err != nil && !os.IsNotExist(err) {
+			return false, err
+		}
 	}
 	// Swap sidecars first, main db last, so a reader never sees a new main db
 	// without its matching wal/shm.
@@ -299,7 +385,7 @@ func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta,
 		}
 	}
 	if progress != nil {
-		fmt.Fprintf(progress, "  sqlite: %d downloaded, %d up to date\n", downloaded, skipped)
+		fmt.Fprintf(progress, "  sqlite: %d downloaded, %d up to date, %d stale sidecars removed\n", downloaded, skipped, len(obsolete))
 	}
 	return true, nil
 }
@@ -480,6 +566,91 @@ func syncFulltext(ctx context.Context, client *syncClient, entries []syncPathMet
 		return client.getStream(ctx, "/api/v1/sync/fulltext/"+strings.Join(segs, "/"), offset)
 	}
 	return runDownloads(ctx, filepath.Join(dataDir, ".zotero_cli", "fulltext"), files, force, concurrency, progress, fetch)
+}
+
+func syncLinkedAttachments(ctx context.Context, client *syncClient, entries []syncLinkedMeta, dataDir string, force bool, concurrency int, progress io.Writer) (downloaded, skipped, bytes, unavailable int64, err error) {
+	attachmentMap, _, err := syncmirror.Load(dataDir)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	if attachmentMap.Attachments == nil {
+		attachmentMap.Attachments = map[string]syncmirror.AttachmentEntry{}
+	}
+
+	type remoteFile struct{ key, name string }
+	remote := make(map[string]remoteFile)
+	files := make([]fileDownload, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Key == "" || entry.Key == "." || safeMirrorFilename(entry.Key) != entry.Key {
+			return 0, 0, 0, unavailable, fmt.Errorf("invalid linked attachment key %q in manifest", entry.Key)
+		}
+		if !entry.Available {
+			unavailable++
+			old := attachmentMap.Attachments[entry.Key]
+			old.Key = entry.Key
+			old.Name = entry.Name
+			old.SourceAvailable = false
+			old.Stale = false
+			old.Error = entry.Error
+			if _, ok := syncmirror.Resolve(dataDir, old); ok {
+				old.Stale = true
+			} else {
+				old.RelativePath = ""
+				old.Size = 0
+				old.Mtime = 0
+			}
+			attachmentMap.Attachments[entry.Key] = old
+			continue
+		}
+		localName := safeMirrorFilename(entry.Name)
+		rel := filepath.ToSlash(filepath.Join(entry.Key, localName))
+		files = append(files, fileDownload{relPath: rel, size: entry.Size, mtime: entry.Mtime})
+		remote[rel] = remoteFile{key: entry.Key, name: entry.Name}
+	}
+	fetch := func(ctx context.Context, relPath string, offset int64) (io.ReadCloser, bool, error) {
+		entry := remote[relPath]
+		return client.getStream(ctx, "/api/v1/sync/linked/"+url.PathEscape(entry.key)+"/"+url.PathEscape(entry.name), offset)
+	}
+	downloaded, skipped, bytes, err = runDownloads(ctx, filepath.Join(dataDir, syncmirror.MetadataDir, syncmirror.LinkedDir), files, force, concurrency, progress, fetch)
+	if err != nil {
+		return downloaded, skipped, bytes, unavailable, err
+	}
+	for _, entry := range entries {
+		if !entry.Available {
+			continue
+		}
+		attachmentMap.Attachments[entry.Key] = syncmirror.AttachmentEntry{
+			Key: entry.Key, Name: entry.Name,
+			RelativePath: syncmirror.LinkedRelativePath(entry.Key, safeMirrorFilename(entry.Name)),
+			Size:         entry.Size, Mtime: entry.Mtime, SourceAvailable: true,
+		}
+	}
+	attachmentMap.Version = syncmirror.AttachmentMapVersion
+	if err := writeSyncJSON(syncmirror.MapPath(dataDir), attachmentMap); err != nil {
+		return downloaded, skipped, bytes, unavailable, err
+	}
+	return downloaded, skipped, bytes, unavailable, nil
+}
+
+func safeMirrorFilename(name string) string {
+	name = filepath.Base(strings.TrimSpace(name))
+	name = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || strings.ContainsRune(`<>:"/\\|?*`, r) {
+			return '_'
+		}
+		return r
+	}, name)
+	name = strings.TrimRight(name, " .")
+	if name == "" || name == "." {
+		return "attachment"
+	}
+	stem := strings.ToUpper(strings.TrimSuffix(name, filepath.Ext(name)))
+	reserved := stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL" ||
+		(len(stem) == 4 && (strings.HasPrefix(stem, "COM") || strings.HasPrefix(stem, "LPT")) && stem[3] >= '1' && stem[3] <= '9')
+	if reserved {
+		name = "_" + name
+	}
+	return name
 }
 
 func humanBytes(n int64) string {

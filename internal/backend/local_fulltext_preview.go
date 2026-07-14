@@ -108,7 +108,7 @@ func (r *LocalReader) FullTextSnippet(ctx context.Context, item domain.Item, que
 			if attachment.Key != item.MatchedChunk.AttachmentKey {
 				continue
 			}
-			doc, ok, err := newFullTextCache(r.FullTextCacheDir).Load(attachment)
+			doc, ok, err := r.fullTextCache().Load(attachment)
 			if err != nil {
 				return "", err
 			}
@@ -134,7 +134,7 @@ func (r *LocalReader) FullTextSnippet(ctx context.Context, item domain.Item, que
 }
 
 func (r *LocalReader) loadFullTextDocument(_ context.Context, item domain.Item, query string) (FullTextDocument, bool, error) {
-	cache := newFullTextCache(r.FullTextCacheDir)
+	cache := r.fullTextCache()
 
 	if item.SnippetAttachmentKey != "" {
 		for _, attachment := range item.Attachments {
@@ -270,11 +270,11 @@ func (r *LocalReader) buildFullTextDocument(item domain.Item, attachment domain.
 }
 
 func (r *LocalReader) ExtractAttachmentFullText(ctx context.Context, item domain.Item, att domain.Attachment) (FullTextDocument, bool, error) {
-	return r.loadFullTextDocumentForAttachment(item, att, newFullTextCache(r.FullTextCacheDir))
+	return r.loadFullTextDocumentForAttachment(item, att, r.fullTextCache())
 }
 
 func (r *LocalReader) ExtractAttachmentFullTextOnly(ctx context.Context, item domain.Item, att domain.Attachment) (FullTextDocument, bool, error) {
-	cache := newFullTextCache(r.FullTextCacheDir)
+	cache := r.fullTextCache()
 	doc, ok, err := cache.Load(att)
 	if err != nil {
 		return FullTextDocument{}, false, err
@@ -295,7 +295,7 @@ func (r *LocalReader) ExtractAttachmentFullTextOnly(ctx context.Context, item do
 }
 
 func (r *LocalReader) SaveFullText(doc FullTextDocument) error {
-	if err := newFullTextCache(r.FullTextCacheDir).Save(doc); err != nil {
+	if err := r.fullTextCache().Save(doc); err != nil {
 		return err
 	}
 	r.clearFullTextIndexStatusCache()
@@ -303,7 +303,7 @@ func (r *LocalReader) SaveFullText(doc FullTextDocument) error {
 }
 
 func (r *LocalReader) SaveFullTextBatch(docs []FullTextDocument) error {
-	if err := newFullTextCache(r.FullTextCacheDir).SaveBatch(docs); err != nil {
+	if err := r.fullTextCache().SaveBatch(docs); err != nil {
 		return err
 	}
 	r.clearFullTextIndexStatusCache()

@@ -35,11 +35,9 @@ func (r Renderer) Result(path app.CommandPath, result app.Result, opts app.Outpu
 		return enc.Encode(Envelope{OK: true, Command: path.String(), Data: result.Data, Meta: result.Meta, Warnings: result.Warnings})
 	}
 	for _, warning := range result.Warnings {
-		if !opts.Quiet {
-			fmt.Fprintln(r.Err, "warning:", warning.Message)
-		}
+		fmt.Fprintln(r.Err, "warning:", warning.Message)
 	}
-	if result.Text != "" && !opts.Quiet {
+	if result.Text != "" {
 		_, err := fmt.Fprintln(r.Out, result.Text)
 		return err
 	}
