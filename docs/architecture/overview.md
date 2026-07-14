@@ -109,7 +109,7 @@ type Reader interface {
 | 能力 | 实现方式 | 说明 |
 |------|----------|------|
 | 条目检索 | SQLite JOIN 查询 | 支持 title/creator/date/tag 过滤 |
-| 全文检索 | FTS5 虚拟表 | `--fulltext` / `--fulltext-any` / `--snippet` |
+| 全文检索 | FTS5 虚拟表 | `--in fulltext|all` + 原生 FTS5 QUERY / `--snippet` |
 | 附件感知 | `storage/` 目录扫描 + 附件健康检查 | `--has-pdf` / `--attachment-type` / resolved path / `--missing-attachment` / `--attachment-health` |
 | 标注读取（DB） | `itemAnnotations` 表 JOIN | 含 dateAdded 时间戳 |
 | 标注读取（PDF） | PyMuPDF `page.annots()` | 扫描 PDF 文件内嵌入标注 |

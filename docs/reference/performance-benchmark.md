@@ -39,7 +39,7 @@ go run ./cmd/zot-bench --binary .\zot.exe --tier data `
 3. 两种方案的延迟、输出大小和后端访问次数如何？
 4. 使用频率是否足以抵消额外的学习成本？
 
-速度本身不是删除依据。例如 `lib show`、`ref profile` 虽可由多个原子命令拼合，但一次聚合调用可能更快、更稳定。相反，如果 `item find` 和 `note find` 获得清晰的“列出全部”语义，`item list`、`note list` 就值得进入合并评估。
+速度本身不是删除依据。例如 `lib show`、`ref profile` 虽可由多个原子命令拼合，但一次聚合调用可能更快、更稳定。`item list` 与 `item find --all`、`note list` 与正则化的 `note find` 虽有部分重叠，但前者是无查询枚举，后者是查询入口；只有在输出语义和 Agent 调用复杂度都没有退化时才评估合并。
 
 新增叶子命令时必须加入 `commands`；能安全执行时再增加 runtime scenario。数据参数使用 `{{ITEM_KEY}}` 形式并列入 `requires`，不能用 help 耗时替代被跳过的真实场景。
 
@@ -54,3 +54,11 @@ go run ./cmd/zot-bench --binary .\zot.exe --tier data `
 - `ref status` 已改为只读打开，不再在每次状态查询时执行建表、迁移、全表 UPDATE 和 FTS 同步。精确统计以 DB/WAL 文件指纹缓存；索引未变化时 median 从约 378 ms 降至约 75 ms，首次失效重算约 283 ms。旧 schema 会回退一次完整迁移，缺失索引只报告 `initialized=false`，不再由 status 隐式创建。
 - `item find` 对无过滤的 8 位大写 Zotero key 使用索引快速路径，本机从约 312 ms 降至约 90–130 ms。普通有限结果查询先对基础候选排序分页，再只为最终页加载 creators、tags 和 attachments；高命中词的净业务耗时约下降 16%。曾验证的独立候选-ID SQL 在零命中和稀有标题场景产生 25%–83% 回归，已撤回，不进入生产路径。
 - `config check` 仍是纯 Web 热点，但它是显式在线验证，不应为了 benchmark 改成离线命令。
+
+## 2026-07-14 场景口径更新
+
+- `item find` 的范围只使用 `--in metadata|fulltext|all`。metadata 是默认基线；fulltext 和 all 必须用原生 SQLite FTS5 表达式单独测量。
+- `ref find` 的范围只使用 `--in all|references|contexts|metadata`，QUERY 同样直接使用 SQLite FTS5。
+- `note find QUERY` 使用不区分大小写的 Go 正则；`note list` 不再接受查询参数。
+- `item export` 只测明确 key 或 `--from PATH|-`。需要筛选时，分别记录 `item find --json` 的选择耗时和 export 的导出耗时，不能把两阶段重新封装成 export 私有筛选器。
+- 当前 `latest.*` 仍是 2026-07-12 的历史实测结果。只有实际重新运行 benchmark 后才能更新其中数值。

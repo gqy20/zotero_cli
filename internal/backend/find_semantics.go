@@ -16,6 +16,10 @@ var (
 
 func NormalizeFindOptions(opts FindOptions) FindOptions {
 	opts.Query = strings.TrimSpace(opts.Query)
+	opts.In = strings.ToLower(strings.TrimSpace(opts.In))
+	if opts.In == "" {
+		opts.In = "metadata"
+	}
 	opts.ItemType = strings.TrimSpace(opts.ItemType)
 	opts.Sort = strings.TrimSpace(opts.Sort)
 	opts.Direction = strings.TrimSpace(opts.Direction)
@@ -75,7 +79,7 @@ func isDefaultFindVisibleItemType(itemType string) bool {
 }
 
 func requiresLocalFindSupport(opts FindOptions) bool {
-	if opts.FullText || opts.FullTextOnly || hasAttachmentFindFilters(opts) {
+	if opts.In != "metadata" || hasAttachmentFindFilters(opts) {
 		return true
 	}
 	if len(opts.Collection) > 0 || len(opts.NoCollection) > 0 {

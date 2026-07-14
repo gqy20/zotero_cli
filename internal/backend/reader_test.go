@@ -381,7 +381,7 @@ func TestHybridReaderFindItemsDoesNotFallbackWhenRequestNeedsLocalOnlyCapability
 		},
 	}
 
-	_, err := reader.FindItems(context.Background(), FindOptions{Query: "test", FullText: true})
+	_, err := reader.FindItems(context.Background(), FindOptions{Query: "test", In: "fulltext"})
 	if err == nil || err.Error() != "local Zotero database is temporarily unavailable: SQLITE_BUSY" {
 		t.Fatalf("FindItems() error = %v, want local temporary-unavailable error", err)
 	}

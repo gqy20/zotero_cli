@@ -104,7 +104,7 @@ func TestSupportsWebFindRejectsLocalOnlyFindCapabilities(t *testing.T) {
 	}{
 		{name: "plain query", opts: FindOptions{Query: "hybrid"}, want: true},
 		{name: "qmode still web-capable", opts: FindOptions{Query: "hybrid", QMode: "everything"}, want: true},
-		{name: "fulltext requires local", opts: FindOptions{Query: "hybrid", FullText: true}, want: false},
+		{name: "fulltext requires local", opts: FindOptions{Query: "hybrid", In: "fulltext"}, want: false},
 		{name: "attachment name requires local", opts: FindOptions{Query: "hybrid", AttachmentName: "pdf"}, want: false},
 		{name: "has pdf requires local", opts: FindOptions{Query: "hybrid", HasPDF: true}, want: false},
 	}

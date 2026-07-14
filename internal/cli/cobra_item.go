@@ -9,19 +9,16 @@ import (
 
 	"zotero_cli/internal/app"
 	"zotero_cli/internal/backend"
-	"zotero_cli/internal/config"
 )
 
 func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 	var find backend.FindOptions
 	var snippet bool
+	find.In = "metadata"
 	findCmd := &cobra.Command{Use: "find QUERY", Short: "Find library items", Args: cobra.ArbitraryArgs}
 	flags := findCmd.Flags()
 	flags.BoolVar(&find.All, "all", false, "disable the default result limit; also permits an empty query")
-	flags.BoolVar(&find.FullText, "fulltext", false, "search metadata and full text")
-	flags.BoolVar(&find.FullTextOnly, "fulltext-only", false, "search only full text")
-	flags.BoolVar(&find.MetadataOnly, "metadata-only", false, "search only metadata")
-	flags.BoolVar(&find.FullTextAny, "fulltext-any", false, "match any full-text term")
+	flags.StringVar(&find.In, "in", "metadata", "search scope: metadata, fulltext, or all")
 	flags.BoolVar(&find.Full, "full", false, "return full item data")
 	flags.BoolVar(&snippet, "snippet", false, "include a matching full-text preview")
 	flags.StringVar(&find.ItemType, "type", "", "item type, such as article or journalArticle")
@@ -66,11 +63,12 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 		if find.QMode != "" && find.QMode != "titleCreatorYear" && find.QMode != "everything" {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("invalid value for --qmode")}
 		}
-		if find.FullTextOnly && find.MetadataOnly {
-			return &exitError{code: ExitUsage, err: fmt.Errorf("--fulltext-only and --metadata-only are mutually exclusive")}
+		find.In = strings.ToLower(strings.TrimSpace(find.In))
+		if find.In != "metadata" && find.In != "fulltext" && find.In != "all" {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--in must be metadata, fulltext, or all")}
 		}
-		if find.FullTextAny && !find.FullText && !find.FullTextOnly {
-			return &exitError{code: ExitUsage, err: fmt.Errorf("--fulltext-any requires --fulltext")}
+		if find.In != "metadata" && find.Query == "" {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--in %s requires QUERY", find.In)}
 		}
 		if find.Query == "" && len(args) == 0 && !find.All && !hasFindFilters(find) {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("QUERY, --all, or a filter is required")}
@@ -119,43 +117,29 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 		})
 	}
 	var exportReq app.ItemExportRequest
-	var exportQuery, exportType string
-	var exportTags []string
-	var exportAll bool
+	var exportFrom string
 	exportCmd := &cobra.Command{Use: "export [KEY...]", Short: "Export item citations", Args: cobra.ArbitraryArgs}
 	exportCmd.Flags().StringVar(&exportReq.Format, "as", "bibtex", "bibtex, biblatex, csljson, or ris")
-	exportCmd.Flags().StringVar(&exportReq.Collection, "collection", "", "export items in a collection")
-	exportCmd.Flags().StringVar(&exportQuery, "query", "", "export items matching a query")
-	exportCmd.Flags().BoolVar(&exportAll, "all", false, "export all items matching filters")
-	exportCmd.Flags().IntVar(&exportReq.Find.Limit, "limit", 0, "maximum matched items")
-	exportCmd.Flags().StringVar(&exportType, "type", "", "item type filter")
-	exportCmd.Flags().StringArrayVar(&exportTags, "tag", nil, "tag filter")
-	exportCmd.Flags().StringVar(&exportReq.Find.AttachmentName, "attachment-name", "", "attachment filename filter")
-	exportCmd.Flags().BoolVar(&exportReq.Find.HasPDF, "has-pdf", false, "only items with PDF attachments")
+	exportCmd.Flags().StringVar(&exportFrom, "from", "", "read item keys or find JSON from a file, or - for stdin")
 	exportCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if exportReq.Format != "bibtex" && exportReq.Format != "biblatex" && exportReq.Format != "csljson" && exportReq.Format != "ris" {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("unsupported export format %q", exportReq.Format)}
 		}
 		exportReq.Keys = args
-		exportReq.Find.Query = strings.TrimSpace(exportQuery)
-		exportReq.Find.All = exportAll
-		exportReq.Find.ItemType = app.NormalizeItemType(exportType)
-		exportReq.Find.Tags = exportTags
-		sources := 0
-		if len(args) > 0 {
-			sources++
+		if len(args) > 0 && strings.TrimSpace(exportFrom) != "" {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("item keys and --from are mutually exclusive")}
 		}
-		if exportReq.Collection != "" {
-			sources++
+		if strings.TrimSpace(exportFrom) != "" {
+			keys, err := app.ResolveExportKeys(exportFrom, c.stdin)
+			if err != nil {
+				return &exitError{code: ExitUsage, err: err}
+			}
+			exportReq.Keys = keys
 		}
-		if exportReq.Find.Query != "" || exportAll || exportType != "" || len(exportTags) > 0 || exportReq.Find.AttachmentName != "" || exportReq.Find.HasPDF {
-			sources++
-		}
-		if sources != 1 {
-			return &exitError{code: ExitUsage, err: fmt.Errorf("provide exactly one export source: item keys, --collection, --query, or --all/filters")}
+		if len(exportReq.Keys) == 0 {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("provide item keys or --from")}
 		}
 		service := app.NewExportService()
-		service.NewReader = func(cfg config.Config) (backend.Reader, error) { return c.backendNewReader(cfg, nil) }
 		service.NewLocalReader = c.newLocalReader
 		path := app.CommandPath{Resource: "item", Action: "export"}
 		return c.renderResult(cmd.Context(), opts, path, func(ctx context.Context) (app.Result, error) { return service.Export(ctx, exportReq) })

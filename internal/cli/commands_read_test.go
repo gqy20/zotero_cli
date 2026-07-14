@@ -65,7 +65,6 @@ type stubLocalExportReader struct {
 	payload   []map[string]any
 	meta      backend.ReadMetadata
 	findErr   error
-	keysErr   error
 	exportErr error
 }
 
@@ -98,13 +97,6 @@ func (r stubLocalExportReader) GetRelated(context.Context, string) ([]domain.Rel
 
 func (r stubLocalExportReader) GetLibraryStats(context.Context) (backend.LibraryStats, error) {
 	return backend.LibraryStats{}, nil
-}
-
-func (r stubLocalExportReader) CollectionItemKeys(context.Context, string, int) ([]string, error) {
-	if r.keysErr != nil {
-		return nil, r.keysErr
-	}
-	return append([]string(nil), r.keys...), nil
 }
 
 func (r stubLocalExportReader) ExportItemsCSLJSON(context.Context, []string) ([]map[string]any, error) {

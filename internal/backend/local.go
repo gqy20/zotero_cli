@@ -132,10 +132,10 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 	if opts.QMode != "" {
 		return nil, newUnsupportedFeatureErrorWithHint("local", "find --qmode", "set ZOT_MODE=web or ZOT_MODE=hybrid to use this feature")
 	}
-	if opts.FullTextOnly {
+	if opts.In == "fulltext" {
 		return r.findItemsFromFullTextIndex(ctx, opts)
 	}
-	if opts.MetadataOnly || !opts.FullText || opts.All || opts.Query == "" {
+	if opts.In == "metadata" || opts.Query == "" {
 		return r.findItemsFromMetadata(ctx, opts)
 	}
 	return r.findItemsMerged(ctx, opts)
@@ -149,12 +149,9 @@ func (r *LocalReader) findItemsMerged(ctx context.Context, opts FindOptions) ([]
 	}
 
 	metadataOpts := branchOpts
-	metadataOpts.FullText = false
-	metadataOpts.FullTextOnly = false
-	metadataOpts.MetadataOnly = true
+	metadataOpts.In = "metadata"
 	fullTextOpts := branchOpts
-	fullTextOpts.FullTextOnly = true
-	fullTextOpts.MetadataOnly = false
+	fullTextOpts.In = "fulltext"
 
 	metadataItems, err := r.findItemsFromMetadata(ctx, metadataOpts)
 	if err != nil {
@@ -171,8 +168,7 @@ func (r *LocalReader) findItemsMerged(ctx context.Context, opts FindOptions) ([]
 }
 
 func (r *LocalReader) findItemsFromMetadata(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
-	opts.FullText = false
-	opts.FullTextOnly = false
+	opts.In = "metadata"
 	if localCanUseExactKeyFastPath(opts) {
 		items, err := r.findItemsFromMetadataQuery(ctx, opts, true)
 		if err != nil || len(items) > 0 {
@@ -209,29 +205,7 @@ func (r *LocalReader) findItemsFromMetadataQuery(ctx context.Context, opts FindO
 				proceedingsTitle string
 				bookTitle        string
 			)
-			if opts.FullText {
-				if err := rows.Scan(
-					&itemID,
-					&item.Key,
-					&item.Version,
-					&item.ItemType,
-					&item.Title,
-					&item.Date,
-					&item.Volume,
-					&item.Issue,
-					&item.Pages,
-					&item.DOI,
-					&item.URL,
-					&publicationTitle,
-					&proceedingsTitle,
-					&bookTitle,
-					&item.DateAdded,
-					&item.Abstract,
-					&item.SearchScore,
-				); err != nil {
-					return err
-				}
-			} else if err := rows.Scan(
+			if err := rows.Scan(
 				&itemID,
 				&item.Key,
 				&item.Version,
@@ -320,9 +294,6 @@ func (r *LocalReader) findItemsFromMetadataQuery(ctx context.Context, opts FindO
 	if err != nil {
 		return nil, err
 	}
-	if opts.FullText {
-		r.lastReadMetadata = mergeReadMetadata(r.lastReadMetadata, ReadMetadata{FullTextEngine: "zotero_fulltext"})
-	}
 	items = localFilterAndOrderItems(items, opts)
 	if !paginatedBeforeHydration {
 		items = paginateItems(items, opts.Start, opts.Limit)
@@ -396,7 +367,7 @@ func mergeMatchedOn(left, right []string) []string {
 }
 
 func (r *LocalReader) findItemsFromFullTextIndex(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
-	matches, err := newFullTextCache(r.FullTextCacheDir).Search(opts.Query, opts.FullTextAny, opts.Limit)
+	matches, err := newFullTextCache(r.FullTextCacheDir).Search(opts.Query, opts.Limit)
 	if err != nil {
 		return nil, err
 	}

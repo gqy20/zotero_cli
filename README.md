@@ -28,10 +28,10 @@
 | 传统方式 | 用 zot + AI |
 |----------|-------------|
 | 手动在 Zotero UI 里翻找文献 | `zot find "关键词" --json` → AI 直接消费结构化结果 |
-| 逐篇打开 PDF 找内容 | `zot find "概念" --fulltext --snippet` → 全库全文检索 |
+| 逐篇打开 PDF 找内容 | `zot find '"概念" OR 同义词*' --in fulltext --snippet` → 全库全文检索 |
 | 查看论文参考文献 | `zot ref ITEMKEY --json` → 优先 PMC JATS，否则 PubMed + Europe PMC 补全 |
 | 解析本地引用关系 | `zot ref resolve`，再用 `ref cited ITEMKEY` / `ref ctx ITEMKEY` 查询 |
-| 搜索引用、语境与 PubMed 主题 | `zot ref find "query" --json`；用 `--contexts`、`--references`、`--metadata` 或 `--field mesh` 限定 |
+| 搜索引用、语境与 PubMed 主题 | `zot ref find "query" --json`；用 `--in contexts|references|metadata|all` 限定 |
 | 发现 PubMed 相关文献 | `zot ref related ITEMKEY --limit 20 --json` |
 | 查看关联生物医学资源 | `zot ref links ITEMKEY --json`（合并 NCBI 与 Europe PMC） |
 | Europe PMC 增强 | `zot ref cited ITEMKEY --external`；`zot ref entities ITEMKEY`；`ref links` 自动合并两套资源 |
@@ -210,7 +210,7 @@ curl -fsSL ${_RAW}/.claude/skills/zotero-cli/examples/show-output.md \
 你说的                                    → AI 调用的命令
 ─────────────────────────────────────────────────────────────
 "搜 CRISPR 基因编辑相关文献"              → zot find "CRISPR gene editing" --tag 基因编辑 --json
-"导出最近半年为 bibtex"                   → zot item export --all --date-after 2025-10 --as bibtex --json
+"导出最近半年为 bibtex"                   → zot find --all --date-after 2025-10 --json > selected.json；zot export --from selected.json --as bibtex
 "看这篇的 PDF 标注"                       → zot ann list KEY --json
 "导出这篇为 BibTeX"                       → zot item export KEY --as bibtex --json
 "查看条目元数据中的关系字段"               → zot item show KEY_A --json
@@ -271,13 +271,12 @@ zot find "CRISPR" --collection ABC123 --exclude-tag "已读" --attachment-name P
 zot find --missing-attachment --json
 zot find --bad-attachment-name --json
 
-# 全文搜索 PDF 内容（local / hybrid）
-# 注意：有 query 且 FTS 索引有数据时会自动合并元数据与全文结果；--all 不会自动走全文
-zot find "同源多倍体" --fulltext --snippet --json
-zot find "同源多倍体" --metadata-only --json  # 仅标题/作者/标签等元数据
-zot find "同源多倍体" --fulltext-only --json  # 仅 PDF 正文
+# 全文搜索 PDF 内容（local / hybrid）；QUERY 直接使用 SQLite FTS5 语法
+zot find '"同源多倍体" OR autopolyploid*' --in fulltext --snippet --json
+zot find "同源多倍体" --in metadata --json  # 仅标题/作者/标签等元数据，也是默认范围
+zot find '同源多倍体 OR autopolyploid*' --in all --snippet --json  # 合并元数据与 PDF 正文
 # 普通检索默认限制 100 条；snippet / --full 默认限制 20 条
-zot find "同源多倍体" --snippet --limit 200 --json
+zot find '"同源多倍体"' --in fulltext --snippet --limit 200 --json
 ```
 
 显式 `--limit N` 始终覆盖默认值；只有显式 `--all` 才取消上限。JSON 的 `meta` 会返回 `returned`、`limit`、`offset`、`has_more` 和可选的 `next_offset`，便于调用方继续翻页。
@@ -288,6 +287,8 @@ zot find "同源多倍体" --snippet --limit 200 --json
 # 提取 PDF 正文供 AI 分析（PyMuPDF 优先 → ft-cache 回退 → pdfium WASM 兜底）
 zot pdf text KEY --json                         # 默认返回 content.txt / chunks.json 缓存路径
 zot pdf text KEY --json --pages 3-8 --grep methods --max-chars 12000
+zot pdf text KEY1 KEY2 --json --grep "gene\s+flow|introgression"
+zot pdf text --collection "研究/植物/栗属" --json --grep "gene\s+flow|introgression"
 zot pdf text KEY -o ./markdown
 zot pdf text --all -o ./markdown --json
 
@@ -328,7 +329,7 @@ zot pdf open KEY --page 5
 # `select` 是已退出稳定 CLI 的桌面端专用入口；请在 Zotero Desktop 中定位条目
 ```
 
-PDF 导入完成后会对本次最终保留的附件执行增量全文索引，因此新文献无需再次运行全库 `index build` 即可参与全文检索。指定收藏夹、重复附件清理和增量索引共享同一个最终附件 key，不会索引已清理的重复记录。全文 snippet 和 `pdf text --grep` 会保留命中位置的相邻上下文；JSON 的 `matched_chunk` 包含页码、附件 key 和坐标。local/hybrid 下无过滤条件的 `pdf text` 默认只返回项目全文缓存的 `content_path` 和可选 `chunks_path`，调用方直接读取该文件；只有 `--grep`、`--pages`、`--max-chars` 才返回文本子集，只有显式 `--output-dir` 才生成 Markdown。缓存和 FTS 索引都会核对 PDF 的路径、大小和高精度修改时间；附件被替换后旧正文不会继续命中。remote 模式因客户端无法访问服务端本地路径，仍返回正文。
+PDF 导入完成后会对本次最终保留的附件执行增量全文索引，因此新文献无需再次运行全库 `index build` 即可参与全文检索。指定收藏夹、重复附件清理和增量索引共享同一个最终附件 key，不会索引已清理的重复记录。`find --snippet` 的 JSON `matched_chunk` 包含页码、附件 key 和坐标；`pdf text --grep` 默认按不区分大小写的 Go 正则解析，有分页缓存时按附件和命中页返回 `match_count`、页码与相邻上下文。`pdf text --collection` 接受收藏夹 key、唯一名称或完整层级路径。检索保持只读，不会自动创建标注。local/hybrid 下无过滤条件的 `pdf text` 默认只返回项目全文缓存的 `content_path` 和可选 `chunks_path`，调用方直接读取该文件；只有 `--grep`、`--pages`、`--max-chars` 才返回文本子集，只有显式 `--output-dir` 才生成 Markdown。缓存和 FTS 索引都会核对 PDF 的路径、大小和高精度修改时间；附件被替换后旧正文不会继续命中。remote 模式因客户端无法访问服务端本地路径，仍返回正文。
 
 #### 与 Zotero 桌面端联动
 
@@ -364,12 +365,13 @@ zot item new --from note.json --if-version N --json
 # 查询文献间的显式关系
 zot item show KEY --json
 
-# 按收藏夹批量导出
-zot item export --collection COLLKEY --as csljson --json
+# 先检索，再把结构化结果交给导出
+zot find --collection COLLKEY --all --json > selected.json
+zot item export --from selected.json --as csljson
 
 # 导出标准格式，供论文写作工具或 AI 后处理
 zot item export KEY --as bibtex --json
-zot item export --collection COLLKEY --as ris --json
+zot find --collection COLLKEY --all --json | zot item export --from - --as ris
 zot item export KEY --as csljson --json
 ```
 
@@ -428,7 +430,7 @@ zot sync
 ZOT_MODE=local ZOT_DATA_DIR=~/.zot/sync zot find ...
 ```
 
-`zot sync` 拉取原始 `zotero.sqlite`（数据库）+ `storage/`（PDF/附件）+ `.zotero_cli/fulltext/`（FTS5 全文索引），落到与 Zotero 原生数据隔离的专门目录，同步后 `local` 模式零改动直接可用、`find --fulltext` 立即可用。再次运行只下载变化的文件；中断的大附件会从已完成的位置继续。注意：仅同步 `storage/` 下的 imported 附件，`linked_file`（外部路径）附件不同步。
+`zot sync` 拉取原始 `zotero.sqlite`（数据库）+ `storage/`（PDF/附件）+ `.zotero_cli/fulltext/`（FTS5 全文索引），落到与 Zotero 原生数据隔离的专门目录，同步后 `local` 模式零改动直接可用、`find --in fulltext` 立即可用。再次运行只下载变化的文件；中断的大附件会从已完成的位置继续。注意：仅同步 `storage/` 下的 imported 附件，`linked_file`（外部路径）附件不同步。
 - **普通 Web API 写操作**：仍需 remote+web 配置（`ZOT_API_KEY` + `ZOT_LIBRARY_ID`）
 
 ## 命令速查

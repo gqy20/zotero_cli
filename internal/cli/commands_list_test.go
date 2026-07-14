@@ -146,6 +146,30 @@ func TestRunNotesText(t *testing.T) {
 	}
 }
 
+func TestRunNoteFindUsesCaseInsensitiveRegularExpression(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"note", "find", "TRANSFORMERS|reading\\s+list", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	data := got["data"].([]any)
+	if len(data) != 2 {
+		t.Fatalf("unexpected regex note results: %#v", data)
+	}
+}
+
 func TestRunNotesJSONKeepsMachineNotes(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

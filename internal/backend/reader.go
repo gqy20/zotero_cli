@@ -15,10 +15,7 @@ import (
 
 type FindOptions struct {
 	Query             string
-	FullText          bool
-	FullTextAny       bool
-	FullTextOnly      bool
-	MetadataOnly      bool
+	In                string
 	All               bool
 	Full              bool
 	ItemType          string
@@ -239,6 +236,23 @@ func (r *HybridReader) ListCollections(ctx context.Context) ([]Collection, error
 			return reader.ListCollections(ctx)
 		},
 	)
+}
+
+func (r *HybridReader) CollectionTarget(ctx context.Context, selector string) (CollectionTarget, error) {
+	if r.local == nil {
+		return CollectionTarget{}, newUnsupportedFeatureError("hybrid", "collection path resolution")
+	}
+	resolver, ok := r.local.(interface {
+		CollectionTarget(context.Context, string) (CollectionTarget, error)
+	})
+	if !ok {
+		return CollectionTarget{}, newUnsupportedFeatureError("hybrid", "collection path resolution")
+	}
+	target, err := resolver.CollectionTarget(ctx, selector)
+	if err == nil {
+		r.lastReadMetadata = consumeReadMetadata(r.local)
+	}
+	return target, err
 }
 
 func (r *HybridReader) ListSavedSearches(ctx context.Context) ([]SavedSearch, error) {

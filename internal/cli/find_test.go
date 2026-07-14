@@ -558,7 +558,7 @@ func TestRunFindLocalTextOutputShowsMatchedOnInFullMode(t *testing.T) {
 		})
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "speciation genome", "--fulltext", "--full"})
+	exitCode := Run([]string{"find", "speciation genome", "--in", "all", "--full"})
 	restoreOutput()
 
 	if exitCode != 0 {
@@ -596,7 +596,7 @@ func TestRunFindLocalTextOutputShowsFullTextMatchedOnInFullMode(t *testing.T) {
 		})
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "speciation genome", "--fulltext", "--full"})
+	exitCode := Run([]string{"find", "speciation genome", "--in", "all", "--full"})
 	restoreOutput()
 
 	if exitCode != 0 {
@@ -634,7 +634,7 @@ func TestRunFindLocalTextOutputIncludesFullTextPreviewWhenSnippetRequested(t *te
 		})
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "speciation", "--snippet"})
+	exitCode := Run([]string{"find", "speciation", "--in", "fulltext", "--snippet"})
 	restoreOutput()
 
 	if exitCode != 0 {
@@ -667,13 +667,13 @@ func TestRunFindSnippetRejectsWebMode(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	_, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "attention", "--snippet"})
+	exitCode := Run([]string{"find", "attention", "--in", "all", "--snippet"})
 	restoreOutput()
 
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
 	}
-	if got := stderr.String(); !strings.Contains(got, "find --snippet requires local or hybrid mode with local data") {
+	if got := stderr.String(); !strings.Contains(got, "web does not support find --in all") {
 		t.Fatalf("expected snippet mode error, got %q", got)
 	}
 }

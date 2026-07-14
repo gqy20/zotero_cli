@@ -52,7 +52,7 @@ func TestRunExportByItemKeyJSON(t *testing.T) {
 	}
 }
 
-func TestRunExportByQueryText(t *testing.T) {
+func TestRunExportFromFindJSONText(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -60,9 +60,13 @@ func TestRunExportByQueryText(t *testing.T) {
 	serverURL, cleanup := newTestAPI(t)
 	defer cleanup()
 	t.Setenv("ZOT_BASE_URL", serverURL)
+	input := filepath.Join(t.TempDir(), "find.json")
+	if err := os.WriteFile(input, []byte(`{"ok":true,"data":[{"key":"X42A7DEE"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--query", "mixed", "--limit", "1"})
+	exitCode := Run([]string{"export", "--from", input})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -178,7 +182,7 @@ func TestRunExportCSLJSONLocalByItemKey(t *testing.T) {
 	}
 }
 
-func TestRunExportCSLJSONLocalFromFindUsesFindFilters(t *testing.T) {
+func TestRunExportCSLJSONLocalFromFindJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -191,9 +195,13 @@ func TestRunExportCSLJSONLocalFromFindUsesFindFilters(t *testing.T) {
 	}
 	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
+	input := filepath.Join(t.TempDir(), "find.json")
+	if err := os.WriteFile(input, []byte(`{"data":[{"key":"ART67890"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--all", "--attachment-name", "mixed", "--limit", "1", "--as", "csljson", "--json"})
+	exitCode := Run([]string{"export", "--from", input, "--as", "csljson", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -318,7 +326,7 @@ func TestRunExportCSLJSONHybridPreservesUnexpectedLocalExportError(t *testing.T)
 	}
 }
 
-func TestRunExportCSLJSONLocalByQuery(t *testing.T) {
+func TestRunExportCSLJSONLocalFromItemArray(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -331,9 +339,13 @@ func TestRunExportCSLJSONLocalByQuery(t *testing.T) {
 	}
 	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
+	input := filepath.Join(t.TempDir(), "items.json")
+	if err := os.WriteFile(input, []byte(`[{"key":"ART67890"}]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--query", "mixed", "--limit", "1", "--as", "csljson", "--json"})
+	exitCode := Run([]string{"export", "--from", input, "--as", "csljson", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -353,7 +365,7 @@ func TestRunExportCSLJSONLocalByQuery(t *testing.T) {
 	}
 }
 
-func TestRunExportCSLJSONLocalByCollection(t *testing.T) {
+func TestRunExportCSLJSONLocalFromKeyArray(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -366,9 +378,13 @@ func TestRunExportCSLJSONLocalByCollection(t *testing.T) {
 	}
 	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
+	input := filepath.Join(t.TempDir(), "keys.json")
+	if err := os.WriteFile(input, []byte(`["ITEM1234","ART67890"]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--collection", "COLL1234", "--as", "csljson", "--json"})
+	exitCode := Run([]string{"export", "--from", input, "--as", "csljson", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -689,7 +705,7 @@ func TestRunStatsTextWarnsWhenUsingSnapshotFallback(t *testing.T) {
 	}
 }
 
-func TestRunExportByCollectionText(t *testing.T) {
+func TestRunExportFromKeyArrayText(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -697,9 +713,13 @@ func TestRunExportByCollectionText(t *testing.T) {
 	serverURL, cleanup := newTestAPI(t)
 	defer cleanup()
 	t.Setenv("ZOT_BASE_URL", serverURL)
+	input := filepath.Join(t.TempDir(), "keys.json")
+	if err := os.WriteFile(input, []byte(`["X42A7DEE"]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"export", "--collection", "COLL1234"})
+	exitCode := Run([]string{"export", "--from", input})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

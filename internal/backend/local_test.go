@@ -197,7 +197,7 @@ func TestFullTextCacheRejectsSameSizeReplacementWithinOneSecond(t *testing.T) {
 	if !cache.IsFresh(legacyMeta, attachment) {
 		t.Fatal("legacy second-resolution cache metadata should remain compatible")
 	}
-	if matches, err := cache.Search("cached phrase", false, 10); err != nil || len(matches) != 1 {
+	if matches, err := cache.Search("cached phrase", 10); err != nil || len(matches) != 1 {
 		t.Fatalf("initial Search() matches=%v error=%v", matches, err)
 	}
 	reader := &LocalReader{FullTextCacheDir: cache.rootDir}
@@ -214,7 +214,7 @@ func TestFullTextCacheRejectsSameSizeReplacementWithinOneSecond(t *testing.T) {
 	if _, ok, err := cache.Load(attachment); err != nil || ok {
 		t.Fatalf("stale Load() ok=%v error=%v", ok, err)
 	}
-	if matches, err := cache.Search("cached phrase", false, 10); err != nil || len(matches) != 0 {
+	if matches, err := cache.Search("cached phrase", 10); err != nil || len(matches) != 0 {
 		t.Fatalf("stale Search() matches=%v error=%v", matches, err)
 	}
 	if reader.IsFullTextIndexed(attachment) {
@@ -491,7 +491,7 @@ func TestFullTextCacheSearchReturnsIndexedMatches(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	matches, err := cache.Search("speciation genome", false, 10)
+	matches, err := cache.Search("speciation genome", 10)
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
@@ -502,7 +502,7 @@ func TestFullTextCacheSearchReturnsIndexedMatches(t *testing.T) {
 		t.Fatalf("Search() match = %#v, want ITEM123/ATT123", matches[0])
 	}
 
-	matches, err = cache.Search("genome patterns", false, 10)
+	matches, err = cache.Search("genome patterns", 10)
 	if err != nil {
 		t.Fatalf("Search() field query error = %v", err)
 	}
@@ -547,14 +547,14 @@ func TestFullTextCacheSaveBatchPreservesExistingIndexEntries(t *testing.T) {
 		t.Fatalf("SaveBatch() error = %v", err)
 	}
 
-	matches, err := cache.Search("chestnut restoration", false, 10)
+	matches, err := cache.Search("chestnut restoration", 10)
 	if err != nil {
 		t.Fatalf("Search() first error = %v", err)
 	}
 	if len(matches) != 1 || matches[0].AttachmentKey != "ATT123" {
 		t.Fatalf("Search() first matches = %#v, want preserved ATT123", matches)
 	}
-	matches, err = cache.Search("wheat breeding", false, 10)
+	matches, err = cache.Search("wheat breeding", 10)
 	if err != nil {
 		t.Fatalf("Search() second error = %v", err)
 	}
@@ -608,7 +608,7 @@ func TestFullTextCacheSearchDedupesParentItems(t *testing.T) {
 	writeDoc("ATT123", "one.pdf")
 	writeDoc("ATT456", "two.pdf")
 
-	matches, err := cache.Search("hybridization speciation", false, 10)
+	matches, err := cache.Search("hybridization speciation", 10)
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
@@ -654,7 +654,7 @@ func TestFullTextCacheSearchPrefersExactTitlePhrase(t *testing.T) {
 	writeDoc("ATT123", "ITEM123", "Plant extinction in the anthropocene", "Plant extinction in the anthropocene with discussion of extinction rates.")
 	writeDoc("ATT456", "ITEM456", "Coral declines", "Plant extinction in the anthropocene is cited once in a broader coral vulnerability paper.")
 
-	matches, err := cache.Search("Plant extinction in the anthropocene", false, 10)
+	matches, err := cache.Search("Plant extinction in the anthropocene", 10)
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
@@ -700,7 +700,7 @@ func TestFullTextCacheSearchPrefersBalancedTokenCoverage(t *testing.T) {
 	writeDoc("ATT123", "ITEM123", "Genome Architecture and Speciation in Plants and Animals", "Genome architecture and speciation are both central themes in this review.")
 	writeDoc("ATT456", "ITEM456", "Changing views on speciation", "Speciation speciation speciation with no meaningful genome discussion.")
 
-	matches, err := cache.Search("speciation genome", false, 10)
+	matches, err := cache.Search("speciation genome", 10)
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}

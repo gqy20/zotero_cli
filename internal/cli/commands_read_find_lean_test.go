@@ -349,7 +349,7 @@ func TestFindJSONAppliesDefaultLimitAndPaginationMetadata(t *testing.T) {
 	}
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "result", "--metadata-only", "--json"})
+	exitCode := Run([]string{"find", "result", "--in", "metadata", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

@@ -218,6 +218,82 @@ func TestAnnotationCommandsExposeAttachmentSelector(t *testing.T) {
 	}
 }
 
+func TestPDFTextExposesCollectionAndRegexGrep(t *testing.T) {
+	root := testCLI.newRootCommand()
+	command, _, err := root.Find([]string{"pdf", "text"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if command.Flags().Lookup("collection") == nil {
+		t.Fatal("pdf text is missing --collection")
+	}
+	grep := command.Flags().Lookup("grep")
+	if grep == nil || !strings.Contains(grep.Usage, "regular expression") {
+		t.Fatalf("pdf text --grep help does not describe regex semantics: %#v", grep)
+	}
+}
+
+func TestQueryCommandsExposeOneScopeSelector(t *testing.T) {
+	root := testCLI.newRootCommand()
+	tests := []struct {
+		path    []string
+		present []string
+		retired []string
+	}{
+		{[]string{"item", "find"}, []string{"in"}, []string{"fulltext", "fulltext-only", "metadata-only", "fulltext-any"}},
+		{[]string{"ref", "find"}, []string{"in"}, []string{"contexts", "references", "metadata"}},
+		{[]string{"note", "list"}, nil, []string{"query"}},
+		{[]string{"item", "export"}, []string{"from"}, []string{"query", "collection", "all", "type", "tag", "attachment-name", "has-pdf"}},
+	}
+	for _, tt := range tests {
+		command, _, err := root.Find(tt.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range tt.present {
+			if command.Flags().Lookup(name) == nil {
+				t.Fatalf("%s is missing --%s", strings.Join(tt.path, " "), name)
+			}
+		}
+		for _, name := range tt.retired {
+			if command.Flags().Lookup(name) != nil {
+				t.Fatalf("%s unexpectedly exposes retired --%s", strings.Join(tt.path, " "), name)
+			}
+		}
+	}
+}
+
+func TestBenchmarkManifestUsesCanonicalCommandPaths(t *testing.T) {
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", ".."))
+	content, err := os.ReadFile(filepath.Join(repositoryRoot, "benchmarks", "cli", "manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest struct {
+		Commands []struct {
+			Path string `json:"path"`
+		} `json:"commands"`
+	}
+	if err := json.Unmarshal(content, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	root := testCLI.newRootCommand()
+	for _, entry := range manifest.Commands {
+		path := strings.Fields(entry.Path)
+		command, remaining, err := root.Find(path)
+		if err != nil || command == nil || len(path) == 0 {
+			t.Fatalf("benchmark command %q is unavailable: remaining=%v err=%v", entry.Path, remaining, err)
+		}
+		if len(remaining) != 0 || command.Name() != path[len(path)-1] {
+			t.Fatalf("benchmark command %q is not canonical: command=%q remaining=%v", entry.Path, command.CommandPath(), remaining)
+		}
+	}
+}
+
 func TestStableDocumentationMatchesCurrentCommandSurface(t *testing.T) {
 	_, currentFile, _, ok := runtime.Caller(0)
 	if !ok {
@@ -235,6 +311,8 @@ func TestStableDocumentationMatchesCurrentCommandSurface(t *testing.T) {
 
 	documentPaths := []string{
 		"README.md",
+		filepath.Join("docs", "reference", "performance-baseline.md"),
+		filepath.Join("docs", "reference", "performance-benchmark.md"),
 		filepath.Join("docs", "user", "commands.md"),
 		filepath.Join("docs", "user", "quickstart.md"),
 		filepath.Join("docs", "user", "examples", "annotations.md"),
@@ -259,6 +337,31 @@ func TestStableDocumentationMatchesCurrentCommandSurface(t *testing.T) {
 			}
 			if isCommand && strings.Contains(line, "ann delete") && !strings.Contains(line, "--source") {
 				t.Fatalf("%s documents unsafe ann delete without --source: %q", relativePath, line)
+			}
+			if isCommand && strings.Contains(line, "find ") {
+				for _, retired := range []string{"--fulltext", "--fulltext-only", "--metadata-only", "--fulltext-any"} {
+					if strings.Contains(line, retired) {
+						t.Fatalf("%s documents retired find flag %s: %q", relativePath, retired, line)
+					}
+				}
+			}
+			if isCommand && strings.Contains(line, "ref find") {
+				for _, retired := range []string{"--contexts", "--references", "--metadata"} {
+					if strings.Contains(line, retired) {
+						t.Fatalf("%s documents retired ref find flag %s: %q", relativePath, retired, line)
+					}
+				}
+			}
+			if isCommand && strings.Contains(line, "note list") && strings.Contains(line, "--query") {
+				t.Fatalf("%s documents retired note list --query: %q", relativePath, line)
+			}
+			if isCommand && strings.Contains(line, "export ") {
+				exportInvocation := line[strings.Index(line, "export "):]
+				for _, retired := range []string{"--query", "--collection", "--all", "--type", "--tag", "--attachment-name", "--has-pdf"} {
+					if strings.Contains(exportInvocation, retired) {
+						t.Fatalf("%s documents retired export selector %s: %q", relativePath, retired, line)
+					}
+				}
 			}
 		}
 	}

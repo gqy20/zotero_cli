@@ -27,8 +27,8 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 .\zot.exe ref show ITEMKEY --json              # PMC/PubMed 核心 + Europe PMC 自动补全
 .\zot.exe ref build --workers 3 --json         # 全库增量参考文献索引
 .\zot.exe ref resolve --workers 8 --json        # 并行将参考文献匹配回本地条目
-.\zot.exe ref find "query" --json             # 搜索参考文献与引用上下文
-.\zot.exe ref find "query" --field mesh --json # 精确搜索 PubMed MeSH
+.\zot.exe ref find '"phrase" OR prefix*' --in all --json # 原生 SQLite FTS5 查询
+.\zot.exe ref find '"query"' --in metadata --field mesh --json # 精确搜索 PubMed MeSH
 .\zot.exe ref related ITEMKEY --limit 20 --json   # PubMed 官方相似文献
 .\zot.exe ref links ITEMKEY --json                # 合并 NCBI 与 Europe PMC 生物医学资源
 .\zot.exe ref cited ITEMKEY --external --json  # Europe PMC 外部被引网络
@@ -40,7 +40,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 .\zot.exe ref build --contexts --workers 3 --json # 补建历史 PMC 引用语境
 .\zot.exe ref status --grobid --json              # 实验性：检查可选 PDF 后备
 .\zot.exe ref build --grobid --limit 5 --json     # 实验性：显式小批量解析
-.\zot.exe item export --collection COLLKEY --as csljson --json
+.\zot.exe find --collection COLLKEY --all --json | .\zot.exe item export --from - --as csljson
 .\zot.exe ann list ITEMKEY --json          # 读取 PDF 标注（双源）
 ```
 
@@ -55,7 +55,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 当用户是在问“哪些文献提到 X”“正文里有没有 X”“找相关段落/证据”时，优先使用：
 
 ```powershell
-.\zot.exe find "query" --fulltext --snippet --json
+.\zot.exe find '"phrase" OR prefix*' --in fulltext --snippet --json
 ```
 
 适用场景：
@@ -95,9 +95,11 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 
 ```powershell
 .\zot.exe pdf text ITEMKEY --json
+.\zot.exe pdf text ITEM1 ITEM2 --grep "gene\s+flow|introgression" --json
+.\zot.exe pdf text --collection "研究/植物/栗属" --grep "gene\s+flow|introgression" --json
 ```
 
-local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `content_path` / `chunks_path`；Agent 直接读取 `content_path`，不要期待 JSON 内嵌整篇正文。只有使用 `--grep`、`--pages` 或 `--max-chars` 时才返回文本子集；只有显式 `--output-dir` 才导出 Markdown。remote 模式因客户端无法访问服务端路径，仍返回正文。
+local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `content_path` / `chunks_path`；Agent 直接读取 `content_path`，不要期待 JSON 内嵌整篇正文。只有使用 `--grep`、`--pages` 或 `--max-chars` 时才返回文本子集；`--grep` 默认解析为不区分大小写的 Go 正则，可直接用 `|` 表达多个候选词，特殊字符按正则规则转义。指定条目范围时可传多个 item key，或用 `--collection` 传收藏夹 key、唯一名称或完整层级路径。有分页缓存时，JSON 按附件和命中页返回 `match_count`、页码与相邻上下文；检索保持只读，不会自动创建标注。只有显式 `--output-dir` 才导出 Markdown。remote 模式因客户端无法访问服务端路径，仍返回正文。
 
 适用场景：
 
@@ -115,7 +117,7 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 
 优先顺序始终是：
 
-1. `find --fulltext --snippet`
+1. `find --in fulltext --snippet`
 2. `show ITEMKEY --snippet`
 3. `pdf text ITEMKEY`
 
@@ -186,11 +188,9 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 - `--offset N` + `--limit N` — 分页
 
 **全文检索：**
-- `--fulltext` — 合并元数据与 FTS5 全文结果；local/hybrid 下有 query 且非 `--all` 时可自动启用
-- `--metadata-only` — 仅检索标题、作者、标签等元数据
-- `--fulltext-only` — 仅检索 PDF 正文
-- `--fulltext-any` — 任一词匹配
-- `--snippet` — 布尔开关，启用 FTS5 匹配片段预览（未指定 `--limit` 时默认 20 条）
+- `--in metadata|fulltext|all` — 唯一的检索范围选择器；默认 `metadata`，全文范围只支持 local/hybrid
+- fulltext/all 的 QUERY 直接使用 SQLite FTS5：`"完整短语"`、`prefix*`、`AND` / `OR` / `NOT`、括号
+- `--snippet` — 启用 FTS5 匹配片段预览，且要求 `--in fulltext` 或 `--in all`（未指定 `--limit` 时默认 20 条）
 
 文本模式辅助选项：
 
@@ -202,6 +202,8 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 ```powershell
 # 提取 PDF 正文（重操作；先读缓存，miss 时才重新提取）
 .\zot.exe pdf text ITEMKEY --json
+.\zot.exe pdf text ITEM1 ITEM2 --grep "hybridization|introgression" --json
+.\zot.exe pdf text --collection "研究/植物/栗属" --grep "hybridization|introgression" --json
 
 # 双源读取标注
 .\zot.exe ann list ITEMKEY --json
@@ -224,8 +226,10 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 
 ```powershell
 .\zot.exe note list --json
-.\zot.exe note find "CRISPR" --limit 20 --json
+.\zot.exe note find 'CRISPR|gene\s+editing' --limit 20 --json
 ```
+
+`note find QUERY` 默认按不区分大小写的 Go 正则解析；`note list` 只枚举笔记。导出只接收明确 item key，或 `--from PATH|-` 读取 key 数组、item 数组及 `find --json` 响应；所有筛选先由 `find` 完成。
 
 ## 写操作安全
 

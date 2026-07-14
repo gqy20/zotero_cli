@@ -18,8 +18,8 @@ func NewWebReader(client *zoteroapi.Client) *WebReader {
 
 func (r *WebReader) FindItems(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
 	opts = NormalizeFindOptions(opts)
-	if opts.FullText {
-		return nil, newUnsupportedFeatureErrorWithHint("web", "find --fulltext", "set ZOT_MODE=local or ZOT_MODE=hybrid to use local full-text attachment search")
+	if opts.In != "metadata" {
+		return nil, newUnsupportedFeatureErrorWithHint("web", "find --in "+opts.In, "set ZOT_MODE=local or ZOT_MODE=hybrid to use local full-text attachment search")
 	}
 	if hasAttachmentFindFilters(opts) {
 		return nil, newUnsupportedFeatureErrorWithHint("web", "find attachment filters", "set ZOT_MODE=local or ZOT_MODE=hybrid to use attachment-aware local search")

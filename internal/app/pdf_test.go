@@ -1,11 +1,35 @@
 package app
 
 import (
+	"context"
 	"testing"
 
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/domain"
 )
+
+type pdfScopeTestReader struct {
+	backend.Reader
+	target   backend.CollectionTarget
+	findOpts backend.FindOptions
+}
+
+func (r *pdfScopeTestReader) CollectionTarget(context.Context, string) (backend.CollectionTarget, error) {
+	return r.target, nil
+}
+
+func (r *pdfScopeTestReader) FindItems(_ context.Context, opts backend.FindOptions) ([]domain.Item, error) {
+	r.findOpts = opts
+	return []domain.Item{{Key: "ITEM1", Title: "Scoped paper"}}, nil
+}
+
+type pdfPageTestExtractor struct {
+	result backend.ItemPageTextResult
+}
+
+func (e pdfPageTestExtractor) ExtractItemAttachmentPageTexts(context.Context, domain.Item) (backend.ItemPageTextResult, error) {
+	return e.result, nil
+}
 
 func TestParsePageRanges(t *testing.T) {
 	ranges, err := parsePageRanges("1-3,7")
@@ -26,16 +50,78 @@ func TestParsePageRanges(t *testing.T) {
 }
 
 func TestFilterPDFText(t *testing.T) {
-	got, total, truncated := filterPDFText("intro\nMethods: sampling and analysis\nresults", "methods", 14)
-	if got != "intro\nMethods:" || total != 44 || !truncated {
+	pattern, err := compilePDFTextPattern("methods")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, total, matches, truncated := filterPDFText("intro\nMethods: sampling and analysis\nresults", pattern, 14)
+	if got != "intro\nMethods:" || total != 44 || matches != 1 || !truncated {
 		t.Fatalf("got=%q total=%d truncated=%t", got, total, truncated)
 	}
 }
 
 func TestFilterPDFTextUsesUnicodeCharactersAndContext(t *testing.T) {
-	got, total, truncated := filterPDFText("背景\n方法：泛基因组分析\n结果", "泛基因组", 8)
-	if got != "背景\n方法：泛基" || total != 15 || !truncated {
+	pattern, err := compilePDFTextPattern("泛基因组")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, total, matches, truncated := filterPDFText("背景\n方法：泛基因组分析\n结果", pattern, 8)
+	if got != "背景\n方法：泛基" || total != 15 || matches != 1 || !truncated {
 		t.Fatalf("got=%q total=%d truncated=%t", got, total, truncated)
+	}
+}
+
+func TestPDFTextGrepUsesCaseInsensitiveRegularExpression(t *testing.T) {
+	pattern, err := compilePDFTextPattern(`gene\s+flow|introgression`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, matches, _ := filterPDFText("before\nGene flow was detected\nafter\nIntrogression occurred", pattern, 0)
+	if matches != 2 || got == "" {
+		t.Fatalf("matches=%d got=%q", matches, got)
+	}
+	if _, err := compilePDFTextPattern("["); err == nil {
+		t.Fatal("expected invalid regular expression error")
+	}
+}
+
+func TestPDFTextItemsResolveCollectionAndApplyItsKey(t *testing.T) {
+	reader := &pdfScopeTestReader{target: backend.CollectionTarget{Key: "COLL1", Name: "Genetics", Path: "Research/Genetics"}}
+	items, target, err := pdfTextItems(context.Background(), reader, nil, false, "Research/Genetics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || target == nil || target.Key != "COLL1" {
+		t.Fatalf("items=%#v target=%#v", items, target)
+	}
+	if len(reader.findOpts.Collection) != 1 || reader.findOpts.Collection[0] != "COLL1" || !reader.findOpts.All || !reader.findOpts.HasPDF {
+		t.Fatalf("find options=%+v", reader.findOpts)
+	}
+}
+
+func TestPDFTextPageEvidenceIncludesOnlyRegexMatches(t *testing.T) {
+	pattern, err := compilePDFTextPattern(`gene\s+flow|introgression`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	extractor := pdfPageTestExtractor{result: backend.ItemPageTextResult{Attachments: []backend.AttachmentPageText{{
+		Attachment: domain.Attachment{Key: "PDF1"},
+		Pages: []backend.PageText{
+			{Page: 1, Text: "background only"},
+			{Page: 2, Text: "Gene flow was detected twice: gene flow."},
+			{Page: 3, Text: "Introgression was inferred."},
+		},
+	}}}}
+	entry, _, available, err := extractPDFTextByPages(context.Background(), extractor, domain.Item{Key: "ITEM1", Title: "Paper"}, PDFTextRequest{Grep: `gene\s+flow|introgression`}, nil, pattern)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !available || entry["match_count"] != 3 {
+		t.Fatalf("entry=%#v available=%t", entry, available)
+	}
+	pages := entry["returned_pages"].([]int)
+	if len(pages) != 2 || pages[0] != 2 || pages[1] != 3 {
+		t.Fatalf("returned pages=%v", pages)
 	}
 }
 

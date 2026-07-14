@@ -794,11 +794,11 @@ func TestRunFindWebRejectsFullText(t *testing.T) {
 	t.Setenv("ZOT_BASE_URL", serverURL)
 
 	_, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "speciation", "--fulltext"})
+	exitCode := Run([]string{"find", "speciation", "--in", "fulltext"})
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%q", exitCode, stderr.String())
 	}
-	if got := stderr.String(); !strings.Contains(got, "web does not support find --fulltext") {
+	if got := stderr.String(); !strings.Contains(got, "web does not support find --in fulltext") {
 		t.Fatalf("expected web fulltext error, got %q", got)
 	}
 }

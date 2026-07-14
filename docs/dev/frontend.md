@@ -149,7 +149,7 @@ zotero_cli/
 | GET | `/api/v1/tags` | `tags` | 标签列表 |
 | GET | `/api/v1/items/:key/annotations` | `annotations` | 文献标注 |
 | GET | `/api/v1/notes` | `notes` | 笔记列表 |
-| GET | `/api/v1/search` | `--fulltext` | 全文搜索 |
+| GET | `/api/v1/search` | `--in fulltext` | 全文搜索 |
 | GET | `/api/v1/overview` | `overview` | 总览（统计+最近文献） |
 
 #### 写操作（受 ZOT_ALLOW_WRITE/ZOT_ALLOW_DELETE 保护）

@@ -139,6 +139,8 @@ go run .\cmd\zot config check
 # 提取文本（PyMuPDF → ft-cache → pdfium WASM）
 .\zot.exe pdf text ITEMKEY --json  # 返回本地全文缓存路径，直接读取 content_path
 .\zot.exe pdf text ITEMKEY --json --pages 3-8 --grep methods --max-chars 12000
+.\zot.exe pdf text ITEM1 ITEM2 --json --grep "gene\s+flow|introgression"
+.\zot.exe pdf text --collection "研究/植物/栗属" --json --grep "gene\s+flow|introgression"
 
 # 查找本地已保存的 Supplementary / Source data / 表格数据附件
 .\zot.exe item supp ITEMKEY --json
@@ -166,13 +168,16 @@ go run .\cmd\zot config check
 .\zot.exe pdf open ITEMKEY --page 5
 ```
 
+`--grep` 默认按不区分大小写的 Go 正则解析；有分页缓存时结果包含附件 key、命中页、`match_count` 和上下文。它只检索，不会自动创建标注。
+
 全文缓存会校验 PDF 的路径、大小和高精度修改时间；附件被替换后，下一次读取或索引会重新提取，不会继续返回旧正文。
 
 ### 批量操作
 
 ```powershell
 .\zot.exe item tag KEY1 KEY2 --tag "to-read" --json
-.\zot.exe item export --collection COLL1234 --as csljson --json
+.\zot.exe find --collection COLL1234 --all --json > selected.json
+.\zot.exe item export --from selected.json --as csljson
 .\zot.exe item import .\paper.pdf --collection "研究/植物/栗属" --json
 
 # 正则批量改名：默认预览，加 --yes 才写入
@@ -192,9 +197,9 @@ go run .\cmd\zot config check
 
 ```powershell
 # local / hybrid 模式下，有 query 且 FTS5 有数据时自动启用全文检索
-.\zot.exe find "同源多倍体" --snippet --json
+.\zot.exe find '"同源多倍体"' --in fulltext --snippet --json
 # snippet 默认限制 20 条，需要更多结果时显式指定 --limit
-.\zot.exe find "基因编辑" --snippet --limit 200 --json
+.\zot.exe find '"基因编辑"' --in fulltext --snippet --limit 200 --json
 ```
 
 `find --all` 或纯时间/标签列表不会自动走全文索引，适合最近入库、发表时间范围等元数据查询。
@@ -246,6 +251,6 @@ go run .\cmd\zot config check
 1. **发现**：`lib show --json`（一站式快照）
 2. **读优先**：`find` / `show` / `ref related` / `lib stats` / `note list`
 3. **PDF 读取**：`pdf text` / `ann list` / `pdf open`
-4. **导出**：`item export --collection COLLKEY` 或 `item export ITEMKEY`
+4. **导出**：`item export ITEMKEY`，或先 `find --json` 再 `item export --from PATH|-`
 5. **变更次之**：`item new/edit/tag/untag` / `ann new`
 6. **删除最后**：仅在用户明确要求时考虑

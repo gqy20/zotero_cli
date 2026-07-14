@@ -47,4 +47,8 @@ func TestStoreSearchReferencesAndContexts(t *testing.T) {
 	if err != nil || len(hits) != 1 {
 		t.Fatalf("refresh duplicated hits=%+v err=%v", hits, err)
 	}
+	hits, err = store.Search(ctx, SearchOptions{Query: `assembl* OR reconstruct*`, In: "all", Limit: 10})
+	if err != nil || len(hits) != 2 || len(hits[0].MatchedOn) != 2 || hits[1].MatchedOn[0] != "metadata" {
+		t.Fatalf("native FTS5 query hits=%+v err=%v", hits, err)
+	}
 }

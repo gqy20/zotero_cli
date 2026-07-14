@@ -13,7 +13,7 @@ func TestFindResultLimitUsesOutputWeightAndExplicitOverrides(t *testing.T) {
 		want int
 	}{
 		{name: "plain", req: ItemFindRequest{}, want: 100},
-		{name: "fulltext lean", req: ItemFindRequest{Options: backend.FindOptions{FullText: true}}, want: 100},
+		{name: "fulltext lean", req: ItemFindRequest{Options: backend.FindOptions{In: "fulltext"}}, want: 100},
 		{name: "snippet", req: ItemFindRequest{Snippet: true}, want: 20},
 		{name: "full item", req: ItemFindRequest{Options: backend.FindOptions{Full: true}}, want: 20},
 		{name: "implicit all from filters stays bounded", req: ItemFindRequest{Options: backend.FindOptions{All: true}}, want: 100},

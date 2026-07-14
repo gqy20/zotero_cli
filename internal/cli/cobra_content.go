@@ -39,12 +39,23 @@ func (c *CLI) newPDFCommand(opts *globalOptions) *cobra.Command {
 	textCmd.Flags().StringVarP(&textReq.OutputDir, "output-dir", "o", "", "write Markdown files to this directory")
 	textCmd.Flags().StringVar(&textReq.Pages, "pages", "", "page ranges such as 1-3,7")
 	textCmd.Flags().IntVar(&textReq.MaxChars, "max-chars", 0, "maximum returned characters")
-	textCmd.Flags().StringVar(&textReq.Grep, "grep", "", "return matching text with adjacent context")
+	textCmd.Flags().StringVar(&textReq.Grep, "grep", "", "return text matching a case-insensitive Go regular expression with adjacent context")
+	textCmd.Flags().StringVar(&textReq.Collection, "collection", "", "select PDFs in a collection key, unique name, or full path")
 	textCmd.Flags().StringVar(&textReq.AttachmentKey, "attachment", "", "extract one attachment")
 	textCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		textReq.Keys = args
-		if textReq.All == (len(args) > 0) {
-			return &exitError{code: ExitUsage, err: fmt.Errorf("provide item keys or --all")}
+		scopes := 0
+		if len(args) > 0 {
+			scopes++
+		}
+		if textReq.All {
+			scopes++
+		}
+		if strings.TrimSpace(textReq.Collection) != "" {
+			scopes++
+		}
+		if scopes != 1 {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("provide exactly one of item keys, --collection, or --all")}
 		}
 		if textReq.MaxChars < 0 {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("--max-chars must be non-negative")}

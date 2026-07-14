@@ -167,14 +167,14 @@ func (c *CLI) newNoteListCommand(opts *globalOptions) *cobra.Command {
 		return c.runRead(cmd, opts, app.CommandPath{Resource: "note", Action: "list"}, func(ctx context.Context, s app.ReadService) (app.Result, error) { return s.Notes(ctx, list) })
 	}}
 	addListFlags(cmd, &list)
-	cmd.Flags().StringVar(&list.Query, "query", "", "filter note text")
 	note.AddCommand(cmd)
-	find := &cobra.Command{Use: "find QUERY", Short: "Find notes by content", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	var findOptions app.ListOptions
+	find := &cobra.Command{Use: "find QUERY", Short: "Find notes by case-insensitive regular expression", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		return c.runRead(cmd, opts, app.CommandPath{Resource: "note", Action: "find"}, func(ctx context.Context, s app.ReadService) (app.Result, error) {
-			return s.Notes(ctx, app.ListOptions{Query: args[0], Limit: list.Limit})
+			return s.Notes(ctx, app.ListOptions{Query: args[0], Limit: findOptions.Limit})
 		})
 	}}
-	addListFlags(find, &list)
+	addListFlags(find, &findOptions)
 	show := &cobra.Command{Use: "show KEY", Short: "Show one note", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		return c.runRead(cmd, opts, app.CommandPath{Resource: "note", Action: "show"}, func(ctx context.Context, s app.ReadService) (app.Result, error) { return s.ShowNote(ctx, args[0]) })
 	}}

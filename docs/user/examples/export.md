@@ -74,8 +74,9 @@ ER  -
 
 ```bash
 # 按关键词检索后导出
-zot item export --query "hybrid speciation" --as csljson --json
+zot item find '"hybrid speciation"' --json > selected.json
+zot item export --from selected.json --as csljson
 
 # 按收藏夹导出
-zot item export --collection COLL1234 --as bibtex --json
+zot item find --collection COLL1234 --all --json | zot item export --from - --as bibtex
 ```

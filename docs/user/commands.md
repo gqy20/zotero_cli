@@ -53,12 +53,13 @@ zot lib log --kind items --since 120 --json
 zot item list --limit 20 --json
 zot item list --scope trash --json
 zot item list --scope pubs --json
-zot item find "CRISPR" --type article --limit 20 --json
+zot item find "CRISPR" --in metadata --type article --limit 20 --json
+zot item find 'CRISPR AND "gene editing"' --in fulltext --snippet --json
 zot item show ITEMKEY --json
 
 zot coll list --json
 zot note list --json
-zot note find "methods" --json
+zot note find 'methods?|procedure(s)?' --json
 zot tag list --json
 zot search list --json
 zot group list --json
@@ -67,6 +68,10 @@ zot group list --json
 统一分页参数是 `--limit`、`--offset`、`--sort`、`--order asc|desc`。`item find` 的轻量结果默认限制 100 条，`--snippet` 或 `--full` 默认限制 20 条；显式正数 `--limit` 优先，只有显式 `--all` 才取消上限。JSON 分页元数据包含 `returned`、`limit`、`offset`、`has_more` 和可选的 `next_offset`。旧 `--start`、`--direction` 已不再接受。
 
 常用 item type 短名会在输入层归一化：`article` → `journalArticle`、`chapter` → `bookSection`、`conf` → `conferencePaper`、`web` → `webpage`、`blog` → `blogPost`。JSON 和持久化数据始终使用 Zotero 官方值。
+
+`item find --in metadata|fulltext|all` 是唯一的检索范围选择器，默认 `metadata`。fulltext/all 的 QUERY 原样交给 SQLite FTS5，可使用 `"完整短语"`、`prefix*`、`AND` / `OR` / `NOT` 和括号；`--snippet` 要求全文范围。`note find QUERY` 则使用不区分大小写的 Go 正则；`note list` 只负责枚举，不接受查询参数。
+
+导出只接收明确的 item key，或通过 `--from PATH|-` 接收 key 数组、item 数组及 `find --json` 响应。需要按收藏夹、日期或标签导出时，先运行 `item find --json`，再把结果文件或 stdin 交给 `item export --from`。
 
 ## 写入与安全
 
@@ -121,6 +126,8 @@ zot file show ATTACHKEY --json
 zot file check ATTACHKEY --json
 
 zot pdf text ITEMKEY --pages 3-8 --grep methods --max-chars 12000 --json
+zot pdf text ITEM1 ITEM2 --grep "gene\s+flow|introgression" --json
+zot pdf text --collection "研究/植物/栗属" --grep "gene\s+flow|introgression" --json
 zot pdf text ITEM1 ITEM2 --output-dir ./markdown --json
 zot pdf figs ITEMKEY --output-dir ./figures --json
 zot pdf open ITEMKEY --page 5
@@ -136,7 +143,7 @@ zot ann delete ITEMKEY --source pdf --attachment ATTACHMENT_KEY --page 3 --yes -
 
 `item import --collection` 接受收藏夹 key、唯一名称或完整层级路径。名称存在歧义时命令会列出带 key 的候选项，不会自动猜测。`config check` 会额外报告 `zotero_desktop_connector_available`；Connector 不可用不会使配置检查失败，但导入 PDF 前必须启动 Zotero 桌面端。
 
-local/hybrid 下无过滤条件的 `pdf text ITEMKEY --json` 默认返回 `content_path` 和可选的 `chunks_path`，不再把完整正文复制到 JSON；Agent 应直接读取 `content_path`。`--grep`、`--pages`、`--max-chars` 返回计算后的文本子集，`--max-chars` 按 Unicode 字符而非 UTF-8 字节计数。多条目和 `--all` 同样返回缓存路径数组，只有显式 `--output-dir` 才导出 Markdown。缓存读取、FTS 检索和 `index build` 的跳过判断都会校验 PDF 源文件；文件被替换后旧缓存与旧索引不会继续命中。remote 模式仍返回正文，因为客户端不能直接读取服务器路径。
+local/hybrid 下无过滤条件的 `pdf text ITEMKEY --json` 默认返回 `content_path` 和可选的 `chunks_path`，不再把完整正文复制到 JSON；Agent 应直接读取 `content_path`。`--grep` 默认按不区分大小写的 Go 正则解析，可用 `|` 检索多个关键词；无效正则会直接报错。`--collection` 接受收藏夹 key、唯一名称或完整层级路径，并与 item keys、`--all` 三选一。使用 `--grep` 且存在分页缓存时，JSON 按附件和命中页返回 `match_count`、页码与相邻上下文，但不会创建标注。`--grep`、`--pages`、`--max-chars` 返回计算后的文本子集，`--max-chars` 按 Unicode 字符而非 UTF-8 字节计数。多条目和 `--all` 同样返回缓存路径数组，只有显式 `--output-dir` 才导出 Markdown。缓存读取、FTS 检索和 `index build` 的跳过判断都会校验 PDF 源文件；文件被替换后旧缓存与旧索引不会继续命中。remote 模式仍返回正文，因为客户端不能直接读取服务器路径。
 
 `ann list`、`ann new`、`ann delete` 明确区分读取、创建和删除。多 PDF 条目默认选择第一个 PDF，也可统一使用 `--attachment ATTACHMENT_KEY` 精确选择。`ann new` 在临时副本中写入并验证后替换原 PDF；实际写入零匹配会报错并保留原文件，`--dry-run` 则允许零匹配。删除必须用 `--source zotero|pdf` 选择来源，建议先用 `--dry-run` 查看精确候选。Zotero 原生标注按 annotation item key 通过 Web API 删除，不再直接修改 SQLite；PDF 内嵌标注按 xref 在临时副本中修改并验证后替换。canonical 语法不接受 `annotations --clear` 或 `annotate --clear`。
 

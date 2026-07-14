@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -25,6 +26,7 @@ type PDFTextRequest struct {
 	Pages         string
 	MaxChars      int
 	Grep          string
+	Collection    string
 	AttachmentKey string
 }
 
@@ -82,6 +84,10 @@ func (s PDFService) openReader() (config.Config, backend.Reader, error) {
 }
 
 func (s PDFService) Text(ctx context.Context, req PDFTextRequest) (Result, error) {
+	pattern, err := compilePDFTextPattern(req.Grep)
+	if err != nil {
+		return Result{}, err
+	}
 	cfg, reader, err := s.openReader()
 	if err != nil {
 		return Result{}, err
@@ -89,7 +95,7 @@ func (s PDFService) Text(ctx context.Context, req PDFTextRequest) (Result, error
 	if req.All && cfg.Mode == "remote" {
 		return Result{}, fmt.Errorf("pdf text --all is supported in local or hybrid mode")
 	}
-	items, err := pdfItems(ctx, reader, req.Keys, req.All)
+	items, collection, err := pdfTextItems(ctx, reader, req.Keys, req.All, req.Collection)
 	if err != nil {
 		return Result{}, err
 	}
@@ -112,7 +118,7 @@ func (s PDFService) Text(ctx context.Context, req PDFTextRequest) (Result, error
 	results := make([]map[string]any, 0, len(items))
 	var singleText string
 	for _, item := range items {
-		entry, text, err := extractPDFText(ctx, reader, item, req, ranges, pathOnly)
+		entry, text, err := extractPDFText(ctx, reader, item, req, ranges, pathOnly, pattern)
 		if err != nil {
 			if len(items) == 1 {
 				return Result{}, err
@@ -147,12 +153,18 @@ func (s PDFService) Text(ctx context.Context, req PDFTextRequest) (Result, error
 	if req.AttachmentKey != "" {
 		filters["attachment_key"] = req.AttachmentKey
 	}
+	if collection != nil {
+		filters["collection"] = map[string]any{"key": collection.Key, "name": collection.Name, "path": collection.Path}
+	}
 	if len(filters) > 0 {
 		meta["filters"] = filters
 	}
 	if fileOutput {
 		meta["output_dir"] = outputDir
 		return Result{Data: results, Meta: meta, Text: fmt.Sprintf("wrote %d Markdown full-text file(s) to %s", len(results), outputDir), Warnings: readWarnings(meta)}, nil
+	}
+	if len(results) == 0 {
+		return Result{Data: results, Meta: meta, Text: "no PDF items matched the selected scope", Warnings: readWarnings(meta)}, nil
 	}
 	if len(results) > 1 || req.All {
 		return Result{Data: results, Meta: meta, Text: fmt.Sprintf("prepared full-text cache paths for %d item(s)", len(results)), Warnings: readWarnings(meta)}, nil
@@ -176,60 +188,138 @@ func shouldReturnPDFCachePaths(mode string, req PDFTextRequest) bool {
 	return mode != "remote" && req.OutputDir == "" && req.Pages == "" && req.Grep == "" && req.MaxChars == 0
 }
 
-func pdfItems(ctx context.Context, reader backend.Reader, keys []string, all bool) ([]domain.Item, error) {
+type pdfCollectionResolver interface {
+	CollectionTarget(context.Context, string) (backend.CollectionTarget, error)
+}
+
+func pdfTextItems(ctx context.Context, reader backend.Reader, keys []string, all bool, collection string) ([]domain.Item, *backend.CollectionTarget, error) {
 	if all {
-		return reader.FindItems(ctx, backend.FindOptions{All: true, Full: true, HasPDF: true})
+		items, err := reader.FindItems(ctx, backend.FindOptions{All: true, Full: true, HasPDF: true})
+		return items, nil, err
+	}
+	if strings.TrimSpace(collection) != "" {
+		target, err := resolvePDFCollection(ctx, reader, collection)
+		if err != nil {
+			return nil, nil, err
+		}
+		items, err := reader.FindItems(ctx, backend.FindOptions{All: true, Full: true, HasPDF: true, Collection: []string{target.Key}})
+		return items, &target, err
 	}
 	items := make([]domain.Item, 0, len(keys))
 	for _, key := range keys {
 		item, err := reader.GetItem(ctx, key)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		items = append(items, item)
 	}
-	return items, nil
+	return items, nil, nil
 }
 
-func extractPDFText(ctx context.Context, reader backend.Reader, item domain.Item, req PDFTextRequest, ranges []pdfPageRange, pathOnly bool) (map[string]any, string, error) {
-	if req.Pages != "" {
+func pdfItems(ctx context.Context, reader backend.Reader, keys []string, all bool) ([]domain.Item, error) {
+	items, _, err := pdfTextItems(ctx, reader, keys, all, "")
+	return items, err
+}
+
+func resolvePDFCollection(ctx context.Context, reader backend.Reader, selector string) (backend.CollectionTarget, error) {
+	if resolver, ok := reader.(pdfCollectionResolver); ok {
+		return resolver.CollectionTarget(ctx, selector)
+	}
+	collections, err := reader.ListCollections(ctx)
+	if err != nil {
+		return backend.CollectionTarget{}, err
+	}
+	value := strings.TrimSpace(selector)
+	keyMatches := make([]backend.Collection, 0, 1)
+	for _, collection := range collections {
+		if strings.EqualFold(collection.Key, value) {
+			keyMatches = append(keyMatches, collection)
+		}
+	}
+	if len(keyMatches) == 1 {
+		return backend.CollectionTarget{Key: keyMatches[0].Key, Name: keyMatches[0].Name, Path: keyMatches[0].Name}, nil
+	}
+	matches := make([]backend.Collection, 0, 1)
+	for _, collection := range collections {
+		if strings.EqualFold(collection.Name, value) {
+			matches = append(matches, collection)
+		}
+	}
+	if len(matches) == 0 {
+		return backend.CollectionTarget{}, fmt.Errorf("collection %q not found; use `zot coll list` to inspect collection keys and names", selector)
+	}
+	if len(matches) > 1 {
+		return backend.CollectionTarget{}, fmt.Errorf("collection %q is ambiguous; use a collection key", selector)
+	}
+	return backend.CollectionTarget{Key: matches[0].Key, Name: matches[0].Name, Path: matches[0].Name}, nil
+}
+
+func extractPDFText(ctx context.Context, reader backend.Reader, item domain.Item, req PDFTextRequest, ranges []pdfPageRange, pathOnly bool, pattern *regexp.Regexp) (map[string]any, string, error) {
+	if req.Pages != "" || pattern != nil {
 		extractor, ok := reader.(pageTextExtractor)
 		if !ok {
-			return nil, "", fmt.Errorf("pdf text --pages requires page-aware extraction support")
+			if req.Pages != "" {
+				return nil, "", fmt.Errorf("pdf text --pages requires page-aware extraction support")
+			}
+		} else {
+			entry, text, available, err := extractPDFTextByPages(ctx, extractor, item, req, ranges, pattern)
+			if err != nil && req.Pages != "" {
+				return nil, "", err
+			}
+			if err == nil && available {
+				return entry, text, nil
+			}
 		}
-		result, err := extractor.ExtractItemAttachmentPageTexts(ctx, item)
-		if err != nil {
-			return nil, "", err
+	}
+	return extractPDFTextWithoutPages(ctx, reader, item, req, pathOnly, pattern)
+}
+
+func extractPDFTextByPages(ctx context.Context, extractor pageTextExtractor, item domain.Item, req PDFTextRequest, ranges []pdfPageRange, pattern *regexp.Regexp) (map[string]any, string, bool, error) {
+	result, err := extractor.ExtractItemAttachmentPageTexts(ctx, item)
+	if err != nil {
+		return nil, "", false, err
+	}
+	if len(result.Attachments) == 0 {
+		return nil, "", false, nil
+	}
+	attachments := make([]map[string]any, 0)
+	var combined []string
+	returnedPages := make([]int, 0)
+	totalChars := 0
+	matchCount := 0
+	truncatedAny := false
+	for _, attachment := range result.Attachments {
+		if req.AttachmentKey != "" && !strings.EqualFold(attachment.Attachment.Key, req.AttachmentKey) {
+			continue
 		}
-		attachments := make([]map[string]any, 0)
-		var combined []string
-		returnedPages := make([]int, 0)
-		totalChars := 0
-		truncatedAny := false
-		for _, attachment := range result.Attachments {
-			if req.AttachmentKey != "" && !strings.EqualFold(attachment.Attachment.Key, req.AttachmentKey) {
+		pages := make([]map[string]any, 0)
+		attachmentMatches := 0
+		for _, page := range attachment.Pages {
+			if !pageInPDFRanges(page.Page, ranges) {
 				continue
 			}
-			pages := make([]map[string]any, 0)
-			for _, page := range attachment.Pages {
-				if !pageInPDFRanges(page.Page, ranges) {
-					continue
-				}
-				text, total, truncated := filterPDFText(page.Text, req.Grep, req.MaxChars)
-				totalChars += total
-				truncatedAny = truncatedAny || truncated
-				pages = append(pages, map[string]any{"page": page.Page, "text": text, "total": total, "returned_chars": utf8.RuneCountInString(text), "truncated": truncated})
-				combined = append(combined, text)
-				returnedPages = append(returnedPages, page.Page)
+			text, total, pageMatches, truncated := filterPDFText(page.Text, pattern, req.MaxChars)
+			if pattern != nil && pageMatches == 0 {
+				continue
 			}
-			attachments = append(attachments, map[string]any{"attachment_key": attachment.Attachment.Key, "pages": pages})
+			totalChars += total
+			matchCount += pageMatches
+			attachmentMatches += pageMatches
+			truncatedAny = truncatedAny || truncated
+			pages = append(pages, map[string]any{"page": page.Page, "text": text, "match_count": pageMatches, "total": total, "returned_chars": utf8.RuneCountInString(text), "truncated": truncated})
+			combined = append(combined, text)
+			returnedPages = append(returnedPages, page.Page)
 		}
-		if req.AttachmentKey != "" && len(attachments) == 0 {
-			return nil, "", fmt.Errorf("attachment %s not found on item %s", req.AttachmentKey, item.Key)
-		}
-		text := strings.Join(combined, "\n")
-		return map[string]any{"item_key": item.Key, "attachments": attachments, "total": totalChars, "returned_chars": utf8.RuneCountInString(text), "truncated": truncatedAny, "returned_pages": returnedPages}, text, nil
+		attachments = append(attachments, map[string]any{"attachment_key": attachment.Attachment.Key, "match_count": attachmentMatches, "pages": pages, "full_text_source": attachment.Source, "full_text_cache_hit": attachment.CacheHit})
 	}
+	if req.AttachmentKey != "" && len(attachments) == 0 {
+		return nil, "", false, fmt.Errorf("attachment %s not found on item %s", req.AttachmentKey, item.Key)
+	}
+	text := strings.Join(combined, "\n")
+	return map[string]any{"item_key": item.Key, "title": item.Title, "attachments": attachments, "match_count": matchCount, "total": totalChars, "returned_chars": utf8.RuneCountInString(text), "truncated": truncatedAny, "returned_pages": returnedPages}, text, true, nil
+}
+
+func extractPDFTextWithoutPages(ctx context.Context, reader backend.Reader, item domain.Item, req PDFTextRequest, pathOnly bool, pattern *regexp.Regexp) (map[string]any, string, error) {
 	var result backend.ItemFullTextResult
 	if extractor, ok := reader.(attachmentTextExtractor); ok {
 		var err error
@@ -262,8 +352,8 @@ func extractPDFText(ctx context.Context, reader backend.Reader, item domain.Item
 			return nil, "", fmt.Errorf("attachment %s not found on item %s", req.AttachmentKey, item.Key)
 		}
 	}
-	filtered, total, truncated := filterPDFText(text, req.Grep, req.MaxChars)
-	entry := map[string]any{"item_key": item.Key, "total": total, "returned_chars": utf8.RuneCountInString(filtered), "truncated": truncated}
+	filtered, total, matches, truncated := filterPDFText(text, pattern, req.MaxChars)
+	entry := map[string]any{"item_key": item.Key, "title": item.Title, "match_count": matches, "total": total, "returned_chars": utf8.RuneCountInString(filtered), "truncated": truncated}
 	if result.PrimaryAttachmentKey != "" {
 		entry["primary_attachment_key"] = result.PrimaryAttachmentKey
 	}
@@ -272,8 +362,8 @@ func extractPDFText(ctx context.Context, reader backend.Reader, item domain.Item
 		if req.AttachmentKey != "" && !strings.EqualFold(attachment.Attachment.Key, req.AttachmentKey) {
 			continue
 		}
-		value, attachmentTotal, attachmentTruncated := filterPDFText(attachment.Text, req.Grep, req.MaxChars)
-		attachments = append(attachments, map[string]any{"attachment_key": attachment.Attachment.Key, "text": value, "total": attachmentTotal, "returned_chars": utf8.RuneCountInString(value), "truncated": attachmentTruncated, "full_text_source": attachment.Source, "full_text_cache_hit": attachment.CacheHit})
+		value, attachmentTotal, attachmentMatches, attachmentTruncated := filterPDFText(attachment.Text, pattern, req.MaxChars)
+		attachments = append(attachments, map[string]any{"attachment_key": attachment.Attachment.Key, "text": value, "match_count": attachmentMatches, "total": attachmentTotal, "returned_chars": utf8.RuneCountInString(value), "truncated": attachmentTruncated, "full_text_source": attachment.Source, "full_text_cache_hit": attachment.CacheHit})
 	}
 	if len(attachments) > 0 {
 		entry["attachments"] = attachments
@@ -341,10 +431,24 @@ func pdfTextCachePathEntry(item domain.Item, result backend.ItemFullTextResult, 
 	return entry, primaryPath, nil
 }
 
-func filterPDFText(text, grep string, maxChars int) (string, int, bool) {
+func compilePDFTextPattern(grep string) (*regexp.Regexp, error) {
+	if strings.TrimSpace(grep) == "" {
+		return nil, nil
+	}
+	pattern, err := regexp.Compile("(?i:" + grep + ")")
+	if err != nil {
+		return nil, fmt.Errorf("invalid --grep regular expression: %w", err)
+	}
+	return pattern, nil
+}
+
+func filterPDFText(text string, pattern *regexp.Regexp, maxChars int) (string, int, int, bool) {
 	total := utf8.RuneCountInString(text)
-	if grep != "" {
-		text = pdfTextEvidenceWindows(text, grep)
+	matches := 0
+	if pattern != nil {
+		indexes := pattern.FindAllStringIndex(text, -1)
+		matches = len(indexes)
+		text = pdfTextEvidenceWindows(text, indexes)
 	}
 	truncated := false
 	runes := []rune(text)
@@ -352,21 +456,27 @@ func filterPDFText(text, grep string, maxChars int) (string, int, bool) {
 		text = string(runes[:maxChars])
 		truncated = true
 	}
-	return text, total, truncated
+	return text, total, matches, truncated
 }
 
-func pdfTextEvidenceWindows(text, query string) string {
+func pdfTextEvidenceWindows(text string, indexes [][]int) string {
 	lines := strings.Split(text, "\n")
-	needle := strings.ToLower(strings.TrimSpace(query))
-	if needle == "" {
-		return text
+	if len(indexes) == 0 {
+		return ""
+	}
+	lineOffsets := make([]int, len(lines)+1)
+	for index, line := range lines {
+		lineOffsets[index+1] = lineOffsets[index] + len(line) + 1
 	}
 	selected := make(map[int]struct{})
-	for index, line := range lines {
-		if !strings.Contains(strings.ToLower(line), needle) {
-			continue
+	for _, match := range indexes {
+		startLine := sort.Search(len(lines), func(i int) bool { return lineOffsets[i+1] > match[0] })
+		endOffset := match[1] - 1
+		if endOffset < match[0] {
+			endOffset = match[0]
 		}
-		for neighbor := index - 1; neighbor <= index+1; neighbor++ {
+		endLine := sort.Search(len(lines), func(i int) bool { return lineOffsets[i+1] > endOffset })
+		for neighbor := startLine - 1; neighbor <= endLine+1; neighbor++ {
 			if neighbor >= 0 && neighbor < len(lines) {
 				selected[neighbor] = struct{}{}
 			}
@@ -375,14 +485,14 @@ func pdfTextEvidenceWindows(text, query string) string {
 	if len(selected) == 0 {
 		return ""
 	}
-	indexes := make([]int, 0, len(selected))
+	selectedIndexes := make([]int, 0, len(selected))
 	for index := range selected {
-		indexes = append(indexes, index)
+		selectedIndexes = append(selectedIndexes, index)
 	}
-	sort.Ints(indexes)
-	parts := make([]string, 0, len(indexes))
+	sort.Ints(selectedIndexes)
+	parts := make([]string, 0, len(selectedIndexes))
 	previous := -2
-	for _, index := range indexes {
+	for _, index := range selectedIndexes {
 		if previous >= 0 && index > previous+1 {
 			parts = append(parts, "…")
 		}

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 )
@@ -25,15 +24,8 @@ type SearchHit struct {
 	Annotation    *Annotation    `json:"annotation,omitempty"`
 }
 
-var ftsSearchWords = regexp.MustCompile(`[\p{L}\p{N}]+`)
-
 func referenceFTSQuery(q string) string {
-	words := ftsSearchWords.FindAllString(q, -1)
-	parts := make([]string, 0, len(words))
-	for _, w := range words {
-		parts = append(parts, `"`+strings.ReplaceAll(w, `"`, `""`)+`"`)
-	}
-	return strings.Join(parts, " AND ")
+	return strings.TrimSpace(q)
 }
 
 func (s *Store) Search(ctx context.Context, opts SearchOptions) ([]SearchHit, error) {

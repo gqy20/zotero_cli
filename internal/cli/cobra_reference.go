@@ -40,11 +40,8 @@ func (c *CLI) newReferenceCommand(opts *globalOptions) *cobra.Command {
 
 	var find app.ReferenceFindRequest
 	find.Options = references.SearchOptions{In: "all", Limit: 20}
-	var contextsOnly, referencesOnly, metadataOnly bool
 	findCmd := &cobra.Command{Use: "find QUERY", Short: "Search references and citation contexts", Args: cobra.MinimumNArgs(1)}
-	findCmd.Flags().BoolVar(&contextsOnly, "contexts", false, "search citation contexts only")
-	findCmd.Flags().BoolVar(&referencesOnly, "references", false, "search reference titles only")
-	findCmd.Flags().BoolVar(&metadataOnly, "metadata", false, "search indexed PubMed metadata only")
+	findCmd.Flags().StringVar(&find.Options.In, "in", "all", "search scope: all, references, contexts, or metadata")
 	findCmd.Flags().StringVar(&find.Options.Field, "field", "", "metadata field")
 	findCmd.Flags().StringVar(&find.Options.Section, "section", "", "citation context section")
 	findCmd.Flags().StringVar(&find.Options.Source, "source", "", "pmc, pubmed, europepmc, or grobid")
@@ -52,17 +49,15 @@ func (c *CLI) newReferenceCommand(opts *globalOptions) *cobra.Command {
 	findCmd.Flags().IntVar(&find.Options.Limit, "limit", 20, "maximum results")
 	findCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		find.Options.Query = strings.Join(args, " ")
-		if boolCountCLI(contextsOnly, referencesOnly, metadataOnly) > 1 {
-			return &exitError{code: ExitUsage, err: fmt.Errorf("--contexts, --references, and --metadata are mutually exclusive")}
+		find.Options.In = strings.ToLower(strings.TrimSpace(find.Options.In))
+		if find.Options.In != "all" && find.Options.In != "references" && find.Options.In != "contexts" && find.Options.In != "metadata" {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--in must be all, references, contexts, or metadata")}
 		}
-		if contextsOnly || find.Options.Section != "" {
-			find.Options.In = "contexts"
-		} else if referencesOnly {
-			find.Options.In = "references"
-		} else if metadataOnly || find.Options.Field != "" {
-			find.Options.In = "metadata"
-		} else {
-			find.Options.In = "all"
+		if find.Options.Section != "" && find.Options.In != "all" && find.Options.In != "contexts" {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--section requires --in contexts or --in all")}
+		}
+		if find.Options.Field != "" && find.Options.In != "all" && find.Options.In != "metadata" {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--field requires --in metadata or --in all")}
 		}
 		find.Options.Source = normalizeReferenceSearchSource(find.Options.Source)
 		if find.Options.Limit < 1 || find.Options.Limit > 200 {
@@ -163,15 +158,6 @@ func (c *CLI) referenceDiscoveryCommand(opts *globalOptions, action string) *cob
 	return cmd
 }
 
-func boolCountCLI(values ...bool) int {
-	count := 0
-	for _, value := range values {
-		if value {
-			count++
-		}
-	}
-	return count
-}
 func normalizeReferenceSearchSource(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	switch value {

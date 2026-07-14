@@ -63,21 +63,22 @@ zot ref cited ITEMKEY --external --limit 100 --json
 ### 搜索参考文献、上下文和主题
 
 ```powershell
-zot ref find "genome assembly" --json
-zot ref find "we used" --contexts --section methods --json
-zot ref find "genome assembly" --references --json
-zot ref find "Hendra Virus" --field mesh --json
-zot ref find "Review" --field publication_types --json
-zot ref find "BRCA1" --field annotations --json
+zot ref find 'genome AND assembl*' --json
+zot ref find '"we used" OR protocol*' --in contexts --section methods --json
+zot ref find 'genome AND assembl*' --in references --json
+zot ref find '"Hendra Virus"' --in metadata --field mesh --json
+zot ref find 'Review' --in metadata --field publication_types --json
+zot ref find 'BRCA1' --in metadata --field annotations --json
 ```
 
-默认 FTS5 搜索覆盖结构化参考文献、引用上下文和 PubMed 元数据。可用范围与字段：
+QUERY 直接使用 SQLite FTS5 语法，支持 `"完整短语"`、`prefix*`、`AND` / `OR` / `NOT` 和括号。默认搜索结构化参考文献、引用上下文和 PubMed 元数据。可用范围与字段：
 
 | 选项 | 范围 |
 |---|---|
-| `--contexts` | PMC/GROBID 正文引用语境 |
-| `--references` | 结构化参考文献 |
-| `--metadata` | PubMed 元数据 |
+| `--in contexts` | PMC/GROBID 正文引用语境 |
+| `--in references` | 结构化参考文献 |
+| `--in metadata` | PubMed 元数据 |
+| `--in all` | 合并以上范围（默认） |
 | `--field mesh` | MeSH descriptor、UI、qualifier |
 | `--field publication_types` | Journal Article、Review、Clinical Trial 等 |
 | `--field keywords` | 作者/出版方关键词 |

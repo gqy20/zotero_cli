@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -207,10 +208,14 @@ func (s ReadService) Notes(ctx context.Context, opts ListOptions) (Result, error
 	if err != nil {
 		return Result{}, err
 	}
-	if q := strings.ToLower(strings.TrimSpace(opts.Query)); q != "" {
+	if q := strings.TrimSpace(opts.Query); q != "" {
+		pattern, err := regexp.Compile("(?i:" + q + ")")
+		if err != nil {
+			return Result{}, fmt.Errorf("invalid note regular expression: %w", err)
+		}
 		filtered := rows[:0]
 		for _, row := range rows {
-			if strings.Contains(strings.ToLower(row.Preview), q) || strings.Contains(strings.ToLower(row.Content), q) {
+			if pattern.MatchString(row.Preview) || pattern.MatchString(row.Content) {
 				filtered = append(filtered, row)
 			}
 		}

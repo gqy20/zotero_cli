@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### 新增
+- **限定语料的正则全文取证**：`pdf text --grep` 默认按不区分大小写的 Go 正则解析，支持用 `|` 一次检索多个关键词；新增 `--collection`，接受收藏夹 key、唯一名称或完整层级路径。有分页全文缓存时，JSON 按附件和命中页返回 `match_count`、页码与相邻上下文，检索保持只读。
 - **CLI v2 阶段 6 长尾命令与运行时能力**：迁移 `schema list/show`、`server start`、`sync pull`，加入 bash/zsh/fish/PowerShell completion；旧 schema 变体、裸 `server` 与裸 `sync` 统一翻译为 canonical invocation，sync 下载生命周期下沉至应用层。
 - **CLI v2 阶段 5 Reference 与 Index**：迁移 `ref show/find/related/cited/ctx/links/entities/profile/build/resolve/status` 与 `index build/status`，Reference/Index 的 store、client、reader 和构建生命周期下沉至应用层。
 - **CLI v2 阶段 1 基础设施**：引入 Cobra 命令树、canonical Invocation、应用服务 Result 与统一 JSON/text/error renderer；`version`、`config init/show/check` 已迁移，旧 `zot init`、`config validate/path` 通过参数翻译进入同一实现。
@@ -21,6 +22,7 @@
 - **`extract-figures` 跨页同尺寸误去重**：跨页 dedup 仅用于小面积/页边且无 caption 的重复元素，避免 BMC/Nature 风格正文大图因宽高相近被当作页眉页脚重复图过滤。
 
 ### 变更
+- **查询与导出接口收敛**：`item find` 用单一 `--in metadata|fulltext|all` 取代四个全文布尔参数，`ref find` 用 `--in all|references|contexts|metadata` 取代三个范围布尔参数，两者都将 QUERY 原样交给 SQLite FTS5。`note find` 统一为不区分大小写的 Go 正则，`note list` 不再承担查询。`item export` 只接受明确 key 或 `--from PATH|-` 的结构化选择结果，不再内置第二套筛选器。
 - **CLI v2 阶段 7 完成**：Cobra tree 成为唯一执行内核；旧命令只在纯 argv translator 中映射到 canonical invocation，`setup/select/abstract/relate/key-info` 收敛为隐藏的 redirect-only adapter，主帮助、completion、JSON command 和用户文档统一使用 v2 语法。
 - **PDF 提取参数收敛**：移除 `extract-text --markdown/--md` 兼容入口，文件输出统一由 `-o/--output-dir` 或 `--all` 触发；`extract-figures --max-per-page` 保留为高级调参项，不再出现在主用法路径中。
 

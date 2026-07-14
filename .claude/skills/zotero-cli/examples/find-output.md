@@ -53,7 +53,7 @@ zot item find "CRISPR" --type article --json
 ## 全文片段
 
 ```powershell
-zot item find "hybrid speciation" --fulltext --snippet --limit 1 --json
+zot item find '"hybrid speciation"' --in fulltext --snippet --limit 1 --json
 ```
 
 ```json

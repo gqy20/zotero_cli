@@ -34,7 +34,7 @@ func TestRunFindLocalJSONMatchesFullTextAttachmentTerms(t *testing.T) {
 		})
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "speciation genome", "--fulltext", "--json"})
+	exitCode := Run([]string{"find", "speciation genome", "--in", "fulltext", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -85,7 +85,7 @@ func TestRunFindLocalJSONMergesMetadataAndFullTextMatches(t *testing.T) {
 	})
 
 	stdout, stderr := captureOutput(t)
-	if exitCode := Run([]string{"find", "mixed", "--fulltext", "--json"}); exitCode != 0 {
+	if exitCode := Run([]string{"find", "mixed", "--in", "all", "--json"}); exitCode != 0 {
 		t.Fatalf("exit code = %d; stderr=%q", exitCode, stderr.String())
 	}
 	var got struct {
@@ -102,7 +102,7 @@ func TestRunFindLocalJSONMergesMetadataAndFullTextMatches(t *testing.T) {
 	}
 
 	stdout, stderr = captureOutput(t)
-	if exitCode := Run([]string{"find", "mixed", "--fulltext-only", "--json"}); exitCode != 0 {
+	if exitCode := Run([]string{"find", "mixed", "--in", "fulltext", "--json"}); exitCode != 0 {
 		t.Fatalf("fulltext-only exit code = %d; stderr=%q", exitCode, stderr.String())
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
@@ -128,7 +128,7 @@ func TestRunFindLocalJSONIncludesFullTextPreviewWhenSnippetRequested(t *testing.
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "mixed.pdf", "--snippet", "--json"})
+	exitCode := Run([]string{"find", "mixed.pdf", "--in", "all", "--snippet", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -175,7 +175,7 @@ func TestRunFindLocalJSONUsesMatchedSnippetForFullTextQuery(t *testing.T) {
 		})
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "speciation genome", "--fulltext", "--snippet", "--json"})
+	exitCode := Run([]string{"find", "speciation genome", "--in", "fulltext", "--snippet", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -228,7 +228,7 @@ func TestRunFindLocalJSONSupportsFullTextIndex(t *testing.T) {
 	}
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "speciation genome", "--fulltext", "--snippet", "--json"})
+	exitCode := Run([]string{"find", "speciation genome", "--in", "fulltext", "--snippet", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -258,7 +258,7 @@ func TestRunFindLocalJSONSupportsFullTextIndex(t *testing.T) {
 	}
 }
 
-func TestRunFindLocalJSONSupportsFullTextAnyAndPrefixMatching(t *testing.T) {
+func TestRunFindLocalJSONSupportsNativeFTSOrAndPrefixMatching(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -280,7 +280,7 @@ func TestRunFindLocalJSONSupportsFullTextAnyAndPrefixMatching(t *testing.T) {
 		})
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "specia genom", "--fulltext", "--fulltext-any", "--json"})
+	exitCode := Run([]string{"find", "specia* OR genom*", "--in", "fulltext", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -300,17 +300,17 @@ func TestRunFindLocalJSONSupportsFullTextAnyAndPrefixMatching(t *testing.T) {
 	}
 }
 
-func TestRunFindRejectsFullTextAnyWithoutFullText(t *testing.T) {
+func TestRunFindRejectsInvalidSearchScope(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
 
 	_, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "genome", "--fulltext-any"})
+	exitCode := Run([]string{"find", "genome", "--in", "somewhere"})
 	if exitCode != 2 {
 		t.Fatalf("expected exit code 2, got %d; stderr=%q", exitCode, stderr.String())
 	}
-	if got := stderr.String(); !strings.Contains(got, "--fulltext-any requires --fulltext") {
-		t.Fatalf("expected fulltext-any usage error, got %q", got)
+	if got := stderr.String(); !strings.Contains(got, "--in must be metadata, fulltext, or all") {
+		t.Fatalf("expected search scope usage error, got %q", got)
 	}
 }

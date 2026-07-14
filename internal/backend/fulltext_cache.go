@@ -875,7 +875,7 @@ func isFullTextIndexSchemaError(err error) bool {
 	return strings.Contains(message, "no column named") || strings.Contains(message, "has no column named")
 }
 
-func (c fullTextCache) Search(query string, any bool, limit int) ([]fullTextIndexMatch, error) {
+func (c fullTextCache) Search(query string, limit int) ([]fullTextIndexMatch, error) {
 	if strings.TrimSpace(query) == "" {
 		return nil, nil
 	}
@@ -891,7 +891,7 @@ func (c fullTextCache) Search(query string, any bool, limit int) ([]fullTextInde
 	}
 	defer db.Close()
 
-	matchExpr := fullTextIndexMatchExpr(query, any)
+	matchExpr := strings.TrimSpace(query)
 	if matchExpr == "" {
 		return nil, nil
 	}
@@ -1066,21 +1066,6 @@ func parseBBoxString(s string, bbox *[4]float64) {
 	if n != 4 {
 		*bbox = [4]float64{}
 	}
-}
-
-func fullTextIndexMatchExpr(query string, any bool) string {
-	tokens := fullTextQueryTokens(query)
-	if len(tokens) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(tokens))
-	for _, token := range tokens {
-		parts = append(parts, `"`+strings.ReplaceAll(token, `"`, `""`)+`"*`)
-	}
-	if any {
-		return strings.Join(parts, " OR ")
-	}
-	return strings.Join(parts, " ")
 }
 
 func rankAndDedupeFullTextMatches(matches []fullTextIndexMatch, query string, limit int) []fullTextIndexMatch {

@@ -3,8 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"zotero_cli/internal/backend"
@@ -56,7 +54,7 @@ type itemPreviewReader interface {
 }
 
 func (s ReadService) FindItems(ctx context.Context, req ItemFindRequest) (Result, error) {
-	cfg, reader, err := s.reader()
+	_, reader, err := s.reader()
 	if err != nil {
 		return Result{}, err
 	}
@@ -67,11 +65,8 @@ func (s ReadService) FindItems(ctx context.Context, req ItemFindRequest) (Result
 	} else {
 		opts.Limit = 0
 	}
-	if !opts.FullText && !opts.MetadataOnly && cfg.Mode != "web" && strings.TrimSpace(opts.Query) != "" && !opts.All && hasFullTextIndex(reader) {
-		opts.FullText = true
-	}
-	if req.Snippet && !opts.MetadataOnly && cfg.Mode != "web" {
-		opts.FullText = true
+	if req.Snippet && opts.In == "metadata" {
+		return Result{}, fmt.Errorf("find --snippet requires --in fulltext or --in all")
 	}
 	injectedAttachments := false
 	if req.Snippet && !containsString(opts.IncludeFields, "attachments") {
@@ -189,15 +184,6 @@ func (s ReadService) ShowItem(ctx context.Context, req ItemShowRequest) (Result,
 		}
 	}
 	return Result{Data: data, Meta: meta, Text: text, Warnings: readWarnings(meta)}, nil
-}
-
-func hasFullTextIndex(reader backend.Reader) bool {
-	local, ok := reader.(*backend.LocalReader)
-	if !ok {
-		return false
-	}
-	info, err := os.Stat(filepath.Join(local.FullTextCacheDir, "index.sqlite"))
-	return err == nil && info.Size() > 4096
 }
 
 func filterItems(items []domain.Item, opts backend.FindOptions) []domain.Item {

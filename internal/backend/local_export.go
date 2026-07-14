@@ -236,50 +236,6 @@ func (r *LocalReader) ExportItemsCSLJSON(ctx context.Context, keys []string) ([]
 	return out, nil
 }
 
-func (r *LocalReader) CollectionItemKeys(ctx context.Context, collectionKey string, limit int) ([]string, error) {
-	db, cleanup, err := r.openDB()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-	defer cleanup()
-
-	query := `
-		SELECT i.key
-		FROM collections c
-		JOIN collectionItems ci ON ci.collectionID = c.collectionID
-		JOIN items i ON i.itemID = ci.itemID
-		JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
-		WHERE c.key = ?
-		AND NOT EXISTS (SELECT 1 FROM itemAttachments ia WHERE ia.itemID = i.itemID)
-		AND NOT EXISTS (SELECT 1 FROM itemNotes n WHERE n.itemID = i.itemID)
-		AND NOT EXISTS (SELECT 1 FROM itemAnnotations a WHERE a.itemID = i.itemID)
-		AND it.typeName <> 'annotation'
-		ORDER BY ci.itemID
-	`
-	rows, err := db.QueryContext(ctx, query, collectionKey)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	keys := []string{}
-	for rows.Next() {
-		var key string
-		if err := rows.Scan(&key); err != nil {
-			return nil, err
-		}
-		keys = append(keys, key)
-		if limit > 0 && len(keys) >= limit {
-			break
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return keys, nil
-}
-
 func (r *LocalReader) loadCSLCreators(ctx context.Context, db *sql.DB, itemID int64) ([]map[string]any, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT

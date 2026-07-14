@@ -128,8 +128,8 @@ zot find "hybrid speciation" --json
 ## 带过滤的示例
 
 ```bash
-# 全文检索 + 片段预览（local/hybrid）
-zot find "CRISPR gene editing" --fulltext --snippet --json
+# 全文检索 + 片段预览（local/hybrid；原样使用 SQLite FTS5 查询）
+zot find 'CRISPR AND "gene editing"' --in fulltext --snippet --json
 
 # 按日期和标签筛选
 zot find "evolution" --date-after 2023 --tag "review" --json
