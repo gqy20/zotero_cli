@@ -248,3 +248,56 @@ func TestImportedAttachmentTargetPrefersFinalLinkedFile(t *testing.T) {
 		t.Fatalf("itemKey=%q attachmentKey=%q", itemKey, attachmentKey)
 	}
 }
+
+func TestItemImportCollectionCleanupAndIndexUseFinalAttachment(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "paper.pdf")
+	if err := os.WriteFile(path, []byte("%PDF-test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	client := &fakeItemImportConnector{recognized: true}
+	deleteClient := &fakeItemImportDeleteClient{}
+	indexer := &fakeItemImportIndexBuilder{}
+	resolver := fakeItemImportCollectionResolver{
+		target: backend.CollectionTarget{ID: 23, Key: "COLLKEY", Name: "Genetics", Path: "Research/Genetics"},
+		attachments: []backend.ImportedAttachment{
+			{Key: "ATT2", ParentKey: "ITEM123", LinkMode: 2, Path: `D:\papers\paper.pdf`},
+			{Key: "ATT1", ParentKey: "ITEM123", LinkMode: 2, Path: `D:\papers\paper.pdf`},
+		},
+	}
+	service := ItemImportService{
+		LoadConfig: func() (config.Config, string, error) {
+			return config.Config{AllowWrite: true}, "", nil
+		},
+		NewClient: func(config.Config) ItemImportConnector { return client },
+		NewResolver: func(config.Config) (itemImportCollectionResolver, error) {
+			return resolver, nil
+		},
+		NewDeleteClient: func(config.Config) (itemImportDeleteClient, error) {
+			return deleteClient, nil
+		},
+		NewIndexBuilder: func() itemImportIndexBuilder { return indexer },
+		PollInterval:    time.Millisecond,
+	}
+
+	result, err := service.Import(context.Background(), ItemImportRequest{Path: path, Collection: "Research/Genetics"})
+	if err != nil {
+		t.Fatalf("Import() error=%v", err)
+	}
+	data := result.Data.(ItemImportResult)
+	if !data.CollectionAssigned || data.CollectionKey != "COLLKEY" || client.updated.Target != "C23" {
+		t.Fatalf("collection result=%+v update=%+v", data, client.updated)
+	}
+	if data.DuplicateCleanup == nil || data.DuplicateCleanup.Kept != "ATT1" || len(data.DuplicateCleanup.Deleted) != 1 || data.DuplicateCleanup.Deleted[0] != "ATT2" {
+		t.Fatalf("cleanup=%+v", data.DuplicateCleanup)
+	}
+	if len(deleteClient.deleted) != 1 || deleteClient.deleted[0] != "ATT2" {
+		t.Fatalf("deleted=%v", deleteClient.deleted)
+	}
+	if data.ItemKey != "ITEM123" || data.AttachmentKey != "ATT1" || !data.FullTextIndexed {
+		t.Fatalf("import result=%+v warnings=%+v", data, result.Warnings)
+	}
+	if len(indexer.request.ItemKeys) != 1 || indexer.request.ItemKeys[0] != "ITEM123" || len(indexer.request.AttachmentKeys) != 1 || indexer.request.AttachmentKeys[0] != "ATT1" {
+		t.Fatalf("index request=%+v", indexer.request)
+	}
+}

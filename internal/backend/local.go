@@ -112,7 +112,8 @@ func (r *LocalReader) IsFullTextIndexed(attachment domain.Attachment) bool {
 		r.fullTextIndex = statuses
 	}
 	status, ok := r.fullTextIndex[attachment.Key]
-	return ok && status.TextHash != "" && status.IndexedTextHash == status.TextHash
+	return ok && status.TextHash != "" && status.IndexedTextHash == status.TextHash &&
+		newFullTextCache(r.FullTextCacheDir).indexedAttachmentFresh(attachment.Key, &attachment)
 }
 
 func (r *LocalReader) IsMarkedFailed(key string) bool {

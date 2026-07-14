@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
@@ -157,6 +158,67 @@ func TestFullTextCacheLoadRejectsStaleEntry(t *testing.T) {
 	}
 	if ok {
 		t.Fatal("Load() ok = true, want false for stale cache")
+	}
+}
+
+func TestFullTextCacheRejectsSameSizeReplacementWithinOneSecond(t *testing.T) {
+	cache := newFullTextCache(t.TempDir())
+	sourcePath := filepath.Join(t.TempDir(), "paper.pdf")
+	oldTime := time.Unix(1_750_000_000, 100_000_000)
+	newTime := time.Unix(1_750_000_000, 700_000_000)
+	if err := os.WriteFile(sourcePath, []byte("old-pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(sourcePath, oldTime, oldTime); err != nil {
+		t.Fatal(err)
+	}
+	doc := FullTextDocument{
+		Text:   "cached phrase from the original PDF",
+		Chunks: []chunk{{Page: 1, Text: "cached phrase from the original PDF", BlockCount: 1}},
+		Meta: fullTextCacheMeta{
+			AttachmentKey: "ATT123",
+			ParentItemKey: "ITEM123",
+			ResolvedPath:  sourcePath,
+			ContentType:   "application/pdf",
+		},
+	}
+	if err := cache.Save(doc); err != nil {
+		t.Fatalf("Save() error=%v", err)
+	}
+	attachment := domain.Attachment{Key: "ATT123", ResolvedPath: sourcePath, Resolved: true, ContentType: "application/pdf"}
+	if _, ok, err := cache.Load(attachment); err != nil || !ok {
+		t.Fatalf("initial Load() ok=%v error=%v", ok, err)
+	}
+	legacyInfo, err := os.Stat(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyMeta := fullTextCacheMeta{AttachmentKey: "ATT123", ResolvedPath: sourcePath, ContentType: "application/pdf", SourceMtimeUnix: legacyInfo.ModTime().Unix(), SourceSize: legacyInfo.Size()}
+	if !cache.IsFresh(legacyMeta, attachment) {
+		t.Fatal("legacy second-resolution cache metadata should remain compatible")
+	}
+	if matches, err := cache.Search("cached phrase", false, 10); err != nil || len(matches) != 1 {
+		t.Fatalf("initial Search() matches=%v error=%v", matches, err)
+	}
+	reader := &LocalReader{FullTextCacheDir: cache.rootDir}
+	if !reader.IsFullTextIndexed(attachment) {
+		t.Fatal("initial IsFullTextIndexed()=false")
+	}
+
+	if err := os.WriteFile(sourcePath, []byte("new-pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(sourcePath, newTime, newTime); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := cache.Load(attachment); err != nil || ok {
+		t.Fatalf("stale Load() ok=%v error=%v", ok, err)
+	}
+	if matches, err := cache.Search("cached phrase", false, 10); err != nil || len(matches) != 0 {
+		t.Fatalf("stale Search() matches=%v error=%v", matches, err)
+	}
+	if reader.IsFullTextIndexed(attachment) {
+		t.Fatal("stale IsFullTextIndexed()=true")
 	}
 }
 

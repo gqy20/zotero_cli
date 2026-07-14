@@ -132,11 +132,11 @@ zot ann delete ITEMKEY --source zotero --type highlight --yes --json
 zot ann delete ITEMKEY --source pdf --attachment ATTACHMENT_KEY --page 3 --yes --json
 ```
 
-`item import` 在 Zotero 元数据识别完成后，会定位本次导入最终保留的 PDF 附件并执行增量全文索引；索引失败会作为 warning 返回，不会回滚已成功的 Zotero 导入。`find --snippet` 返回 FTS5 最佳命中块及相邻上下文，并在 `matched_chunk` 中保留页码、附件 key 与坐标。
+`item import` 在 Zotero 元数据识别完成后，会定位本次导入最终保留的 PDF 附件并执行增量全文索引；指定收藏夹、重复附件清理和索引均以最终附件 key 为准。索引失败会作为 warning 返回，不会回滚已成功的 Zotero 导入。`find --snippet` 返回 FTS5 最佳命中块及相邻上下文，并在 `matched_chunk` 中保留页码、附件 key 与坐标。
 
 `item import --collection` 接受收藏夹 key、唯一名称或完整层级路径。名称存在歧义时命令会列出带 key 的候选项，不会自动猜测。`config check` 会额外报告 `zotero_desktop_connector_available`；Connector 不可用不会使配置检查失败，但导入 PDF 前必须启动 Zotero 桌面端。
 
-local/hybrid 下无过滤条件的 `pdf text ITEMKEY --json` 默认返回 `content_path` 和可选的 `chunks_path`，不再把完整正文复制到 JSON；Agent 应直接读取 `content_path`。`--grep`、`--pages`、`--max-chars` 返回计算后的文本子集，`--max-chars` 按 Unicode 字符而非 UTF-8 字节计数。多条目和 `--all` 同样返回缓存路径数组，只有显式 `--output-dir` 才导出 Markdown。remote 模式仍返回正文，因为客户端不能直接读取服务器路径。
+local/hybrid 下无过滤条件的 `pdf text ITEMKEY --json` 默认返回 `content_path` 和可选的 `chunks_path`，不再把完整正文复制到 JSON；Agent 应直接读取 `content_path`。`--grep`、`--pages`、`--max-chars` 返回计算后的文本子集，`--max-chars` 按 Unicode 字符而非 UTF-8 字节计数。多条目和 `--all` 同样返回缓存路径数组，只有显式 `--output-dir` 才导出 Markdown。缓存读取、FTS 检索和 `index build` 的跳过判断都会校验 PDF 源文件；文件被替换后旧缓存与旧索引不会继续命中。remote 模式仍返回正文，因为客户端不能直接读取服务器路径。
 
 `ann list`、`ann new`、`ann delete` 明确区分读取、创建和删除。多 PDF 条目默认选择第一个 PDF，也可统一使用 `--attachment ATTACHMENT_KEY` 精确选择。`ann new` 在临时副本中写入并验证后替换原 PDF；实际写入零匹配会报错并保留原文件，`--dry-run` 则允许零匹配。删除必须用 `--source zotero|pdf` 选择来源，建议先用 `--dry-run` 查看精确候选。Zotero 原生标注按 annotation item key 通过 Web API 删除，不再直接修改 SQLite；PDF 内嵌标注按 xref 在临时副本中修改并验证后替换。canonical 语法不接受 `annotations --clear` 或 `annotate --clear`。
 

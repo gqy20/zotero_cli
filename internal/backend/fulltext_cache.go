@@ -35,6 +35,7 @@ type fullTextCacheMeta struct {
 	AttachmentPath  string `json:"attachment_path,omitempty"`
 	Extractor       string `json:"extractor,omitempty"`
 	SourceMtimeUnix int64  `json:"source_mtime_unix,omitempty"`
+	SourceMtimeNano int64  `json:"source_mtime_unix_nano,omitempty"`
 	SourceSize      int64  `json:"source_size,omitempty"`
 	TextHash        string `json:"text_hash,omitempty"`
 	IndexedTextHash string `json:"indexed_text_hash,omitempty"`
@@ -226,22 +227,13 @@ func (c fullTextCache) SyncIndexIfMissing(doc FullTextDocument) error {
 }
 
 func (c fullTextCache) Save(doc FullTextDocument) error {
+	doc = c.prepareDoc(doc)
 	key := strings.TrimSpace(doc.Meta.AttachmentKey)
 	if key == "" {
 		return nil
 	}
 	if err := os.MkdirAll(c.attachmentDir(key), 0o755); err != nil {
 		return err
-	}
-	if doc.Meta.TextHash == "" && doc.Text != "" {
-		hash := sha256.Sum256([]byte(doc.Text))
-		doc.Meta.TextHash = "sha256:" + hex.EncodeToString(hash[:])
-	}
-	if doc.Meta.ExtractedAt == "" {
-		doc.Meta.ExtractedAt = time.Now().UTC().Format(time.RFC3339)
-	}
-	if doc.Meta.Chars == 0 && doc.Text != "" {
-		doc.Meta.Chars = len([]rune(doc.Text))
 	}
 	if err := os.WriteFile(c.contentPath(key), []byte(doc.Text), 0o600); err != nil {
 		return err
@@ -306,8 +298,8 @@ func (c fullTextCache) writeMetaBatch(db *sql.DB, docs []FullTextDocument) error
 	metaStmt, err := tx.Prepare(`INSERT OR REPLACE INTO fulltext_meta (
 		attachment_key, parent_item_key, resolved_path, content_type,
 		title, creators, tags, attachment_title, attachment_name, attachment_path,
-		extractor, source_mtime_unix, source_size, text_hash, indexed_text_hash, indexed_at, extracted_at, pages, chars
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		extractor, source_mtime_unix, source_mtime_unix_nano, source_size, text_hash, indexed_text_hash, indexed_at, extracted_at, pages, chars
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -337,6 +329,7 @@ func (c fullTextCache) writeMetaBatch(db *sql.DB, docs []FullTextDocument) error
 			doc.Meta.AttachmentPath,
 			doc.Meta.Extractor,
 			doc.Meta.SourceMtimeUnix,
+			doc.Meta.SourceMtimeNano,
 			doc.Meta.SourceSize,
 			doc.Meta.TextHash,
 			doc.Meta.IndexedTextHash,
@@ -565,6 +558,13 @@ func (c fullTextCache) prepareDoc(doc FullTextDocument) FullTextDocument {
 	if doc.Meta.Chars == 0 && doc.Text != "" {
 		doc.Meta.Chars = len([]rune(doc.Text))
 	}
+	if sourcePath := strings.TrimSpace(doc.Meta.ResolvedPath); sourcePath != "" {
+		if info, err := os.Stat(sourcePath); err == nil {
+			doc.Meta.SourceMtimeUnix = info.ModTime().Unix()
+			doc.Meta.SourceMtimeNano = info.ModTime().UnixNano()
+			doc.Meta.SourceSize = info.Size()
+		}
+	}
 	return doc
 }
 
@@ -599,6 +599,9 @@ func (c fullTextCache) IsFresh(meta fullTextCacheMeta, attachment domain.Attachm
 	}
 	if filepath.Clean(meta.ResolvedPath) != filepath.Clean(sourcePath) {
 		return false
+	}
+	if meta.SourceMtimeNano > 0 {
+		return meta.SourceMtimeNano == info.ModTime().UnixNano() && meta.SourceSize == info.Size()
 	}
 	return meta.SourceMtimeUnix == info.ModTime().Unix() && meta.SourceSize == info.Size()
 }
@@ -666,8 +669,8 @@ func (c fullTextCache) syncIndexWithReset(doc FullTextDocument, reset bool) erro
 		`INSERT INTO fulltext_meta (
 		 attachment_key, parent_item_key, resolved_path, content_type,
 		 title, creators, tags, attachment_title, attachment_name, attachment_path,
-		 extractor, source_mtime_unix, source_size, text_hash, indexed_text_hash, indexed_at, extracted_at, pages, chars
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 extractor, source_mtime_unix, source_mtime_unix_nano, source_size, text_hash, indexed_text_hash, indexed_at, extracted_at, pages, chars
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		doc.Meta.AttachmentKey,
 		doc.Meta.ParentItemKey,
 		doc.Meta.ResolvedPath,
@@ -680,6 +683,7 @@ func (c fullTextCache) syncIndexWithReset(doc FullTextDocument, reset bool) erro
 		doc.Meta.AttachmentPath,
 		doc.Meta.Extractor,
 		doc.Meta.SourceMtimeUnix,
+		doc.Meta.SourceMtimeNano,
 		doc.Meta.SourceSize,
 		doc.Meta.TextHash,
 		doc.Meta.TextHash,
@@ -764,6 +768,7 @@ func ensureFullTextIndexSchema(db *sql.DB) error {
 		 attachment_path TEXT,
 		 extractor TEXT,
 		 source_mtime_unix INTEGER,
+		 source_mtime_unix_nano INTEGER,
 		 source_size INTEGER,
 		 text_hash TEXT,
 		 indexed_text_hash TEXT,
@@ -799,6 +804,9 @@ func ensureFullTextIndexSchema(db *sql.DB) error {
 		}
 	}
 	if err := ensureTableColumn(db, "fulltext_meta", "indexed_text_hash", "TEXT"); err != nil {
+		return err
+	}
+	if err := ensureTableColumn(db, "fulltext_meta", "source_mtime_unix_nano", "INTEGER"); err != nil {
 		return err
 	}
 	if err := ensureTableColumn(db, "fulltext_meta", "indexed_at", "TEXT"); err != nil {
@@ -923,6 +931,7 @@ func (c fullTextCache) searchChunks(db *sql.DB, matchExpr string, query string, 
 	defer rows.Close()
 
 	rawMatches := make([]fullTextIndexMatch, 0, fetchLimit)
+	freshByAttachment := make(map[string]bool)
 	for rows.Next() {
 		var match fullTextIndexMatch
 		var bboxStr string
@@ -941,6 +950,14 @@ func (c fullTextCache) searchChunks(db *sql.DB, matchExpr string, query string, 
 			return nil, err
 		}
 		if strings.TrimSpace(match.ParentItemKey) == "" {
+			continue
+		}
+		fresh, checked := freshByAttachment[match.AttachmentKey]
+		if !checked {
+			fresh = c.indexedAttachmentFresh(match.AttachmentKey, nil)
+			freshByAttachment[match.AttachmentKey] = fresh
+		}
+		if !fresh {
 			continue
 		}
 		parseBBoxString(bboxStr, &match.ChunkBBox)
@@ -962,6 +979,40 @@ func (c fullTextCache) searchChunks(db *sql.DB, matchExpr string, query string, 
 		matches[i].ContextPageEnd = pageEnd
 	}
 	return matches, nil
+}
+
+func fullTextIndexedSourceFresh(sourcePath string, sourceMtimeUnix, sourceMtimeNano, sourceSize int64) bool {
+	if strings.TrimSpace(sourcePath) == "" {
+		return false
+	}
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		return false
+	}
+	if sourceMtimeNano > 0 {
+		return info.ModTime().UnixNano() == sourceMtimeNano && info.Size() == sourceSize
+	}
+	return info.ModTime().Unix() == sourceMtimeUnix && info.Size() == sourceSize
+}
+
+func (c fullTextCache) indexedAttachmentFresh(attachmentKey string, attachment *domain.Attachment) bool {
+	metaBytes, err := os.ReadFile(c.metaPath(attachmentKey))
+	if os.IsNotExist(err) {
+		// Preserve compatibility with legacy indexes that predate per-attachment
+		// cache metadata. New and rebuilt indexes always have meta.json.
+		return true
+	}
+	if err != nil {
+		return false
+	}
+	var meta fullTextCacheMeta
+	if err := json.Unmarshal(metaBytes, &meta); err != nil {
+		return false
+	}
+	if attachment != nil {
+		return c.IsFresh(meta, *attachment)
+	}
+	return fullTextIndexedSourceFresh(meta.ResolvedPath, meta.SourceMtimeUnix, meta.SourceMtimeNano, meta.SourceSize)
 }
 
 func fullTextEvidenceWindow(db *sql.DB, attachmentKey string, chunkIndex int) (string, int, error) {

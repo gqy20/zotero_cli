@@ -166,6 +166,8 @@ go run .\cmd\zot config check
 .\zot.exe pdf open ITEMKEY --page 5
 ```
 
+全文缓存会校验 PDF 的路径、大小和高精度修改时间；附件被替换后，下一次读取或索引会重新提取，不会继续返回旧正文。
+
 ### 批量操作
 
 ```powershell

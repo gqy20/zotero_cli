@@ -104,7 +104,7 @@ zot item show ITEMKEY --snippet --json
 zot pdf text ITEMKEY --pages 3-8 --grep methods --max-chars 12000 --json
 ```
 
-`pdf text` 会优先命中 `.zotero_cli/fulltext` 缓存；只有 cache miss 才重新提取。local/hybrid 下无过滤条件的请求返回 `content_path` 和可选的 `chunks_path`，Agent 直接读取 `content_path`，不要期待 JSON 内嵌整篇正文。只有 `--grep`、`--pages` 或 `--max-chars` 返回文本子集，只有显式 `--output-dir` 才导出 Markdown；remote 模式仍返回正文。
+`pdf text` 会优先命中 `.zotero_cli/fulltext` 缓存；只有 cache miss 才重新提取。PDF 路径、大小或高精度修改时间变化时缓存自动失效，FTS 检索也不会返回已过期正文。local/hybrid 下无过滤条件的请求返回 `content_path` 和可选的 `chunks_path`，Agent 直接读取 `content_path`，不要期待 JSON 内嵌整篇正文。只有 `--grep`、`--pages` 或 `--max-chars` 返回文本子集，只有显式 `--output-dir` 才导出 Markdown；remote 模式仍返回正文。
 
 ## PDF、附件与标注
 
