@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"zotero_cli/internal/config"
@@ -555,6 +556,73 @@ func TestClientDeleteItems(t *testing.T) {
 	}
 	if result.LastModifiedVersion != 54 || len(result.Successful) != 2 || result.Successful[1].Key != "ITEMA002" {
 		t.Fatalf("unexpected delete result: %#v", result)
+	}
+}
+
+func TestClientDeleteCollectionsAndSearchesUseOfficialBatchParameters(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		path      string
+		parameter string
+		call      func(*Client) (BatchWriteResult, error)
+	}{
+		{name: "collections", path: "/users/123/collections", parameter: "collectionKey", call: func(client *Client) (BatchWriteResult, error) {
+			return client.DeleteCollections(context.Background(), []string{"COLL0001", "COLL0002"}, 60)
+		}},
+		{name: "searches", path: "/users/123/searches", parameter: "searchKey", call: func(client *Client) (BatchWriteResult, error) {
+			return client.DeleteSearches(context.Background(), []string{"SRCH0001", "SRCH0002"}, 60)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodDelete || r.URL.Path != tt.path {
+					t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+				}
+				if got := r.URL.Query().Get(tt.parameter); got == "" || !strings.Contains(got, ",") {
+					t.Fatalf("%s = %q", tt.parameter, got)
+				}
+				if got := r.Header.Get("If-Unmodified-Since-Version"); got != "60" {
+					t.Fatalf("version = %q", got)
+				}
+				w.Header().Set("Last-Modified-Version", "61")
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			defer server.Close()
+			client := New(config.Config{LibraryType: "user", LibraryID: "123", APIKey: "secret"}, server.URL, server.Client())
+			result, err := tt.call(client)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Successful) != 2 || result.LastModifiedVersion != 61 {
+				t.Fatalf("result = %#v", result)
+			}
+		})
+	}
+}
+
+func TestClientGetLibraryVersionUsesLightweightRequest(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/users/123/items" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if r.URL.Query().Get("format") != "versions" || r.URL.Query().Get("limit") != "1" {
+			t.Fatalf("query = %s", r.URL.RawQuery)
+		}
+		w.Header().Set("Last-Modified-Version", "77")
+		writeTestJSON := map[string]int{"ITEMA001": 76}
+		_ = json.NewEncoder(w).Encode(writeTestJSON)
+	}))
+	defer server.Close()
+	client := New(config.Config{LibraryType: "user", LibraryID: "123", APIKey: "secret"}, server.URL, server.Client())
+	version, err := client.GetLibraryVersion(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version != 77 {
+		t.Fatalf("version = %d", version)
 	}
 }
 

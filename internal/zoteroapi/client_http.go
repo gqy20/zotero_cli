@@ -264,7 +264,7 @@ func (c *Client) doWriteRequest(ctx context.Context, method string, relativePath
 	return c.doHTTPRequest(ctx, method, u.String(), payload, false, headers)
 }
 
-func (c *Client) doDeleteByKeysRequest(ctx context.Context, relativePath string, keys []string, ifUnmodifiedSinceVersion int) (*http.Response, error) {
+func (c *Client) doDeleteByKeysRequest(ctx context.Context, relativePath string, keyParameter string, keys []string, ifUnmodifiedSinceVersion int) (*http.Response, error) {
 	if c.cfg.Mode != "" && c.cfg.Mode != "web" {
 		return nil, fmt.Errorf("unsupported mode %q", c.cfg.Mode)
 	}
@@ -284,7 +284,7 @@ func (c *Client) doDeleteByKeysRequest(ctx context.Context, relativePath string,
 	}
 
 	values := u.Query()
-	values.Set("itemKey", strings.Join(keys, ","))
+	values.Set(keyParameter, strings.Join(keys, ","))
 	u.RawQuery = values.Encode()
 
 	headers := map[string]string{

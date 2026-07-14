@@ -61,7 +61,7 @@ type itemImportCollectionResolver interface {
 }
 
 type itemImportDeleteClient interface {
-	GetLibraryStats(context.Context) (zoteroapi.LibraryStats, error)
+	GetLibraryVersion(context.Context) (int, error)
 	DeleteItems(context.Context, []string, int) (zoteroapi.BatchWriteResult, error)
 }
 
@@ -313,13 +313,13 @@ func (s ItemImportService) cleanupDuplicateAttachments(ctx context.Context, cfg 
 		cleanup.Deleted = nil
 		return cleanup, err
 	}
-	stats, err := client.GetLibraryStats(ctx)
+	version, err := client.GetLibraryVersion(ctx)
 	if err != nil {
 		cleanup.Deleted = nil
 		return cleanup, err
 	}
 	deleted := append([]string(nil), cleanup.Deleted...)
-	batch, err := client.DeleteItems(ctx, deleted, stats.LastLibraryVersion)
+	batch, err := deleteKeysInBatches(ctx, client.DeleteItems, deleted, version)
 	if err != nil {
 		cleanup.Deleted = nil
 		return cleanup, err

@@ -58,8 +58,8 @@ func (f *fakeItemImportIndexBuilder) Build(_ context.Context, request IndexBuild
 	return Result{Data: IndexBuildResult{TotalItems: 1, TotalAttachments: 1, Indexed: 1}}, nil
 }
 
-func (f *fakeItemImportDeleteClient) GetLibraryStats(context.Context) (zoteroapi.LibraryStats, error) {
-	return zoteroapi.LibraryStats{LastLibraryVersion: 17}, nil
+func (f *fakeItemImportDeleteClient) GetLibraryVersion(context.Context) (int, error) {
+	return 17, nil
 }
 
 func (f *fakeItemImportDeleteClient) DeleteItems(_ context.Context, keys []string, version int) (zoteroapi.BatchWriteResult, error) {

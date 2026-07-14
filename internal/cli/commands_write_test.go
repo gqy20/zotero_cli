@@ -220,6 +220,33 @@ func TestRunTagReplacePreviewJSON(t *testing.T) {
 	}
 }
 
+func TestRunTagApplyDryRun(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	planPath := filepath.Join(t.TempDir(), "tags.json")
+	if err := os.WriteFile(planPath, []byte(`[{"keys":["ITEMA001","ITEMA002"],"add":["进化","综述"]},{"keys":["ITEMA001"],"remove":["旧标签"]}]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"tag", "apply", "--from", planPath, "--dry-run", "--json"})
+	if exitCode != ExitOK {
+		t.Fatalf("code=%d stderr=%q", exitCode, stderr.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if got["command"] != "tag apply" {
+		t.Fatalf("command = %#v", got["command"])
+	}
+	data := got["data"].(map[string]any)
+	if data["items"] != float64(2) || data["add_assignments"] != float64(4) || data["remove_assignments"] != float64(1) {
+		t.Fatalf("data = %#v", data)
+	}
+}
+
 func TestRunCreateItemFromFileText(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

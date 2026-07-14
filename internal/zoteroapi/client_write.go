@@ -51,7 +51,19 @@ func (c *Client) DeleteItem(ctx context.Context, key string, ifUnmodifiedSinceVe
 }
 
 func (c *Client) DeleteItems(ctx context.Context, keys []string, ifUnmodifiedSinceVersion int) (BatchWriteResult, error) {
-	resp, err := c.doDeleteByKeysRequest(ctx, "items", keys, ifUnmodifiedSinceVersion)
+	return c.deleteObjects(ctx, "items", "itemKey", keys, ifUnmodifiedSinceVersion)
+}
+
+func (c *Client) DeleteCollections(ctx context.Context, keys []string, ifUnmodifiedSinceVersion int) (BatchWriteResult, error) {
+	return c.deleteObjects(ctx, "collections", "collectionKey", keys, ifUnmodifiedSinceVersion)
+}
+
+func (c *Client) DeleteSearches(ctx context.Context, keys []string, ifUnmodifiedSinceVersion int) (BatchWriteResult, error) {
+	return c.deleteObjects(ctx, "searches", "searchKey", keys, ifUnmodifiedSinceVersion)
+}
+
+func (c *Client) deleteObjects(ctx context.Context, relativePath string, keyParameter string, keys []string, ifUnmodifiedSinceVersion int) (BatchWriteResult, error) {
+	resp, err := c.doDeleteByKeysRequest(ctx, relativePath, keyParameter, keys, ifUnmodifiedSinceVersion)
 	if err != nil {
 		return BatchWriteResult{}, err
 	}

@@ -563,3 +563,23 @@ func (c *Client) GetLibraryStats(ctx context.Context) (LibraryStats, error) {
 		LastLibraryVersion: itemVersions.LastModifiedVersion,
 	}, nil
 }
+
+// GetLibraryVersion returns the current library version without loading the
+// library's collections and saved searches. The response header on any
+// multi-object request carries the library version, so a one-item versions
+// request is sufficient for write preconditions.
+func (c *Client) GetLibraryVersion(ctx context.Context) (int, error) {
+	resp, err := c.doRequest(ctx, "items", FindOptions{Limit: 1}, map[string]string{"format": "versions"})
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, apiErrorFromResponse(resp)
+	}
+	version := parseLastModifiedVersion(resp.Header.Get("Last-Modified-Version"))
+	if version <= 0 {
+		return 0, fmt.Errorf("library did not provide a usable current version")
+	}
+	return version, nil
+}

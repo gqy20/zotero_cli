@@ -176,7 +176,13 @@ go run .\cmd\zot config check
 # 正则批量改名：默认预览，加 --yes 才写入
 .\zot.exe tag replace --match '^(Gene Flow|Gene flow|gene flow)$' --replace 'Gene Flow'
 .\zot.exe tag replace --match '^植物/(.+)$' --replace '物种/植物/$1' --yes
+
+# tag-plan.json 可为不同条目同时新增或移除多个标签
+.\zot.exe tag apply --from .\tag-plan.json --dry-run --json
+.\zot.exe tag apply --from .\tag-plan.json --json
 ```
+
+批量写操作自动按 Zotero 官方上限每 50 条切分，并在批次之间衔接库版本号。`tag apply` 在全部批次完成后统一读取并核验最终标签。
 
 导入的 `--collection` 支持收藏夹 key、唯一名称或完整层级路径。同名时命令会列出带 key 的候选路径，不会自动猜测；导入完成后会为最终保留的附件增量建立全文索引。
 

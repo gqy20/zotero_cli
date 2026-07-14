@@ -85,12 +85,27 @@ zot item import ./paper.pdf --collection "研究/植物/栗属" --json
 zot tag replace --match '^(SV|SV检测)$' --replace '结构变异' --json
 zot tag replace --match '^植物/(.+)$' --replace '物种/植物/$1' --yes --json
 
+# 一次应用多篇文献的多个标签变更；先 dry-run，再正式写入
+zot tag apply --from ./tag-plan.json --dry-run --json
+zot tag apply --from ./tag-plan.json --json
+
 zot coll new --name "Reviews" --json
 zot coll add COLLKEY ITEM1 ITEM2 --json
 zot coll remove COLLKEY ITEM1 --json
 zot note new --parent ITEMKEY --text "Reading note" --json
 zot search new --data '{"name":"Recent","conditions":[]}' --json
 ```
+
+`tag-plan.json` 是面向条目的操作数组，例如：
+
+```json
+[
+  {"keys": ["ITEMA001", "ITEMA002"], "add": ["进化", "综述"]},
+  {"keys": ["ITEMA001"], "remove": ["旧标签"]}
+]
+```
+
+`tag apply` 会合并同一条目的操作，按 Zotero 官方上限每 50 条分批写入并统一核验。标签写入、收藏夹成员修改和批量删除也使用相同的自动分批与版本衔接机制。
 
 写入统一接受 `--set FIELD=VALUE`、`--data JSON`、`--from PATH`；`--from -` 表示 stdin。安全选项统一为 `--dry-run`、`--yes/-y`、`--if-version`。`tag replace` 是例外：不带 `--yes` 时默认只生成预览。
 

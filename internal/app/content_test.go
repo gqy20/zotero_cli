@@ -40,8 +40,8 @@ type annotationTestDeleteClient struct {
 	version int
 }
 
-func (c *annotationTestDeleteClient) GetLibraryStats(context.Context) (zoteroapi.LibraryStats, error) {
-	return zoteroapi.LibraryStats{LastLibraryVersion: 17}, nil
+func (c *annotationTestDeleteClient) GetLibraryVersion(context.Context) (int, error) {
+	return 17, nil
 }
 
 func (c *annotationTestDeleteClient) DeleteItems(_ context.Context, keys []string, version int) (zoteroapi.BatchWriteResult, error) {

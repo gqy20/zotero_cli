@@ -10,7 +10,7 @@ import (
 	"zotero_cli/internal/zoteroapi"
 )
 
-const tagReplaceBatchSize = 50
+const tagSearchBatchSize = 20
 
 type TagReplaceRequest struct {
 	Match   string        `json:"match"`
@@ -88,17 +88,9 @@ func (s WriteService) ReplaceTags(ctx context.Context, req TagReplaceRequest) (R
 	if err != nil {
 		return Result{}, err
 	}
-	itemsByKey := make(map[string]zoteroapi.Item)
-	for _, replacement := range replacements {
-		items, err := client.FindItems(ctx, zoteroapi.FindOptions{Tag: replacement.From})
-		if err != nil {
-			return Result{Data: report}, fmt.Errorf("find items tagged %q: %w", replacement.From, err)
-		}
-		for _, item := range items {
-			if itemHasExactTag(item, replacement.From) {
-				itemsByKey[item.Key] = item
-			}
-		}
+	itemsByKey, err := findItemsForTagReplacements(ctx, client, replacements)
+	if err != nil {
+		return Result{Data: report}, err
 	}
 
 	keys := make([]string, 0, len(itemsByKey))
@@ -122,19 +114,13 @@ func (s WriteService) ReplaceTags(ctx context.Context, req TagReplaceRequest) (R
 		payload = append(payload, map[string]any{"key": key, "version": item.Version, "tags": tags})
 	}
 
-	for start := 0; start < len(payload); start += tagReplaceBatchSize {
-		end := min(start+tagReplaceBatchSize, len(payload))
-		batch, err := client.UpdateItems(ctx, payload[start:end], version)
-		if err != nil {
-			return Result{Data: report}, err
-		}
-		if len(batch.Failed) > 0 {
-			return Result{Data: report}, fmt.Errorf("replace tags failed for %d item(s)", len(batch.Failed))
-		}
-		report.UpdatedItems += len(batch.Successful)
-		if batch.LastModifiedVersion > 0 {
-			version = batch.LastModifiedVersion
-		}
+	batch, err := updateItemsInBatches(ctx, client, payload, version)
+	report.UpdatedItems = len(batch.Successful)
+	if batch.LastModifiedVersion > 0 {
+		version = batch.LastModifiedVersion
+	}
+	if err != nil {
+		return Result{Data: report}, err
 	}
 
 	verifyKeys := make([]string, 0, len(expected))
@@ -142,19 +128,16 @@ func (s WriteService) ReplaceTags(ctx context.Context, req TagReplaceRequest) (R
 		verifyKeys = append(verifyKeys, key)
 	}
 	sort.Strings(verifyKeys)
-	for start := 0; start < len(verifyKeys); start += tagReplaceBatchSize {
-		end := min(start+tagReplaceBatchSize, len(verifyKeys))
-		items, err := client.GetItemsByKeys(ctx, verifyKeys[start:end])
-		if err != nil {
-			return Result{Data: report}, fmt.Errorf("verify replaced tags: %w", err)
+	items, err := getItemsByKeysInBatches(ctx, client, verifyKeys)
+	if err != nil {
+		return Result{Data: report}, fmt.Errorf("verify replaced tags: %w", err)
+	}
+	for _, item := range items {
+		want, ok := expected[item.Key]
+		if !ok || !equalTagSets(itemTagObjects(item), want) {
+			return Result{Data: report}, fmt.Errorf("verification failed for item %s", item.Key)
 		}
-		for _, item := range items {
-			want, ok := expected[item.Key]
-			if !ok || !equalTagSets(itemTagObjects(item), want) {
-				return Result{Data: report}, fmt.Errorf("verification failed for item %s", item.Key)
-			}
-			report.VerifiedItems++
-		}
+		report.VerifiedItems++
 	}
 	if report.VerifiedItems != len(expected) {
 		return Result{Data: report}, fmt.Errorf("verification returned %d of %d updated item(s)", report.VerifiedItems, len(expected))
@@ -163,6 +146,51 @@ func (s WriteService) ReplaceTags(ctx context.Context, req TagReplaceRequest) (R
 	report.Applied = true
 	report.LastLibraryVersion = version
 	return tagReplaceResult(report, false), nil
+}
+
+func findItemsForTagReplacements(ctx context.Context, client WriteClient, replacements []TagReplacement) (map[string]zoteroapi.Item, error) {
+	itemsByKey := make(map[string]zoteroapi.Item)
+	queries := make([]string, 0, len(replacements))
+	for _, replacement := range replacements {
+		term := replacement.From
+		if strings.Contains(term, "||") {
+			items, err := client.FindItems(ctx, zoteroapi.FindOptions{Tag: term})
+			if err != nil {
+				return nil, fmt.Errorf("find items tagged %q: %w", term, err)
+			}
+			collectReplacementItems(itemsByKey, items, replacements)
+			continue
+		}
+		if strings.HasPrefix(term, "-") {
+			term = `\` + term
+		}
+		queries = append(queries, term)
+	}
+	for start := 0; start < len(queries); start += tagSearchBatchSize {
+		end := min(start+tagSearchBatchSize, len(queries))
+		query := strings.Join(queries[start:end], " || ")
+		items, err := client.FindItems(ctx, zoteroapi.FindOptions{Tag: query})
+		if err != nil {
+			return nil, fmt.Errorf("find items for tag replacement batch: %w", err)
+		}
+		collectReplacementItems(itemsByKey, items, replacements)
+	}
+	return itemsByKey, nil
+}
+
+func collectReplacementItems(target map[string]zoteroapi.Item, items []zoteroapi.Item, replacements []TagReplacement) {
+	matched := make(map[string]struct{}, len(replacements))
+	for _, replacement := range replacements {
+		matched[replacement.From] = struct{}{}
+	}
+	for _, item := range items {
+		for _, tag := range itemTagObjects(item) {
+			if _, ok := matched[tag.Tag]; ok {
+				target[item.Key] = item
+				break
+			}
+		}
+	}
 }
 
 func replaceItemTags(item zoteroapi.Item, re *regexp.Regexp, replacement string) ([]zoteroapi.ItemTag, bool, error) {

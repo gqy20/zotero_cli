@@ -136,6 +136,28 @@ func (c *CLI) newTagCommand(opts *globalOptions) *cobra.Command {
 	_ = replaceCmd.MarkFlagRequired("match")
 	_ = replaceCmd.MarkFlagRequired("replace")
 	tag.AddCommand(replaceCmd)
+	var applyFrom string
+	var applySafety app.SafetyOptions
+	applyCmd := &cobra.Command{
+		Use:   "apply",
+		Short: "Apply multiple item tag changes in batched Web API requests",
+		Long: "Apply an item-centric JSON array in one operation. Each entry has keys plus add and/or remove arrays.\n" +
+			`Example: [{"keys":["ITEMA001","ITEMA002"],"add":["进化","综述"]},{"keys":["ITEMA001"],"remove":["旧标签"]}]`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			operations, err := app.ResolveTagApplyOperations(applyFrom, c.stdin)
+			if err != nil {
+				return &exitError{code: ExitUsage, err: err}
+			}
+			return c.runWrite(cmd, opts, app.CommandPath{Resource: "tag", Action: "apply"}, func(ctx context.Context, s app.WriteService) (app.Result, error) {
+				return s.ApplyTags(ctx, app.TagApplyRequest{Operations: operations, Safety: applySafety})
+			})
+		},
+	}
+	applyCmd.Flags().StringVar(&applyFrom, "from", "", "read a JSON tag-operation array from a file, or - for stdin")
+	addSafetyFlags(applyCmd, &applySafety, false)
+	_ = applyCmd.MarkFlagRequired("from")
+	tag.AddCommand(applyCmd)
 	return tag
 }
 func (c *CLI) newNoteListCommand(opts *globalOptions) *cobra.Command {

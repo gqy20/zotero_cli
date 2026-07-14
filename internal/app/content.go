@@ -205,7 +205,7 @@ func NewAnnotationService() AnnotationService {
 }
 
 type annotationDeleteClient interface {
-	GetLibraryStats(context.Context) (zoteroapi.LibraryStats, error)
+	GetLibraryVersion(context.Context) (int, error)
 	DeleteItems(context.Context, []string, int) (zoteroapi.BatchWriteResult, error)
 }
 
@@ -376,11 +376,11 @@ func (s AnnotationService) Delete(ctx context.Context, itemKey string, filter An
 		}
 		version := safety.IfVersion
 		if version == 0 {
-			stats, err := client.GetLibraryStats(ctx)
+			current, err := client.GetLibraryVersion(ctx)
 			if err != nil {
 				return Result{}, fmt.Errorf("resolve current library version: %w", err)
 			}
-			version = stats.LastLibraryVersion
+			version = current
 			if version <= 0 {
 				return Result{}, fmt.Errorf("library did not provide a usable current version")
 			}
@@ -389,7 +389,7 @@ func (s AnnotationService) Delete(ctx context.Context, itemKey string, filter An
 		for _, annotation := range zoteroCandidates {
 			keys = append(keys, annotation.Key)
 		}
-		batch, err := client.DeleteItems(ctx, keys, version)
+		batch, err := deleteKeysInBatches(ctx, client.DeleteItems, keys, version)
 		if err != nil {
 			return Result{}, err
 		}

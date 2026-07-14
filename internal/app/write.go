@@ -44,12 +44,14 @@ type MembershipRequest struct {
 }
 
 type WriteClient interface {
-	GetLibraryStats(context.Context) (zoteroapi.LibraryStats, error)
+	GetLibraryVersion(context.Context) (int, error)
 	ListTags(context.Context) ([]zoteroapi.Tag, error)
 	FindItems(context.Context, zoteroapi.FindOptions) ([]zoteroapi.Item, error)
 	CreateItem(context.Context, map[string]any, int) (zoteroapi.WriteResult, error)
 	UpdateItem(context.Context, string, map[string]any, int) (zoteroapi.WriteResult, error)
 	DeleteItems(context.Context, []string, int) (zoteroapi.BatchWriteResult, error)
+	DeleteCollections(context.Context, []string, int) (zoteroapi.BatchWriteResult, error)
+	DeleteSearches(context.Context, []string, int) (zoteroapi.BatchWriteResult, error)
 	GetItemsByKeys(context.Context, []string) ([]zoteroapi.Item, error)
 	UpdateItems(context.Context, []map[string]any, int) (zoteroapi.BatchWriteResult, error)
 	CreateCollection(context.Context, map[string]any, int) (zoteroapi.WriteResult, error)
@@ -190,11 +192,11 @@ func (s WriteService) clientAndVersion(ctx context.Context, cfg config.Config, s
 		return nil, 0, fmt.Errorf("--if-version must be non-negative")
 	}
 	if version == 0 {
-		stats, err := client.GetLibraryStats(ctx)
+		current, err := client.GetLibraryVersion(ctx)
 		if err != nil {
 			return nil, 0, fmt.Errorf("resolve current library version: %w", err)
 		}
-		version = stats.LastLibraryVersion
+		version = current
 		if version <= 0 {
 			return nil, 0, fmt.Errorf("library did not provide a usable current version; pass --if-version")
 		}
@@ -288,40 +290,58 @@ func (s WriteService) Delete(ctx context.Context, kind string, req ObjectWriteRe
 		return Result{}, err
 	}
 	if kind == "item" || kind == "note" {
-		result, err := client.DeleteItems(ctx, req.Keys, version)
+		keys, err := uniqueKeys(req.Keys)
 		if err != nil {
 			return Result{}, err
 		}
-		text := fmt.Sprintf("deleted %d %s objects at library version %d", len(req.Keys), displayResource(kind), result.LastModifiedVersion)
-		if len(req.Keys) == 1 {
-			text = fmt.Sprintf("deleted %s %s at library version %d", displayResource(kind), req.Keys[0], result.LastModifiedVersion)
+		result, err := deleteKeysInBatches(ctx, client.DeleteItems, keys, version)
+		if err != nil {
+			return Result{Data: result}, err
 		}
-		return Result{Data: result, Meta: map[string]any{"deleted": len(req.Keys)}, Text: text}, nil
+		text := fmt.Sprintf("deleted %d %s objects at library version %d", len(keys), displayResource(kind), result.LastModifiedVersion)
+		if len(keys) == 1 {
+			text = fmt.Sprintf("deleted %s %s at library version %d", displayResource(kind), keys[0], result.LastModifiedVersion)
+		}
+		return Result{Data: result, Meta: map[string]any{"deleted": len(keys)}, Text: text}, nil
 	}
-	results := make([]zoteroapi.WriteResult, 0, len(req.Keys))
-	for _, key := range req.Keys {
-		var result zoteroapi.WriteResult
+	keys, err := uniqueKeys(req.Keys)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(keys) == 1 {
+		var single zoteroapi.WriteResult
 		switch kind {
 		case "coll":
-			result, err = client.DeleteCollection(ctx, key, version)
+			single, err = client.DeleteCollection(ctx, keys[0], version)
 		case "search":
-			result, err = client.DeleteSearch(ctx, key, version)
+			single, err = client.DeleteSearch(ctx, keys[0], version)
 		default:
 			return Result{}, fmt.Errorf("unsupported delete resource %q", kind)
 		}
 		if err != nil {
 			return Result{}, err
 		}
-		results = append(results, result)
-		if result.LastModifiedVersion > 0 {
-			version = result.LastModifiedVersion
-		}
+		result := zoteroapi.BatchWriteResult{Successful: []zoteroapi.WriteResult{single}, LastModifiedVersion: single.LastModifiedVersion}
+		return Result{Data: result, Meta: map[string]any{"deleted": 1}, Text: fmt.Sprintf("deleted %s %s at library version %d", displayResource(kind), keys[0], single.LastModifiedVersion)}, nil
 	}
-	text := fmt.Sprintf("deleted %d %s objects", len(results), displayResource(kind))
-	if len(results) == 1 {
-		text = fmt.Sprintf("deleted %s %s at library version %d", displayResource(kind), results[0].Key, results[0].LastModifiedVersion)
+	var deleteBatch batchDeleteFunc
+	switch kind {
+	case "coll":
+		deleteBatch = client.DeleteCollections
+	case "search":
+		deleteBatch = client.DeleteSearches
+	default:
+		return Result{}, fmt.Errorf("unsupported delete resource %q", kind)
 	}
-	return Result{Data: results, Meta: map[string]any{"deleted": len(results)}, Text: text}, nil
+	result, err := deleteKeysInBatches(ctx, deleteBatch, keys, version)
+	if err != nil {
+		return Result{Data: result}, err
+	}
+	text := fmt.Sprintf("deleted %d %s objects at library version %d", len(keys), displayResource(kind), result.LastModifiedVersion)
+	if len(keys) == 1 {
+		text = fmt.Sprintf("deleted %s %s at library version %d", displayResource(kind), keys[0], result.LastModifiedVersion)
+	}
+	return Result{Data: result, Meta: map[string]any{"deleted": len(keys)}, Text: text}, nil
 }
 
 func displayResource(kind string) string {
@@ -342,21 +362,25 @@ func (s WriteService) Tags(ctx context.Context, req TagWriteRequest) (Result, er
 	if req.Safety.DryRun {
 		return dryRunResult("update item tags", req, version), nil
 	}
-	items, err := client.GetItemsByKeys(ctx, req.Keys)
+	keys, err := uniqueKeys(req.Keys)
 	if err != nil {
 		return Result{}, err
+	}
+	items, err := getItemsByKeysInBatches(ctx, client, keys)
+	if err != nil {
+		return Result{}, err
+	}
+	if missing := missingItemKeys(keys, items); len(missing) > 0 {
+		return Result{}, fmt.Errorf("item keys not found: %s", formatMissingKeys(missing))
 	}
 	payload := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		tags := updateItemTags(item, req.Tag, req.Add)
 		payload = append(payload, map[string]any{"key": item.Key, "version": item.Version, "tags": tags})
 	}
-	result, err := client.UpdateItems(ctx, payload, version)
+	result, err := updateItemsInBatches(ctx, client, payload, version)
 	if err != nil {
-		return Result{}, err
-	}
-	if len(result.Failed) > 0 {
-		return Result{Data: result}, fmt.Errorf("update item tags failed for %d item(s)", len(result.Failed))
+		return Result{Data: result}, err
 	}
 	action := "added"
 	if !req.Add {
@@ -402,24 +426,31 @@ func (s WriteService) Membership(ctx context.Context, req MembershipRequest) (Re
 	if req.Safety.DryRun {
 		return dryRunResult("update collection membership", req, version), nil
 	}
-	items, err := client.GetItemsByKeys(ctx, req.ItemKeys)
+	keys, err := uniqueKeys(req.ItemKeys)
 	if err != nil {
 		return Result{}, err
+	}
+	items, err := getItemsByKeysInBatches(ctx, client, keys)
+	if err != nil {
+		return Result{}, err
+	}
+	if missing := missingItemKeys(keys, items); len(missing) > 0 {
+		return Result{}, fmt.Errorf("item keys not found: %s", formatMissingKeys(missing))
 	}
 	payload := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		collections := updateStringSet(item.Collections, req.CollectionKey, req.Add)
 		payload = append(payload, map[string]any{"key": item.Key, "version": item.Version, "collections": collections})
 	}
-	result, err := client.UpdateItems(ctx, payload, version)
+	result, err := updateItemsInBatches(ctx, client, payload, version)
 	if err != nil {
-		return Result{}, err
+		return Result{Data: result}, err
 	}
 	action := "added to"
 	if !req.Add {
 		action = "removed from"
 	}
-	return Result{Data: result, Text: fmt.Sprintf("%d items %s collection %s at library version %d", len(req.ItemKeys), action, req.CollectionKey, result.LastModifiedVersion)}, nil
+	return Result{Data: result, Text: fmt.Sprintf("%d items %s collection %s at library version %d", len(keys), action, req.CollectionKey, result.LastModifiedVersion)}, nil
 }
 
 func updateStringSet(values []string, target string, add bool) []string {
