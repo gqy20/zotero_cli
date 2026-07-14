@@ -34,7 +34,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 .\zot.exe tag list --json                   # JSON 包含 type：0=手动，1=自动
 .\zot.exe tag clean --match '^[\x00-\x7F]+$' --max-items 1 --json # 默认仅预览低频自动英文标签
 .\zot.exe find --all --json
-.\zot.exe find --all --sort dateAdded --order desc --limit 10 --json  # 最近入库
+.\zot.exe find --sort dateAdded --order desc --limit 10 --json  # 最近入库
 .\zot.exe find "query" --json
 .\zot.exe show ITEMKEY --json
 .\zot.exe ref show ITEMKEY --json              # PMC/PubMed 核心 + Europe PMC 自动补全
@@ -47,12 +47,12 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 .\zot.exe ref cited ITEMKEY --external --json  # Europe PMC 外部被引网络
 .\zot.exe ref entities ITEMKEY --json          # Europe PMC 实体/关系并写入按需索引
 .\zot.exe ref profile ITEMKEY --json              # 版本、评价、基金与开放获取画像
-.\zot.exe ref status --unsupported --json                # 查看 NCBI 不支持、待 GROBID 的条目
+.\zot.exe ref status --view unsupported --json                # 查看 NCBI 不支持、待 GROBID 的条目
 .\zot.exe ref cited ITEMKEY --json            # 查询哪些已索引条目引用该文献
 .\zot.exe ref ctx ITEMKEY --json            # 查询 PMC 正文引用语境
-.\zot.exe ref build --contexts --workers 3 --json # 补建历史 PMC 引用语境
-.\zot.exe ref status --grobid --json              # 实验性：检查可选 PDF 后备
-.\zot.exe ref build --grobid --limit 5 --json     # 实验性：显式小批量解析
+.\zot.exe ref build --scope contexts --workers 3 --json # 补建历史 PMC 引用语境
+.\zot.exe ref status --view grobid --json              # 实验性：检查可选 PDF 后备
+.\zot.exe ref build --scope grobid --limit 5 --json     # 实验性：显式小批量解析
 .\zot.exe find --collection COLLKEY --all --json | .\zot.exe item export --from - --as csljson
 .\zot.exe ann list ITEMKEY --json          # 读取 PDF 标注（双源）
 ```
@@ -143,14 +143,14 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 用户问“最近入库”“今天刚添加”“最新加入 Zotero 的文献”时，用 `dateAdded`，不要用发表日期 `date`：
 
 ```powershell
-.\zot.exe find --all --sort dateAdded --order desc --limit 10 --json
+.\zot.exe find --sort dateAdded --order desc --limit 10 --json
 .\zot.exe find --all --added-since 7d --sort dateAdded --order desc --json
 ```
 
 如果只是快速人工扫标题，优先用文本模式的轻量字段：
 
 ```powershell
-.\zot.exe find --all --sort dateAdded --order desc --limit 10 --include-fields title,date_added,container
+.\zot.exe find --sort dateAdded --order desc --limit 10 --include-fields title,date_added,container
 ```
 
 注意：`--include-fields` 主要影响文本模式；`--json` 默认返回完整 Item 结构。
@@ -201,9 +201,9 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 - `--offset N` + `--limit N` — 分页
 
 **全文检索：**
-- `--in metadata|fulltext|all` — 唯一的检索范围选择器；默认 `metadata`，全文范围只支持 local/hybrid
-- fulltext/all 的 QUERY 直接使用 SQLite FTS5：`"完整短语"`、`prefix*`、`AND` / `OR` / `NOT`、括号
-- `--snippet` — 启用 FTS5 匹配片段预览，且要求 `--in fulltext` 或 `--in all`（未指定 `--limit` 时默认 20 条）
+- `--in metadata|fulltext` — 唯一的检索范围选择器；默认 `metadata`，全文范围只支持 local/hybrid
+- fulltext 的 QUERY 直接使用 SQLite FTS5：`"完整短语"`、`prefix*`、`AND` / `OR` / `NOT`、括号
+- `--snippet` — 启用 FTS5 匹配片段预览，且要求 `--in fulltext`（未指定 `--limit` 时默认 20 条）
 
 文本模式辅助选项：
 
@@ -314,8 +314,8 @@ CLI 配置存储在 `~/.zot/.env`。
 
 ## 性能注意
 
-- `find` 轻量结果未指定 `--limit` 时默认 100 条；`--snippet` 或 `--full` 默认 20 条；仅显式 `--all` 取消上限
-- local/hybrid 下有 query 且 FTS 有数据时自动启用全文检索；`--all` / 纯过滤列表不会自动走全文索引
+- `find` 轻量结果未指定 `--limit` 时默认 100 条；`--snippet` 或 `--full` 默认 20 条；`--all` 仅取消上限并与 `--limit` 互斥，metadata 范围可省略 QUERY
+- local/hybrid 下必须显式使用 `--in fulltext` 才查询全文索引；默认 `metadata` 不会根据索引状态改变查询语义
 - `pdf text` 结果有缓存，重复提取同一 PDF 直接命中；local / hybrid 的无过滤请求默认返回缓存路径
 - 高频脚本遇 `429` 会自动退避+抖动，但仍应主动降速
 

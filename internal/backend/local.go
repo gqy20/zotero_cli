@@ -132,39 +132,13 @@ func (r *LocalReader) FindItems(ctx context.Context, opts FindOptions) ([]domain
 	if opts.QMode != "" {
 		return nil, newUnsupportedFeatureErrorWithHint("local", "find --qmode", "set ZOT_MODE=web or ZOT_MODE=hybrid to use this feature")
 	}
+	if opts.In != "metadata" && opts.In != "fulltext" {
+		return nil, fmt.Errorf("invalid find scope %q: expected metadata or fulltext", opts.In)
+	}
 	if opts.In == "fulltext" {
 		return r.findItemsFromFullTextIndex(ctx, opts)
 	}
-	if opts.In == "metadata" || opts.Query == "" {
-		return r.findItemsFromMetadata(ctx, opts)
-	}
-	return r.findItemsMerged(ctx, opts)
-}
-
-func (r *LocalReader) findItemsMerged(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
-	branchOpts := opts
-	branchOpts.Start = 0
-	if opts.Limit > 0 {
-		branchOpts.Limit = opts.Start + opts.Limit
-	}
-
-	metadataOpts := branchOpts
-	metadataOpts.In = "metadata"
-	fullTextOpts := branchOpts
-	fullTextOpts.In = "fulltext"
-
-	metadataItems, err := r.findItemsFromMetadata(ctx, metadataOpts)
-	if err != nil {
-		return nil, err
-	}
-	fullTextItems, err := r.findItemsFromFullTextIndex(ctx, fullTextOpts)
-	if err != nil {
-		return nil, err
-	}
-
-	items := mergeFindItems(metadataItems, fullTextItems)
-	items = localFilterAndOrderItems(items, opts)
-	return paginateItems(items, opts.Start, opts.Limit), nil
+	return r.findItemsFromMetadata(ctx, opts)
 }
 
 func (r *LocalReader) findItemsFromMetadata(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
@@ -324,50 +298,9 @@ func metadataFindScore(item domain.Item, query string) int {
 	}
 }
 
-func mergeFindItems(metadataItems, fullTextItems []domain.Item) []domain.Item {
-	merged := make([]domain.Item, 0, len(metadataItems)+len(fullTextItems))
-	byKey := make(map[string]int, len(metadataItems)+len(fullTextItems))
-	for _, item := range metadataItems {
-		byKey[item.Key] = len(merged)
-		merged = append(merged, item)
-	}
-	for _, item := range fullTextItems {
-		if index, ok := byKey[item.Key]; ok {
-			existing := &merged[index]
-			existing.MatchedOn = mergeMatchedOn(existing.MatchedOn, item.MatchedOn)
-			if existing.SnippetAttachmentKey == "" {
-				existing.SnippetAttachmentKey = item.SnippetAttachmentKey
-			}
-			if existing.MatchedChunk == nil {
-				existing.MatchedChunk = item.MatchedChunk
-			}
-			continue
-		}
-		byKey[item.Key] = len(merged)
-		merged = append(merged, item)
-	}
-	return merged
-}
-
-func mergeMatchedOn(left, right []string) []string {
-	out := append([]string(nil), left...)
-	for _, value := range right {
-		found := false
-		for _, existing := range out {
-			if existing == value {
-				found = true
-				break
-			}
-		}
-		if !found {
-			out = append(out, value)
-		}
-	}
-	return out
-}
-
 func (r *LocalReader) findItemsFromFullTextIndex(ctx context.Context, opts FindOptions) ([]domain.Item, error) {
-	matches, err := newFullTextCache(r.FullTextCacheDir).Search(opts.Query, opts.Limit)
+	candidateLimit := fullTextCandidateLimit(opts)
+	matches, err := newFullTextCache(r.FullTextCacheDir).Search(opts.Query, candidateLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -436,6 +369,34 @@ func (r *LocalReader) findItemsFromFullTextIndex(ctx context.Context, opts FindO
 		}
 	}
 	return items, nil
+}
+
+func fullTextCandidateLimit(opts FindOptions) int {
+	if opts.Limit <= 0 || fullTextNeedsCompleteCandidateSet(opts) {
+		return 0
+	}
+	return opts.Start + opts.Limit
+}
+
+func fullTextNeedsCompleteCandidateSet(opts FindOptions) bool {
+	if opts.ItemType != "" || len(opts.Tags) > 0 || opts.DateAfter != "" || opts.DateBefore != "" {
+		return true
+	}
+	if len(opts.Collection) > 0 || len(opts.NoCollection) > 0 || len(opts.TagContains) > 0 || len(opts.ExcludeTags) > 0 {
+		return true
+	}
+	if opts.ExcludeItemType != "" || opts.DateModifiedAfter != "" || opts.DateAddedAfter != "" || hasAttachmentFindFilters(opts) {
+		return true
+	}
+	sortBy := strings.ToLower(strings.TrimSpace(opts.Sort))
+	if sortBy == "" {
+		return strings.TrimSpace(opts.Direction) != ""
+	}
+	if sortBy == "relevance" || sortBy == "relevance_score" {
+		direction := strings.ToLower(strings.TrimSpace(opts.Direction))
+		return direction != "" && direction != "desc"
+	}
+	return true
 }
 
 func (r *LocalReader) GetItem(ctx context.Context, key string) (domain.Item, error) {

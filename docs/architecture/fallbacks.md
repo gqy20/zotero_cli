@@ -101,7 +101,7 @@ PMC JATS 成功时不会重复请求 Europe PMC references。GROBID 是显式、
 
 以下情况应保留真实错误或给出迁移提示：
 
-- `find --in fulltext|all`、附件路径/类型/健康过滤等本地独有查询不能退到 Zotero Web API
+- `find --in fulltext`、附件路径/类型/健康过滤等本地独有查询不能退到 Zotero Web API
 - PDF 文件、PDF 标注和本地附件读取不能因 LocalReader 缺失而假装由 WebReader 提供
 - 无效参数、认证失败、权限不足、版本冲突和删除门控失败不能通过替换后端绕过
 - 损坏或语义不完整的旧缓存不能生成看似可靠的页码、坐标或引用上下文

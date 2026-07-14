@@ -81,7 +81,6 @@
     {"id":"item-find","command":"item find","args":["{{QUERY}}","--in","metadata","--limit","{{LIMIT}}","--json"],"tier":"default","risk":"read","compare":"item-find-mode","variant":"configured"},
     {"id":"item-find-local","command":"item find","args":["{{QUERY}}","--in","metadata","--limit","{{LIMIT}}","--mode","local","--json"],"tier":"default","risk":"read","compare":"item-find-mode","variant":"local"},
     {"id":"item-find-fulltext","command":"item find","args":["{{QUERY}}","--in","fulltext","--limit","{{LIMIT}}","--mode","local","--json"],"tier":"extended","risk":"read"},
-    {"id":"item-find-all","command":"item find","args":["{{QUERY}}","--in","all","--limit","{{LIMIT}}","--mode","local","--json"],"tier":"extended","risk":"read"},
     {"id":"note-list","command":"note list","args":["--limit","{{LIMIT}}","--json"],"tier":"default","risk":"read","compare":"note-list-mode","variant":"configured"},
     {"id":"note-list-local","command":"note list","args":["--limit","{{LIMIT}}","--mode","local","--json"],"tier":"default","risk":"read","compare":"note-list-mode","variant":"local"},
     {"id":"note-find","command":"note find","args":["{{QUERY}}","--limit","{{LIMIT}}","--json"],"tier":"default","risk":"read","compare":"note-find-mode","variant":"configured"},

@@ -15,10 +15,10 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 	var find backend.FindOptions
 	var snippet bool
 	find.In = "metadata"
-	findCmd := &cobra.Command{Use: "find QUERY", Short: "Find library items", Args: cobra.ArbitraryArgs}
+	findCmd := &cobra.Command{Use: "find [QUERY]", Short: "Find or browse library items", Args: cobra.ArbitraryArgs}
 	flags := findCmd.Flags()
-	flags.BoolVar(&find.All, "all", false, "disable the default result limit; also permits an empty query")
-	flags.StringVar(&find.In, "in", "metadata", "search scope: metadata, fulltext, or all")
+	flags.BoolVar(&find.All, "all", false, "remove the result limit")
+	flags.StringVar(&find.In, "in", "metadata", "search scope: metadata or fulltext")
 	flags.BoolVar(&find.Full, "full", false, "return full item data")
 	flags.BoolVar(&snippet, "snippet", false, "include a matching full-text preview")
 	flags.StringVar(&find.ItemType, "type", "", "item type, such as article or journalArticle")
@@ -54,6 +54,9 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 		if find.Limit < 0 || find.Start < 0 {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("--limit and --offset must be non-negative")}
 		}
+		if find.All && cmd.Flags().Changed("limit") {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--all and --limit are mutually exclusive")}
+		}
 		if cmd.Flags().Changed("limit") && find.Limit == 0 {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("--limit must be positive; use --all to remove the result limit")}
 		}
@@ -64,17 +67,11 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("invalid value for --qmode")}
 		}
 		find.In = strings.ToLower(strings.TrimSpace(find.In))
-		if find.In != "metadata" && find.In != "fulltext" && find.In != "all" {
-			return &exitError{code: ExitUsage, err: fmt.Errorf("--in must be metadata, fulltext, or all")}
+		if find.In != "metadata" && find.In != "fulltext" {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--in must be metadata or fulltext")}
 		}
 		if find.In != "metadata" && find.Query == "" {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("--in %s requires QUERY", find.In)}
-		}
-		if find.Query == "" && len(args) == 0 && !find.All && !hasFindFilters(find) {
-			return &exitError{code: ExitUsage, err: fmt.Errorf("QUERY, --all, or a filter is required")}
-		}
-		if find.Query == "" && hasFindFilters(find) {
-			find.All = true
 		}
 		if err := validateIncludeFields(find.IncludeFields); err != nil {
 			return &exitError{code: ExitUsage, err: err}
@@ -82,9 +79,8 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 		path := app.CommandPath{Resource: "item", Action: "find"}
 		return c.runRead(cmd, opts, path, func(ctx context.Context, service app.ReadService) (app.Result, error) {
 			return service.FindItems(ctx, app.ItemFindRequest{
-				Options:     find,
-				Snippet:     snippet,
-				ExplicitAll: cmd.Flags().Changed("all") && find.All,
+				Options: find,
+				Snippet: snippet,
 			})
 		})
 	}
@@ -155,8 +151,4 @@ func validateIncludeFields(fields []string) error {
 		}
 	}
 	return nil
-}
-
-func hasFindFilters(opts backend.FindOptions) bool {
-	return opts.ItemType != "" || len(opts.Tags) > 0 || opts.DateAfter != "" || opts.DateBefore != "" || opts.HasPDF || len(opts.Collection) > 0 || len(opts.NoCollection) > 0 || len(opts.TagContains) > 0 || len(opts.ExcludeTags) > 0 || opts.ExcludeItemType != "" || opts.MissingAttachment || opts.BadAttachmentName || opts.AttachmentName != "" || opts.AttachmentPath != "" || opts.AttachmentType != "" || opts.AttachmentHealth != "" || opts.DateModifiedAfter != "" || opts.DateAddedAfter != ""
 }

@@ -244,6 +244,8 @@ func TestQueryCommandsExposeOneScopeSelector(t *testing.T) {
 	}{
 		{[]string{"item", "find"}, []string{"in"}, []string{"fulltext", "fulltext-only", "metadata-only", "fulltext-any"}},
 		{[]string{"ref", "find"}, []string{"in"}, []string{"contexts", "references", "metadata"}},
+		{[]string{"ref", "build"}, []string{"scope"}, []string{"failed", "contexts", "grobid"}},
+		{[]string{"ref", "status"}, []string{"view"}, []string{"failed", "unsupported", "grobid"}},
 		{[]string{"note", "list"}, nil, []string{"query"}},
 		{[]string{"item", "export"}, []string{"from"}, []string{"query", "collection", "all", "type", "tag", "attachment-name", "has-pdf"}},
 	}
@@ -261,6 +263,37 @@ func TestQueryCommandsExposeOneScopeSelector(t *testing.T) {
 			if command.Flags().Lookup(name) != nil {
 				t.Fatalf("%s unexpectedly exposes retired --%s", strings.Join(tt.path, " "), name)
 			}
+		}
+	}
+}
+
+func TestFindRejectsAllWithLimit(t *testing.T) {
+	_, stderr := captureOutput(t)
+	if code := Run([]string{"find", "genome", "--all", "--limit", "10"}); code != ExitUsage {
+		t.Fatalf("code = %d; stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "--all and --limit are mutually exclusive") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestReferenceScopeAndViewRejectInvalidValues(t *testing.T) {
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{args: []string{"ref", "build", "--scope", "invalid"}, want: "--scope must be pending, failed, contexts, or grobid"},
+		{args: []string{"ref", "build", "--all"}, want: "--all requires --scope grobid"},
+		{args: []string{"ref", "build", "--scope", "grobid", "--all", "--limit", "5"}, want: "--all and --limit are mutually exclusive"},
+		{args: []string{"ref", "status", "--view", "invalid"}, want: "--view must be summary, failed, unsupported, or grobid"},
+	}
+	for _, tt := range tests {
+		_, stderr := captureOutput(t)
+		if code := Run(tt.args); code != ExitUsage {
+			t.Fatalf("%v code = %d; stderr=%q", tt.args, code, stderr.String())
+		}
+		if !strings.Contains(stderr.String(), tt.want) {
+			t.Fatalf("%v stderr = %q", tt.args, stderr.String())
 		}
 	}
 }
@@ -334,6 +367,14 @@ func TestStableDocumentationMatchesCurrentCommandSurface(t *testing.T) {
 		for _, line := range strings.Split(text, "\n") {
 			trimmed := strings.TrimSpace(line)
 			isCommand := strings.HasPrefix(trimmed, "zot ") || strings.HasPrefix(trimmed, `.\zot.exe `)
+			isItemFind := strings.Contains(line, "item find") ||
+				(isCommand && strings.Contains(line, " find") && !strings.Contains(line, "ref find"))
+			if isItemFind && strings.Contains(line, "--in all") {
+				t.Fatalf("%s documents retired item find --in all scope: %q", relativePath, line)
+			}
+			if isCommand && isItemFind && strings.Contains(line, "--all") && strings.Contains(line, "--limit") {
+				t.Fatalf("%s combines mutually exclusive item find --all and --limit: %q", relativePath, line)
+			}
 			if isCommand && strings.Contains(line, "pdf text") && strings.Contains(line, "--workers") {
 				t.Fatalf("%s documents unsupported pdf text --workers flag: %q", relativePath, line)
 			}
@@ -351,6 +392,20 @@ func TestStableDocumentationMatchesCurrentCommandSurface(t *testing.T) {
 				for _, retired := range []string{"--contexts", "--references", "--metadata"} {
 					if strings.Contains(line, retired) {
 						t.Fatalf("%s documents retired ref find flag %s: %q", relativePath, retired, line)
+					}
+				}
+			}
+			if isCommand && strings.Contains(line, "ref build") {
+				for _, retired := range []string{"--failed", "--contexts", "--grobid"} {
+					if strings.Contains(line, retired) {
+						t.Fatalf("%s documents retired ref build flag %s: %q", relativePath, retired, line)
+					}
+				}
+			}
+			if isCommand && strings.Contains(line, "ref status") {
+				for _, retired := range []string{"--failed", "--unsupported", "--grobid"} {
+					if strings.Contains(line, retired) {
+						t.Fatalf("%s documents retired ref status flag %s: %q", relativePath, retired, line)
 					}
 				}
 			}

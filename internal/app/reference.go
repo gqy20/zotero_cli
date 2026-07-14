@@ -23,21 +23,17 @@ type ReferenceShowRequest struct {
 }
 
 type ReferenceBuildRequest struct {
-	Workers  int
-	Limit    int
-	Source   string
-	Force    bool
-	Refresh  bool
-	Failed   bool
-	Contexts bool
-	Grobid   bool
-	All      bool
+	Workers int
+	Limit   int
+	Source  string
+	Scope   string
+	Force   bool
+	Refresh bool
+	All     bool
 }
 
 type ReferenceStatusRequest struct {
-	Failed      bool
-	Unsupported bool
-	Grobid      bool
+	View string
 }
 
 type ReferenceFindRequest struct {
@@ -125,7 +121,20 @@ func (s ReferenceService) Show(ctx context.Context, req ReferenceShowRequest) (R
 }
 
 func (s ReferenceService) Build(ctx context.Context, req ReferenceBuildRequest) (Result, error) {
-	if req.Grobid {
+	scope := strings.ToLower(strings.TrimSpace(req.Scope))
+	if scope == "" {
+		scope = "pending"
+	}
+	if scope != "pending" && scope != "failed" && scope != "contexts" && scope != "grobid" {
+		return Result{}, fmt.Errorf("invalid reference build scope %q", req.Scope)
+	}
+	if req.All && scope != "grobid" {
+		return Result{}, fmt.Errorf("ref build --all requires --scope grobid")
+	}
+	if req.All && req.Limit > 0 {
+		return Result{}, fmt.Errorf("ref build --all and --limit are mutually exclusive")
+	}
+	if scope == "grobid" {
 		return s.GrobidBuild(ctx, req)
 	}
 	if req.Workers == 0 {
@@ -139,9 +148,6 @@ func (s ReferenceService) Build(ctx context.Context, req ReferenceBuildRequest) 
 	}
 	if req.Limit < 0 || !validReferenceSource(req.Source) {
 		return Result{}, fmt.Errorf("invalid reference build options")
-	}
-	if req.Failed && req.Contexts {
-		return Result{}, fmt.Errorf("--failed and --contexts are mutually exclusive")
 	}
 	cfg, err := s.config()
 	if err != nil {
@@ -157,7 +163,7 @@ func (s ReferenceService) Build(ctx context.Context, req ReferenceBuildRequest) 
 	}
 	defer store.Close()
 	var items []domain.Item
-	if req.Failed {
+	if scope == "failed" {
 		failed, err := store.Failed(ctx)
 		if err != nil {
 			return Result{}, err
@@ -168,7 +174,7 @@ func (s ReferenceService) Build(ctx context.Context, req ReferenceBuildRequest) 
 			}
 		}
 		req.Force = true
-	} else if req.Contexts {
+	} else if scope == "contexts" {
 		pending, err := store.ContextPending(ctx, req.Limit)
 		if err != nil {
 			return Result{}, err
@@ -192,12 +198,19 @@ func (s ReferenceService) Build(ctx context.Context, req ReferenceBuildRequest) 
 	if err != nil {
 		return Result{}, err
 	}
-	meta := map[string]any{"processed": report.Processed, "succeeded": report.Succeeded, "unsupported": report.Unsupported, "failed": report.Failed, "elapsed_ms": report.ElapsedMS, "workers": req.Workers, "scope_failed": req.Failed, "scope_contexts": req.Contexts}
+	meta := map[string]any{"processed": report.Processed, "succeeded": report.Succeeded, "unsupported": report.Unsupported, "failed": report.Failed, "elapsed_ms": report.ElapsedMS, "workers": req.Workers, "scope": scope}
 	return Result{Data: report, Meta: meta, Text: fmt.Sprintf("Reference build: %d succeeded, %d unsupported, %d failed, %d skipped; %d references (%s)", report.Succeeded, report.Unsupported, report.Failed, report.Skipped, report.References, time.Duration(report.ElapsedMS)*time.Millisecond)}, nil
 }
 
 func (s ReferenceService) Status(ctx context.Context, req ReferenceStatusRequest) (Result, error) {
-	if req.Grobid {
+	view := strings.ToLower(strings.TrimSpace(req.View))
+	if view == "" {
+		view = "summary"
+	}
+	if view != "summary" && view != "failed" && view != "unsupported" && view != "grobid" {
+		return Result{}, fmt.Errorf("invalid reference status view %q", req.View)
+	}
+	if view == "grobid" {
 		return s.GrobidStatus(ctx)
 	}
 	cfg, err := s.config()
@@ -237,14 +250,14 @@ func (s ReferenceService) Status(ctx context.Context, req ReferenceStatusRequest
 			return Result{}, err
 		}
 	}
-	if req.Failed {
+	if view == "failed" {
 		rows, err := store.Failed(ctx)
 		if err != nil {
 			return Result{}, err
 		}
 		return Result{Data: rows, Meta: map[string]any{"total": len(rows), "index_path": store.Path(), "initialized": true, "read_mode": readMode}, Text: failedReferenceText(rows)}, nil
 	}
-	if req.Unsupported {
+	if view == "unsupported" {
 		rows, err := store.Unsupported(ctx)
 		if err != nil {
 			return Result{}, err

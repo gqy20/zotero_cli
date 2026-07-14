@@ -51,7 +51,6 @@ go run ./cmd/zot-bench --binary .\zot.exe --tier data `
 |---|---|---|
 | 元数据检索 | `item find QUERY --in metadata --limit N --json` | 默认本地条目查询 |
 | 全文检索 | `item find 'term* OR "phrase"' --in fulltext --limit N --json` | 单独测 FTS5，不混入元数据路径 |
-| 合并检索 | `item find 'term* OR "phrase"' --in all --limit N --json` | 测 metadata + FTS5 合并和去重 |
 | 引用检索 | `ref find 'term* OR "phrase"' --in all --json` | 测引用、语境和元数据 FTS5 |
 | 笔记检索 | `note find 'term|phrase\s+variant' --json` | 测 Go 正则过滤；不要使用 `note list --query` |
 | 明确 key 导出 | `item export ITEMKEY --as bibtex` | 测 Zotero 导出，不包含选择阶段 |

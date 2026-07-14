@@ -73,13 +73,13 @@ zot index status --json
 最近入库使用 `dateAdded`：
 
 ```powershell
-zot item find --all --sort dateAdded --order desc --limit 10 --json
+zot item find --sort dateAdded --order desc --limit 10 --json
 zot item find --all --added-since 7d --sort dateAdded --order desc --json
 ```
 
 统一分页参数为 `--limit`、`--offset`、`--sort`、`--order asc|desc`。
 
-`item find` 未显式指定 `--limit` 时，轻量结果默认限制 100 条，`--snippet` 或 `--full` 默认限制 20 条。显式正数 `--limit` 覆盖默认值，只有显式 `--all` 才取消上限；JSON `meta` 提供 `returned`、`limit`、`offset`、`has_more` 和可选的 `next_offset`。
+`item find` 未显式指定 `--limit` 时，轻量结果默认限制 100 条，`--snippet` 或 `--full` 默认限制 20 条。`--all` 仅取消结果上限，并与 `--limit` 互斥；metadata 范围可省略 QUERY。JSON `meta` 提供 `returned`、`limit`、`offset`、`has_more` 和可选的 `next_offset`。
 
 ## Item type 归一化
 
@@ -153,15 +153,15 @@ zot ref entities ITEMKEY --json
 zot ref profile ITEMKEY --json
 
 zot ref build --workers 3 --json
-zot ref build --failed --workers 2 --json
-zot ref build --contexts --workers 3 --json
+zot ref build --scope failed --workers 2 --json
+zot ref build --scope contexts --workers 3 --json
 zot ref resolve --workers 8 --json
 zot ref status --json
-zot ref status --failed --json
-zot ref status --unsupported --json
+zot ref status --view failed --json
+zot ref status --view unsupported --json
 ```
 
-PMC JATS 优先；没有 PMC 时使用 PubMed，并以 Europe PMC 增强。Europe PMC 失败不得阻断 NCBI 核心结果。GROBID 仅在显式 `--grobid` 时启用。
+PMC JATS 优先；没有 PMC 时使用 PubMed，并以 Europe PMC 增强。Europe PMC 失败不得阻断 NCBI 核心结果。GROBID 仅在显式 `--scope grobid` 时启用。
 
 ## 安全写入
 

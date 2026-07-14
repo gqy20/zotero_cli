@@ -135,7 +135,7 @@ zot find 'CRISPR AND "gene editing"' --in fulltext --snippet --json
 zot find "evolution" --date-after 2023 --tag "review" --json
 
 # 最近入库：按 Zotero dateAdded 排序
-zot find --all --sort dateAdded --order desc --limit 10 --json
+zot find --sort dateAdded --order desc --limit 10 --json
 
 # 最近 7 天入库
 zot find --all --added-since 7d --sort dateAdded --order desc --json
@@ -149,13 +149,13 @@ zot find --attachment-health warning --json
 zot find --all --date-after 2026-03 --date-before 2026-03 --sort date --order desc --json
 
 # 快速人工浏览最近入库标题（文本模式）
-zot find --all --sort dateAdded --order desc --limit 10 --include-fields title,date_added,container
+zot find --sort dateAdded --order desc --limit 10 --include-fields title,date_added,container
 
 # 返回完整字段
 zot find "speciation" --full --json
 ```
 
-未指定 `--limit` 时，普通轻量检索最多返回 100 条，`--snippet` 或 `--full` 最多返回 20 条。只有显式 `--all` 才返回全部匹配项；当 `meta.has_more=true` 时，用 `meta.next_offset` 继续翻页。
+未指定 `--limit` 时，普通轻量检索最多返回 100 条，`--snippet` 或 `--full` 最多返回 20 条。`--all` 仅取消上限并与 `--limit` 互斥；metadata 范围允许省略 QUERY。当 `meta.has_more=true` 时，用 `meta.next_offset` 继续翻页。
 
 `--date-after` / `--date-before` 过滤发表日期，支持 `YYYY` / `YYYY-MM` / `YYYY-MM-DD`。local/hybrid 会兼容 Zotero 常见的部分日期字符串，如 `YYYY-MM-00 YYYY-MM` 和 `MM/YYYY`。
 

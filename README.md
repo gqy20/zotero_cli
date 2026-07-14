@@ -255,7 +255,7 @@ zot find "hybrid speciation" --json
 zot find "CRISPR" --date-after 2023 --date-before 2025 --json
 
 # 最近入库（按 Zotero dateAdded，而不是发表日期）
-zot find --all --sort dateAdded --order desc --limit 10 --json
+zot find --sort dateAdded --order desc --limit 10 --json
 
 # 某个月发表的文献
 zot find --all --date-after 2026-03 --date-before 2026-03 --sort date --order desc --json
@@ -274,12 +274,11 @@ zot find --bad-attachment-name --json
 # 全文搜索 PDF 内容（local / hybrid）；QUERY 直接使用 SQLite FTS5 语法
 zot find '"同源多倍体" OR autopolyploid*' --in fulltext --snippet --json
 zot find "同源多倍体" --in metadata --json  # 仅标题/作者/标签等元数据，也是默认范围
-zot find '同源多倍体 OR autopolyploid*' --in all --snippet --json  # 合并元数据与 PDF 正文
 # 普通检索默认限制 100 条；snippet / --full 默认限制 20 条
 zot find '"同源多倍体"' --in fulltext --snippet --limit 200 --json
 ```
 
-显式 `--limit N` 始终覆盖默认值；只有显式 `--all` 才取消上限。JSON 的 `meta` 会返回 `returned`、`limit`、`offset`、`has_more` 和可选的 `next_offset`，便于调用方继续翻页。
+显式 `--limit N` 覆盖默认值；`--all` 取消上限，二者互斥。metadata 范围允许省略 QUERY，因此 `zot find` 默认浏览前 100 条。JSON 的 `meta` 会返回 `returned`、`limit`、`offset`、`has_more` 和可选的 `next_offset`，便于调用方继续翻页。
 
 ### PDF 阅读与标注
 

@@ -57,7 +57,7 @@ go run ./cmd/zot-bench --binary .\zot.exe --tier data `
 
 ## 2026-07-14 场景口径更新
 
-- `item find` 的范围只使用 `--in metadata|fulltext|all`。metadata 是默认基线；fulltext 和 all 必须用原生 SQLite FTS5 表达式单独测量。
+- `item find` 的范围只使用 `--in metadata|fulltext`。metadata 是默认基线；fulltext 必须用原生 SQLite FTS5 表达式单独测量。
 - `ref find` 的范围只使用 `--in all|references|contexts|metadata`，QUERY 同样直接使用 SQLite FTS5。
 - `note find QUERY` 使用不区分大小写的 Go 正则；`note list` 不再接受查询参数。
 - `item export` 只测明确 key 或 `--from PATH|-`。需要筛选时，分别记录 `item find --json` 的选择耗时和 export 的导出耗时，不能把两阶段重新封装成 export 私有筛选器。

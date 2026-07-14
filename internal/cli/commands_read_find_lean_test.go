@@ -15,11 +15,15 @@ import (
 // --- Stubs for lean tests ---
 
 type leanStubReader struct {
-	items []domain.Item
-	item  domain.Item
+	items    []domain.Item
+	item     domain.Item
+	observed *backend.FindOptions
 }
 
 func (r leanStubReader) FindItems(_ context.Context, opts backend.FindOptions) ([]domain.Item, error) {
+	if r.observed != nil {
+		*r.observed = opts
+	}
 	return append([]domain.Item(nil), r.items...), nil
 }
 
@@ -368,7 +372,7 @@ func TestFindJSONAppliesDefaultLimitAndPaginationMetadata(t *testing.T) {
 	}
 }
 
-func TestFindJSONExplicitAllDisablesDefaultLimit(t *testing.T) {
+func TestFindJSONAllDisablesDefaultLimit(t *testing.T) {
 	items := make([]domain.Item, 101)
 	for i := range items {
 		items[i] = domain.Item{Key: fmt.Sprintf("ITEM_%04d", i), ItemType: "journalArticle", Title: fmt.Sprintf("Result %d", i)}
@@ -400,6 +404,41 @@ func TestFindJSONExplicitAllDisablesDefaultLimit(t *testing.T) {
 	meta := got["meta"].(map[string]any)
 	if meta["limit"] != float64(0) || meta["has_more"] != false {
 		t.Fatalf("unexpected unbounded pagination meta: %#v", meta)
+	}
+}
+
+func TestFindJSONFilterWithoutQueryKeepsDefaultLimit(t *testing.T) {
+	items := make([]domain.Item, 101)
+	for i := range items {
+		items[i] = domain.Item{Key: fmt.Sprintf("ITEM_%04d", i), ItemType: "journalArticle", Title: fmt.Sprintf("Result %d", i)}
+	}
+
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	var observed backend.FindOptions
+	previousNewReader := testCLI.backendNewReader
+	t.Cleanup(func() { testCLI.backendNewReader = previousNewReader })
+	testCLI.backendNewReader = func(config.Config, *http.Client) (backend.Reader, error) {
+		return leanStubReader{items: items, observed: &observed}, nil
+	}
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"find", "--type", "article", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	if data := got["data"].([]any); len(data) != 100 {
+		t.Fatalf("filtered find returned %d items, want default limit 100", len(data))
+	}
+	if observed.All {
+		t.Fatalf("filter-only find unexpectedly enabled all mode: %#v", observed)
 	}
 }
 

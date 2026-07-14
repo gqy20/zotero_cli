@@ -65,11 +65,11 @@ zot search list --json
 zot group list --json
 ```
 
-统一分页参数是 `--limit`、`--offset`、`--sort`、`--order asc|desc`。`item find` 的轻量结果默认限制 100 条，`--snippet` 或 `--full` 默认限制 20 条；显式正数 `--limit` 优先，只有显式 `--all` 才取消上限。JSON 分页元数据包含 `returned`、`limit`、`offset`、`has_more` 和可选的 `next_offset`。旧 `--start`、`--direction` 已不再接受。
+统一分页参数是 `--limit`、`--offset`、`--sort`、`--order asc|desc`。`item find` 的轻量结果默认限制 100 条，`--snippet` 或 `--full` 默认限制 20 条；`--all` 仅表示取消上限，并与 `--limit` 互斥。metadata 范围允许省略 QUERY，因此过滤、排序和默认浏览都不需要借用 `--all`。JSON 分页元数据包含 `returned`、`limit`、`offset`、`has_more` 和可选的 `next_offset`。旧 `--start`、`--direction` 已不再接受。
 
 常用 item type 短名会在输入层归一化：`article` → `journalArticle`、`chapter` → `bookSection`、`conf` → `conferencePaper`、`web` → `webpage`、`blog` → `blogPost`。JSON 和持久化数据始终使用 Zotero 官方值。
 
-`item find --in metadata|fulltext|all` 是唯一的检索范围选择器，默认 `metadata`。fulltext/all 的 QUERY 原样交给 SQLite FTS5，可使用 `"完整短语"`、`prefix*`、`AND` / `OR` / `NOT` 和括号；`--snippet` 要求全文范围。`note find QUERY` 则使用不区分大小写的 Go 正则；`note list` 只负责枚举，不接受查询参数。
+`item find --in metadata|fulltext` 是唯一的检索范围选择器，默认 `metadata`。fulltext 的 QUERY 原样交给 SQLite FTS5，可使用 `"完整短语"`、`prefix*`、`AND` / `OR` / `NOT` 和括号；`--snippet` 要求 `--in fulltext`。元数据与全文使用不同查询语义，因此不提供含混的合并范围。`note find QUERY` 则使用不区分大小写的 Go 正则；`note list` 只负责枚举，不接受查询参数。
 
 导出只接收明确的 item key，或通过 `--from PATH|-` 接收 key 数组、item 数组及 `find --json` 响应。需要按收藏夹、日期或标签导出时，先运行 `item find --json`，再把结果文件或 stdin 交给 `item export --from`。
 
@@ -165,20 +165,20 @@ zot ref entities ITEMKEY --json
 zot ref profile ITEMKEY --json
 
 zot ref build --workers 3 --json
-zot ref build --failed --workers 2 --json
-zot ref build --contexts --workers 3 --json
-zot ref build --grobid --limit 5 --json
+zot ref build --scope failed --workers 2 --json
+zot ref build --scope contexts --workers 3 --json
+zot ref build --scope grobid --limit 5 --json
 zot ref resolve --workers 8 --json
 zot ref status --json
-zot ref status --failed --json
-zot ref status --unsupported --json
-zot ref status --grobid --json
+zot ref status --view failed --json
+zot ref status --view unsupported --json
+zot ref status --view grobid --json
 
 zot index build --workers 4 --json
 zot index status --json
 ```
 
-`ref build --failed` 与 `ref build --contexts` 是互斥范围；GROBID 仅在显式 `--grobid` 时启用。完整来源和 fallback 语义见 [引用索引与文献发现](./references.md)。
+`ref build --scope pending|failed|contexts|grobid` 使用单一构建范围；`ref status --view summary|failed|unsupported|grobid` 使用单一展示视图。GROBID 仅在显式 `--scope grobid` 时启用。完整来源和 fallback 语义见 [引用索引与文献发现](./references.md)。
 
 ## Schema、配置与运行时
 

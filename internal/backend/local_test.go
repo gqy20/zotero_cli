@@ -620,7 +620,7 @@ func TestFullTextCacheSearchDedupesParentItems(t *testing.T) {
 	}
 }
 
-func TestFullTextCacheSearchPrefersExactTitlePhrase(t *testing.T) {
+func TestFullTextCacheSearchReturnsPhraseMatches(t *testing.T) {
 	rootDir := t.TempDir()
 	cache := newFullTextCache(rootDir)
 	sourceDir := t.TempDir()
@@ -661,12 +661,12 @@ func TestFullTextCacheSearchPrefersExactTitlePhrase(t *testing.T) {
 	if len(matches) == 0 {
 		t.Fatalf("Search() returned no matches")
 	}
-	if matches[0].ParentItemKey != "ITEM123" {
-		t.Fatalf("Search() top match = %#v, want ITEM123 exact title hit first", matches[0])
+	if len(matches) != 2 {
+		t.Fatalf("Search() returned %d matches, want 2", len(matches))
 	}
 }
 
-func TestFullTextCacheSearchPrefersBalancedTokenCoverage(t *testing.T) {
+func TestFullTextCacheSearchUsesNativeChunkBM25Ordering(t *testing.T) {
 	rootDir := t.TempDir()
 	cache := newFullTextCache(rootDir)
 	sourceDir := t.TempDir()
@@ -707,8 +707,8 @@ func TestFullTextCacheSearchPrefersBalancedTokenCoverage(t *testing.T) {
 	if len(matches) == 0 {
 		t.Fatalf("Search() returned no matches")
 	}
-	if matches[0].ParentItemKey != "ITEM123" {
-		t.Fatalf("Search() top match = %#v, want ITEM123 balanced two-token hit first", matches[0])
+	if matches[0].ParentItemKey != "ITEM456" {
+		t.Fatalf("Search() top match = %#v, want native BM25 ordering without custom token balancing", matches[0])
 	}
 }
 

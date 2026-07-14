@@ -73,31 +73,41 @@ func (c *CLI) newReferenceCommand(opts *globalOptions) *cobra.Command {
 
 	var build app.ReferenceBuildRequest
 	build.Source = "auto"
+	build.Scope = "pending"
 	build.Workers = 3
 	buildCmd := &cobra.Command{Use: "build", Short: "Build or backfill the reference index", Args: cobra.NoArgs}
 	buildCmd.Flags().IntVar(&build.Workers, "workers", 3, "parallel workers")
-	buildCmd.Flags().IntVar(&build.Limit, "limit", 0, "maximum pending items")
+	buildCmd.Flags().IntVar(&build.Limit, "limit", 0, "maximum items")
 	buildCmd.Flags().StringVar(&build.Source, "source", "auto", "auto, pmc, or pubmed")
+	buildCmd.Flags().StringVar(&build.Scope, "scope", "pending", "pending, failed, contexts, or grobid")
 	buildCmd.Flags().BoolVar(&build.Force, "force", false, "reprocess fresh items")
 	buildCmd.Flags().BoolVar(&build.Refresh, "refresh", false, "bypass network caches")
-	buildCmd.Flags().BoolVar(&build.Failed, "failed", false, "retry only failed items")
-	buildCmd.Flags().BoolVar(&build.Contexts, "contexts", false, "backfill PMC citation contexts")
-	buildCmd.Flags().BoolVar(&build.Grobid, "grobid", false, "EXPERIMENTAL: process unsupported items through GROBID")
 	buildCmd.Flags().BoolVar(&build.All, "all", false, "process every GROBID candidate")
-	buildCmd.MarkFlagsMutuallyExclusive("failed", "contexts", "grobid")
 	buildCmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		build.Scope = strings.ToLower(strings.TrimSpace(build.Scope))
+		if !validReferenceBuildScope(build.Scope) {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--scope must be pending, failed, contexts, or grobid")}
+		}
+		if build.All && build.Scope != "grobid" {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--all requires --scope grobid")}
+		}
+		if build.All && cmd.Flags().Changed("limit") {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--all and --limit are mutually exclusive")}
+		}
 		return c.runReference(cmd, opts, "build", func(ctx context.Context, service app.ReferenceService) (app.Result, error) {
 			return service.Build(ctx, build)
 		})
 	}
 
 	var status app.ReferenceStatusRequest
+	status.View = "summary"
 	statusCmd := &cobra.Command{Use: "status", Short: "Show reference index coverage", Args: cobra.NoArgs}
-	statusCmd.Flags().BoolVar(&status.Failed, "failed", false, "list failed items")
-	statusCmd.Flags().BoolVar(&status.Unsupported, "unsupported", false, "list unsupported items")
-	statusCmd.Flags().BoolVar(&status.Grobid, "grobid", false, "check experimental GROBID fallback")
-	statusCmd.MarkFlagsMutuallyExclusive("failed", "unsupported", "grobid")
+	statusCmd.Flags().StringVar(&status.View, "view", "summary", "summary, failed, unsupported, or grobid")
 	statusCmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		status.View = strings.ToLower(strings.TrimSpace(status.View))
+		if !validReferenceStatusView(status.View) {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--view must be summary, failed, unsupported, or grobid")}
+		}
 		return c.runReference(cmd, opts, "status", func(ctx context.Context, service app.ReferenceService) (app.Result, error) {
 			return service.Status(ctx, status)
 		})
@@ -115,6 +125,14 @@ func (c *CLI) newReferenceCommand(opts *globalOptions) *cobra.Command {
 	ref.AddCommand(showCmd, findCmd, buildCmd, statusCmd, resolve)
 	ref.AddCommand(c.referenceDiscoveryCommand(opts, "related"), c.referenceDiscoveryCommand(opts, "cited"), c.referenceDiscoveryCommand(opts, "ctx"), c.referenceDiscoveryCommand(opts, "links"), c.referenceDiscoveryCommand(opts, "entities"), c.referenceDiscoveryCommand(opts, "profile"))
 	return ref
+}
+
+func validReferenceBuildScope(scope string) bool {
+	return scope == "pending" || scope == "failed" || scope == "contexts" || scope == "grobid"
+}
+
+func validReferenceStatusView(view string) bool {
+	return view == "summary" || view == "failed" || view == "unsupported" || view == "grobid"
 }
 
 func (c *CLI) referenceDiscoveryCommand(opts *globalOptions, action string) *cobra.Command {

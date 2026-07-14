@@ -61,7 +61,7 @@ go run .\cmd\zot config check
 
 ```powershell
 # 最近加入 Zotero 的条目
-.\zot.exe find --all --sort dateAdded --order desc --limit 10 --json
+.\zot.exe find --sort dateAdded --order desc --limit 10 --json
 
 # 只看最近 7 天入库
 .\zot.exe find --all --added-since 7d --sort dateAdded --order desc --json
@@ -73,7 +73,7 @@ go run .\cmd\zot config check
 快速人工浏览标题时，可用文本模式控制字段：
 
 ```powershell
-.\zot.exe find --all --sort dateAdded --order desc --limit 10 --include-fields title,date_added,container
+.\zot.exe find --sort dateAdded --order desc --limit 10 --include-fields title,date_added,container
 ```
 
 ### 6. 运行模式选择
@@ -196,20 +196,20 @@ go run .\cmd\zot config check
 ### 全文检索最佳实践
 
 ```powershell
-# local / hybrid 模式下，有 query 且 FTS5 有数据时自动启用全文检索
+# local / hybrid 模式下，显式选择 FTS5 全文检索
 .\zot.exe find '"同源多倍体"' --in fulltext --snippet --json
 # snippet 默认限制 20 条，需要更多结果时显式指定 --limit
 .\zot.exe find '"基因编辑"' --in fulltext --snippet --limit 200 --json
 ```
 
-`find --all` 或纯时间/标签列表不会自动走全文索引，适合最近入库、发表时间范围等元数据查询。
+默认 `--in metadata` 始终查询元数据；全文查询必须显式使用 `--in fulltext`，不会因本地索引状态而改变语义。
 
 ## 性能优化建议
 
 | 建议 | 说明 |
 |------|------|
 | **默认分页上限** | 轻量 `find` 默认 100 条，`--snippet` / `--full` 默认 20 条；只有显式 `--all` 才取消上限 |
-| **自动全文检索** | local/hybrid 下有 query 且 FTS5 有数据时可自动走全文路径；`--all` 不自动走全文 |
+| **显式全文检索** | local/hybrid 下使用 `--in fulltext` 查询 FTS5；默认元数据查询不隐式切换路径 |
 | **`--include-fields` 控制文本输出** | 快速人工浏览时只展示指定字段；`--json` 默认返回完整 Item |
 | **优先 `--full`** | 一次获取完整数据比多次往返更高效 |
 

@@ -655,7 +655,7 @@ func TestRunFindLocalJSONSupportsSortingByDateAddedDesc(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "--all", "--sort", "dateAdded", "--order", "desc", "--limit", "1", "--json"})
+	exitCode := Run([]string{"find", "--sort", "dateAdded", "--order", "desc", "--limit", "1", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -698,7 +698,7 @@ func TestRunFindAllLocalJSONSortsByDateAddedWithoutAutoFullText(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "--all", "--sort", "dateAdded", "--order", "desc", "--limit", "1", "--json"})
+	exitCode := Run([]string{"find", "--sort", "dateAdded", "--order", "desc", "--limit", "1", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

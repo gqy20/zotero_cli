@@ -98,10 +98,18 @@ func TestReferenceStatusMigratesOutdatedIndexOnce(t *testing.T) {
 	}
 }
 
-func TestReferenceBuildRejectsAmbiguousScope(t *testing.T) {
+func TestReferenceBuildRejectsInvalidScope(t *testing.T) {
 	service := NewReferenceService()
-	_, err := service.Build(context.Background(), ReferenceBuildRequest{Failed: true, Contexts: true})
-	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+	_, err := service.Build(context.Background(), ReferenceBuildRequest{Scope: "invalid"})
+	if err == nil || !strings.Contains(err.Error(), "invalid reference build scope") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestReferenceStatusRejectsInvalidView(t *testing.T) {
+	service := NewReferenceService()
+	_, err := service.Status(context.Background(), ReferenceStatusRequest{View: "invalid"})
+	if err == nil || !strings.Contains(err.Error(), "invalid reference status view") {
 		t.Fatalf("error = %v", err)
 	}
 }

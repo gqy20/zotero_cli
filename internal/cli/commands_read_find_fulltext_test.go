@@ -66,7 +66,7 @@ func TestRunFindLocalJSONMatchesFullTextAttachmentTerms(t *testing.T) {
 	}
 }
 
-func TestRunFindLocalJSONMergesMetadataAndFullTextMatches(t *testing.T) {
+func TestRunFindLocalJSONReturnsIndexedMatchedChunkWhenSnippetRequested(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -80,55 +80,12 @@ func TestRunFindLocalJSONMergesMetadataAndFullTextMatches(t *testing.T) {
 	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 	buildGlobalFTSCacheForTest(t, dataDir, []ftsCacheRow{
-		{"ATTA1111", "ART67890", "Mixed Survey", "", "unrelated body text"},
-		{"ATTB2222", "ARTFULL2", "Prefix Match Article", "", "a mixed signal found only in the PDF body"},
+		{"ATTA1111", "ART67890", "Mixed Survey", "mixed.pdf",
+			"Mixed survey full text preview from zotero cache. Core section discusses speciation genome patterns in plants and gene flow."},
 	})
 
 	stdout, stderr := captureOutput(t)
-	if exitCode := Run([]string{"find", "mixed", "--in", "all", "--json"}); exitCode != 0 {
-		t.Fatalf("exit code = %d; stderr=%q", exitCode, stderr.String())
-	}
-	var got struct {
-		Data []struct {
-			Key       string   `json:"key"`
-			MatchedOn []string `json:"matched_on"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
-		t.Fatal(err)
-	}
-	if len(got.Data) != 3 || got.Data[0].Key != "ART67890" || got.Data[1].Key != "BOOK1234" || got.Data[2].Key != "ARTFULL2" {
-		t.Fatalf("merged result order = %#v", got.Data)
-	}
-
-	stdout, stderr = captureOutput(t)
-	if exitCode := Run([]string{"find", "mixed", "--in", "fulltext", "--json"}); exitCode != 0 {
-		t.Fatalf("fulltext-only exit code = %d; stderr=%q", exitCode, stderr.String())
-	}
-	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
-		t.Fatal(err)
-	}
-	if len(got.Data) != 1 || got.Data[0].Key != "ARTFULL2" {
-		t.Fatalf("fulltext-only result = %#v", got.Data)
-	}
-}
-
-func TestRunFindLocalJSONIncludesFullTextPreviewWhenSnippetRequested(t *testing.T) {
-	configRoot := t.TempDir()
-	setTestConfigDir(t, configRoot)
-	writeTestConfig(t, configRoot)
-	t.Setenv("ZOT_MODE", "local")
-
-	dataDir := t.TempDir()
-	storageDir := filepath.Join(dataDir, "storage")
-	if err := os.Mkdir(storageDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
-	t.Setenv("ZOT_DATA_DIR", dataDir)
-
-	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "mixed.pdf", "--in", "all", "--snippet", "--json"})
+	exitCode := Run([]string{"find", `"Mixed survey"`, "--in", "fulltext", "--snippet", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -138,7 +95,7 @@ func TestRunFindLocalJSONIncludesFullTextPreviewWhenSnippetRequested(t *testing.
 		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
 	}
 	meta, ok := got["meta"].(map[string]any)
-	if !ok || meta["full_text_source"] != "zotero_ft_cache" {
+	if !ok || meta["full_text_engine"] != "index_sqlite" {
 		t.Fatalf("unexpected meta payload: %#v", got["meta"])
 	}
 	data, ok := got["data"].([]any)
@@ -146,9 +103,12 @@ func TestRunFindLocalJSONIncludesFullTextPreviewWhenSnippetRequested(t *testing.
 		t.Fatalf("unexpected data payload: %#v", got["data"])
 	}
 	item := data[0].(map[string]any)
-	preview, ok := item["full_text_preview"].(string)
-	if !ok || !strings.Contains(preview, "Mixed survey full text preview") {
-		t.Fatalf("unexpected full_text_preview: %#v", item["full_text_preview"])
+	if _, exists := item["full_text_preview"]; exists {
+		t.Fatalf("matched context must not be duplicated as full_text_preview: %#v", item)
+	}
+	matched, ok := item["matched_chunk"].(map[string]any)
+	if !ok || !strings.Contains(matched["context"].(string), "Mixed survey full text preview") {
+		t.Fatalf("unexpected matched evidence: %#v", item["matched_chunk"])
 	}
 	if _, exists := item["attachments"]; exists {
 		t.Fatalf("did not expect attachments to be exposed by snippet-only output: %#v", item["attachments"])
@@ -295,8 +255,84 @@ func TestRunFindLocalJSONSupportsNativeFTSOrAndPrefixMatching(t *testing.T) {
 	}
 	first := data[0].(map[string]any)
 	second := data[1].(map[string]any)
-	if first["key"] != "ART67890" || second["key"] != "ARTFULL2" {
-		t.Fatalf("unexpected ordering or keys: %#v", got["data"])
+	keys := map[any]bool{first["key"]: true, second["key"]: true}
+	if !keys["ART67890"] || !keys["ARTFULL2"] {
+		t.Fatalf("unexpected keys: %#v", got["data"])
+	}
+}
+
+func TestRunFindFullTextAppliesOffsetAfterNativeRanking(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+	buildGlobalFTSCacheForTest(t, dataDir, []ftsCacheRow{
+		{"ATTA1111", "ART67890", "Mixed Survey", "", "pagination target target target"},
+		{"ATTB2222", "ARTFULL2", "Prefix Match Article", "", "pagination target"},
+	})
+
+	stdout, stderr := captureOutput(t)
+	if code := Run([]string{"find", "pagination", "--in", "fulltext", "--limit", "10", "--json"}); code != 0 {
+		t.Fatalf("all results code=%d stderr=%q", code, stderr.String())
+	}
+	var all struct {
+		Data []struct {
+			Key string `json:"key"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &all); err != nil || len(all.Data) != 2 {
+		t.Fatalf("all results=%#v err=%v", all, err)
+	}
+
+	stdout, stderr = captureOutput(t)
+	if code := Run([]string{"find", "pagination", "--in", "fulltext", "--offset", "1", "--limit", "1", "--json"}); code != 0 {
+		t.Fatalf("paged results code=%d stderr=%q", code, stderr.String())
+	}
+	var page struct {
+		Data []struct {
+			Key string `json:"key"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &page); err != nil || len(page.Data) != 1 || page.Data[0].Key != all.Data[1].Key {
+		t.Fatalf("paged results=%#v want second=%#v err=%v", page, all.Data[1], err)
+	}
+}
+
+func TestRunFindFullTextFiltersBeforeApplyingLimit(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalFindFixture(t, dataDir, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+	buildGlobalFTSCacheForTest(t, dataDir, []ftsCacheRow{
+		{"ATTA1111", "ART67890", "Mixed Survey", "", "filtertarget filtertarget filtertarget"},
+		{"ATTB2222", "ARTFULL2", "Prefix Match Article", "", "filtertarget"},
+	})
+
+	stdout, stderr := captureOutput(t)
+	if code := Run([]string{"find", "filtertarget", "--in", "fulltext", "--tag", "genomics", "--limit", "1", "--json"}); code != 0 {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+	var got struct {
+		Data []struct {
+			Key string `json:"key"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil || len(got.Data) != 1 || got.Data[0].Key != "ARTFULL2" {
+		t.Fatalf("filtered results=%#v err=%v", got, err)
 	}
 }
 
@@ -306,11 +342,11 @@ func TestRunFindRejectsInvalidSearchScope(t *testing.T) {
 	writeTestConfig(t, configRoot)
 
 	_, stderr := captureOutput(t)
-	exitCode := Run([]string{"find", "genome", "--in", "somewhere"})
+	exitCode := Run([]string{"find", "genome", "--in", "all"})
 	if exitCode != 2 {
 		t.Fatalf("expected exit code 2, got %d; stderr=%q", exitCode, stderr.String())
 	}
-	if got := stderr.String(); !strings.Contains(got, "--in must be metadata, fulltext, or all") {
+	if got := stderr.String(); !strings.Contains(got, "--in must be metadata or fulltext") {
 		t.Fatalf("expected search scope usage error, got %q", got)
 	}
 }

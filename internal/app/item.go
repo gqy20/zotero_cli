@@ -10,9 +10,8 @@ import (
 )
 
 type ItemFindRequest struct {
-	Options     backend.FindOptions
-	Snippet     bool
-	ExplicitAll bool
+	Options backend.FindOptions
+	Snippet bool
 }
 
 const (
@@ -54,11 +53,14 @@ type itemPreviewReader interface {
 }
 
 func (s ReadService) FindItems(ctx context.Context, req ItemFindRequest) (Result, error) {
+	opts := backend.NormalizeFindOptions(req.Options)
+	if opts.All && opts.Limit > 0 {
+		return Result{}, fmt.Errorf("--all and --limit are mutually exclusive")
+	}
 	_, reader, err := s.reader()
 	if err != nil {
 		return Result{}, err
 	}
-	opts := backend.NormalizeFindOptions(req.Options)
 	pageLimit := findResultLimit(req, opts)
 	if pageLimit > 0 {
 		opts.Limit = pageLimit + 1
@@ -66,7 +68,7 @@ func (s ReadService) FindItems(ctx context.Context, req ItemFindRequest) (Result
 		opts.Limit = 0
 	}
 	if req.Snippet && opts.In == "metadata" {
-		return Result{}, fmt.Errorf("find --snippet requires --in fulltext or --in all")
+		return Result{}, fmt.Errorf("find --snippet requires --in fulltext")
 	}
 	injectedAttachments := false
 	if req.Snippet && !containsString(opts.IncludeFields, "attachments") {
@@ -124,11 +126,11 @@ func (s ReadService) FindItems(ctx context.Context, req ItemFindRequest) (Result
 }
 
 func findResultLimit(req ItemFindRequest, opts backend.FindOptions) int {
+	if opts.All {
+		return 0
+	}
 	if opts.Limit > 0 {
 		return opts.Limit
-	}
-	if req.ExplicitAll {
-		return 0
 	}
 	if req.Snippet || opts.Full {
 		return defaultDetailedFindLimit

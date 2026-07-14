@@ -55,7 +55,7 @@ zot item list --limit 20 --offset 0 --json
 zot item list --scope trash --json
 zot item list --scope pubs --json
 zot item find "CRISPR" --type article --json
-zot item find --all --sort dateAdded --order desc --limit 10 --json
+zot item find --sort dateAdded --order desc --limit 10 --json
 zot item show ITEMKEY --json
 zot item show ITEMKEY --snippet --json
 ```
@@ -69,10 +69,10 @@ zot item show ITEMKEY --snippet --json
 - `--modified-within` / `--added-since`
 - `--has-pdf`
 - `--attachment-name` / `--attachment-path`
-- `--in metadata|fulltext|all`（默认 metadata；全文查询直接使用 SQLite FTS5 语法）
+- `--in metadata|fulltext`（默认 metadata；全文查询直接使用 SQLite FTS5 语法）
 - `--snippet`
 
-分页和排序只使用 `--limit`、`--offset`、`--sort`、`--order`。`item find` 的轻量结果默认限制 100 条，`--snippet` 或 `--full` 默认限制 20 条；只有显式 `--all` 才取消上限。JSON `meta` 提供 `has_more` 和可选的 `next_offset`。
+分页和排序只使用 `--limit`、`--offset`、`--sort`、`--order`。`item find` 的轻量结果默认限制 100 条，`--snippet` 或 `--full` 默认限制 20 条；`--all` 仅取消上限，并与 `--limit` 互斥。metadata 范围允许省略 QUERY。JSON `meta` 提供 `has_more` 和可选的 `next_offset`。
 
 ## Item type alias
 
@@ -167,14 +167,14 @@ zot ref links ITEMKEY --json
 zot ref entities ITEMKEY --json
 zot ref profile ITEMKEY --json
 zot ref build --workers 3 --json
-zot ref build --failed --workers 2 --json
-zot ref build --contexts --workers 3 --json
-zot ref build --grobid --limit 5 --json
+zot ref build --scope failed --workers 2 --json
+zot ref build --scope contexts --workers 3 --json
+zot ref build --scope grobid --limit 5 --json
 zot ref resolve --workers 8 --json
 zot ref status --json
-zot ref status --failed --json
-zot ref status --unsupported --json
-zot ref status --grobid --json
+zot ref status --view failed --json
+zot ref status --view unsupported --json
+zot ref status --view grobid --json
 ```
 
 来源规则：PMC JATS 优先；没有 PMC 时使用 PubMed；Europe PMC 是增强层，失败不应使 NCBI 核心结果失败；GROBID 是显式实验性后备。

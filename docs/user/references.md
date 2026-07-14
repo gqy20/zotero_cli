@@ -30,8 +30,8 @@ Zotero item
 zot ref show ITEMKEY --json
 zot ref build --workers 3 --json
 zot ref status --json
-zot ref status --failed --json
-zot ref build --failed --workers 2 --json
+zot ref status --view failed --json
+zot ref build --scope failed --workers 2 --json
 ```
 
 `ref ITEMKEY` 等同于 `ref show ITEMKEY`。`ref build` 扫描符合条件的顶层条目，按 Zotero 指纹和索引数据版本增量跳过。索引格式升级时，即使 Zotero 条目没有变化，旧成功记录也会自动补建一次。
@@ -39,7 +39,7 @@ zot ref build --failed --workers 2 --json
 确定缺少 DOI、PMID 和 PMCID、无法进入 NCBI 的条目记录为 `unsupported`，不会被 `retry` 反复请求：
 
 ```powershell
-zot ref status --unsupported --json
+zot ref status --view unsupported --json
 ```
 
 ### 解析本地引用图
@@ -171,7 +171,7 @@ zot ref profile ITEMKEY --json
 同时保存上下文总数、有/无上下文的参考文献数量和覆盖率。历史 PMC 条目可单独补建：
 
 ```powershell
-zot ref build --contexts --workers 3 --json
+zot ref build --scope contexts --workers 3 --json
 ```
 
 默认复用缓存；只有 `--refresh` 才重新请求网络。
@@ -207,8 +207,8 @@ NCBI 默认请求间隔为 400 ms；设置 `ZOT_NCBI_API_KEY` 后为 125 ms。�
 ## GROBID 的边界
 
 ```powershell
-zot ref status --grobid --json
-zot ref build --grobid --limit 5 --workers 1 --json
+zot ref status --view grobid --json
+zot ref build --scope grobid --limit 5 --workers 1 --json
 ```
 
 GROBID 不属于默认构建路线。公共演示服务不保证配额、稳定性、隐私或完成时间；敏感 PDF 应使用本地 GROBID。`--all` 才允许显式全量运行。

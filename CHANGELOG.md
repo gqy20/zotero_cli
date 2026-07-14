@@ -22,7 +22,8 @@
 - **`extract-figures` 跨页同尺寸误去重**：跨页 dedup 仅用于小面积/页边且无 caption 的重复元素，避免 BMC/Nature 风格正文大图因宽高相近被当作页眉页脚重复图过滤。
 
 ### 变更
-- **查询与导出接口收敛**：`item find` 用单一 `--in metadata|fulltext|all` 取代四个全文布尔参数，`ref find` 用 `--in all|references|contexts|metadata` 取代三个范围布尔参数，两者都将 QUERY 原样交给 SQLite FTS5。`note find` 统一为不区分大小写的 Go 正则，`note list` 不再承担查询。`item export` 只接受明确 key 或 `--from PATH|-` 的结构化选择结果，不再内置第二套筛选器。
+- **查询范围参数去布尔堆积**：`ref build` 使用 `--scope pending|failed|contexts|grobid`，`ref status` 使用 `--view summary|failed|unsupported|grobid`。`item find --all` 仅取消结果上限并与 `--limit` 互斥；metadata 范围可省略 QUERY，过滤和排序不再借用内部 `All/ExplicitAll` 状态。
+- **查询与导出接口收敛**：`item find` 用单一 `--in metadata|fulltext` 取代四个全文布尔参数，避免把两套不同查询语言伪装成可合并范围；`ref find` 用 `--in all|references|contexts|metadata` 取代三个范围布尔参数。全文与引用 QUERY 原样交给 SQLite FTS5。`note find` 统一为不区分大小写的 Go 正则，`note list` 不再承担查询。`item export` 只接受明确 key 或 `--from PATH|-` 的结构化选择结果，不再内置第二套筛选器。
 - **CLI v2 阶段 7 完成**：Cobra tree 成为唯一执行内核；旧命令只在纯 argv translator 中映射到 canonical invocation，`setup/select/abstract/relate/key-info` 收敛为隐藏的 redirect-only adapter，主帮助、completion、JSON command 和用户文档统一使用 v2 语法。
 - **PDF 提取参数收敛**：移除 `extract-text --markdown/--md` 兼容入口，文件输出统一由 `-o/--output-dir` 或 `--all` 触发；`extract-figures --max-per-page` 保留为高级调参项，不再出现在主用法路径中。
 
@@ -244,7 +245,7 @@
 
 ### 新增
 - **`find` 高级过滤**：新增 11 个过滤选项，覆盖收藏夹（`--collection` / `--no-collection`）、标签模糊匹配（`--tag-contains`）、排除过滤（`--exclude-tag` / `--no-type`）、相对时间（`--modified-within` / `--added-since`）、附件细节（`--attachment-name` / `--attachment-path`）、排序方向（`--direction`）和分页偏移（`--start`）。
-- **自动全文检索**：local / hybrid 模式下 FTS5 索引有数据时，即使不指定 `--fulltext` 也会自动走全文检索路径，降低 agent 使用门槛。
+- **显式全文检索**：local / hybrid 模式通过 `item find QUERY --in fulltext` 使用 FTS5 索引；默认 `metadata` 不会根据索引状态隐式改变查询语义。
 - **Snippet 安全限制**：`--snippet` 未指定 `--limit` 时默认限制为 50 条，防止批量提取意外消耗大量资源。
 
 ### 性能
