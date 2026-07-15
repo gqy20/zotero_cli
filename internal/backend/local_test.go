@@ -981,6 +981,68 @@ func TestListSyncLinkedAttachmentsPreservesAttachmentsRelativePath(t *testing.T)
 	}
 }
 
+func TestListSyncLinkedAttachmentsRejectsNonPortablePathsBeforeFileLookup(t *testing.T) {
+	dataDir := t.TempDir()
+	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
+	db, err := sql.Open("sqlite", sqlitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statements := []string{
+		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT)`,
+		`CREATE TABLE itemAttachments (itemID INTEGER, linkMode INTEGER, path TEXT)`,
+		`CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID INTEGER)`,
+		`CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT)`,
+		`CREATE TABLE fieldsCombined (fieldID INTEGER PRIMARY KEY, fieldName TEXT)`,
+		`INSERT INTO items VALUES (1, 'ABS12345')`,
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			db.Close()
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO itemAttachments VALUES (1, 2, ?)`, `Z:\offline-share\paper.pdf`); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := &LocalReader{
+		DataDir: dataDir, SQLitePath: sqlitePath, StorageDir: filepath.Join(dataDir, "storage"),
+		AttachmentBaseDir: t.TempDir(), openSQLiteDB: openSQLiteDB, createSnapshot: createSQLiteSnapshot,
+	}
+	entries, err := reader.ListSyncLinkedAttachments(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Available || entries[0].RelativePath != "" || !strings.Contains(entries[0].Error, `attachments:`) || !strings.Contains(entries[0].Error, `relative path`) {
+		t.Fatalf("unexpected absolute-path entry: %#v", entries)
+	}
+
+	db, err = sql.Open("sqlite", sqlitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE itemAttachments SET path = 'attachments:papers/paper.pdf'`); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reader.AttachmentBaseDir = ""
+	entries, err = reader.ListSyncLinkedAttachments(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Available || !strings.Contains(entries[0].Error, `base attachment directory is not configured`) {
+		t.Fatalf("unexpected missing-base-directory entry: %#v", entries)
+	}
+}
+
 func TestFindDefaultDataDirFallsBackToHomeZotero(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

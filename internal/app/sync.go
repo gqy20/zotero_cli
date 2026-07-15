@@ -102,6 +102,7 @@ func (s SyncService) Sync(ctx context.Context, req SyncRequest) (result Result, 
 	if err != nil {
 		return Result{}, fmt.Errorf("fetch manifest: %w", err)
 	}
+	linkedWarnings := syncLinkedAttachmentWarnings(manifest.Linked)
 	progress := newSyncProgress(s.Progress, manifest)
 	progress.Start()
 	defer func() { progress.Stop(err) }()
@@ -167,7 +168,29 @@ func (s SyncService) Sync(ctx context.Context, req SyncRequest) (result Result, 
 	fmt.Fprintf(&text, "  attachments: %d downloaded, %d unchanged (%s)\n", downloaded, skipped, humanBytes(bytes))
 	fmt.Fprintf(&text, "  linked attachments: %d downloaded, %d unchanged (%s), %d unavailable\n", linkedDownloaded, linkedSkipped, humanBytes(linkedBytes), linkedUnavailable)
 	fmt.Fprintf(&text, "\nUse it:\n  zot --mode local find ...\n")
-	return Result{Data: summary, Text: strings.TrimRight(text.String(), "\n")}, nil
+	return Result{Data: summary, Text: strings.TrimRight(text.String(), "\n"), Warnings: linkedWarnings}, nil
+}
+
+func syncLinkedAttachmentWarnings(entries []syncLinkedMeta) []Warning {
+	warnings := make([]Warning, 0)
+	for _, entry := range entries {
+		if entry.Available {
+			continue
+		}
+		reason := strings.TrimSpace(entry.Error)
+		if reason == "" {
+			reason = "source file is unavailable"
+		}
+		label := entry.Key
+		if name := strings.TrimSpace(entry.Name); name != "" {
+			label += " (" + name + ")"
+		}
+		warnings = append(warnings, Warning{
+			Code:    "linked_attachment_skipped",
+			Message: fmt.Sprintf("linked attachment %s skipped: %s", label, reason),
+		})
+	}
+	return warnings
 }
 
 // --- manifest types (mirror server's syncManifest shape) ---
@@ -452,7 +475,7 @@ func (c *syncClient) getManifest(ctx context.Context) (syncManifest, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return syncManifest{}, fmt.Errorf("HTTP %d", resp.StatusCode)
+		return syncManifest{}, syncHTTPError(resp)
 	}
 	var api struct {
 		Ok    bool         `json:"ok"`
@@ -466,6 +489,26 @@ func (c *syncClient) getManifest(ctx context.Context) (syncManifest, error) {
 		return syncManifest{}, fmt.Errorf("%s", api.Error)
 	}
 	return api.Data, nil
+}
+
+func syncHTTPError(resp *http.Response) error {
+	const maxErrorBody = 64 << 10
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
+	if readErr != nil {
+		return fmt.Errorf("HTTP %d (read error response: %v)", resp.StatusCode, readErr)
+	}
+	var api struct {
+		Error string `json:"error"`
+	}
+	if json.Unmarshal(body, &api) == nil {
+		if message := strings.TrimSpace(api.Error); message != "" {
+			return fmt.Errorf("HTTP %d: %s", resp.StatusCode, message)
+		}
+	}
+	if message := strings.TrimSpace(string(body)); message != "" {
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, message)
+	}
+	return fmt.Errorf("HTTP %d", resp.StatusCode)
 }
 
 func (c *syncClient) getStream(ctx context.Context, path string, offset int64) (io.ReadCloser, bool, error) {
@@ -849,12 +892,17 @@ func syncLinkedAttachments(ctx context.Context, client *syncClient, entries []sy
 			old.Name = entry.Name
 			old.SourceAvailable = false
 			old.Stale = false
-			old.Error = entry.Error
-			rel, pathErr := linkedAttachmentMirrorRelativePath(dataDir, entry)
-			if pathErr != nil {
-				return 0, 0, 0, unavailable, pathErr
+			if strings.TrimSpace(entry.RelativePath) != "" {
+				if rel, pathErr := linkedAttachmentMirrorRelativePath(dataDir, entry); pathErr == nil {
+					old.RelativePath = rel
+				} else {
+					if entry.Error != "" {
+						entry.Error += "; "
+					}
+					entry.Error += pathErr.Error()
+				}
 			}
-			old.RelativePath = rel
+			old.Error = entry.Error
 			if _, ok := syncmirror.Resolve(dataDir, old); ok {
 				old.Stale = true
 			} else {

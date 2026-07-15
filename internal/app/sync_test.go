@@ -91,6 +91,26 @@ func TestSyncUsesConfiguredServerAndDefaultMirror(t *testing.T) {
 	}
 }
 
+func TestSyncManifestErrorIncludesServerMessage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = io.WriteString(w, `{"ok":false,"data":null,"error":"linked attachment \"ABCD1234\" must use an attachments: relative path","meta":{}}`)
+	}))
+	defer server.Close()
+
+	client := &syncClient{baseURL: server.URL, httpClient: server.Client()}
+	_, err := client.getManifest(context.Background())
+	if err == nil {
+		t.Fatal("expected manifest request to fail")
+	}
+	for _, want := range []string{"HTTP 500", "ABCD1234", "attachments: relative path"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not contain %q", err, want)
+		}
+	}
+}
+
 func TestSyncLinkedAttachmentsDownloadsAndRetainsUnavailableMirror(t *testing.T) {
 	dataDir := t.TempDir()
 	content := []byte("linked pdf")
@@ -146,6 +166,35 @@ func TestSyncLinkedAttachmentsDownloadsAndRetainsUnavailableMirror(t *testing.T)
 	}
 	if _, ok := syncmirror.Resolve(dataDir, entry); !ok {
 		t.Fatal("stale local copy should remain usable")
+	}
+}
+
+func TestSyncLinkedAttachmentsSkipsUnavailableEntryWithoutRelativePath(t *testing.T) {
+	dataDir := t.TempDir()
+	client := &syncClient{baseURL: "http://example.test", httpClient: http.DefaultClient}
+	entries := []syncLinkedMeta{{
+		Key: "ABS12345", Name: "paper.pdf", Available: false,
+		Error: `unsupported path; expected an "attachments:" relative path`,
+	}}
+
+	downloaded, skipped, transferred, unavailable, err := syncLinkedAttachments(context.Background(), client, entries, dataDir, false, 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if downloaded != 0 || skipped != 0 || transferred != 0 || unavailable != 1 {
+		t.Fatalf("unexpected stats: downloaded=%d skipped=%d bytes=%d unavailable=%d", downloaded, skipped, transferred, unavailable)
+	}
+	warnings := syncLinkedAttachmentWarnings(entries)
+	if len(warnings) != 1 || warnings[0].Code != "linked_attachment_skipped" || !strings.Contains(warnings[0].Message, "ABS12345") {
+		t.Fatalf("unexpected warnings: %#v", warnings)
+	}
+	attachmentMap, _, err := syncmirror.Load(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := attachmentMap.Attachments["ABS12345"]
+	if entry.SourceAvailable || entry.RelativePath != "" || entry.Error == "" {
+		t.Fatalf("unexpected skipped attachment map entry: %#v", entry)
 	}
 }
 

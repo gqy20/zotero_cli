@@ -13,6 +13,9 @@
 - **`zot serve` 启动提示**：服务成功绑定端口后输出可直接配置客户端的 `server_addr`、本机 URL、局域网候选 URL 和完整 remote 配置命令；端口占用等监听失败不再先误报服务已启动。
 - **同步实时进度**：`zot sync` 根据 manifest 汇总整个镜像的文件数与字节数，分阶段显示实时百分比、传输速度和 ETA；跳过文件与断点续传字节纳入整体进度，进度继续写入 stderr 以保持 `--json` stdout 稳定。`zot serve` 请求日志新增 `bytes_sent`。
 
+### 修复
+- **同步 manifest 诊断与异常外链隔离**：`zot sync` 在 manifest 返回非 200 时读取并显示服务端 JSON 错误，不再只报告 `HTTP 500`；`zot serve` 记录 manifest 失败阶段、具体 attachment key、错误和阶段耗时，并在成功时报告各区段数量。单个外链附件缺少 `attachments:` 相对路径、基本目录或源文件时以 unavailable 条目和 warning 返回并跳过，不再阻断 SQLite、正常附件及全文索引同步；路径验证先于文件访问，避免探测不受支持的绝对路径或离线盘符。
+
 ### 工具链
 - **本地构建与多平台发布分工**：`make build` 改为构建当前平台的最终二进制并对 Windows/Linux 执行 UPX 压缩；`make release` 独立交叉构建 Linux amd64/arm64、Windows amd64 与 macOS amd64/arm64，生成与 GitHub Release 同名的归档、Windows 独立可执行文件和 `checksums.txt`。归档由 Go 标准库生成，不依赖本机 `zip`/`tar`。
 - **Linux 发布包压缩**：Release workflow 对 Linux amd64/arm64 与 Windows 统一执行 UPX 压缩和完整性测试；Linux amd64 冒烟测试改为针对最终压缩产物运行，macOS 产物保持不压缩。

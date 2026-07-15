@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/safepath"
@@ -56,8 +57,9 @@ const sqliteFileName = "zotero.sqlite"
 // syncManifest reports file sizes + mtimes so the client can skip unchanged
 // files on subsequent syncs (incremental).
 func (h *Handler) syncManifest(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
 	if h.dataDir == "" {
-		writeError(w, http.StatusServiceUnavailable, fmt.Errorf("server has no data_dir; cannot sync"))
+		writeSyncManifestError(w, r, http.StatusServiceUnavailable, "configuration", started, fmt.Errorf("server has no data_dir; cannot sync"))
 		return
 	}
 
@@ -80,9 +82,56 @@ func (h *Handler) syncManifest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(manifest.SQLite) == 0 || manifest.SQLite[0].Path != sqliteFileName {
-		writeError(w, http.StatusNotFound, fmt.Errorf("zotero.sqlite not found in data_dir"))
+		writeSyncManifestError(w, r, http.StatusNotFound, "sqlite", started, fmt.Errorf("zotero.sqlite not found in data_dir"))
 		return
 	}
+
+	// Validate linked attachment portability before walking storage and fulltext.
+	// A bad absolute/offline path should fail immediately instead of making the
+	// client wait for an otherwise unusable manifest.
+	linkedStarted := time.Now()
+	if lister, ok := h.reader.(backend.SyncLinkedAttachmentLister); ok {
+		linked, err := lister.ListSyncLinkedAttachments(r.Context())
+		if err != nil {
+			writeSyncManifestError(w, r, http.StatusInternalServerError, "linked_attachments", started, fmt.Errorf("list linked attachments: %w", err))
+			return
+		}
+		manifest.Linked = make([]syncLinkedEntry, 0, len(linked))
+		for _, entry := range linked {
+			relativePath := strings.TrimSpace(entry.RelativePath)
+			if entry.Available && relativePath == "" {
+				writeSyncManifestError(w, r, http.StatusInternalServerError, "linked_attachment_paths", started, fmt.Errorf("linked attachment %q has no %q relative path", entry.Key, "attachments:"))
+				return
+			}
+			if relativePath != "" {
+				if _, pathErr := safepath.JoinRelative(h.dataDir, relativePath); pathErr != nil {
+					if entry.Available {
+						writeSyncManifestError(w, r, http.StatusInternalServerError, "linked_attachment_paths", started, fmt.Errorf("linked attachment %q has invalid relative path: %w", entry.Key, pathErr))
+						return
+					}
+					if entry.Error != "" {
+						entry.Error += "; "
+					}
+					entry.Error += fmt.Sprintf("invalid relative path: %v", pathErr)
+					relativePath = ""
+				}
+			}
+			if !entry.Available {
+				if logger, ok := r.Context().Value(loggerKey).(*Logger); ok {
+					logger.Warn("sync linked attachment skipped",
+						"key", entry.Key,
+						"name", entry.Name,
+						"error", entry.Error,
+					)
+				}
+			}
+			manifest.Linked = append(manifest.Linked, syncLinkedEntry{
+				Key: entry.Key, Name: entry.Name, RelativePath: relativePath, Size: entry.Size, Mtime: entry.Mtime,
+				Available: entry.Available, Error: entry.Error,
+			})
+		}
+	}
+	linkedScanDuration := time.Since(linkedStarted)
 
 	storageDir := filepath.Join(h.dataDir, "storage")
 	if entries, err := os.ReadDir(storageDir); err == nil {
@@ -121,30 +170,45 @@ func (h *Handler) syncManifest(w http.ResponseWriter, r *http.Request) {
 	fulltextDir := filepath.Join(h.dataDir, ".zotero_cli", "fulltext")
 	manifest.Fulltext = collectTree(fulltextDir, fulltextDir)
 
-	if lister, ok := h.reader.(backend.SyncLinkedAttachmentLister); ok {
-		linked, err := lister.ListSyncLinkedAttachments(r.Context())
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, fmt.Errorf("list linked attachments: %w", err))
-			return
-		}
-		manifest.Linked = make([]syncLinkedEntry, 0, len(linked))
-		for _, entry := range linked {
-			if strings.TrimSpace(entry.RelativePath) == "" {
-				writeError(w, http.StatusInternalServerError, fmt.Errorf("linked attachment %q has no attachments: relative path", entry.Key))
-				return
-			}
-			if _, pathErr := safepath.JoinRelative(h.dataDir, entry.RelativePath); pathErr != nil {
-				writeError(w, http.StatusInternalServerError, fmt.Errorf("linked attachment %q has invalid relative path: %w", entry.Key, pathErr))
-				return
-			}
-			manifest.Linked = append(manifest.Linked, syncLinkedEntry{
-				Key: entry.Key, Name: entry.Name, RelativePath: entry.RelativePath, Size: entry.Size, Mtime: entry.Mtime,
-				Available: entry.Available, Error: entry.Error,
-			})
-		}
+	if logger, ok := r.Context().Value(loggerKey).(*Logger); ok {
+		logger.Info("sync manifest built",
+			"sqlite_files", len(manifest.SQLite),
+			"storage_directories", len(manifest.Storage),
+			"fulltext_files", len(manifest.Fulltext),
+			"linked_attachments", len(manifest.Linked),
+			"linked_unavailable", countUnavailableLinked(manifest.Linked),
+			"linked_scan_ms", linkedScanDuration.Milliseconds(),
+			"duration_ms", time.Since(started).Milliseconds(),
+		)
 	}
 
 	writeJSON(w, http.StatusOK, manifest, Meta{})
+}
+
+func countUnavailableLinked(entries []syncLinkedEntry) int {
+	count := 0
+	for _, entry := range entries {
+		if !entry.Available {
+			count++
+		}
+	}
+	return count
+}
+
+func writeSyncManifestError(w http.ResponseWriter, r *http.Request, status int, stage string, started time.Time, err error) {
+	if logger, ok := r.Context().Value(loggerKey).(*Logger); ok {
+		log := logger.Warn
+		if status >= http.StatusInternalServerError {
+			log = logger.Error
+		}
+		log("sync manifest failed",
+			"stage", stage,
+			"status", status,
+			"duration_ms", time.Since(started).Milliseconds(),
+			"err", err,
+		)
+	}
+	writeError(w, status, err)
 }
 
 // syncLinkedFile serves a linked-file attachment through the reader so its

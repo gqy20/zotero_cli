@@ -297,7 +297,7 @@ CLI 配置存储在 `~/.zot/.env`。
 .\zot.exe config check   # 校验配置有效性
 ```
 
-`sync` 同时复制 `storage/` imported 附件和可解析的 `linked_file` 外部附件。外链文件保留 `attachments:` 后的相对目录并写入同步端 `~/.zot/sync/attachments/`，不依赖服务端绝对路径，也不改写 SQLite；缺少安全相对路径时同步失败，不回退到 attachment key 镜像。源文件缺失不会中止整库同步，已有旧副本保留。远端附件删除不传播到本地。未显式配置 `data_dir` 时，`--mode local` 自动识别 `~/.zot/sync`。
+`sync` 同时复制 `storage/` imported 附件和可解析的 `linked_file` 外部附件。外链文件保留 `attachments:` 后的相对目录并写入同步端 `~/.zot/sync/attachments/`，不依赖服务端绝对路径，也不改写 SQLite；缺少安全相对路径、基本目录或源文件的单个附件以 warning 跳过，不回退到 attachment key 镜像，也不阻断整库同步，已有旧副本保留为 stale。远端附件删除不传播到本地。未显式配置 `data_dir` 时，`--mode local` 自动识别 `~/.zot/sync`。
 
 配置缺失时，主动初始化而不是绕过错误。
 

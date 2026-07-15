@@ -1,12 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"zotero_cli/internal/backend"
@@ -19,8 +21,17 @@ type linkedSyncReader struct {
 
 type missingRelativePathSyncReader struct{ mockReader }
 
+type unavailableLinkedSyncReader struct{ mockReader }
+
 func (r *missingRelativePathSyncReader) ListSyncLinkedAttachments(context.Context) ([]backend.SyncLinkedAttachment, error) {
 	return []backend.SyncLinkedAttachment{{Key: "LINK1", Name: "paper.pdf", Available: true}}, nil
+}
+
+func (r *unavailableLinkedSyncReader) ListSyncLinkedAttachments(context.Context) ([]backend.SyncLinkedAttachment, error) {
+	return []backend.SyncLinkedAttachment{{
+		Key: "ABS12345", Name: "paper.pdf", Available: false,
+		Error: `unsupported path; expected an "attachments:" relative path`,
+	}}, nil
 }
 
 func (r *linkedSyncReader) ListSyncLinkedAttachments(context.Context) ([]backend.SyncLinkedAttachment, error) {
@@ -167,10 +178,55 @@ func TestSyncManifestRejectsLinkedAttachmentWithoutRelativePath(t *testing.T) {
 	mux := http.NewServeMux()
 	NewHandlerWithDir(&missingRelativePathSyncReader{}, dataDir).RegisterRoutes(mux)
 
+	var logs bytes.Buffer
+	logger := NewLogger(&logs, "debug")
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/sync/manifest", nil))
+	req := httptest.NewRequest("GET", "/api/v1/sync/manifest", nil)
+	req = req.WithContext(context.WithValue(req.Context(), loggerKey, logger))
+	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d: %s", rec.Code, rec.Body.String())
+	}
+	for label, output := range map[string]string{"response": rec.Body.String(), "log": logs.String()} {
+		for _, want := range []string{"LINK1", "relative path"} {
+			if !strings.Contains(output, want) {
+				t.Fatalf("%s %q does not contain %q", label, output, want)
+			}
+		}
+	}
+	if !strings.Contains(logs.String(), `"stage":"linked_attachment_paths"`) {
+		t.Fatalf("log does not identify manifest stage: %s", logs.String())
+	}
+}
+
+func TestSyncManifestIncludesAndLogsUnavailableLinkedAttachment(t *testing.T) {
+	dataDir := t.TempDir()
+	writeSyncFixture(t, dataDir)
+	mux := http.NewServeMux()
+	NewHandlerWithDir(&unavailableLinkedSyncReader{}, dataDir).RegisterRoutes(mux)
+
+	var logs bytes.Buffer
+	logger := NewLogger(&logs, "debug")
+	req := httptest.NewRequest("GET", "/api/v1/sync/manifest", nil)
+	req = req.WithContext(context.WithValue(req.Context(), loggerKey, logger))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Data syncManifest `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Data.Linked) != 1 || response.Data.Linked[0].Available || response.Data.Linked[0].Key != "ABS12345" || response.Data.Linked[0].Error == "" {
+		t.Fatalf("unexpected linked manifest: %#v", response.Data.Linked)
+	}
+	for _, want := range []string{"sync linked attachment skipped", "ABS12345", "sync manifest built", `"linked_unavailable":1`} {
+		if !strings.Contains(logs.String(), want) {
+			t.Fatalf("log %q does not contain %q", logs.String(), want)
+		}
 	}
 }
 

@@ -445,7 +445,7 @@ zot --mode local find ...
 
 服务成功绑定端口后会输出一条 `server ready` 结构化日志，其中 `server_addr` 可直接用于客户端配置；`local_url` 供本机访问，`network_urls` 列出检测到的局域网候选地址。如果存在多个网络接口，请选择客户端能够访问的地址。日志中的 `remote_config` 是可直接复制执行的完整配置命令。
 
-`zot sync` 是单向增量拉取：拉取原始 `zotero.sqlite`（数据库）、`storage/` 中的 imported PDF/附件、可解析的 `linked_file` 外部附件，以及 `.zotero_cli/fulltext/` 全文索引。外链附件保留 SQLite 中 `attachments:` 后的原相对目录，写入同步端自己的 `~/.zot/sync/attachments/`；例如服务端 `D:\zotero\zotero\Q_生物科学\paper.pdf` 会在同步端成为 `~/.zot/sync/attachments/Q_生物科学/paper.pdf`，不会写回或依赖服务端绝对路径。外链附件没有安全相对路径时同步会明确失败，不再创建 key 镜像。整个过程不改写 SQLite。
+`zot sync` 是单向增量拉取：拉取原始 `zotero.sqlite`（数据库）、`storage/` 中的 imported PDF/附件、可解析的 `linked_file` 外部附件，以及 `.zotero_cli/fulltext/` 全文索引。外链附件保留 SQLite 中 `attachments:` 后的原相对目录，写入同步端自己的 `~/.zot/sync/attachments/`；例如服务端 `D:\zotero\zotero\Q_生物科学\paper.pdf` 会在同步端成为 `~/.zot/sync/attachments/Q_生物科学/paper.pdf`，不会写回或依赖服务端绝对路径。外链附件没有安全相对路径时会输出 warning 并跳过，不创建 key 镜像，也不阻断数据库和其他附件同步。整个过程不改写 SQLite。
 
 同步结果是一个可直接使用的自包含本地镜像：
 

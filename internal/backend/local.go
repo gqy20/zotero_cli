@@ -186,26 +186,37 @@ func (r *LocalReader) ListSyncLinkedAttachments(ctx context.Context) ([]SyncLink
 				filename = filepath.Base(filepath.FromSlash(zoteroPath))
 			}
 			entry := SyncLinkedAttachment{Key: key, Name: filename}
-			if after, relative := strings.CutPrefix(zoteroPath, "attachments:"); relative && r.AttachmentBaseDir != "" {
-				if candidate, pathErr := safepath.JoinRelative(r.AttachmentBaseDir, after); pathErr == nil {
-					if rel, relErr := filepath.Rel(r.AttachmentBaseDir, candidate); relErr == nil {
-						entry.RelativePath = filepath.ToSlash(rel)
-					}
-				}
-			}
-			resolved, ok := r.resolveAttachmentPathWithoutMirror(key, zoteroPath, filename)
-			if !ok {
-				entry.Error = "source file is unavailable"
+			after, relative := strings.CutPrefix(zoteroPath, "attachments:")
+			if !relative {
+				entry.Error = `unsupported path; expected an "attachments:" relative path`
 				attachments = append(attachments, entry)
 				continue
 			}
-			info, statErr := os.Stat(resolved)
+			if r.AttachmentBaseDir == "" {
+				entry.Error = "Zotero base attachment directory is not configured"
+				attachments = append(attachments, entry)
+				continue
+			}
+			candidate, pathErr := safepath.JoinRelative(r.AttachmentBaseDir, after)
+			if pathErr != nil {
+				entry.Error = fmt.Sprintf("invalid attachments: relative path: %v", pathErr)
+				attachments = append(attachments, entry)
+				continue
+			}
+			rel, relErr := filepath.Rel(r.AttachmentBaseDir, candidate)
+			if relErr != nil {
+				entry.Error = fmt.Sprintf("cannot derive relative path: %v", relErr)
+				attachments = append(attachments, entry)
+				continue
+			}
+			entry.RelativePath = filepath.ToSlash(rel)
+			info, statErr := os.Stat(candidate)
 			if statErr != nil || info.IsDir() {
 				entry.Error = "source file is unavailable"
 				attachments = append(attachments, entry)
 				continue
 			}
-			entry.Name = filepath.Base(resolved)
+			entry.Name = filepath.Base(candidate)
 			entry.Size = info.Size()
 			entry.Mtime = info.ModTime().Unix()
 			entry.Available = true

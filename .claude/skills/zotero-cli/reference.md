@@ -221,7 +221,7 @@ zot sync status --full
 zot --mode local find "query"
 ```
 
-`sync` 使用配置中的服务器地址和默认镜像目录，单向增量拉取 SQLite、storage、可解析的 linked_file 外部附件和全文索引；外链文件保留 `attachments:` 后的安全相对路径并写入同步端 `~/.zot/sync/attachments/`，不依赖服务端绝对路径，也不改写 SQLite。远端删除不会清理本地附件或全文缓存，SQLite sidecar 除外；缺失的外链源文件不会中止同步，已有本地副本继续保留。同步后 `--mode local` 自动识别 `~/.zot/sync`。中断的大文件会自动续传，仅在需要重新下载全部文件时使用 `--force`。`sync status` 合并状态与校验；`--full` 会执行完整 SQLite 和上次 manifest 校验；具体附件位置使用 `file path` 查询。
+`sync` 使用配置中的服务器地址和默认镜像目录，单向增量拉取 SQLite、storage、可解析的 linked_file 外部附件和全文索引；外链文件保留 `attachments:` 后的安全相对路径并写入同步端 `~/.zot/sync/attachments/`，不依赖服务端绝对路径，也不改写 SQLite。远端删除不会清理本地附件或全文缓存，SQLite sidecar 除外；缺少安全相对路径、基本目录或源文件的单个外链附件以 warning 跳过，不中止同步，已有本地副本继续保留为 stale。同步后 `--mode local` 自动识别 `~/.zot/sync`。中断的大文件会自动续传，仅在需要重新下载全部文件时使用 `--force`。`sync status` 合并状态与校验；`--full` 会执行完整 SQLite 和上次 manifest 校验；具体附件位置使用 `file path` 查询。
 
 ## 兼容边界
 
