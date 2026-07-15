@@ -75,7 +75,11 @@ func TestRunInitInteractiveHybridMode(t *testing.T) {
 	if !strings.Contains(cfgStr, "ZOT_MODE=hybrid") {
 		t.Fatalf("expected ZOT_MODE=hybrid in config, got:\n%s", cfgStr)
 	}
-	if !strings.Contains(cfgStr, "ZOT_DATA_DIR=/tmp/zotero") {
+	wantDataDir, err := filepath.Abs("/tmp/zotero")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(cfgStr, "ZOT_DATA_DIR="+wantDataDir) {
 		t.Fatalf("expected DATA_DIR in config, got:\n%s", cfgStr)
 	}
 }

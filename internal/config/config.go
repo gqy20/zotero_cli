@@ -79,6 +79,9 @@ func Load() (Config, string, error) {
 	if !found {
 		return Config{}, path, ErrNotFound
 	}
+	if cfg.DataDir != "" && !filepath.IsAbs(cfg.DataDir) {
+		return Config{}, path, fmt.Errorf("ZOT_DATA_DIR must be an absolute path, got %q", cfg.DataDir)
+	}
 	return cfg, path, nil
 }
 
@@ -89,6 +92,10 @@ func Save(cfg Config) error {
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	cfg.DataDir, err = NormalizeDataDir(cfg.DataDir)
+	if err != nil {
 		return err
 	}
 
@@ -109,6 +116,21 @@ func Save(cfg Config) error {
 		"",
 	}
 	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o600)
+}
+
+// NormalizeDataDir converts an explicitly supplied data directory to a stable
+// absolute path before it is persisted. Empty values remain empty so local
+// mode can auto-detect the default sync mirror.
+func NormalizeDataDir(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	abs, err := filepath.Abs(value)
+	if err != nil {
+		return "", fmt.Errorf("resolve data_dir: %w", err)
+	}
+	return filepath.Clean(abs), nil
 }
 
 func loadEnvConfig() (Config, bool, error) {

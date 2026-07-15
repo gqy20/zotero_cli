@@ -296,3 +296,28 @@ func TestPathIsWithin(t *testing.T) {
 		}
 	}
 }
+
+func TestSyncStorageFileRejectsEscapingSymlink(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dataDir, "storage", "KEY"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "zotero.sqlite"), []byte("sqlite"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "outside.pdf")
+	if err := os.WriteFile(outside, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dataDir, "storage", "KEY", "link.pdf")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	mux := newSyncMux(t, dataDir)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/sync/storage/KEY/link.pdf", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected escaping symlink to be rejected, got %d", rec.Code)
+	}
+}

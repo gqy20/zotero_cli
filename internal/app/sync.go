@@ -16,6 +16,7 @@ import (
 	"unicode"
 
 	"zotero_cli/internal/config"
+	"zotero_cli/internal/safepath"
 	"zotero_cli/internal/syncmirror"
 )
 
@@ -289,10 +290,21 @@ const sqliteFileName = "zotero.sqlite"
 // WAL mode this usually means only the small -wal is re-fetched.
 func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta, dataDir string, force bool, progress io.Writer) (changed bool, err error) {
 	hasMain := false
+	allowed := map[string]bool{
+		sqliteFileName: true, sqliteFileName + "-wal": true,
+		sqliteFileName + "-shm": true, sqliteFileName + "-journal": true,
+	}
+	seen := make(map[string]bool, len(entries))
 	for _, entry := range entries {
+		if !allowed[entry.Path] {
+			return false, fmt.Errorf("manifest contains invalid sqlite path %q", entry.Path)
+		}
+		if seen[entry.Path] {
+			return false, fmt.Errorf("manifest contains duplicate sqlite path %q", entry.Path)
+		}
+		seen[entry.Path] = true
 		if entry.Path == sqliteFileName {
 			hasMain = true
-			break
 		}
 	}
 	if !hasMain {
@@ -309,7 +321,10 @@ func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta,
 	present := make(map[string]bool, len(entries))
 	for _, e := range entries {
 		present[e.Path] = true
-		local := filepath.Join(dataDir, e.Path)
+		local, pathErr := safepath.JoinComponents(dataDir, e.Path)
+		if pathErr != nil {
+			return false, pathErr
+		}
 		if !force {
 			if fi, perr := os.Stat(local); perr == nil && fi.Size() == e.Size && fi.ModTime().Unix() == e.Mtime {
 				skipped++
@@ -320,7 +335,11 @@ func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta,
 		if err != nil {
 			return false, err
 		}
-		dest := filepath.Join(staging, e.Path)
+		dest, pathErr := safepath.JoinComponents(staging, e.Path)
+		if pathErr != nil {
+			body.Close()
+			return false, pathErr
+		}
 		f, err := os.Create(dest)
 		if err != nil {
 			body.Close()
@@ -407,8 +426,11 @@ type fetchFn func(ctx context.Context, relPath string, offset int64) (io.ReadClo
 func runDownloads(ctx context.Context, targetDir string, files []fileDownload, force bool, concurrency int, progress io.Writer, fetch fetchFn) (downloaded, skipped, bytes int64, err error) {
 	var jobs []fileDownload
 	for _, f := range files {
+		local, pathErr := safepath.JoinRelative(targetDir, f.relPath)
+		if pathErr != nil {
+			return 0, 0, 0, pathErr
+		}
 		if !force {
-			local := filepath.Join(targetDir, filepath.FromSlash(f.relPath))
 			if fi, e := os.Stat(local); e == nil && fi.Size() == f.size && fi.ModTime().Unix() == f.mtime {
 				atomic.AddInt64(&skipped, 1)
 				continue
@@ -482,9 +504,15 @@ func runDownloads(ctx context.Context, targetDir string, files []fileDownload, f
 }
 
 func downloadOne(ctx context.Context, targetDir string, f fileDownload, fetch fetchFn) error {
-	dest := filepath.Join(targetDir, filepath.FromSlash(f.relPath))
+	dest, err := safepath.JoinRelative(targetDir, f.relPath)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
+	}
+	if !safepath.ExistingDirectoryWithin(targetDir, filepath.Dir(dest)) {
+		return fmt.Errorf("destination directory for %q escapes its root", f.relPath)
 	}
 	part := fmt.Sprintf("%s.part-%d-%d", dest, f.size, f.mtime)
 	partName := filepath.Base(part)
@@ -541,6 +569,9 @@ func syncStorage(ctx context.Context, client *syncClient, entries []syncStorageM
 	var files []fileDownload
 	for _, e := range entries {
 		for _, f := range e.Files {
+			if _, pathErr := safepath.JoinComponents(dataDir, e.Key, f.Name); pathErr != nil {
+				return 0, 0, 0, fmt.Errorf("invalid storage manifest path: %w", pathErr)
+			}
 			files = append(files, fileDownload{relPath: e.Key + "/" + f.Name, size: f.Size, mtime: f.Mtime})
 		}
 	}

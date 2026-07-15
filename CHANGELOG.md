@@ -30,6 +30,7 @@
 - **附件健康检查**：`inspect-attachment` 新增 `--health`，可诊断本地附件路径未解析、文件缺失、路径是目录、文件名过长、非法字符、异常空格、PDF 缺 `.pdf` 后缀和泛化命名等问题；`find` 新增 `--missing-attachment`、`--bad-attachment-name`、`--attachment-health critical|error|warning|info` 用于批量定位异常附件。
 
 ### 修复
+- **同步与附件路径边界**：同步客户端统一拒绝绝对路径、`..` 和非法 manifest 组件，下载与 `sync status --full` 使用同一校验；本地 `storage:`/`attachments:` 解析限制在各自根目录内，服务端不再通过同步端点跟随越界符号链接。配置初始化会把 `data_dir` 固化为绝对路径，手写相对 `ZOT_DATA_DIR` 会明确报错。
 - **标注来源与附件选择安全**：修复删除来源含混、多 PDF 条目选择不稳定、写入零匹配仍替换原文件等风险；Zotero 标注删除统一走 Web API，PDF 内嵌标注按 xref 事务式处理。
 - **导入结果与全文索引衔接**：导入后以最终保留的附件 key 完成重复附件清理、收藏夹归属和增量全文索引，避免对临时或已删除附件建立缓存。
 - **同步后本地模式衔接**：全局 `--mode` 现在真正覆盖单次命令配置；`--mode local` 在没有显式 `data_dir` 时自动识别 `~/.zot/sync`。同步全文缓存的源路径跨机器变化后，仍可按附件 key、mtime 和 size 正确校验。

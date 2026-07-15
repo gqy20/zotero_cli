@@ -155,6 +155,28 @@ func TestDownloadOneResumesMatchingPartialFile(t *testing.T) {
 	}
 }
 
+func TestDownloadOneRejectsEscapingPath(t *testing.T) {
+	target := t.TempDir()
+	fetched := false
+	err := downloadOne(context.Background(), target, fileDownload{relPath: "../outside.txt", size: 1}, func(context.Context, string, int64) (io.ReadCloser, bool, error) {
+		fetched = true
+		return io.NopCloser(bytes.NewReader([]byte("x"))), false, nil
+	})
+	if err == nil {
+		t.Fatal("expected unsafe relative path to be rejected")
+	}
+	if fetched {
+		t.Fatal("unsafe path should be rejected before download")
+	}
+}
+
+func TestSyncStorageRejectsUnsafeManifestComponents(t *testing.T) {
+	entries := []syncStorageMeta{{Key: "..", Files: []syncFileMeta{{Name: "outside.pdf"}}}}
+	if _, _, _, err := syncStorage(context.Background(), nil, entries, t.TempDir(), false, 1, nil); err == nil {
+		t.Fatal("expected unsafe storage key to be rejected")
+	}
+}
+
 func TestSyncRequiresConfiguredServer(t *testing.T) {
 	service := NewSyncService()
 	service.LoadConfig = func() (config.Config, string, error) { return config.Config{}, "", nil }
@@ -222,6 +244,13 @@ func TestSyncSqliteRejectsManifestWithoutMainDatabase(t *testing.T) {
 	}
 }
 
+func TestSyncSqliteRejectsUnexpectedPath(t *testing.T) {
+	entries := []syncPathMeta{{Path: sqliteFileName}, {Path: "../outside"}}
+	if _, err := syncSqlite(context.Background(), nil, entries, t.TempDir(), false, nil); err == nil {
+		t.Fatal("expected unsafe sqlite path to be rejected")
+	}
+}
+
 func TestSyncStatusFullVerifiesLastManifest(t *testing.T) {
 	configDir := t.TempDir()
 	dataDir := filepath.Join(configDir, "sync")
@@ -276,5 +305,16 @@ func TestSyncStatusFullVerifiesLastManifest(t *testing.T) {
 	status = result.Data.(SyncStatusSummary)
 	if status.Healthy || status.Manifest == nil || status.Manifest.Changed != 1 || status.SQLite.Error == "" {
 		t.Fatalf("unexpected degraded status: %#v", status)
+	}
+}
+
+func TestVerifySyncManifestRejectsEscapingPath(t *testing.T) {
+	dataDir := t.TempDir()
+	manifest := syncManifest{Fulltext: []syncPathMeta{{Path: "../../outside", Size: 1}}}
+	if err := writeSyncManifest(dataDir, manifest); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := verifySyncManifest(dataDir); err == nil {
+		t.Fatal("expected unsafe manifest path to be rejected")
 	}
 }

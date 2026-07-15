@@ -90,6 +90,10 @@ func (ConfigService) Init(ctx context.Context, req ConfigInitRequest) (Result, e
 			return Result{}, err
 		}
 	}
+	cfg.DataDir, err = config.NormalizeDataDir(cfg.DataDir)
+	if err != nil {
+		return Result{}, err
+	}
 	if err := config.Save(cfg); err != nil {
 		return Result{}, err
 	}

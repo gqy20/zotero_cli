@@ -139,6 +139,8 @@ zot lib show --json        # 一站式库概览
 | `ZOT_MODE` | 推荐 `hybrid`（本地优先 + Web 回退） |
 | `ZOT_SERVER_ADDR` | 远程模式需要，运行 `zot serve` 的地址（如 `http://192.168.1.100:8021`） |
 
+`ZOT_DATA_DIR` 使用绝对路径；`zot config init` 会自动把输入路径规范化为绝对路径，手工配置的相对路径会被拒绝，避免从不同工作目录启动时指向不同文献库。
+
 > local/hybrid 下 `zot config init` 会询问是否安装 PyMuPDF，也可事后 `zot config init --pdf` 安装或 `zot config init --check-pdf` 诊断。
 >
 > 完整配置指南（含 API Key 获取、文件重命名模板、推荐插件）：见 [配置指南](docs/user/zotero-setup-guide.md)。

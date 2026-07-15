@@ -941,6 +941,12 @@ func TestFindDefaultDataDirReturnsEmptyWhenNoSQLite(t *testing.T) {
 	}
 }
 
+func TestNewLocalReaderRejectsRelativeDataDir(t *testing.T) {
+	if _, err := NewLocalReader(config.Config{Mode: "local", DataDir: "relative/path"}); err == nil || !strings.Contains(err.Error(), "absolute path") {
+		t.Fatalf("NewLocalReader() error = %v; want absolute-path error", err)
+	}
+}
+
 func TestResolveAttachmentPathSupportsAttachmentsRelativeBaseDir(t *testing.T) {
 	baseDir := t.TempDir()
 	relativePath := filepath.Join("papers", "example.pdf")
@@ -959,6 +965,36 @@ func TestResolveAttachmentPathSupportsAttachmentsRelativeBaseDir(t *testing.T) {
 	}
 	if got != absolutePath {
 		t.Fatalf("resolveAttachmentPath() = %q, want %q", got, absolutePath)
+	}
+}
+
+func TestResolveAttachmentPathRejectsAttachmentsPathEscape(t *testing.T) {
+	root := t.TempDir()
+	baseDir := filepath.Join(root, "base")
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "outside.pdf"), []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reader := &LocalReader{AttachmentBaseDir: baseDir}
+	if got, ok := reader.resolveAttachmentPath("ATTACH1", "attachments:../outside.pdf", "outside.pdf"); ok {
+		t.Fatalf("escaping attachments path resolved to %q", got)
+	}
+}
+
+func TestResolveAttachmentPathRejectsStorageFilenameEscape(t *testing.T) {
+	root := t.TempDir()
+	storageDir := filepath.Join(root, "storage")
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "outside.pdf"), []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reader := &LocalReader{StorageDir: storageDir}
+	if got, ok := reader.resolveAttachmentPath("ATTACH1", "storage:outside.pdf", "../../outside.pdf"); ok {
+		t.Fatalf("escaping storage filename resolved to %q", got)
 	}
 }
 

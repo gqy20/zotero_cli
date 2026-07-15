@@ -25,7 +25,8 @@ func TestLoadReturnsEnvConfigWhenFileMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	envPath := filepath.Join(envDir, ".env")
-	envBody := "ZOT_DATA_DIR=D:/zotero\nZOT_LIBRARY_TYPE=user\nZOT_LIBRARY_ID=123456\nZOT_API_KEY=secret\nZOT_TIMEOUT_SECONDS=9\nZOT_RETRY_MAX_ATTEMPTS=4\nZOT_RETRY_BASE_DELAY_MS=125\nZOT_ALLOW_WRITE=1\nZOT_ALLOW_DELETE=0\n"
+	dataDir := filepath.Join(root, "zotero")
+	envBody := "ZOT_DATA_DIR=" + dataDir + "\nZOT_LIBRARY_TYPE=user\nZOT_LIBRARY_ID=123456\nZOT_API_KEY=secret\nZOT_TIMEOUT_SECONDS=9\nZOT_RETRY_MAX_ATTEMPTS=4\nZOT_RETRY_BASE_DELAY_MS=125\nZOT_ALLOW_WRITE=1\nZOT_ALLOW_DELETE=0\n"
 	if err := os.WriteFile(envPath, []byte(envBody), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +39,7 @@ func TestLoadReturnsEnvConfigWhenFileMissing(t *testing.T) {
 	if cfg.LibraryType != "user" || cfg.LibraryID != "123456" || cfg.APIKey != "secret" {
 		t.Fatalf("unexpected loaded config: %+v", cfg)
 	}
-	if cfg.DataDir != "D:/zotero" {
+	if cfg.DataDir != dataDir {
 		t.Fatalf("expected data dir to load, got %q", cfg.DataDir)
 	}
 	if cfg.TimeoutSeconds != 9 {
@@ -66,7 +67,7 @@ func TestLoadEnvOverridesEnvFile(t *testing.T) {
 
 	configBody := strings.Join([]string{
 		"ZOT_MODE=web",
-		"ZOT_DATA_DIR=D:/file-data",
+		"ZOT_DATA_DIR=" + filepath.Join(root, "file-data"),
 		"ZOT_LIBRARY_TYPE=group",
 		"ZOT_LIBRARY_ID=file-id",
 		"ZOT_API_KEY=file-key",
@@ -85,7 +86,8 @@ func TestLoadEnvOverridesEnvFile(t *testing.T) {
 
 	t.Setenv("ZOT_LIBRARY_ID", "env-id")
 	t.Setenv("ZOT_API_KEY", "env-key")
-	t.Setenv("ZOT_DATA_DIR", "D:/env-data")
+	envDataDir := filepath.Join(root, "env-data")
+	t.Setenv("ZOT_DATA_DIR", envDataDir)
 	t.Setenv("ZOT_TIMEOUT_SECONDS", "15")
 	t.Setenv("ZOT_RETRY_MAX_ATTEMPTS", "5")
 	t.Setenv("ZOT_ALLOW_WRITE", "1")
@@ -98,7 +100,7 @@ func TestLoadEnvOverridesEnvFile(t *testing.T) {
 	if cfg.LibraryType != "group" {
 		t.Fatalf("expected file-backed library type to remain, got %q", cfg.LibraryType)
 	}
-	if cfg.DataDir != "D:/env-data" {
+	if cfg.DataDir != envDataDir {
 		t.Fatalf("expected env to override data dir, got %q", cfg.DataDir)
 	}
 	if cfg.LibraryID != "env-id" {
@@ -118,6 +120,45 @@ func TestLoadEnvOverridesEnvFile(t *testing.T) {
 	}
 	if !cfg.AllowWrite || !cfg.AllowDelete {
 		t.Fatalf("unexpected permissions after override: %+v", cfg)
+	}
+}
+
+func TestLoadRejectsRelativeDataDir(t *testing.T) {
+	root := t.TempDir()
+	setConfigEnv(t, root)
+	if err := os.MkdirAll(filepath.Join(root, ".zot"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".zot", ".env"), []byte("ZOT_DATA_DIR=relative/path\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Load(); err == nil || !strings.Contains(err.Error(), "must be an absolute path") {
+		t.Fatalf("Load() error = %v; want absolute-path error", err)
+	}
+}
+
+func TestSaveNormalizesRelativeDataDir(t *testing.T) {
+	root := t.TempDir()
+	setConfigEnv(t, root)
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+
+	if err := Save(Config{DataDir: "library"}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, ".zot", ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "ZOT_DATA_DIR=" + filepath.Join(root, "library")
+	if !strings.Contains(string(data), want) {
+		t.Fatalf("saved config does not contain %q:\n%s", want, data)
 	}
 }
 

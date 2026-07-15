@@ -206,7 +206,7 @@ Schema 响应默认缓存 7 天；`meta.read_source=cache` 表示缓存命中。
 
 completion 支持 `bash`、`zsh`、`fish`、`powershell`，生成过程不会加载配置或访问网络。
 
-`sync` 是远端到本地的单向增量拉取，包含 SQLite、全文索引、`storage/` imported 附件和可解析的 `linked_file` 外部附件。外链文件以 attachment key 复制到镜像覆盖层，不改写 SQLite；源文件不可用不会中止整库同步，本地已有旧副本会继续保留。远端删除不会传播为本地附件或全文缓存删除。同步后可直接用 `zot --mode local ...`，未显式配置 `data_dir` 时会自动识别 `~/.zot/sync`。`sync status` 执行 SQLite 快速检查并显示上次同步状态；`sync status --full` 额外执行完整 SQLite integrity check，并核对上次成功同步 manifest 中的所有可用文件。sync 的机器可读调用使用 `--json`。
+`sync` 是远端到本地的单向增量拉取，包含 SQLite、全文索引、`storage/` imported 附件和可解析的 `linked_file` 外部附件。外链文件以 attachment key 复制到镜像覆盖层，不改写 SQLite；源文件不可用不会中止整库同步，本地已有旧副本会继续保留。远端删除不会传播为本地附件或全文缓存删除。同步后可直接用 `zot --mode local ...`，未显式配置 `data_dir` 时会自动识别 `~/.zot/sync`；显式 `data_dir` 必须是绝对路径。`sync status` 执行 SQLite 快速检查并显示上次同步状态；`sync status --full` 额外执行完整 SQLite integrity check，并核对上次成功同步 manifest 中的所有可用文件。sync 的机器可读调用使用 `--json`。
 
 帮助页与 completion 是纯文本产物，不支持 `--json`。`config init --json` 为非交互模式，调用方必须一次提供当前模式所需的完整参数。
 

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"zotero_cli/internal/domain"
+	"zotero_cli/internal/safepath"
 	"zotero_cli/internal/syncmirror"
 )
 
@@ -715,18 +716,24 @@ func (r *LocalReader) resolveAttachmentPathWithoutMirror(key string, zoteroPath 
 	if after, ok := strings.CutPrefix(zoteroPath, "storage:"); ok {
 		name := filename
 		if name == "" {
-			name = path.Base(after)
+			name = path.Base(strings.ReplaceAll(after, `\`, "/"))
 		}
 		if name == "" || name == "." {
 			return "", false
 		}
-		resolved := filepath.Join(r.StorageDir, key, filepath.FromSlash(name))
+		resolved, err := safepath.JoinComponents(r.StorageDir, key, name)
+		if err != nil {
+			return "", false
+		}
 		if _, err := os.Stat(resolved); err == nil {
 			return resolved, true
 		}
 	}
 	if after, ok := strings.CutPrefix(zoteroPath, "attachments:"); ok && r.AttachmentBaseDir != "" {
-		resolved := filepath.Join(r.AttachmentBaseDir, filepath.FromSlash(after))
+		resolved, err := safepath.JoinRelative(r.AttachmentBaseDir, after)
+		if err != nil {
+			return "", false
+		}
 		if _, err := os.Stat(resolved); err == nil {
 			return resolved, true
 		}

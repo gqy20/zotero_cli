@@ -19,6 +19,7 @@ import (
 
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
+	"zotero_cli/internal/safepath"
 	"zotero_cli/internal/syncmirror"
 )
 
@@ -42,6 +43,9 @@ type LocalReader struct {
 
 func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 	dataDirInput := cfg.DataDir
+	if strings.TrimSpace(dataDirInput) != "" && !filepath.IsAbs(dataDirInput) {
+		return nil, fmt.Errorf("data_dir must be an absolute path, got %q", dataDirInput)
+	}
 	if dataDirInput == "" && cfg.Mode == "local" {
 		if syncDir, syncErr := config.DefaultSyncDataDir(); syncErr == nil && isLocalDataDir(syncDir) {
 			dataDirInput = syncDir
@@ -129,7 +133,10 @@ func (r *LocalReader) fullTextCache() fullTextCache {
 		if name == "" || name == "." {
 			return "", false
 		}
-		path := filepath.Join(r.StorageDir, key, name)
+		path, err := safepath.JoinComponents(r.StorageDir, key, name)
+		if err != nil {
+			return "", false
+		}
 		if info, err := os.Stat(path); err == nil && !info.IsDir() {
 			return path, true
 		}

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"zotero_cli/internal/backend"
+	"zotero_cli/internal/safepath"
 )
 
 // Sync endpoints let a client pull the raw Zotero data files (zotero.sqlite +
@@ -64,7 +65,12 @@ func (h *Handler) syncManifest(w http.ResponseWriter, r *http.Request) {
 	// change -wal (small), leaving the ~hundred-MB main db untouched.
 	manifest := syncManifest{}
 	for _, name := range []string{sqliteFileName, sqliteFileName + "-wal", sqliteFileName + "-shm", sqliteFileName + "-journal"} {
-		if fi, err := os.Stat(filepath.Join(h.dataDir, name)); err == nil {
+		full := filepath.Join(h.dataDir, name)
+		if entry, lstatErr := os.Lstat(full); lstatErr == nil && entry.Mode().IsRegular() && safepath.ExistingRegularFileWithin(h.dataDir, full) {
+			fi, err := os.Stat(full)
+			if err != nil {
+				continue
+			}
 			manifest.SQLite = append(manifest.SQLite, syncPathEntry{
 				Path:  name,
 				Size:  fi.Size(),
@@ -89,10 +95,11 @@ func (h *Handler) syncManifest(w http.ResponseWriter, r *http.Request) {
 			}
 			se := syncStorageEntry{Key: e.Name()}
 			for _, f := range files {
-				if f.IsDir() {
+				if f.IsDir() || f.Type()&os.ModeSymlink != 0 {
 					continue
 				}
-				if info, err := f.Info(); err == nil {
+				full := filepath.Join(storageDir, e.Name(), f.Name())
+				if info, err := f.Info(); err == nil && info.Mode().IsRegular() && safepath.ExistingRegularFileWithin(storageDir, full) {
 					se.Files = append(se.Files, syncFileEntry{
 						Name:  f.Name(),
 						Size:  info.Size(),
@@ -174,8 +181,11 @@ func collectTree(root, dir string) []syncPathEntry {
 			out = append(out, collectTree(root, full)...)
 			continue
 		}
+		if e.Type()&os.ModeSymlink != 0 {
+			continue
+		}
 		fi, err := e.Info()
-		if err != nil {
+		if err != nil || !fi.Mode().IsRegular() || !safepath.ExistingRegularFileWithin(root, full) {
 			continue
 		}
 		rel, err := filepath.Rel(root, full)
@@ -200,13 +210,9 @@ func (h *Handler) syncFulltextFile(w http.ResponseWriter, r *http.Request) {
 	}
 	rel := r.PathValue("path")
 	fulltextDir := filepath.Join(h.dataDir, ".zotero_cli", "fulltext")
-	abs := filepath.Join(fulltextDir, filepath.FromSlash(rel))
-	if rel == "" || !pathIsWithin(abs, fulltextDir) {
+	abs, err := safepath.JoinRelative(fulltextDir, rel)
+	if err != nil || !safepath.ExistingRegularFileWithin(fulltextDir, abs) {
 		writeError(w, http.StatusNotFound, fmt.Errorf("invalid path"))
-		return
-	}
-	if fi, err := os.Stat(abs); err != nil || fi.IsDir() {
-		writeError(w, http.StatusNotFound, fmt.Errorf("file not found"))
 		return
 	}
 	http.ServeFile(w, r, abs)
@@ -221,18 +227,15 @@ func (h *Handler) syncSqliteFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, fmt.Errorf("server has no data_dir; cannot sync"))
 		return
 	}
-	name := filepath.Base(r.PathValue("name"))
-	if !strings.HasPrefix(name, sqliteFileName) {
+	name := r.PathValue("name")
+	allowed := name == sqliteFileName || name == sqliteFileName+"-wal" || name == sqliteFileName+"-shm" || name == sqliteFileName+"-journal"
+	if !allowed {
 		writeError(w, http.StatusNotFound, fmt.Errorf("invalid path"))
 		return
 	}
-	abs := filepath.Join(h.dataDir, name)
-	if !pathIsWithin(abs, h.dataDir) {
+	abs, err := safepath.JoinComponents(h.dataDir, name)
+	if err != nil || !safepath.ExistingRegularFileWithin(h.dataDir, abs) {
 		writeError(w, http.StatusNotFound, fmt.Errorf("invalid path"))
-		return
-	}
-	if fi, err := os.Stat(abs); err != nil || fi.IsDir() {
-		writeError(w, http.StatusNotFound, fmt.Errorf("file not found"))
 		return
 	}
 	http.ServeFile(w, r, abs)
@@ -246,21 +249,12 @@ func (h *Handler) syncStorageFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, fmt.Errorf("server has no data_dir; cannot sync"))
 		return
 	}
-	key := filepath.Base(r.PathValue("key"))
-	file := filepath.Base(r.PathValue("file"))
-	if key == "." || key == string(os.PathSeparator) || file == "." || file == string(os.PathSeparator) {
-		writeError(w, http.StatusNotFound, fmt.Errorf("invalid path"))
-		return
-	}
-
+	key := r.PathValue("key")
+	file := r.PathValue("file")
 	storageDir := filepath.Join(h.dataDir, "storage")
-	abs := filepath.Join(storageDir, key, file)
-	if !pathIsWithin(abs, storageDir) {
+	abs, err := safepath.JoinComponents(storageDir, key, file)
+	if err != nil || !safepath.ExistingRegularFileWithin(storageDir, abs) {
 		writeError(w, http.StatusNotFound, fmt.Errorf("invalid path"))
-		return
-	}
-	if fi, err := os.Stat(abs); err != nil || fi.IsDir() {
-		writeError(w, http.StatusNotFound, fmt.Errorf("file not found"))
 		return
 	}
 
@@ -269,9 +263,5 @@ func (h *Handler) syncStorageFile(w http.ResponseWriter, r *http.Request) {
 
 // pathIsWithin reports whether path resolves to inside dir (no ../ escape).
 func pathIsWithin(path, dir string) bool {
-	rel, err := filepath.Rel(filepath.Clean(dir), filepath.Clean(path))
-	if err != nil {
-		return false
-	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
+	return safepath.Within(dir, path)
 }

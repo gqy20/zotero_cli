@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"zotero_cli/internal/config"
+	"zotero_cli/internal/safepath"
 	"zotero_cli/internal/syncmirror"
 
 	_ "modernc.org/sqlite"
@@ -304,23 +305,43 @@ func verifySyncManifest(dataDir string) (SyncManifestStatus, int64, error) {
 	}
 	status.Present = true
 	for _, entry := range manifest.SQLite {
-		verifyManifestFile(&status, filepath.Join(dataDir, filepath.FromSlash(entry.Path)), "sqlite/"+entry.Path, entry.Size, entry.Mtime)
+		path, pathErr := safepath.JoinComponents(dataDir, entry.Path)
+		if pathErr != nil {
+			return status, 0, fmt.Errorf("invalid sqlite manifest path: %w", pathErr)
+		}
+		verifyManifestFile(&status, path, "sqlite/"+entry.Path, entry.Size, entry.Mtime)
 	}
 	for _, group := range manifest.Storage {
 		for _, entry := range group.Files {
 			rel := filepath.ToSlash(filepath.Join(group.Key, entry.Name))
-			verifyManifestFile(&status, filepath.Join(dataDir, "storage", filepath.FromSlash(rel)), "storage/"+rel, entry.Size, entry.Mtime)
+			path, pathErr := safepath.JoinComponents(filepath.Join(dataDir, "storage"), group.Key, entry.Name)
+			if pathErr != nil {
+				return status, 0, fmt.Errorf("invalid storage manifest path: %w", pathErr)
+			}
+			verifyManifestFile(&status, path, "storage/"+rel, entry.Size, entry.Mtime)
 		}
 	}
 	for _, entry := range manifest.Fulltext {
-		verifyManifestFile(&status, filepath.Join(dataDir, syncMetadataDir, "fulltext", filepath.FromSlash(entry.Path)), "fulltext/"+entry.Path, entry.Size, entry.Mtime)
+		path, pathErr := safepath.JoinRelative(filepath.Join(dataDir, syncMetadataDir, "fulltext"), entry.Path)
+		if pathErr != nil {
+			return status, 0, fmt.Errorf("invalid fulltext manifest path: %w", pathErr)
+		}
+		verifyManifestFile(&status, path, "fulltext/"+entry.Path, entry.Size, entry.Mtime)
 	}
 	for _, entry := range manifest.Linked {
 		if !entry.Available {
 			continue
 		}
-		rel := syncmirror.LinkedRelativePath(entry.Key, safeMirrorFilename(entry.Name))
-		verifyManifestFile(&status, filepath.Join(dataDir, filepath.FromSlash(rel)), "linked/"+entry.Key+"/"+entry.Name, entry.Size, entry.Mtime)
+		name := safeMirrorFilename(entry.Name)
+		if entry.Key == "" || safeMirrorFilename(entry.Key) != entry.Key {
+			return status, 0, fmt.Errorf("invalid linked manifest key %q", entry.Key)
+		}
+		rel := syncmirror.LinkedRelativePath(entry.Key, name)
+		path, pathErr := safepath.JoinRelative(dataDir, rel)
+		if pathErr != nil {
+			return status, 0, fmt.Errorf("invalid linked manifest path: %w", pathErr)
+		}
+		verifyManifestFile(&status, path, "linked/"+entry.Key+"/"+entry.Name, entry.Size, entry.Mtime)
 	}
 	partial, err := countPartialFiles(dataDir)
 	return status, partial, err
