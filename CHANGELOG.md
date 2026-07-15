@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+### 新增
+- **可扩展导出与统一文献导入**：`item export` 按默认 100 条分批请求，并新增 `--batch-size` 与显式 `--stream` 原始流式输出；`--from PATH|-` 使用增量 JSON 解码。`item import` 在原有 PDF Connector 工作流之外支持 DOI、PMID、doi.org/PubMed URL 和单条引用 JSON，统一执行 PubMed 元数据解析、重复检查、dry-run 计划与 Web API 创建；identifier 导入不会隐式下载 PDF。
+
+### 安全性
+- **导入安全与部分成功状态**：元数据导入按 DOI、PMID、标题/年份/首位作者检测重复，唯一命中安全跳过，多重命中停止并报告歧义；PDF 已上传后的收藏夹、识别、清理或索引失败以 `partial` 状态和 warning 返回，不再把已接受的导入伪装成整体失败。
+
 ### 变更
 - **附件命令语义收敛**：`file path/open/show` 统一接受普通 item key 或 attachment key；移除 `--item` 与重复的 `file check`，路径查询直接返回健康诊断。新增通用 `file open`，多附件条目要求明确选择 attachment key；单条 `item show --json` 新增紧凑的 `attachment_files` 路径摘要。
 - **任务型 help 与状态语义**：`pdf/ref/index/ann/schema/lib/item supp/item import/sync status` 补齐用途、存储位置、模式限制、最小示例和跨命令引导；`lib show` 将误导性的 `Index` 拆为本地数据与 PDF 全文索引状态，`index status` 统计索引数据库和提取文本缓存的真实占用。`lib taste` 的根 help 改为有效的 `--init/--path` 语法；`item import --dry-run` 不再要求写权限；remote `pdf figs` 默认稳定写入 `~/.zot/figures/` 并显示最终目录；标注 JSON 使用 `zotero_annotations` 代替实现导向的 `db_annotations`。

@@ -165,6 +165,7 @@ type Item struct {
 	Pages       string              `json:"pages,omitempty"`
 	DOI         string              `json:"doi,omitempty"`
 	URL         string              `json:"url,omitempty"`
+	Extra       string              `json:"extra,omitempty"`
 	Tags        []string            `json:"tags,omitempty"`
 	TagObjects  []ItemTag           `json:"-"`
 	Collections []string            `json:"collections,omitempty"`

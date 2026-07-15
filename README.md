@@ -339,6 +339,8 @@ zot pdf open KEY --page 5
 
 `item import --dry-run` 只校验 PDF、Zotero Desktop Connector 和可选收藏夹，不需要开启写权限，也不会上传文件、创建条目或启动元数据识别。PDF 真正导入完成后会对本次最终保留的附件执行增量全文索引，因此新文献无需再次运行全库 `index build` 即可参与全文检索。指定收藏夹、重复附件清理和增量索引共享同一个最终附件 key，不会索引已清理的重复记录。`find --snippet` 的 JSON 只返回轻量条目信息和 `matched_chunk` 证据，不复制摘要、附件、笔记或完整 Item；单条 `item show --json` 会额外返回紧凑的 `attachment_files`（key、文件名、类型、可用的本地路径），完整附件对象仍需 `--full`。命中上下文以实际命中位置为中心，最多约 1200 个 Unicode 字符，并包含页码、附件 key 和坐标。`pdf text --grep` 默认按不区分大小写的 Go 正则解析，有分页缓存时按附件和命中页返回 `match_count`、页码与相邻上下文。`pdf text --collection` 接受收藏夹 key、唯一名称或完整层级路径。检索保持只读，不会自动创建标注。local/hybrid 下无过滤条件的 `pdf text` 默认只返回提取文本缓存的 `content_path` 和可选 `chunks_path`，调用方直接读取该文件；这些不是 PDF 二进制副本。只有 `--grep`、`--pages`、`--max-chars` 才返回文本子集，只有显式 `--output-dir` 才生成 Markdown。源附件的真实路径使用 `zot file path KEY` 获取。缓存和 FTS 索引都会核对 PDF 的路径、大小和高精度修改时间；附件被替换后旧正文不会继续命中。remote 模式因客户端无法访问服务端本地路径，仍返回正文。
 
+`item import` 也接受 `DOI:...`、`PMID:...`、doi.org/PubMed URL，以及 `--from PATH|-` 提供的单条引用 JSON。identifier 导入通过 PubMed 解析元数据，按 DOI、PMID、标题/年份/首位作者检查重复，并通过 Zotero Web API 创建条目；它不会隐式下载 PDF。`--dry-run` 会返回最终 payload、重复候选和计划动作。真实创建需要 `web`/`hybrid`，或配置了 API key 与 library ID 的 `remote`；纯 `local` 模式只适合 dry-run 与重复检查。
+
 #### 与 Zotero 桌面端联动
 
 zot 直接解析你的 **Zotero 本地数据目录** 和附件文件；需要打开 PDF 时调用操作系统默认程序：
@@ -381,6 +383,7 @@ zot item export --from selected.json --as csljson
 zot item export KEY --as bibtex --json
 zot find --collection COLLKEY --all --json | zot item export --from - --as ris
 zot item export KEY --as csljson --json
+zot item export --from selected.json --as csljson --stream --batch-size 100 > library.json
 ```
 
 ### 库管理

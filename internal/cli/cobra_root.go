@@ -226,6 +226,43 @@ func (c *CLI) renderResult(ctx context.Context, opts *globalOptions, path app.Co
 	return (appRender.Renderer{Out: c.stdout, Err: c.stderr}).Result(path, result, output)
 }
 
+func (c *CLI) runRaw(ctx context.Context, opts *globalOptions, run func(context.Context) error) error {
+	if jsonOutputRequested(opts) {
+		return &exitError{code: ExitUsage, err: fmt.Errorf("raw streaming output cannot be combined with --json or --format json")}
+	}
+	if rawMode := strings.ToLower(strings.TrimSpace(opts.mode)); rawMode != "" {
+		switch rawMode {
+		case "web", "local", "hybrid", "remote":
+		default:
+			return &exitError{code: ExitUsage, err: fmt.Errorf("invalid mode %q; expected web, local, hybrid, or remote", rawMode)}
+		}
+		oldMode, hadMode := os.LookupEnv("ZOT_MODE")
+		if err := os.Setenv("ZOT_MODE", rawMode); err != nil {
+			return err
+		}
+		defer func() {
+			if hadMode {
+				_ = os.Setenv("ZOT_MODE", oldMode)
+			} else {
+				_ = os.Unsetenv("ZOT_MODE")
+			}
+		}()
+	}
+	if raw := strings.TrimSpace(opts.timeout); raw != "" {
+		timeout, err := time.ParseDuration(raw)
+		if err != nil || timeout <= 0 {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("invalid timeout %q; use a positive duration such as 30s or 10m", raw)}
+		}
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	if err := run(ctx); err != nil {
+		return &exitError{code: ExitError, err: err}
+	}
+	return nil
+}
+
 func (c *CLI) newVersionCommand(opts *globalOptions) *cobra.Command {
 	var check bool
 	cmd := &cobra.Command{

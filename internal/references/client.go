@@ -100,6 +100,35 @@ func (c *Client) FetchPubMedArticle(ctx context.Context, pmid string, refresh bo
 	return records[0], nil
 }
 
+// ResolveArticle resolves a PMID, or a DOI indexed by PubMed, to normalized
+// article metadata. DOI-only records outside PubMed are intentionally not
+// synthesized from another provider.
+func (c *Client) ResolveArticle(ctx context.Context, ids Identifiers, refresh bool) (Article, error) {
+	pmid := strings.TrimSpace(ids.PMID)
+	if pmid == "" && strings.TrimSpace(ids.DOI) != "" {
+		var err error
+		pmid, err = c.ResolveDOI(ctx, ids.DOI, refresh)
+		if err != nil {
+			return Article{}, err
+		}
+		if pmid == "" {
+			return Article{}, fmt.Errorf("DOI %s is not indexed by PubMed", normalizeDOI(ids.DOI))
+		}
+	}
+	if pmid == "" {
+		return Article{}, fmt.Errorf("PMID or DOI is required")
+	}
+	record, err := c.FetchPubMedArticle(ctx, pmid, refresh)
+	if err != nil {
+		return Article{}, err
+	}
+	return Article{
+		PMID: record.PMID, PMCID: record.PMCID, DOI: record.DOI, Title: record.Title,
+		Authors: record.Authors, Container: record.Container, Year: record.Year,
+		Volume: record.Volume, Issue: record.Issue, Pages: record.Pages, Metadata: record.Metadata,
+	}, nil
+}
+
 func (c *Client) FetchPubMedReferences(ctx context.Context, pmid string, refresh bool) ([]Reference, error) {
 	ids, err := c.fetchLinkIDs(ctx, pmid, "pubmed", "pubmed_pubmed_refs", refresh)
 	if err != nil {

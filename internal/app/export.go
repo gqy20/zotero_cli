@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,9 +15,12 @@ import (
 )
 
 type ItemExportRequest struct {
-	Keys   []string
-	Format string
+	Keys      []string
+	Format    string
+	BatchSize int
 }
+
+const defaultExportBatchSize = 100
 
 type exportClient interface {
 	ExportItems(context.Context, []string, zoteroapi.ExportOptions) (zoteroapi.ExportResult, error)
@@ -61,19 +63,31 @@ func (s ExportService) Export(ctx context.Context, req ItemExportRequest) (Resul
 	if len(keys) == 0 {
 		return Result{}, fmt.Errorf("item export requires item keys or --from")
 	}
-	readMeta := map[string]any{}
+	batchSize := exportBatchSize(req.BatchSize)
+	readMeta := map[string]any{"total": len(keys), "batch_size": batchSize, "batches": batchCount(len(keys), batchSize)}
 	if format == "csljson" && cfg.Mode != "web" && cfg.Mode != "remote" {
 		local, localErr := s.NewLocalReader(cfg)
 		if localErr == nil {
-			if exporter, ok := local.(localCSLExporter); ok && localErr == nil {
-				payload, exportErr := exporter.ExportItemsCSLJSON(ctx, keys)
-				if exportErr == nil {
+			if exporter, ok := local.(localCSLExporter); ok {
+				payload := make([]map[string]any, 0, len(keys))
+				for index, batch := range exportKeyBatches(keys, batchSize) {
+					part, exportErr := exporter.ExportItemsCSLJSON(ctx, batch)
+					if exportErr != nil {
+						localErr = exportBatchError(index, len(keys), batchSize, batch, exportErr)
+						break
+					}
+					payload = append(payload, part...)
+				}
+				if localErr == nil {
 					meta := readMetaFromReader(local)
 					meta["total"] = len(keys)
+					meta["batch_size"] = batchSize
+					meta["batches"] = batchCount(len(keys), batchSize)
 					result := zoteroapi.ExportResult{Format: "csljson", Data: payload}
 					return Result{Data: result, Meta: meta, Text: jsonText(payload), Warnings: readWarnings(meta)}, nil
 				}
-				localErr = exportErr
+			} else {
+				localErr = backend.ErrUnsupportedFeature
 			}
 		}
 		if cfg.Mode == "local" {
@@ -87,17 +101,93 @@ func (s ExportService) Export(ctx context.Context, req ItemExportRequest) (Resul
 	if err != nil {
 		return Result{}, err
 	}
-	exported, err := client.ExportItems(ctx, keys, zoteroapi.ExportOptions{Format: format, Style: cfg.Style, Locale: cfg.Locale})
-	if err != nil {
-		return Result{}, err
+	exported := zoteroapi.ExportResult{Format: format}
+	var text strings.Builder
+	var data []any
+	for index, batch := range exportKeyBatches(keys, batchSize) {
+		part, exportErr := client.ExportItems(ctx, batch, zoteroapi.ExportOptions{Format: format, Style: cfg.Style, Locale: cfg.Locale})
+		if exportErr != nil {
+			return Result{}, exportBatchError(index, len(keys), batchSize, batch, exportErr)
+		}
+		if format == "csljson" {
+			values, convertErr := exportDataSlice(part.Data)
+			if convertErr != nil {
+				return Result{}, exportBatchError(index, len(keys), batchSize, batch, convertErr)
+			}
+			data = append(data, values...)
+		} else if part.Text != "" {
+			if text.Len() > 0 && !strings.HasSuffix(text.String(), "\n") {
+				text.WriteByte('\n')
+			}
+			text.WriteString(part.Text)
+		}
 	}
-	readMeta["total"] = len(keys)
+	exported.Text = text.String()
+	if format == "csljson" {
+		exported.Data = data
+	}
 	readMeta["read_source"] = "web"
-	text := exported.Text
-	if text == "" {
-		text = jsonText(exported.Data)
+	resultText := exported.Text
+	if resultText == "" {
+		resultText = jsonText(exported.Data)
 	}
-	return Result{Data: exported, Meta: readMeta, Text: text}, nil
+	return Result{Data: exported, Meta: readMeta, Text: resultText}, nil
+}
+
+func (s ExportService) Stream(ctx context.Context, req ItemExportRequest, out io.Writer) error {
+	if out == nil {
+		return fmt.Errorf("export stream requires an output writer")
+	}
+	cfg, _, err := s.LoadConfig()
+	if err != nil {
+		return err
+	}
+	format := strings.ToLower(strings.TrimSpace(req.Format))
+	if format == "" {
+		format = "bibtex"
+	}
+	if format != "bibtex" && format != "biblatex" && format != "csljson" && format != "ris" {
+		return fmt.Errorf("unsupported export format %q", format)
+	}
+	keys := uniqueExportKeys(req.Keys)
+	if len(keys) == 0 {
+		return fmt.Errorf("item export requires item keys or --from")
+	}
+	batchSize := exportBatchSize(req.BatchSize)
+	if format == "csljson" && cfg.Mode != "web" && cfg.Mode != "remote" {
+		local, localErr := s.NewLocalReader(cfg)
+		if localErr == nil {
+			if exporter, ok := local.(localCSLExporter); ok {
+				return streamLocalCSLJSON(ctx, exporter, keys, batchSize, out)
+			}
+			localErr = backend.ErrUnsupportedFeature
+		}
+		if cfg.Mode == "local" || (localErr != nil && !isExpectedLocalExportFallback(localErr)) {
+			return localErr
+		}
+	}
+	client, err := s.NewClient(cfg)
+	if err != nil {
+		return err
+	}
+	if format == "csljson" {
+		return streamWebCSLJSON(ctx, client, cfg, keys, batchSize, out)
+	}
+	for index, batch := range exportKeyBatches(keys, batchSize) {
+		part, exportErr := client.ExportItems(ctx, batch, zoteroapi.ExportOptions{Format: format, Style: cfg.Style, Locale: cfg.Locale})
+		if exportErr != nil {
+			return exportBatchError(index, len(keys), batchSize, batch, exportErr)
+		}
+		if index > 0 {
+			if _, err := io.WriteString(out, "\n"); err != nil {
+				return err
+			}
+		}
+		if _, err := io.WriteString(out, part.Text); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func ResolveExportKeys(from string, stdin io.Reader) ([]string, error) {
@@ -105,26 +195,27 @@ func ResolveExportKeys(from string, stdin io.Reader) ([]string, error) {
 	if from == "" {
 		return nil, fmt.Errorf("--from requires a JSON file path or - for stdin")
 	}
-	var content []byte
-	var err error
+	var input io.Reader
+	var closeInput io.Closer
 	if from == "-" {
 		if stdin == nil {
 			return nil, fmt.Errorf("--from - requires stdin")
 		}
-		content, err = io.ReadAll(bufio.NewReader(stdin))
+		input = stdin
 	} else {
-		content, err = os.ReadFile(from)
+		file, err := os.Open(from)
+		if err != nil {
+			return nil, fmt.Errorf("read --from %q: %w", from, err)
+		}
+		input = file
+		closeInput = file
 	}
+	if closeInput != nil {
+		defer closeInput.Close()
+	}
+	keys, err := decodeExportKeys(json.NewDecoder(input))
 	if err != nil {
-		return nil, fmt.Errorf("read --from %q: %w", from, err)
-	}
-	var value any
-	if err := json.Unmarshal(content, &value); err != nil {
 		return nil, fmt.Errorf("parse --from %q: %w", from, err)
-	}
-	keys, err := exportKeysFromJSON(value)
-	if err != nil {
-		return nil, err
 	}
 	keys = uniqueExportKeys(keys)
 	if len(keys) == 0 {
@@ -133,37 +224,208 @@ func ResolveExportKeys(from string, stdin io.Reader) ([]string, error) {
 	return keys, nil
 }
 
-func exportKeysFromJSON(value any) ([]string, error) {
-	switch typed := value.(type) {
-	case []any:
-		keys := make([]string, 0, len(typed))
-		for index, entry := range typed {
-			entryKeys, err := exportKeysFromJSON(entry)
-			if err != nil {
-				return nil, fmt.Errorf("export input entry %d: %w", index+1, err)
+func decodeExportKeys(decoder *json.Decoder) ([]string, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return nil, err
+	}
+	return decodeExportKeysToken(decoder, token)
+}
+
+func decodeExportKeysToken(decoder *json.Decoder, token json.Token) ([]string, error) {
+	switch value := token.(type) {
+	case json.Delim:
+		switch value {
+		case '[':
+			var keys []string
+			for decoder.More() {
+				entry, err := decodeExportKeys(decoder)
+				if err != nil {
+					return nil, fmt.Errorf("export input entry %d: %w", len(keys)+1, err)
+				}
+				keys = append(keys, entry...)
 			}
-			keys = append(keys, entryKeys...)
+			_, err := decoder.Token()
+			return keys, err
+		case '{':
+			var keys []string
+			recognized := false
+			for decoder.More() {
+				nameToken, err := decoder.Token()
+				if err != nil {
+					return nil, err
+				}
+				name, _ := nameToken.(string)
+				switch name {
+				case "data":
+					recognized = true
+					entry, err := decodeExportKeys(decoder)
+					if err != nil {
+						return nil, err
+					}
+					keys = append(keys, entry...)
+				case "key", "item_key":
+					recognized = true
+					var key string
+					if err := decoder.Decode(&key); err != nil {
+						return nil, fmt.Errorf("%s must be a string", name)
+					}
+					if strings.TrimSpace(key) != "" {
+						keys = append(keys, key)
+					}
+				default:
+					if err := skipJSONValue(decoder); err != nil {
+						return nil, err
+					}
+				}
+			}
+			if _, err := decoder.Token(); err != nil {
+				return nil, err
+			}
+			if !recognized {
+				return nil, fmt.Errorf("object must contain key, item_key, or data")
+			}
+			return keys, nil
 		}
-		return keys, nil
-	case map[string]any:
-		if data, ok := typed["data"]; ok {
-			return exportKeysFromJSON(data)
-		}
-		if key, ok := typed["key"].(string); ok && strings.TrimSpace(key) != "" {
-			return []string{key}, nil
-		}
-		if key, ok := typed["item_key"].(string); ok && strings.TrimSpace(key) != "" {
-			return []string{key}, nil
-		}
-		return nil, fmt.Errorf("object must contain key, item_key, or data")
 	case string:
-		if strings.TrimSpace(typed) == "" {
+		if strings.TrimSpace(value) == "" {
 			return nil, fmt.Errorf("item key is empty")
 		}
-		return []string{typed}, nil
-	default:
-		return nil, fmt.Errorf("expected a key, item object, array, or CLI JSON envelope")
+		return []string{value}, nil
 	}
+	return nil, fmt.Errorf("expected a key, item object, array, or CLI JSON envelope")
+}
+
+func skipJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := token.(json.Delim)
+	if !ok || (delim != '[' && delim != '{') {
+		return nil
+	}
+	for decoder.More() {
+		if delim == '{' {
+			if _, err := decoder.Token(); err != nil {
+				return err
+			}
+		}
+		if err := skipJSONValue(decoder); err != nil {
+			return err
+		}
+	}
+	_, err = decoder.Token()
+	return err
+}
+
+func exportBatchSize(value int) int {
+	if value <= 0 {
+		return defaultExportBatchSize
+	}
+	return value
+}
+
+func batchCount(total, size int) int {
+	if total == 0 {
+		return 0
+	}
+	return (total + size - 1) / size
+}
+
+func exportKeyBatches(keys []string, size int) [][]string {
+	batches := make([][]string, 0, batchCount(len(keys), size))
+	for start := 0; start < len(keys); start += size {
+		end := start + size
+		if end > len(keys) {
+			end = len(keys)
+		}
+		batches = append(batches, keys[start:end])
+	}
+	return batches
+}
+
+func exportBatchError(index, total, size int, keys []string, err error) error {
+	return fmt.Errorf("export batch %d/%d (%s..%s): %w", index+1, batchCount(total, size), keys[0], keys[len(keys)-1], err)
+}
+
+func exportDataSlice(value any) ([]any, error) {
+	switch typed := value.(type) {
+	case []any:
+		return typed, nil
+	case []map[string]any:
+		result := make([]any, 0, len(typed))
+		for _, entry := range typed {
+			result = append(result, entry)
+		}
+		return result, nil
+	default:
+		return nil, fmt.Errorf("CSL JSON export returned %T instead of an array", value)
+	}
+}
+
+func streamLocalCSLJSON(ctx context.Context, exporter localCSLExporter, keys []string, batchSize int, out io.Writer) error {
+	if _, err := io.WriteString(out, "["); err != nil {
+		return err
+	}
+	written := 0
+	for index, batch := range exportKeyBatches(keys, batchSize) {
+		part, err := exporter.ExportItemsCSLJSON(ctx, batch)
+		if err != nil {
+			return exportBatchError(index, len(keys), batchSize, batch, err)
+		}
+		for _, entry := range part {
+			if written > 0 {
+				if _, err := io.WriteString(out, ","); err != nil {
+					return err
+				}
+			}
+			encoded, err := json.Marshal(entry)
+			if err != nil {
+				return err
+			}
+			if _, err := out.Write(encoded); err != nil {
+				return err
+			}
+			written++
+		}
+	}
+	_, err := io.WriteString(out, "]\n")
+	return err
+}
+
+func streamWebCSLJSON(ctx context.Context, client exportClient, cfg config.Config, keys []string, batchSize int, out io.Writer) error {
+	if _, err := io.WriteString(out, "["); err != nil {
+		return err
+	}
+	written := 0
+	for index, batch := range exportKeyBatches(keys, batchSize) {
+		part, err := client.ExportItems(ctx, batch, zoteroapi.ExportOptions{Format: "csljson", Style: cfg.Style, Locale: cfg.Locale})
+		if err != nil {
+			return exportBatchError(index, len(keys), batchSize, batch, err)
+		}
+		values, err := exportDataSlice(part.Data)
+		if err != nil {
+			return exportBatchError(index, len(keys), batchSize, batch, err)
+		}
+		for _, entry := range values {
+			if written > 0 {
+				if _, err := io.WriteString(out, ","); err != nil {
+					return err
+				}
+			}
+			encoded, err := json.Marshal(entry)
+			if err != nil {
+				return err
+			}
+			if _, err := out.Write(encoded); err != nil {
+				return err
+			}
+			written++
+		}
+	}
+	_, err := io.WriteString(out, "]\n")
+	return err
 }
 
 func uniqueExportKeys(keys []string) []string {

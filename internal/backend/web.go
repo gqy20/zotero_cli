@@ -160,6 +160,7 @@ func mapItem(item zoteroapi.Item) domain.Item {
 		Pages:       item.Pages,
 		DOI:         item.DOI,
 		URL:         item.URL,
+		Extra:       item.Extra,
 		Tags:        append([]string(nil), item.Tags...),
 		Attachments: mapAttachments(item.Attachments),
 	}

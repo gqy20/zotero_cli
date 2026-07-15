@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -184,24 +186,50 @@ func (c *CLI) addItemWriteCommands(item *cobra.Command, opts *globalOptions) {
 	c.addObjectWriteCommands(item, opts, "item")
 	var importDryRun bool
 	var importCollection string
+	var importFrom string
 	importCmd := &cobra.Command{
-		Use:   "import PATH",
-		Short: "Import a local PDF through Zotero desktop",
-		Long: "Import a readable local PDF through the Zotero desktop connector. Zotero desktop\n" +
-			"must be running. A successful import may queue metadata recognition and can assign\n" +
-			"the new item to a collection. Real imports require ZOT_ALLOW_WRITE=1.\n\n" +
-			"--dry-run validates the PDF, connector, and optional collection without uploading\n" +
-			"the file, creating an item, assigning a collection, or starting recognition.",
-		Example: "  zot item import paper.pdf --dry-run\n  zot item import paper.pdf\n  zot item import paper.pdf --collection \"Research/Methods\"",
-		Args:    cobra.ExactArgs(1),
+		Use:   "import [SOURCE]",
+		Short: "Import a PDF or create an item from DOI/PMID metadata",
+		Long: "Import a local PDF through Zotero desktop, or create a Zotero item from a DOI,\n" +
+			"PMID, doi.org URL, PubMed URL, or one JSON result supplied with --from. PDF\n" +
+			"imports require Zotero desktop. Identifier imports resolve metadata through PubMed\n" +
+			"and require Web API write access; they do not download a PDF. Existing matches are\n" +
+			"reported and skipped. Real imports require ZOT_ALLOW_WRITE=1.\n\n" +
+			"--dry-run resolves metadata, checks duplicates and shows the final plan without uploading\n" +
+			"a PDF or creating a library item.",
+		Example: "  zot item import paper.pdf --dry-run\n  zot item import DOI:10.1000/example --dry-run\n  zot item import PMID:12345678\n  zot item import https://doi.org/10.1000/example\n  zot item import --from ref-result.json",
+		Args:    cobra.MaximumNArgs(1),
 	}
-	importCmd.Flags().BoolVar(&importDryRun, "dry-run", false, "validate the PDF and Zotero connection without importing")
-	importCmd.Flags().StringVar(&importCollection, "collection", "", "collection key, unique name, or full path")
+	importCmd.Flags().BoolVar(&importDryRun, "dry-run", false, "resolve, validate, check duplicates, and show the plan without writing")
+	importCmd.Flags().StringVar(&importCollection, "collection", "", "collection key; local/hybrid also accept a unique name or full path")
+	importCmd.Flags().StringVar(&importFrom, "from", "", "read one reference result as JSON from a file, or - for stdin")
 	importCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 && strings.TrimSpace(importFrom) == "" {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("SOURCE or --from is required")}
+		}
+		if len(args) > 0 && strings.TrimSpace(importFrom) != "" {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("SOURCE and --from cannot be combined")}
+		}
+		var source string
+		if len(args) > 0 {
+			source = args[0]
+		}
+		var fromData []byte
+		if strings.TrimSpace(importFrom) != "" {
+			var err error
+			if importFrom == "-" {
+				fromData, err = io.ReadAll(c.stdin)
+			} else {
+				fromData, err = os.ReadFile(importFrom)
+			}
+			if err != nil {
+				return &exitError{code: ExitUsage, err: fmt.Errorf("read import JSON: %w", err)}
+			}
+		}
 		service := app.NewItemImportService()
 		path := app.CommandPath{Resource: "item", Action: "import"}
 		return c.renderResult(cmd.Context(), opts, path, func(ctx context.Context) (app.Result, error) {
-			return service.Import(ctx, app.ItemImportRequest{Path: args[0], Collection: importCollection, DryRun: importDryRun})
+			return service.Import(ctx, app.ItemImportRequest{Source: source, FromData: fromData, FromName: importFrom, Collection: importCollection, DryRun: importDryRun})
 		})
 	}
 	item.AddCommand(importCmd)

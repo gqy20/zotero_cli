@@ -127,9 +127,12 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 	}
 	var exportReq app.ItemExportRequest
 	var exportFrom string
-	exportCmd := &cobra.Command{Use: "export [KEY...]", Short: "Export item citations", Args: cobra.ArbitraryArgs}
+	var exportStream bool
+	exportCmd := &cobra.Command{Use: "export [KEY...]", Short: "Export item citations", Long: "Export citations in bounded batches. Default text/JSON output keeps the stable result\ncontract; --stream writes raw citation data incrementally to stdout and cannot be\ncombined with --json.", Args: cobra.ArbitraryArgs}
 	exportCmd.Flags().StringVar(&exportReq.Format, "as", "bibtex", "bibtex, biblatex, csljson, or ris")
 	exportCmd.Flags().StringVar(&exportFrom, "from", "", "read item keys or find JSON from a file, or - for stdin")
+	exportCmd.Flags().IntVar(&exportReq.BatchSize, "batch-size", 100, "maximum item keys per export request")
+	exportCmd.Flags().BoolVar(&exportStream, "stream", false, "write raw export data incrementally to stdout")
 	exportCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if exportReq.Format != "bibtex" && exportReq.Format != "biblatex" && exportReq.Format != "csljson" && exportReq.Format != "ris" {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("unsupported export format %q", exportReq.Format)}
@@ -148,8 +151,16 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 		if len(exportReq.Keys) == 0 {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("provide item keys or --from")}
 		}
+		if exportReq.BatchSize <= 0 {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--batch-size must be positive")}
+		}
 		service := app.NewExportService()
 		service.NewLocalReader = c.newLocalReader
+		if exportStream {
+			return c.runRaw(cmd.Context(), opts, func(ctx context.Context) error {
+				return service.Stream(ctx, exportReq, c.stdout)
+			})
+		}
 		path := app.CommandPath{Resource: "item", Action: "export"}
 		return c.renderResult(cmd.Context(), opts, path, func(ctx context.Context) (app.Result, error) { return service.Export(ctx, exportReq) })
 	}

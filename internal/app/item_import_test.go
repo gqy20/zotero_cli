@@ -10,9 +10,36 @@ import (
 
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/config"
+	"zotero_cli/internal/domain"
+	"zotero_cli/internal/references"
 	"zotero_cli/internal/zoteroapi"
 	"zotero_cli/internal/zoteroconnector"
 )
+
+type metadataImportReader struct {
+	items []domain.Item
+}
+
+func (r metadataImportReader) FindItems(context.Context, backend.FindOptions) ([]domain.Item, error) {
+	return r.items, nil
+}
+func (metadataImportReader) GetItem(context.Context, string) (domain.Item, error) {
+	return domain.Item{}, backend.ErrItemNotFound
+}
+func (metadataImportReader) GetRelated(context.Context, string) ([]domain.Relation, error) {
+	return nil, nil
+}
+func (metadataImportReader) GetLibraryStats(context.Context) (backend.LibraryStats, error) {
+	return backend.LibraryStats{}, nil
+}
+func (metadataImportReader) ListNotes(context.Context) ([]domain.Note, error) { return nil, nil }
+func (metadataImportReader) ListTags(context.Context) ([]backend.Tag, error)  { return nil, nil }
+func (metadataImportReader) ListCollections(context.Context) ([]backend.Collection, error) {
+	return nil, nil
+}
+func (metadataImportReader) GetAttachmentFile(context.Context, string) (string, string, error) {
+	return "", "", backend.ErrItemNotFound
+}
 
 type fakeItemImportConnector struct {
 	pinged     bool
@@ -89,7 +116,7 @@ func TestItemImportDryRunDoesNotUpload(t *testing.T) {
 		LoadConfig: func() (config.Config, string, error) { return config.Config{AllowWrite: false}, "", nil },
 		NewClient:  func(config.Config) ItemImportConnector { return client },
 	}
-	result, err := service.Import(context.Background(), ItemImportRequest{Path: path, DryRun: true})
+	result, err := service.Import(context.Background(), ItemImportRequest{Source: path, DryRun: true})
 	if err != nil {
 		t.Fatalf("Import() error=%v", err)
 	}
@@ -113,7 +140,7 @@ func TestItemImportUploadsPDF(t *testing.T) {
 		LoadConfig: func() (config.Config, string, error) { return config.Config{AllowWrite: true}, "", nil },
 		NewClient:  func(config.Config) ItemImportConnector { return client },
 	}
-	result, err := service.Import(context.Background(), ItemImportRequest{Path: path})
+	result, err := service.Import(context.Background(), ItemImportRequest{Source: path})
 	if err != nil {
 		t.Fatalf("Import() error=%v", err)
 	}
@@ -139,7 +166,7 @@ func TestItemImportAssignsCollection(t *testing.T) {
 			return fakeItemImportCollectionResolver{target: backend.CollectionTarget{ID: 23, Key: "COLLKEY", Name: "Genetics", Path: "Research/Genetics"}}, nil
 		},
 	}
-	result, err := service.Import(context.Background(), ItemImportRequest{Path: path, Collection: "COLLKEY"})
+	result, err := service.Import(context.Background(), ItemImportRequest{Source: path, Collection: "COLLKEY"})
 	if err != nil {
 		t.Fatalf("Import() error=%v", err)
 	}
@@ -168,7 +195,7 @@ func TestItemImportIndexesRecognizedAttachment(t *testing.T) {
 		NewIndexBuilder: func() itemImportIndexBuilder { return indexer },
 		PollInterval:    time.Millisecond,
 	}
-	result, err := service.Import(context.Background(), ItemImportRequest{Path: path})
+	result, err := service.Import(context.Background(), ItemImportRequest{Source: path})
 	if err != nil {
 		t.Fatalf("Import() error=%v", err)
 	}
@@ -190,7 +217,7 @@ func TestItemImportRejectsNonPDFAndDisabledWrites(t *testing.T) {
 		LoadConfig: func() (config.Config, string, error) { return config.Config{AllowWrite: true}, "", nil },
 		NewClient:  func(config.Config) ItemImportConnector { return &fakeItemImportConnector{} },
 	}
-	if _, err := service.Import(context.Background(), ItemImportRequest{Path: path}); err == nil || !strings.Contains(err.Error(), "only PDF") {
+	if _, err := service.Import(context.Background(), ItemImportRequest{Source: path}); err == nil || !strings.Contains(err.Error(), "only PDF") {
 		t.Fatalf("non-PDF error=%v", err)
 	}
 	service.LoadConfig = func() (config.Config, string, error) { return config.Config{AllowWrite: false}, "", nil }
@@ -198,8 +225,67 @@ func TestItemImportRejectsNonPDFAndDisabledWrites(t *testing.T) {
 	if err := os.WriteFile(pdfPath, []byte("%PDF-test"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Import(context.Background(), ItemImportRequest{Path: pdfPath}); err == nil || !strings.Contains(err.Error(), "writes are disabled") {
+	if _, err := service.Import(context.Background(), ItemImportRequest{Source: pdfPath}); err == nil || !strings.Contains(err.Error(), "writes are disabled") {
 		t.Fatalf("disabled error=%v", err)
+	}
+}
+
+func TestItemImportMetadataDryRunShowsPlanWithoutWrite(t *testing.T) {
+	writer := &fakeWriteClient{}
+	article := references.Article{PMID: "12345678", DOI: "10.1000/test", Title: "A useful paper", Year: "2024", Authors: []references.Author{{Family: "Smith", Given: "A"}}}
+	service := ItemImportService{
+		LoadConfig: func() (config.Config, string, error) { return config.Config{Mode: "web", AllowWrite: false}, "", nil },
+		ResolveArticle: func(context.Context, config.Config, references.Identifiers) (references.Article, error) {
+			return article, nil
+		},
+		NewReader:      func(config.Config) (backend.Reader, error) { return metadataImportReader{}, nil },
+		NewWriteClient: func(config.Config) (itemImportWriteClient, error) { return writer, nil },
+	}
+	result, err := service.Import(context.Background(), ItemImportRequest{Source: "PMID:12345678", DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := result.Data.(ItemImportResult)
+	if data.Status != "ready" || data.SourceType != "metadata" || len(data.PlannedActions) == 0 || data.Accepted {
+		t.Fatalf("data=%+v", data)
+	}
+	if result.Meta["payload"] == nil {
+		t.Fatalf("meta=%v", result.Meta)
+	}
+}
+
+func TestItemImportMetadataSkipsExistingDOI(t *testing.T) {
+	article := references.Article{PMID: "12345678", DOI: "10.1000/test", Title: "A useful paper", Year: "2024"}
+	service := ItemImportService{
+		LoadConfig: func() (config.Config, string, error) { return config.Config{Mode: "local"}, "", nil },
+		ResolveArticle: func(context.Context, config.Config, references.Identifiers) (references.Article, error) {
+			return article, nil
+		},
+		NewReader: func(config.Config) (backend.Reader, error) {
+			return metadataImportReader{items: []domain.Item{{Key: "EXISTING", Title: article.Title, DOI: "https://doi.org/10.1000/test"}}}, nil
+		},
+	}
+	result, err := service.Import(context.Background(), ItemImportRequest{Source: "https://doi.org/10.1000/test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := result.Data.(ItemImportResult)
+	if data.Status != "existing" || data.ItemKey != "EXISTING" || data.Accepted {
+		t.Fatalf("data=%+v", data)
+	}
+}
+
+func TestMetadataImportIdentifiersRejectsMultipleJSONCandidates(t *testing.T) {
+	_, err := metadataImportIdentifiers("", []byte(`[{"doi":"10.1/a"},{"pmid":"12345"}]`))
+	if err == nil || !strings.Contains(err.Error(), "2 candidates") {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestMetadataDuplicateMatchRecognizesPMIDInExtra(t *testing.T) {
+	item := domain.Item{Extra: "PMID: 12345678\nPMCID: PMC1"}
+	if match := metadataDuplicateMatch(item, references.Article{PMID: "12345678", Title: "different"}); match != "pmid" {
+		t.Fatalf("match=%q", match)
 	}
 }
 
@@ -284,7 +370,7 @@ func TestItemImportCollectionCleanupAndIndexUseFinalAttachment(t *testing.T) {
 		PollInterval:    time.Millisecond,
 	}
 
-	result, err := service.Import(context.Background(), ItemImportRequest{Path: path, Collection: "Research/Genetics"})
+	result, err := service.Import(context.Background(), ItemImportRequest{Source: path, Collection: "Research/Genetics"})
 	if err != nil {
 		t.Fatalf("Import() error=%v", err)
 	}

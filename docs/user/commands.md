@@ -75,7 +75,7 @@ zot group list --json
 
 `item find --in metadata|fulltext` 是唯一的检索范围选择器，默认 `metadata`。fulltext 的 QUERY 原样交给 SQLite FTS5，可使用 `"完整短语"`、`prefix*`、`AND` / `OR` / `NOT` 和括号；`--snippet` 要求 `--in fulltext`。元数据与全文使用不同查询语义，因此不提供含混的合并范围。`note find QUERY` 则使用不区分大小写的 Go 正则；`note list` 只负责枚举，不接受查询参数。
 
-导出只接收明确的 item key，或通过 `--from PATH|-` 接收 key 数组、item 数组及 `find --json` 响应。需要按收藏夹、日期或标签导出时，先运行 `item find --json`，再把结果文件或 stdin 交给 `item export --from`。
+导出只接收明确的 item key，或通过 `--from PATH|-` 接收 key 数组、item 数组及 `find --json` 响应。需要按收藏夹、日期或标签导出时，先运行 `item find --json`，再把结果文件或 stdin 交给 `item export --from`。服务会按 `--batch-size`（默认 100）分批请求；默认输出继续使用统一 JSON/text 契约，显式 `--stream` 则把 BibTeX、RIS 或一个有效的 CSL-JSON 数组直接流式写到 stdout，且不能与 `--json` 同用。
 
 ## 写入与安全
 
@@ -89,6 +89,10 @@ zot item import ./paper.pdf --dry-run --json
 zot item import ./paper.pdf --json
 zot item import ./paper.pdf --collection COLLKEY --json
 zot item import ./paper.pdf --collection "研究/植物/栗属" --json
+zot item import DOI:10.1000/example --dry-run --json
+zot item import PMID:12345678 --json
+zot item import https://doi.org/10.1000/example --json
+zot item import --from ref-result.json --dry-run --json
 
 # 默认只预览；Go 正则替换支持 $1 等捕获组
 zot tag replace --match '^(SV|SV检测)$' --replace '结构变异' --json
@@ -157,6 +161,8 @@ zot ann delete ITEMKEY --source pdf --attachment ATTACHMENT_KEY --page 3 --yes -
 `item import` 在 Zotero 元数据识别完成后，会定位本次导入最终保留的 PDF 附件并执行增量全文索引；指定收藏夹、重复附件清理和索引均以最终附件 key 为准。索引失败会作为 JSON envelope 中的 warning 返回，不会重复写入 stderr，也不会回滚已成功的 Zotero 导入。`find --snippet` 只返回轻量条目信息和以实际命中为中心的约 1200 字符证据，并在 `matched_chunk` 中保留页码、附件 key 与坐标；它与 `--full` 互斥。
 
 `item import --collection` 接受收藏夹 key、唯一名称或完整层级路径。名称存在歧义时命令会列出带 key 的候选项，不会自动猜测。`--dry-run` 不需要开启写权限，只校验 PDF、Zotero Desktop Connector 和目标收藏夹，不上传文件、不创建条目、不分配收藏夹，也不启动元数据识别；真实导入才要求 `ZOT_ALLOW_WRITE=1`。`config check` 会额外报告 `zotero_desktop_connector_available`；Connector 不可用不会使配置检查失败，但导入 PDF 前必须启动 Zotero 桌面端。
+
+同一 `item import` 入口也接受 DOI、PMID、doi.org/PubMed URL 和 `--from PATH|-` 的单条引用 JSON。identifier 输入通过 PubMed 解析为最终 Zotero payload，按 DOI、PMID、标题/年份/首位作者去重；唯一命中返回 `existing` 并跳过，多重命中报告歧义且不创建。identifier 导入不会自动下载 PDF，真实创建要求 Web API 写能力（`web`/`hybrid`，或带 API 凭据的 `remote`）；纯 `local` 可执行 dry-run 和本地重复检查。PDF 已被 Connector 接受后，后续收藏夹、识别、重复附件清理或索引失败会返回 `partial` 和分阶段 warning，而不是把已成功上传伪装成整体失败。
 
 local/hybrid 下无过滤条件的 `pdf text ITEMKEY --json` 默认返回 `content_path` 和可选的 `chunks_path`，不再把完整正文复制到 JSON；Agent 应直接读取 `content_path`。这些路径属于 `.zotero_cli/fulltext/cache/<attachment-key>/` 下的提取文本缓存，不是 PDF 二进制副本；源 PDF 使用 `file path` 定位。`--grep` 默认按不区分大小写的 Go 正则解析，可用 `|` 检索多个关键词；无效正则会直接报错。`--collection` 接受收藏夹 key、唯一名称或完整层级路径，并与 item keys、`--all` 三选一。使用 `--grep` 且存在分页缓存时，JSON 按附件和命中页返回 `match_count`、页码与相邻上下文，但不会创建标注。`--grep`、`--pages`、`--max-chars` 返回计算后的文本子集，`--max-chars` 按 Unicode 字符而非 UTF-8 字节计数。多条目和 `--all` 同样返回缓存路径数组，只有显式 `--output-dir` 才导出 Markdown；它不会复制源 PDF。缓存读取、FTS 检索和 `index build` 的跳过判断都会校验 PDF 源文件；文件被替换后旧缓存与旧索引不会继续命中。`index status` 只报告派生索引的位置，并提示通过 `file path` 查询源文件。remote 模式仍返回正文，因为客户端不能直接读取服务器路径。
 

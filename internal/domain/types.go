@@ -17,6 +17,7 @@ type Item struct {
 	Pages                string            `json:"pages,omitempty"`
 	DOI                  string            `json:"doi,omitempty"`
 	URL                  string            `json:"url,omitempty"`
+	Extra                string            `json:"extra,omitempty"`
 	Tags                 []string          `json:"tags,omitempty"`
 	Collections          []Collection      `json:"collections,omitempty"`
 	Attachments          []Attachment      `json:"attachments,omitempty"`

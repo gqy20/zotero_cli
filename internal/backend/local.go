@@ -323,6 +323,7 @@ func (r *LocalReader) findItemsFromMetadataQuery(ctx context.Context, opts FindO
 				&item.Pages,
 				&item.DOI,
 				&item.URL,
+				&item.Extra,
 				&publicationTitle,
 				&proceedingsTitle,
 				&bookTitle,

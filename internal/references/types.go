@@ -40,6 +40,21 @@ type Reference struct {
 	ContextCount  int      `json:"context_count"`
 }
 
+// Article is normalized PubMed metadata suitable for creating a library item.
+type Article struct {
+	PMID      string         `json:"pmid,omitempty"`
+	PMCID     string         `json:"pmcid,omitempty"`
+	DOI       string         `json:"doi,omitempty"`
+	Title     string         `json:"title"`
+	Authors   []Author       `json:"authors,omitempty"`
+	Container string         `json:"container,omitempty"`
+	Year      string         `json:"year,omitempty"`
+	Volume    string         `json:"volume,omitempty"`
+	Issue     string         `json:"issue,omitempty"`
+	Pages     string         `json:"pages,omitempty"`
+	Metadata  PubMedMetadata `json:"metadata,omitempty"`
+}
+
 type Context struct {
 	ReferenceID    string `json:"reference_id"`
 	ReferenceIndex int    `json:"reference_index,omitempty"`
