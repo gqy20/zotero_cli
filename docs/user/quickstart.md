@@ -148,11 +148,10 @@ go run .\cmd\zot config check
 .\zot.exe item supp ITEMKEY --json
 .\zot.exe item supp ITEMKEY --online --json
 .\zot.exe item supp --all --json --limit 50
+.\zot.exe file path ITEMKEY --json
 .\zot.exe file path ATTKEY --json
-.\zot.exe file path --item ITEMKEY --json
-.\zot.exe file show ATTKEY --json
-.\zot.exe file show --item ITEMKEY --json
-.\zot.exe file check --item ITEMKEY --json
+.\zot.exe file open ATTKEY --json
+.\zot.exe file show ITEMKEY --json
 .\zot.exe find --missing-attachment --json
 
 # 双源读取标注（Zotero 管理的标注 + PDF 文件内嵌标注）

@@ -236,7 +236,7 @@ func (s IndexService) Status(_ context.Context) (Result, error) {
 	} else if status.Status == "unavailable" {
 		text += "\nBuild: zot index build"
 	}
-	text += "\nSource PDFs: use `zot file path ATTACHMENT_KEY` (typically under storage/ or attachments/)"
+	text += "\nSource PDFs: use `zot file path KEY` (typically under storage/ or attachments/)"
 	return Result{Data: status, Meta: map[string]any{"available": status.Status == "available"}, Text: text}, nil
 }
 

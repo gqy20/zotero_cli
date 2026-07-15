@@ -113,7 +113,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 .\zot.exe pdf text --collection "研究/植物/栗属" --grep "gene\s+flow|introgression" --json
 ```
 
-local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `content_path` / `chunks_path`；Agent 直接读取 `content_path`，不要期待 JSON 内嵌整篇正文。这些是提取文本缓存，不是 PDF 二进制副本；源附件路径使用 `file path ATTACHMENT_KEY --json` 查询。只有使用 `--grep`、`--pages` 或 `--max-chars` 时才返回文本子集；`--grep` 默认解析为不区分大小写的 Go 正则，可直接用 `|` 表达多个候选词，特殊字符按正则规则转义。指定条目范围时可传多个 item key，或用 `--collection` 传收藏夹 key、唯一名称或完整层级路径。有分页缓存时，JSON 按附件和命中页返回 `match_count`、页码与相邻上下文；检索保持只读，不会自动创建标注。只有显式 `--output-dir` 才导出 Markdown，并且不会复制源 PDF。remote 模式因客户端无法访问服务端路径，仍返回正文。
+local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `content_path` / `chunks_path`；Agent 直接读取 `content_path`，不要期待 JSON 内嵌整篇正文。这些是提取文本缓存，不是 PDF 二进制副本；源附件路径使用 `file path KEY --json` 查询，KEY 可为普通条目或附件。只有使用 `--grep`、`--pages` 或 `--max-chars` 时才返回文本子集；`--grep` 默认解析为不区分大小写的 Go 正则，可直接用 `|` 表达多个候选词，特殊字符按正则规则转义。指定条目范围时可传多个 item key，或用 `--collection` 传收藏夹 key、唯一名称或完整层级路径。有分页缓存时，JSON 按附件和命中页返回 `match_count`、页码与相邻上下文；检索保持只读，不会自动创建标注。只有显式 `--output-dir` 才导出 Markdown，并且不会复制源 PDF。remote 模式因客户端无法访问服务端路径，仍返回正文。
 
 适用场景：
 
@@ -218,7 +218,8 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 .\zot.exe pdf text ITEMKEY --json
 .\zot.exe pdf text ITEM1 ITEM2 --grep "hybridization|introgression" --json
 .\zot.exe pdf text --collection "研究/植物/栗属" --grep "hybridization|introgression" --json
-.\zot.exe file path ATTACHMENT_KEY --json       # 返回附件真实本地路径，不打开文件
+.\zot.exe file path KEY --json                  # item/attachment key 均可；返回路径与健康状态
+.\zot.exe file open KEY --json                  # 用系统默认程序打开；多附件条目需传 attachment key
 
 # 双源读取标注
 .\zot.exe ann list ITEMKEY --json

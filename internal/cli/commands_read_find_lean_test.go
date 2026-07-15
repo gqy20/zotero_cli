@@ -181,7 +181,7 @@ func TestFindJSONDefaultIsLean(t *testing.T) {
 	}
 
 	// Must NOT have verbose fields
-	for _, forbidden := range []string{"abstract", "attachments", "notes", "annotations", "journal_rank"} {
+	for _, forbidden := range []string{"abstract", "attachments", "attachment_files", "notes", "annotations", "journal_rank"} {
 		if _, exists := data[forbidden]; exists {
 			t.Errorf("lean output must not contain %q", forbidden)
 		}
@@ -326,7 +326,7 @@ func TestFindJSONLeanPreservesMultipleItems(t *testing.T) {
 		keys[i] = item["key"].(string)
 
 		// All items must be lean (no verbose fields)
-		for _, forbidden := range []string{"abstract", "attachments", "notes", "annotations", "journal_rank"} {
+		for _, forbidden := range []string{"abstract", "attachments", "attachment_files", "notes", "annotations", "journal_rank"} {
 			if _, exists := item[forbidden]; exists {
 				t.Errorf("item[%d][%q] should not exist in lean output", i, forbidden)
 			}

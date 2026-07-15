@@ -37,7 +37,7 @@ func (c *CLI) newPDFCommand(opts *globalOptions) *cobra.Command {
 		Short: "Extract text and figures or open PDF attachments",
 		Long: "Work with PDF attachments resolved from Zotero items. `text` creates or queries\n" +
 			"derived text, `figs` writes extracted figure images, and `open` launches the\n" +
-			"source PDF. Use `zot file path ATTACHMENT_KEY` when you need the PDF binary itself.",
+			"source PDF. Use `zot file path KEY` when you need the PDF binary itself.",
 		Example: "  zot pdf text ITEM_KEY\n  zot pdf figs ITEM_KEY\n  zot pdf open ITEM_KEY",
 	}
 	var textReq app.PDFTextRequest
@@ -47,7 +47,7 @@ func (c *CLI) newPDFCommand(opts *globalOptions) *cobra.Command {
 		Long: "Prepare or query extracted text for PDF attachments.\n\n" +
 			"Without text filters, local mode returns content_path and chunks_path under\n" +
 			".zotero_cli/fulltext/cache/<attachment-key>/. These are extracted-text files,\n" +
-			"not copies of the source PDF. Use `zot file path ATTACHMENT_KEY` to locate\n" +
+			"not copies of the source PDF. Use `zot file path KEY` to locate\n" +
 			"the resolved PDF binary.",
 		Example: "  zot pdf text ITEM_KEY\n  zot pdf text ITEM_KEY --pages 1-3\n  zot pdf text ITEM_KEY --grep \"gene flow|introgression\"\n  zot pdf text --all -o ./markdown",
 		Args:    cobra.ArbitraryArgs,
@@ -134,27 +134,21 @@ func (c *CLI) newPDFCommand(opts *globalOptions) *cobra.Command {
 }
 
 func (c *CLI) newFileCommand(opts *globalOptions) *cobra.Command {
-	file := &cobra.Command{Use: "file", Short: "Locate and inspect local attachment files", Long: "Resolve Zotero attachment records to local filesystem paths and inspect supported\nfiles. After `zot sync`, local mode resolves paths from the offline mirror.", Example: "  zot file path ATTACHMENT_KEY\n  zot file path --item ITEM_KEY\n  zot file check --item ITEM_KEY"}
+	file := &cobra.Command{Use: "file", Short: "Locate, open, and preview attachment files", Long: "Accept either an item key or an attachment key, then resolve the corresponding\nattachment files. After `zot sync`, local mode resolves paths from the offline mirror.", Example: "  zot file path KEY\n  zot file open KEY\n  zot file show KEY"}
 
 	var pathReq app.FileRequest
 	pathCmd := &cobra.Command{
-		Use:   "path [ATTACHMENT_KEY]",
-		Short: "Show resolved local attachment paths",
-		Long: "Show the resolved filesystem path for one attachment key, or all locally\n" +
-			"resolved attachments belonging to an item. This does not open or modify files.\n" +
+		Use:   "path KEY",
+		Short: "Resolve attachment paths and report file health",
+		Long: "Accept an item or attachment key and show the resolved local paths together\n" +
+			"with existence and health diagnostics. This does not open or modify files.\n" +
 			"Requires local or hybrid mode; remote clients should run `zot sync` first. Use\n" +
 			"`zot sync status` to inspect mirror health.",
-		Example: "  zot file path ATTACHMENT_KEY\n  zot file path --item ITEM_KEY\n  zot file path ATTACHMENT_KEY --json",
-		Args:    cobra.MaximumNArgs(1),
+		Example: "  zot file path ITEM_KEY\n  zot file path ATTACHMENT_KEY\n  zot file path KEY --json",
+		Args:    cobra.ExactArgs(1),
 	}
-	pathCmd.Flags().StringVar(&pathReq.ItemKey, "item", "", "show paths for attachments belonging to one item")
 	pathCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if (len(args) == 1) == (strings.TrimSpace(pathReq.ItemKey) != "") {
-			return &exitError{code: ExitUsage, err: fmt.Errorf("provide an attachment key or --item")}
-		}
-		if len(args) == 1 {
-			pathReq.AttachmentKey = args[0]
-		}
+		pathReq.Key = args[0]
 		pathReq.PathOnly = true
 		path := app.CommandPath{Resource: "file", Action: "path"}
 		return c.runRead(cmd, opts, path, func(ctx context.Context, service app.ReadService) (app.Result, error) {
@@ -163,16 +157,13 @@ func (c *CLI) newFileCommand(opts *globalOptions) *cobra.Command {
 	}
 
 	var showReq app.FileRequest
-	show := &cobra.Command{Use: "show [ATTACHMENT_KEY]", Short: "Preview a spreadsheet attachment", Args: cobra.MaximumNArgs(1)}
-	show.Flags().StringVar(&showReq.ItemKey, "item", "", "inspect attachments belonging to one item")
+	show := &cobra.Command{Use: "show KEY", Short: "Preview spreadsheet attachments", Long: "Preview supported spreadsheet attachments (.xlsx and related workbook formats).\nKEY may identify either one attachment or an item containing spreadsheet attachments.", Args: cobra.ExactArgs(1)}
 	show.Flags().StringVar(&showReq.Sheet, "sheet", "", "inspect one workbook sheet")
 	show.Flags().IntVar(&showReq.Head, "head", 5, "preview non-empty rows per sheet")
 	show.Flags().IntVar(&showReq.MaxSheets, "max-sheets", 5, "maximum workbook sheets")
 	show.Flags().IntVar(&showReq.MaxColumns, "max-columns", 12, "maximum preview cells per row")
 	show.RunE = func(cmd *cobra.Command, args []string) error {
-		if len(args) == 1 {
-			showReq.AttachmentKey = args[0]
-		}
+		showReq.Key = args[0]
 		if showReq.Head <= 0 || showReq.MaxSheets <= 0 || showReq.MaxColumns <= 0 {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("--head, --max-sheets, and --max-columns must be positive")}
 		}
@@ -182,21 +173,18 @@ func (c *CLI) newFileCommand(opts *globalOptions) *cobra.Command {
 		})
 	}
 
-	var checkReq app.FileRequest
-	check := &cobra.Command{Use: "check [ATTACHMENT_KEY]", Short: "Show resolved local paths and attachment health", Args: cobra.MaximumNArgs(1)}
-	check.Flags().StringVar(&checkReq.ItemKey, "item", "", "inspect attachments belonging to one item")
-	check.RunE = func(cmd *cobra.Command, args []string) error {
-		if len(args) == 1 {
-			checkReq.AttachmentKey = args[0]
-		}
-		checkReq.Health = true
-		path := app.CommandPath{Resource: "file", Action: "check"}
+	var openReq app.FileRequest
+	openCmd := &cobra.Command{Use: "open KEY", Short: "Open an attachment with the system default application", Long: "Accept an attachment key or an item key. An item with exactly one attachment is\nopened directly; when an item has multiple attachments, pass the desired attachment\nkey explicitly. Remote mode downloads the file before opening it.", Args: cobra.ExactArgs(1)}
+	openCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		openReq.Key = args[0]
+		openReq.Open = true
+		path := app.CommandPath{Resource: "file", Action: "open"}
 		return c.runRead(cmd, opts, path, func(ctx context.Context, service app.ReadService) (app.Result, error) {
-			return service.Files(ctx, checkReq)
+			return service.Files(ctx, openReq)
 		})
 	}
 
-	file.AddCommand(pathCmd, show, check)
+	file.AddCommand(pathCmd, openCmd, show)
 	return file
 }
 

@@ -43,7 +43,7 @@ func TestCanonicalCommandsExist(t *testing.T) {
 		{"coll", "show"}, {"coll", "new"}, {"coll", "edit"}, {"coll", "delete"}, {"coll", "add"}, {"coll", "remove"},
 		{"note", "find"}, {"note", "show"}, {"note", "new"}, {"note", "edit"}, {"note", "delete"},
 		{"search", "show"}, {"search", "new"}, {"search", "edit"}, {"search", "delete"},
-		{"file", "show"}, {"file", "check"}, {"pdf", "text"}, {"pdf", "figs"}, {"pdf", "open"}, {"ann", "list"}, {"ann", "new"}, {"ann", "delete"},
+		{"file", "path"}, {"file", "open"}, {"file", "show"}, {"pdf", "text"}, {"pdf", "figs"}, {"pdf", "open"}, {"ann", "list"}, {"ann", "new"}, {"ann", "delete"},
 		{"ref", "show"}, {"ref", "find"}, {"ref", "related"}, {"ref", "cited"}, {"ref", "ctx"}, {"ref", "links"}, {"ref", "entities"}, {"ref", "profile"}, {"ref", "build"}, {"ref", "resolve"}, {"ref", "status"},
 		{"index", "build"}, {"index", "status"}, {"schema", "list"}, {"schema", "show"},
 		{"config", "init"}, {"config", "show"}, {"config", "check"},
@@ -241,26 +241,13 @@ func TestRootUsesCobraHelp(t *testing.T) {
 	}
 }
 
-func TestFileCheckOnlyExposesHealthRelevantFlags(t *testing.T) {
+func TestFileCommandsExposeOnlyRelevantFlags(t *testing.T) {
 	root := testCLI.newRootCommand()
-	check, _, err := root.Find([]string{"file", "check"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if check.Flags().Lookup("item") == nil {
-		t.Fatal("file check missing --item")
-	}
-	for _, name := range []string{"sheet", "head", "max-sheets", "max-columns"} {
-		if check.Flags().Lookup(name) != nil {
-			t.Fatalf("file check unexpectedly exposes --%s", name)
-		}
-	}
-
 	show, _, err := root.Find([]string{"file", "show"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"item", "sheet", "head", "max-sheets", "max-columns"} {
+	for _, name := range []string{"sheet", "head", "max-sheets", "max-columns"} {
 		if show.Flags().Lookup(name) == nil {
 			t.Fatalf("file show missing --%s", name)
 		}
@@ -270,13 +257,20 @@ func TestFileCheckOnlyExposesHealthRelevantFlags(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pathCmd.Flags().Lookup("item") == nil {
-		t.Fatal("file path missing --item")
-	}
-	for _, name := range []string{"sheet", "head", "max-sheets", "max-columns"} {
+	for _, name := range []string{"item", "sheet", "head", "max-sheets", "max-columns"} {
 		if pathCmd.Flags().Lookup(name) != nil {
 			t.Fatalf("file path unexpectedly exposes --%s", name)
 		}
+	}
+	openCmd, _, err := root.Find([]string{"file", "open"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if openCmd.Use != "open KEY" {
+		t.Fatalf("unexpected file open use: %q", openCmd.Use)
+	}
+	if legacy, _, err := root.Find([]string{"file", "check"}); err == nil && legacy.Name() == "check" {
+		t.Fatal("legacy file check command is still registered")
 	}
 }
 
@@ -289,8 +283,9 @@ func TestAttachmentCommandsExplainPathsAndCaches(t *testing.T) {
 		{[]string{"pdf", "open"}, []string{"system default application", "return the resolved path", "may ignore"}},
 		{[]string{"pdf", "text"}, []string{"extracted-text files", "not copies of the source PDF", "zot file path"}},
 		{[]string{"index", "status"}, []string{"does not contain PDF binaries", "storage/ or attachments/", "zot file path"}},
-		{[]string{"file"}, []string{"Locate and inspect local attachment files"}},
-		{[]string{"file", "check"}, []string{"resolved local paths"}},
+		{[]string{"file"}, []string{"Locate, open, and preview attachment files"}},
+		{[]string{"file", "path"}, []string{"health diagnostics", "item or attachment key"}},
+		{[]string{"file", "open"}, []string{"system default application", "multiple attachments"}},
 	}
 	for _, check := range checks {
 		cmd, _, err := root.Find(check.args)

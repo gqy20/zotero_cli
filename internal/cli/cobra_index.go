@@ -42,7 +42,7 @@ func (c *CLI) newIndexCommand(opts *globalOptions) *cobra.Command {
 		Short: "Show extracted PDF full-text index status",
 		Long: "Show the location and availability of the derived full-text index.\n\n" +
 			"The index does not contain PDF binaries. Source attachments may resolve under\n" +
-			"storage/ or attachments/; use `zot file path ATTACHMENT_KEY` for an exact path.\n" +
+			"storage/ or attachments/; use `zot file path KEY` for an exact path.\n" +
 			"Reported storage includes both index.sqlite and extracted-text cache files.",
 		Example: "  zot index status\n  zot index status --json",
 		Args:    cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {

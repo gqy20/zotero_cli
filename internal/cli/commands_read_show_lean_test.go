@@ -52,6 +52,14 @@ func TestShowJSONDefaultIsLean(t *testing.T) {
 	if data["doi"] != "10.1038/nrg.2024.001" {
 		t.Errorf("doi = %q, want 10.1038/nrg.2024.001", data["doi"])
 	}
+	attachments, ok := data["attachment_files"].([]any)
+	if !ok || len(attachments) != 2 {
+		t.Fatalf("attachment_files should contain two compact entries, got %#v", data["attachment_files"])
+	}
+	firstAttachment := attachments[0].(map[string]any)
+	if firstAttachment["key"] != "ATT_PDF1" || firstAttachment["filename"] != "paper.pdf" || firstAttachment["content_type"] != "application/pdf" {
+		t.Fatalf("unexpected compact attachment: %#v", firstAttachment)
+	}
 	meta, ok := got["meta"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected meta to be a map, got %T", got["meta"])

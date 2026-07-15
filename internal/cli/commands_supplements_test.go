@@ -177,6 +177,10 @@ func TestRunFilePathLocalJSON(t *testing.T) {
 	if entry["attachment_key"] != "ATTACHPDF" || filepath.Clean(entry["local_path"].(string)) != filepath.Clean(want) {
 		t.Fatalf("unexpected path entry: %#v", entry)
 	}
+	health, ok := entry["health"].(map[string]any)
+	if !ok || health["ok"] != true {
+		t.Fatalf("file path should include successful health diagnostics: %#v", entry["health"])
+	}
 	if _, exists := entry["workbook"]; exists {
 		t.Fatalf("file path unexpectedly inspected workbook: %#v", entry)
 	}
@@ -200,7 +204,7 @@ func TestRunInspectAttachmentItemJSON(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"file", "show", "--item", "ITEM1234", "--json"})
+	exitCode := Run([]string{"file", "show", "ITEM1234", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}
@@ -216,7 +220,7 @@ func TestRunInspectAttachmentItemJSON(t *testing.T) {
 	}
 }
 
-func TestRunInspectAttachmentItemHealthJSON(t *testing.T) {
+func TestRunFilePathItemIncludesHealthJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)
 	writeTestConfig(t, configRoot)
@@ -234,7 +238,7 @@ func TestRunInspectAttachmentItemHealthJSON(t *testing.T) {
 	t.Setenv("ZOT_DATA_DIR", dataDir)
 
 	stdout, stderr := captureOutput(t)
-	exitCode := Run([]string{"file", "check", "--item", "ITEM1234", "--json"})
+	exitCode := Run([]string{"file", "path", "ITEM1234", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
 	}

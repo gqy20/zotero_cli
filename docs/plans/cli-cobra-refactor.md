@@ -348,7 +348,7 @@ zot item list --scope pubs
 
 群组是可列出的真实资源，使用 `group list`，不再使用 `lib groups`。当前没有稳定的单群组详情能力，因此不为矩阵整齐虚构 `group show`。
 
-附件是独立于 PDF 的真实资源。表格预览和附件健康检查分别使用 `file show`、`file check`；`pdf` 只保留确实要求 PDF 的 `text`、`figs`、`open`。
+附件是独立于 PDF 的真实资源。路径与健康检查统一使用 `file path`，通用打开使用 `file open`，表格预览使用 `file show`；`pdf` 只保留确实要求 PDF 的 `text`、`figs`、`open`。
 
 补充材料发现以文献条目为起点，归入 `item supp`。导出对象也是文献条目集合，canonical 路径为 `item export`；高频旧入口 `zot export` 可以像 `find/show` 一样保留为正式快捷入口，但不能拥有独立实现。
 
@@ -406,7 +406,7 @@ zot item find CRISPR
 zot item show ABCD
 zot coll list
 zot note new --parent ABCD
-zot file check ATTACHKEY
+zot file path ATTACHKEY
 zot pdf text ABCD
 zot pdf figs ABCD
 zot ann new ABCD --text "target"
@@ -758,7 +758,7 @@ Cobra → typed request → app service → Result → renderer
 
 迁移：
 
-- file show/check
+- file path/open/show
 - pdf text/figs/open
 - ann list/new/delete
 - local/hybrid/remote 路由

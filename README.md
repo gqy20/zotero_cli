@@ -302,11 +302,9 @@ zot pdf text --all -o ./markdown --json
 zot item supp KEY --json
 zot item supp KEY --online --json
 zot item supp --all --json --limit 50
-zot file path ATTKEY --json
-zot file path --item KEY --json
-zot file show ATTKEY --json
-zot file show --item KEY --json
-zot file check --item KEY --json
+zot file path KEY --json
+zot file open KEY --json
+zot file show KEY --json
 
 # 提取论文图表（支持缓存、多 PDF 附件、低质量误检过滤和每页上限）
 zot pdf figs KEY --json
@@ -339,7 +337,7 @@ zot pdf open KEY --page 5
 # `select` 是已退出稳定 CLI 的桌面端专用入口；请在 Zotero Desktop 中定位条目
 ```
 
-`item import --dry-run` 只校验 PDF、Zotero Desktop Connector 和可选收藏夹，不需要开启写权限，也不会上传文件、创建条目或启动元数据识别。PDF 真正导入完成后会对本次最终保留的附件执行增量全文索引，因此新文献无需再次运行全库 `index build` 即可参与全文检索。指定收藏夹、重复附件清理和增量索引共享同一个最终附件 key，不会索引已清理的重复记录。`find --snippet` 的 JSON 只返回轻量条目信息和 `matched_chunk` 证据，不复制摘要、附件、笔记或完整 Item；命中上下文以实际命中位置为中心，最多约 1200 个 Unicode 字符，并包含页码、附件 key 和坐标。`pdf text --grep` 默认按不区分大小写的 Go 正则解析，有分页缓存时按附件和命中页返回 `match_count`、页码与相邻上下文。`pdf text --collection` 接受收藏夹 key、唯一名称或完整层级路径。检索保持只读，不会自动创建标注。local/hybrid 下无过滤条件的 `pdf text` 默认只返回提取文本缓存的 `content_path` 和可选 `chunks_path`，调用方直接读取该文件；这些不是 PDF 二进制副本。只有 `--grep`、`--pages`、`--max-chars` 才返回文本子集，只有显式 `--output-dir` 才生成 Markdown。源 PDF 的真实路径使用 `zot file path ATTACHMENT_KEY` 获取。缓存和 FTS 索引都会核对 PDF 的路径、大小和高精度修改时间；附件被替换后旧正文不会继续命中。remote 模式因客户端无法访问服务端本地路径，仍返回正文。
+`item import --dry-run` 只校验 PDF、Zotero Desktop Connector 和可选收藏夹，不需要开启写权限，也不会上传文件、创建条目或启动元数据识别。PDF 真正导入完成后会对本次最终保留的附件执行增量全文索引，因此新文献无需再次运行全库 `index build` 即可参与全文检索。指定收藏夹、重复附件清理和增量索引共享同一个最终附件 key，不会索引已清理的重复记录。`find --snippet` 的 JSON 只返回轻量条目信息和 `matched_chunk` 证据，不复制摘要、附件、笔记或完整 Item；单条 `item show --json` 会额外返回紧凑的 `attachment_files`（key、文件名、类型、可用的本地路径），完整附件对象仍需 `--full`。命中上下文以实际命中位置为中心，最多约 1200 个 Unicode 字符，并包含页码、附件 key 和坐标。`pdf text --grep` 默认按不区分大小写的 Go 正则解析，有分页缓存时按附件和命中页返回 `match_count`、页码与相邻上下文。`pdf text --collection` 接受收藏夹 key、唯一名称或完整层级路径。检索保持只读，不会自动创建标注。local/hybrid 下无过滤条件的 `pdf text` 默认只返回提取文本缓存的 `content_path` 和可选 `chunks_path`，调用方直接读取该文件；这些不是 PDF 二进制副本。只有 `--grep`、`--pages`、`--max-chars` 才返回文本子集，只有显式 `--output-dir` 才生成 Markdown。源附件的真实路径使用 `zot file path KEY` 获取。缓存和 FTS 索引都会核对 PDF 的路径、大小和高精度修改时间；附件被替换后旧正文不会继续命中。remote 模式因客户端无法访问服务端本地路径，仍返回正文。
 
 #### 与 Zotero 桌面端联动
 
@@ -475,7 +473,7 @@ zot --mode local find ...
 | **关系** | `ref related` | 查询相关文献 |
 | **PDF** | `pdf text` | 提取 PDF 正文 |
 | **PDF** | `item supp` | 查找本地已保存的补充材料、Source data、表格/数据附件 |
-| **PDF** | `file path/check/show` | 查询本地真实路径、检查附件健康状态，并预览 `.xlsx` 附件 |
+| **附件** | `file path/open/show` | 解析并检查本地路径、用系统默认程序打开，并预览 `.xlsx` 附件 |
 | **PDF** | `pdf figs` | 提取论文图表（缓存、多 PDF 附件、低质量误检过滤） |
 | **标注** | `ann list` / `ann new` / `ann delete` | 读取、写入和删除 PDF 标注 |
 | **PDF** | `pdf open` | 用系统默认程序打开并返回真实路径 |

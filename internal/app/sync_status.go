@@ -196,7 +196,7 @@ func (s SyncService) Status(ctx context.Context, req SyncStatusRequest) (Result,
 		fmt.Fprintf(&text, "  manifest: %d verified, %d missing, %d changed\n", summary.Manifest.Verified, summary.Manifest.Missing, summary.Manifest.Changed)
 		fmt.Fprintf(&text, "  partial files: %d\n", summary.PartialFiles)
 	}
-	fmt.Fprintln(&text, "  attachment paths: zot file path ATTACHMENT_KEY")
+	fmt.Fprintln(&text, "  attachment paths: zot file path KEY")
 	return Result{Data: summary, Text: strings.TrimRight(text.String(), "\n")}, nil
 }
 

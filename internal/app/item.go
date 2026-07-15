@@ -44,6 +44,19 @@ type LeanItem struct {
 	RelevanceScore  int      `json:"relevance_score,omitempty"`
 }
 
+type LeanAttachmentFile struct {
+	Key         string `json:"key"`
+	Filename    string `json:"filename,omitempty"`
+	ContentType string `json:"content_type,omitempty"`
+	LocalPath   string `json:"local_path,omitempty"`
+	Resolved    bool   `json:"resolved"`
+}
+
+type LeanShowItem struct {
+	LeanItem
+	AttachmentFiles []LeanAttachmentFile `json:"attachment_files,omitempty"`
+}
+
 type FindSnippetItem struct {
 	Key             string                   `json:"key"`
 	ItemType        string                   `json:"item_type"`
@@ -194,7 +207,7 @@ func (s ReadService) ShowItem(ctx context.Context, req ItemShowRequest) (Result,
 	meta["total"] = 1
 	var data any = item
 	if !req.Full && !req.Snippet {
-		data = leanItem(item)
+		data = leanShowItem(item)
 		appendLeanMetadata(meta)
 	}
 	text := itemShowText(item)
@@ -240,6 +253,20 @@ func leanItems(items []domain.Item) []LeanItem {
 		result = append(result, leanItem(item))
 	}
 	return result
+}
+
+func leanShowItem(item domain.Item) LeanShowItem {
+	attachments := make([]LeanAttachmentFile, 0, len(item.Attachments))
+	for _, attachment := range item.Attachments {
+		attachments = append(attachments, LeanAttachmentFile{
+			Key:         attachment.Key,
+			Filename:    firstNonEmpty(attachment.Filename, attachment.Title),
+			ContentType: attachment.ContentType,
+			LocalPath:   attachment.ResolvedPath,
+			Resolved:    attachment.Resolved,
+		})
+	}
+	return LeanShowItem{LeanItem: leanItem(item), AttachmentFiles: attachments}
 }
 
 func appendLeanMetadata(meta map[string]any) {

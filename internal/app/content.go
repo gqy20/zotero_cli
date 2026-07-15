@@ -14,14 +14,13 @@ import (
 )
 
 type FileRequest struct {
-	AttachmentKey string
-	ItemKey       string
-	PathOnly      bool
-	Sheet         string
-	Head          int
-	MaxSheets     int
-	MaxColumns    int
-	Health        bool
+	Key        string
+	PathOnly   bool
+	Open       bool
+	Sheet      string
+	Head       int
+	MaxSheets  int
+	MaxColumns int
 }
 
 type FileResult struct {
@@ -32,6 +31,7 @@ type FileResult struct {
 	LocalPath     string                    `json:"local_path"`
 	Health        *backend.AttachmentHealth `json:"health,omitempty"`
 	Workbook      *backend.TableWorkbook    `json:"workbook,omitempty"`
+	Opened        bool                      `json:"opened,omitempty"`
 }
 
 func (s ReadService) Files(ctx context.Context, req FileRequest) (Result, error) {
@@ -49,23 +49,17 @@ func (s ReadService) Files(ctx context.Context, req FileRequest) (Result, error)
 	if err != nil {
 		return Result{}, err
 	}
-	if req.AttachmentKey == "" && req.ItemKey == "" {
-		return Result{}, fmt.Errorf("attachment key or --item is required")
-	}
-	if req.AttachmentKey != "" && req.ItemKey != "" {
-		return Result{}, fmt.Errorf("attachment key and --item are mutually exclusive")
-	}
-	if req.Sheet != "" && req.ItemKey != "" {
-		return Result{}, fmt.Errorf("--sheet requires one attachment key")
+	if strings.TrimSpace(req.Key) == "" {
+		return Result{}, fmt.Errorf("item or attachment key is required")
 	}
 	opts := backend.TableInspectOptions{Sheet: req.Sheet, Head: positiveDefault(req.Head, 5), MaxSheets: positiveDefault(req.MaxSheets, 5), MaxColumns: positiveDefault(req.MaxColumns, 12)}
-	results, err := inspectFileTargets(ctx, reader, req, opts)
+	results, err := s.inspectFileTargets(ctx, reader, req, opts)
 	if err != nil {
 		return Result{}, err
 	}
 	meta := readMeta(reader)
 	meta["total"] = len(results)
-	if !req.PathOnly {
+	if !req.PathOnly && !req.Open {
 		meta["head"] = opts.Head
 		meta["max_sheets"] = opts.MaxSheets
 		meta["max_columns"] = opts.MaxColumns
@@ -73,19 +67,28 @@ func (s ReadService) Files(ctx context.Context, req FileRequest) (Result, error)
 	return Result{Data: results, Meta: meta, Text: fileResultsText(results), Warnings: readWarnings(meta)}, nil
 }
 
-func inspectFileTargets(ctx context.Context, reader backend.Reader, req FileRequest, opts backend.TableInspectOptions) ([]FileResult, error) {
-	if req.AttachmentKey != "" {
-		path, contentType, err := reader.GetAttachmentFile(ctx, req.AttachmentKey)
+func (s ReadService) inspectFileTargets(ctx context.Context, reader backend.Reader, req FileRequest, opts backend.TableInspectOptions) ([]FileResult, error) {
+	item, err := reader.GetItem(ctx, req.Key)
+	if err != nil {
+		return nil, fmt.Errorf("resolve item or attachment %q: %w", req.Key, err)
+	}
+	if strings.EqualFold(item.ItemType, "attachment") {
+		path, contentType, err := reader.GetAttachmentFile(ctx, req.Key)
 		if err != nil {
 			return nil, err
 		}
-		attachment := domain.Attachment{Key: req.AttachmentKey, ContentType: contentType, ResolvedPath: path, Resolved: true}
-		result := FileResult{AttachmentKey: req.AttachmentKey, ContentType: contentType, LocalPath: path}
-		if req.Health {
+		attachment := domain.Attachment{Key: req.Key, ContentType: contentType, ResolvedPath: path, Resolved: true}
+		result := FileResult{AttachmentKey: req.Key, Label: firstNonEmpty(item.Title, filepath.Base(path), req.Key), ContentType: contentType, LocalPath: path}
+		if req.PathOnly {
 			health := backend.InspectAttachmentHealth(attachment)
 			result.Health = &health
 		}
-		if !req.PathOnly && (!req.Health || isWorkbookPath(path)) {
+		if req.Open {
+			if err := s.openAttachment(path); err != nil {
+				return nil, err
+			}
+			result.Opened = true
+		} else if !req.PathOnly {
 			workbook, err := backend.InspectTableFile(path, opts)
 			if err != nil {
 				return nil, err
@@ -94,21 +97,45 @@ func inspectFileTargets(ctx context.Context, reader backend.Reader, req FileRequ
 		}
 		return []FileResult{result}, nil
 	}
-	item, err := reader.GetItem(ctx, req.ItemKey)
-	if err != nil {
-		return nil, err
+	if len(item.Attachments) == 0 {
+		return nil, fmt.Errorf("item %s has no attachments", item.Key)
+	}
+	if req.Open {
+		if len(item.Attachments) != 1 {
+			keys := make([]string, 0, len(item.Attachments))
+			for _, attachment := range item.Attachments {
+				keys = append(keys, attachment.Key)
+			}
+			sort.Strings(keys)
+			return nil, fmt.Errorf("item %s has %d attachments (%s); pass one attachment key to choose the file to open", item.Key, len(keys), strings.Join(keys, ", "))
+		}
+		attachment := item.Attachments[0]
+		path, contentType, err := resolveAttachmentFile(ctx, reader, attachment)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", attachment.Key, err)
+		}
+		if err := s.openAttachment(path); err != nil {
+			return nil, err
+		}
+		return []FileResult{{AttachmentKey: attachment.Key, ItemKey: item.Key, Label: attachmentLabel(attachment), ContentType: firstNonEmpty(attachment.ContentType, contentType), LocalPath: path, Opened: true}}, nil
 	}
 	attachments := workbookAttachments(item.Attachments)
-	if req.Health || req.PathOnly {
+	if req.PathOnly {
 		attachments = item.Attachments
 	}
 	results := make([]FileResult, 0, len(attachments))
 	for _, attachment := range attachments {
-		if !attachment.Resolved && !req.Health {
-			continue
+		if !req.PathOnly {
+			path, contentType, err := resolveAttachmentFile(ctx, reader, attachment)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", attachment.Key, err)
+			}
+			attachment.ResolvedPath = path
+			attachment.Resolved = true
+			attachment.ContentType = firstNonEmpty(attachment.ContentType, contentType)
 		}
-		result := FileResult{AttachmentKey: attachment.Key, ItemKey: item.Key, Label: firstNonEmpty(attachment.Title, attachment.Filename, filepath.Base(attachment.ResolvedPath), attachment.Key), ContentType: attachment.ContentType, LocalPath: attachment.ResolvedPath}
-		if req.Health {
+		result := FileResult{AttachmentKey: attachment.Key, ItemKey: item.Key, Label: attachmentLabel(attachment), ContentType: attachment.ContentType, LocalPath: attachment.ResolvedPath}
+		if req.PathOnly {
 			health := backend.InspectAttachmentHealth(attachment)
 			result.Health = &health
 		}
@@ -122,9 +149,30 @@ func inspectFileTargets(ctx context.Context, reader backend.Reader, req FileRequ
 		results = append(results, result)
 	}
 	if len(results) == 0 {
-		return nil, fmt.Errorf("no matching attachments found for item %s", req.ItemKey)
+		return nil, fmt.Errorf("item %s has no supported spreadsheet attachments", item.Key)
 	}
 	return results, nil
+}
+
+func (s ReadService) openAttachment(path string) error {
+	if s.OpenFile == nil {
+		return fmt.Errorf("system file opener is not configured")
+	}
+	if err := s.OpenFile(path); err != nil {
+		return fmt.Errorf("open attachment: %w", err)
+	}
+	return nil
+}
+
+func resolveAttachmentFile(ctx context.Context, reader backend.Reader, attachment domain.Attachment) (string, string, error) {
+	if strings.TrimSpace(attachment.ResolvedPath) != "" && attachment.Resolved {
+		return attachment.ResolvedPath, attachment.ContentType, nil
+	}
+	return reader.GetAttachmentFile(ctx, attachment.Key)
+}
+
+func attachmentLabel(attachment domain.Attachment) string {
+	return firstNonEmpty(attachment.Title, attachment.Filename, filepath.Base(attachment.ResolvedPath), attachment.Key)
 }
 
 func positiveDefault(value, fallback int) int {
@@ -171,6 +219,9 @@ func fileResultsText(results []FileResult) string {
 			for _, issue := range result.Health.Issues {
 				fmt.Fprintf(&b, "\n  - %s %s: %s", issue.Severity, issue.Code, issue.Message)
 			}
+		}
+		if result.Opened {
+			b.WriteString("\nOpened: yes")
 		}
 		if result.Workbook != nil {
 			fmt.Fprintf(&b, "\nWorkbook: %s, sheets=%d", result.Workbook.FileType, result.Workbook.SheetCount)

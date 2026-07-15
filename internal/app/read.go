@@ -40,6 +40,7 @@ type ReadService struct {
 	LoadConfig func() (config.Config, string, error)
 	NewReader  func(config.Config) (backend.Reader, error)
 	NewClient  func(config.Config) (*zoteroapi.Client, error)
+	OpenFile   func(string) error
 }
 
 func NewReadService() ReadService {
@@ -65,6 +66,7 @@ func NewReadService() ReadService {
 			}
 			return zoteroapi.New(normalized, os.Getenv("ZOT_BASE_URL"), http.DefaultClient), nil
 		},
+		OpenFile: openSystemFile,
 	}
 }
 

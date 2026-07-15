@@ -26,7 +26,7 @@ zot
 ├── tag list|replace|apply|clean
 ├── search list|show|new|edit|delete
 ├── group list
-├── file path|show|check
+├── file path|open|show
 ├── pdf text|figs|open
 ├── ann list|new|delete
 ├── ref show|find|related|cited|ctx|links|entities|profile|build|resolve|status
@@ -131,10 +131,10 @@ zot search new --data '{"name":"Recent","conditions":[]}' --json
 
 ```powershell
 zot item supp ITEMKEY --json
+zot file path ITEMKEY --json
 zot file path ATTACHKEY --json
-zot file path --item ITEMKEY --json
-zot file show ATTACHKEY --json
-zot file check ATTACHKEY --json
+zot file open ATTACHKEY --json
+zot file show ITEMKEY --json
 
 zot pdf text ITEMKEY --pages 3-8 --grep methods --max-chars 12000 --json
 zot pdf text ITEM1 ITEM2 --grep "gene\s+flow|introgression" --json
@@ -152,7 +152,7 @@ zot ann delete ITEMKEY --source pdf --attachment ATTACHMENT_KEY --page 3 --yes -
 
 `item supp` 返回补充材料候选的类型、解析状态、置信度、证据、本地路径或在线下载地址；`--online` 只支持单个条目，不能与 `--all` 同用。命令不会自动下载、导入或修改任何补充文件。
 
-`file path` 只解析并返回附件的真实本地文件路径，不打开或修改文件；可传 attachment key，或通过 `--item` 返回一个条目下所有可解析附件。`file check` 同时返回 `local_path` 和健康诊断，`file show` 专用于表格预览。
+`file path` 接受普通 item key 或 attachment key，返回真实本地路径与健康诊断，但不打开或修改文件。`file open` 使用系统默认程序打开附件；普通条目只有一个附件时可直接打开，有多个附件时必须改传明确的 attachment key。`file show` 目前专用于电子表格预览。三者都不再使用 `--item`。
 
 `item import` 在 Zotero 元数据识别完成后，会定位本次导入最终保留的 PDF 附件并执行增量全文索引；指定收藏夹、重复附件清理和索引均以最终附件 key 为准。索引失败会作为 JSON envelope 中的 warning 返回，不会重复写入 stderr，也不会回滚已成功的 Zotero 导入。`find --snippet` 只返回轻量条目信息和以实际命中为中心的约 1200 字符证据，并在 `matched_chunk` 中保留页码、附件 key 与坐标；它与 `--full` 互斥。
 

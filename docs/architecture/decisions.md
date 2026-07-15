@@ -42,7 +42,7 @@ Python 环境自动管理在 `{ZOT_DATA_DIR}/.zotero_cli/venv/`，优先使用 `
 
 ## 5. PDF 打开与路径解析
 
-`pdf open ITEM_KEY` 先通过当前 reader 解析父条目的第一个 PDF 附件，再调用操作系统默认文件程序，并在文本/JSON 结果中返回真实路径。`--page` 当前只作为结果提示，系统程序可能忽略。需要路径而不打开文件时使用 `file path ATTACHMENT_KEY` 或 `file path --item ITEM_KEY`。已退出的 `select` 桌面端入口不再属于稳定命令树。
+`pdf open ITEM_KEY` 先通过当前 reader 解析父条目的第一个 PDF 附件，再调用操作系统默认文件程序，并在文本/JSON 结果中返回真实路径。`--page` 当前只作为结果提示，系统程序可能忽略。通用附件操作使用 `file path KEY` 或 `file open KEY`；KEY 可指普通条目或附件，多附件条目在打开时必须明确传 attachment key。已退出的 `select` 桌面端入口不再属于稳定命令树。
 
 ## 6. 错误体系
 
