@@ -62,3 +62,4 @@ web/.env
 web/.env.local
 web/.env.*.local
 .codex/tmp/
+/dist/

@@ -31,6 +31,13 @@ Workflow: `.github/workflows/release.yml`
 - If `HOMEBREW_TAP_TOKEN` is configured, updates `gqy20/homebrew-tap` automatically
 - Uploads release artifacts, checksums, `version.json`, and `latest` to Qiniu CDN
 
+## Local builds
+
+- `make build` builds the current target and compresses Windows/Linux binaries with UPX; macOS remains uncompressed.
+- `make release` independently cross-builds Linux `amd64`/`arm64`, Windows `amd64`, and macOS `amd64`/`arm64` into `dist/`.
+- Local release archives use the same `zot_<version>_<os>_<arch>` names and package layout as GitHub Release, include `README.md` and `LICENSE`, and produce `checksums.txt`.
+- UPX is required before either target when Linux or Windows binaries are produced. Override the detected version with `VERSION=vX.Y.Z make release`.
+
 ## Homebrew tap automation
 
 The release workflow can update the external tap repository after a tagged release is published.

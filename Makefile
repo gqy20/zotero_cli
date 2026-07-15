@@ -7,6 +7,7 @@ BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 LDFLAGS := -ldflags "-X zotero_cli/internal/cli.version=$(VERSION) -X zotero_cli/internal/cli.commit=$(COMMIT) -X zotero_cli/internal/cli.buildDate=$(BUILD_DATE) -s -w"
 UPX := upx
+DIST := dist
 
 # --- 格式化 ---
 
@@ -41,14 +42,26 @@ test-short:
 
 build:
 	rm -f $(BINARY)$(EXT)
+	@if [ "$(shell go env GOOS)" != "darwin" ]; then command -v $(UPX) >/dev/null 2>&1 || { echo "UPX is required: install upx and retry" >&2; exit 1; }; fi
 	go build -trimpath $(LDFLAGS) -o $(BINARY)$(EXT) ./cmd/zot
+	@if [ "$(shell go env GOOS)" = "darwin" ]; then \
+		echo "macOS binary left uncompressed (UPX is not used for Mach-O)"; \
+	else \
+		$(UPX) --best --lzma -o $(BINARY)$(EXT).tmp $(BINARY)$(EXT) && \
+		mv $(BINARY)$(EXT).tmp $(BINARY)$(EXT) && \
+		$(UPX) -t $(BINARY)$(EXT); \
+	fi
+	@ls -lh $(BINARY)$(EXT)
 
 # --- 发布（含 upx 压缩）---
 
-release: build
-	$(UPX) --best --lzma -o $(BINARY)$(EXT).tmp $(BINARY)$(EXT) && mv $(BINARY)$(EXT).tmp $(BINARY)$(EXT)
-	@echo "---"
-	@ls -lh $(BINARY)$(EXT)
+release:
+	go run ./scripts/release.go \
+		-version "$(VERSION)" \
+		-commit "$(COMMIT)" \
+		-build-date "$(BUILD_DATE)" \
+		-dist "$(DIST)" \
+		-upx "$(UPX)"
 
 # --- CI 综合检查 ---
 
@@ -73,3 +86,4 @@ install-hooks:
 
 clean:
 	rm -f $(BINARY)$(EXT)
+	rm -rf $(DIST)

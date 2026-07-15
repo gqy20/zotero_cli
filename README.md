@@ -150,12 +150,16 @@ zot lib taste --init       # 可选：创建长期文献管理偏好模板
 
 ```bash
 git clone https://github.com/gqy20/zotero_cli.git && cd zotero_cli
-go build -o zot.exe ./cmd/zot     # Go 1.26+，无 CGO 依赖
+go build -o zot.exe ./cmd/zot     # 开发构建：Go 1.26+，无 CGO 依赖
+make build                        # 当前平台正式构建；Windows/Linux 使用 UPX
+make release                      # 在 dist/ 生成五个平台发布包和 checksums.txt
 # 远程模式服务端就是同一个二进制：
 #   zot serve                     # 起服务端（默认 :8021）
 # 想要带 Web UI 的版本（需先在 web/ 下 npm run build）：
 #   go build -tags embed -o zot.exe ./cmd/zot
 ```
+
+`make build` 要求 Windows/Linux 本机已安装 `upx`；macOS 产物不进行 UPX 压缩。`make release` 会交叉构建 Linux amd64/arm64、Windows amd64 和 macOS amd64/arm64，产物命名与 GitHub Release 一致。可用 `VERSION=vX.Y.Z make release` 显式指定版本；默认采用 `git describe`。
 
 ## AI Agent 集成（Claude Code / Codex）
 

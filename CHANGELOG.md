@@ -14,6 +14,7 @@
 - **同步实时进度**：`zot sync` 根据 manifest 汇总整个镜像的文件数与字节数，分阶段显示实时百分比、传输速度和 ETA；跳过文件与断点续传字节纳入整体进度，进度继续写入 stderr 以保持 `--json` stdout 稳定。`zot serve` 请求日志新增 `bytes_sent`。
 
 ### 工具链
+- **本地构建与多平台发布分工**：`make build` 改为构建当前平台的最终二进制并对 Windows/Linux 执行 UPX 压缩；`make release` 独立交叉构建 Linux amd64/arm64、Windows amd64 与 macOS amd64/arm64，生成与 GitHub Release 同名的归档、Windows 独立可执行文件和 `checksums.txt`。归档由 Go 标准库生成，不依赖本机 `zip`/`tar`。
 - **Linux 发布包压缩**：Release workflow 对 Linux amd64/arm64 与 Windows 统一执行 UPX 压缩和完整性测试；Linux amd64 冒烟测试改为针对最终压缩产物运行，macOS 产物保持不压缩。
 
 ## [0.1.0] - 2026-07-14
