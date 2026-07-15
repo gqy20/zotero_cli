@@ -407,7 +407,7 @@ zot lib log --kind items --since 0 --json  # 版本变更记录
 | 模式 | 数据源 | 需要 | 适用场景 |
 |------|--------|------|----------|
 | `web` | Zotero Cloud API | API key | 远程检索、云端管理 |
-| `local` | 本地 SQLite + storage/ | ZOT_DATA_DIR | 离线操作、PDF 处理、全文搜索 |
+| `local` | 本地 SQLite + storage/ | `ZOT_DATA_DIR` 或 `~/.zot/sync` | 离线操作、PDF 处理、全文搜索 |
 | `hybrid`（推荐） | 本地优先，Web 回退 | 两者都要 | 日常使用，兼顾速度与完整性 |
 | `remote` | HTTP → 远端 `zot serve` (port 8021) | ZOT_SERVER_ADDR | 同服务器端模式，局域网访问；PDF 标注读写走服务器 |
 
@@ -435,6 +435,9 @@ zot --mode local find ...
 ```
 
 `zot sync` 是单向增量拉取：拉取原始 `zotero.sqlite`（数据库）、`storage/` 中的 imported PDF/附件、可解析的 `linked_file` 外部附件，以及 `.zotero_cli/fulltext/` 全文索引。外链附件复制到隔离的镜像目录，并通过 attachment key 映射供复制后的 SQLite 无感读取，不改写数据库中的原始路径。新增和变化的文件会下载；远端删除不会清理本地历史附件或全文缓存，SQLite 的 WAL/SHM/journal sidecar 则始终按当前远端数据库状态精确处理。源端暂时缺失的外链文件会被标记为 unavailable；若本地已有旧副本，继续保留并标记 stale。同步后可直接运行 `zot --mode local ...`，全文检索和 PDF 操作均使用镜像；中断的大附件会续传。
+
+`local` 模式未显式配置 `ZOT_DATA_DIR` 时会自动使用 `~/.zot/sync`；显式数据目录始终优先。`hybrid` 不会自动切换到同步镜像，离线使用请运行 `zot --mode local ...`。同步期间会校验远端文件路径，确保文件只写入本地镜像目录。
+
 - **普通 Web API 写操作**：仍需 remote+web 配置（`ZOT_API_KEY` + `ZOT_LIBRARY_ID`）
 
 ## 命令速查
