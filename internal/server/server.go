@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
+	"sort"
 	"time"
 
 	"zotero_cli/internal/backend"
@@ -62,8 +64,84 @@ func NewServerWithPermissionsAndLogger(reader backend.Reader, addr string, dataD
 }
 
 func (s *Server) Start() error {
-	s.logger.Info("server starting", "addr", s.addr)
-	return s.srv.ListenAndServe()
+	listener, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		return err
+	}
+	localURL, networkURLs := serverURLs(listener.Addr())
+	serverAddr := localURL
+	if len(networkURLs) > 0 {
+		serverAddr = networkURLs[0]
+	}
+	s.logger.Info(
+		"server ready",
+		"listen_addr", listener.Addr().String(),
+		"server_addr", serverAddr,
+		"local_url", localURL,
+		"network_urls", networkURLs,
+		"remote_config", "zot config init --mode remote --server-addr "+serverAddr,
+	)
+	return s.srv.Serve(listener)
+}
+
+func serverURLs(addr net.Addr) (string, []string) {
+	host, port, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		return "", nil
+	}
+	if ip := net.ParseIP(host); ip != nil && !ip.IsUnspecified() {
+		url := httpURL(ip.String(), port)
+		if ip.IsLoopback() {
+			return url, nil
+		}
+		return "", []string{url}
+	}
+
+	localURL := httpURL("localhost", port)
+	seen := make(map[string]struct{})
+	var networkURLs []string
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return localURL, nil
+	}
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, candidate := range addrs {
+			ip, _, err := net.ParseCIDR(candidate.String())
+			if err != nil || !ip.IsGlobalUnicast() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+				continue
+			}
+			url := httpURL(ip.String(), port)
+			if _, ok := seen[url]; ok {
+				continue
+			}
+			seen[url] = struct{}{}
+			networkURLs = append(networkURLs, url)
+		}
+	}
+	sort.Slice(networkURLs, func(i, j int) bool {
+		iIPv6 := isIPv6URL(networkURLs[i])
+		jIPv6 := isIPv6URL(networkURLs[j])
+		if iIPv6 != jIPv6 {
+			return !iIPv6
+		}
+		return networkURLs[i] < networkURLs[j]
+	})
+	return localURL, networkURLs
+}
+
+func httpURL(host, port string) string {
+	return "http://" + net.JoinHostPort(host, port)
+}
+
+func isIPv6URL(rawURL string) bool {
+	return len(rawURL) > len("http://") && rawURL[len("http://")] == '['
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {

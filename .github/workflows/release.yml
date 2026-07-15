@@ -115,6 +115,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Install UPX
+        if: matrix.goos != 'darwin'
         uses: crazy-max/ghaction-upx@v3
         with:
           install-only: true
@@ -148,18 +149,28 @@ jobs:
 
           go build -trimpath -ldflags "${GO_VERSION_LDFLAGS}" -o "${package_dir}/${BINARY_NAME}${ext}" ./cmd/zot
 
-          if [[ "${GOOS}" == "linux" && "${GOARCH}" == "amd64" ]]; then
-            "${package_dir}/${BINARY_NAME}" version
-            "${package_dir}/${BINARY_NAME}" --help >/dev/null
-          fi
           cp README.md "${package_dir}/README.md" 2>/dev/null || true
           cp LICENSE "${package_dir}/LICENSE" 2>/dev/null || true
 
-          # Windows: UPX 压缩后覆盖，并额外拷一份独立 .exe 到 dist 供直链下载
+          binary_path="${package_dir}/${BINARY_NAME}${ext}"
+
+          # Linux and Windows release binaries are UPX-compressed; macOS is left untouched.
+          if [[ "${GOOS}" == "linux" || "${GOOS}" == "windows" ]]; then
+            upx --best --lzma -o "${binary_path}.tmp" "${binary_path}"
+            mv "${binary_path}.tmp" "${binary_path}"
+            upx -t "${binary_path}"
+            echo "UPX compressed size: $(du -h "${binary_path}" | cut -f1)"
+          fi
+
+          # Run native Linux smoke tests against the final compressed binary.
+          if [[ "${GOOS}" == "linux" && "${GOARCH}" == "amd64" ]]; then
+            "${binary_path}" version
+            "${binary_path}" --help >/dev/null
+          fi
+
+          # Windows also publishes a standalone executable for direct download.
           if [[ "${GOOS}" == "windows" ]]; then
-            upx --best --lzma -o "${package_dir}/${BINARY_NAME}${ext}.tmp" "${package_dir}/${BINARY_NAME}${ext}" && mv "${package_dir}/${BINARY_NAME}${ext}.tmp" "${package_dir}/${BINARY_NAME}${ext}"
             cp "${package_dir}/${BINARY_NAME}${ext}" "dist/${artifact_base}.exe"
-            echo "压缩大小: $(du -h "dist/${artifact_base}.exe" | cut -f1)"
           fi
 
           if [[ "${ARCHIVE_FORMAT}" == "zip" ]]; then
@@ -231,8 +242,8 @@ jobs:
             echo "| Windows（完整包） | \`${binary_name}_${VERSION}_windows_amd64.zip\` |"
             echo "| macOS (Apple Silicon) | \`${binary_name}_${VERSION}_darwin_arm64.tar.gz\` |"
             echo "| macOS (Intel) | \`${binary_name}_${VERSION}_darwin_amd64.tar.gz\` |"
-            echo "| Linux (x86_64) | \`${binary_name}_${VERSION}_linux_amd64.tar.gz\` |"
-            echo "| Linux (arm64) | \`${binary_name}_${VERSION}_linux_arm64.tar.gz\` |"
+            echo "| Linux (x86_64, UPX) | \`${binary_name}_${VERSION}_linux_amd64.tar.gz\` |"
+            echo "| Linux (arm64, UPX) | \`${binary_name}_${VERSION}_linux_arm64.tar.gz\` |"
             echo "| 校验和 | \`checksums.txt\` |"
             echo
             echo "### 更新内容"

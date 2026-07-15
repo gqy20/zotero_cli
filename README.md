@@ -423,7 +423,7 @@ remote 模式下：
 
 ```bash
 # 服务端：在有 Zotero 数据的机器上起服务
-zot serve                               # 默认 :8021
+zot serve                               # 默认 :8021；启动后显示可用的 server_addr
 
 # 客户端：地址由 config 管理；同步到默认镜像目录（sqlite + 所有附件）
 zot config init --mode remote --server-addr http://192.168.1.50:8021
@@ -434,7 +434,9 @@ zot sync status --full      # 完整 SQLite + 上次 manifest 校验
 zot --mode local find ...
 ```
 
-`zot sync` 是单向增量拉取：拉取原始 `zotero.sqlite`（数据库）、`storage/` 中的 imported PDF/附件、可解析的 `linked_file` 外部附件，以及 `.zotero_cli/fulltext/` 全文索引。外链附件复制到隔离的镜像目录，并通过 attachment key 映射供复制后的 SQLite 无感读取，不改写数据库中的原始路径。新增和变化的文件会下载；远端删除不会清理本地历史附件或全文缓存，SQLite 的 WAL/SHM/journal sidecar 则始终按当前远端数据库状态精确处理。源端暂时缺失的外链文件会被标记为 unavailable；若本地已有旧副本，继续保留并标记 stale。同步后可直接运行 `zot --mode local ...`，全文检索和 PDF 操作均使用镜像；中断的大附件会续传。
+服务成功绑定端口后会输出一条 `server ready` 结构化日志，其中 `server_addr` 可直接用于客户端配置；`local_url` 供本机访问，`network_urls` 列出检测到的局域网候选地址。如果存在多个网络接口，请选择客户端能够访问的地址。日志中的 `remote_config` 是可直接复制执行的完整配置命令。
+
+`zot sync` 是单向增量拉取：拉取原始 `zotero.sqlite`（数据库）、`storage/` 中的 imported PDF/附件、可解析的 `linked_file` 外部附件，以及 `.zotero_cli/fulltext/` 全文索引。外链附件复制到隔离的镜像目录，并通过 attachment key 映射供复制后的 SQLite 无感读取，不改写数据库中的原始路径。新增和变化的文件会下载；远端删除不会清理本地历史附件或全文缓存，SQLite 的 WAL/SHM/journal sidecar 则始终按当前远端数据库状态精确处理。源端暂时缺失的外链文件会被标记为 unavailable；若本地已有旧副本，继续保留并标记 stale。同步期间按 SQLite、校验、全文索引、普通附件、外部附件和最终写入显示阶段日志，并每两秒报告整体文件数、实时字节、百分比、速度和 ETA；进度写入 stderr，不影响 `--json` 的 stdout。同步后可直接运行 `zot --mode local ...`，全文检索和 PDF 操作均使用镜像；中断的大附件会续传并计入恢复进度。
 
 `local` 模式未显式配置 `ZOT_DATA_DIR` 时会自动使用 `~/.zot/sync`；显式数据目录始终优先。`hybrid` 不会自动切换到同步镜像，离线使用请运行 `zot --mode local ...`。同步期间会校验远端文件路径，确保文件只写入本地镜像目录。
 

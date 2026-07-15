@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+### 变更
+- **`zot serve` 启动提示**：服务成功绑定端口后输出可直接配置客户端的 `server_addr`、本机 URL、局域网候选 URL 和完整 remote 配置命令；端口占用等监听失败不再先误报服务已启动。
+- **同步实时进度**：`zot sync` 根据 manifest 汇总整个镜像的文件数与字节数，分阶段显示实时百分比、传输速度和 ETA；跳过文件与断点续传字节纳入整体进度，进度继续写入 stderr 以保持 `--json` stdout 稳定。`zot serve` 请求日志新增 `bytes_sent`。
+
+### 工具链
+- **Linux 发布包压缩**：Release workflow 对 Linux amd64/arm64 与 Windows 统一执行 UPX 压缩和完整性测试；Linux amd64 冒烟测试改为针对最终压缩产物运行，macOS 产物保持不压缩。
+
 ## [0.1.0] - 2026-07-14
 
 0.1.0 完成 CLI v2、引用知识库和可离线工作的同步镜像。该版本收敛了命令语法与 JSON 契约，并移除旧兼容入口；升级脚本前请按当前 `zot --help` 和 `docs/user/commands.md` 检查调用方式。

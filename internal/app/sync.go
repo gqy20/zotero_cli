@@ -95,34 +95,46 @@ func (s SyncService) Sync(ctx context.Context, req SyncRequest) (result Result, 
 	}
 	client := &syncClient{baseURL: strings.TrimRight(serverAddr, "/"), authKey: authKey, httpClient: httpClient()}
 
+	if s.Progress != nil {
+		fmt.Fprintf(s.Progress, "Fetching sync manifest from %s...\n", serverAddr)
+	}
 	manifest, err := client.getManifest(ctx)
 	if err != nil {
 		return Result{}, fmt.Errorf("fetch manifest: %w", err)
 	}
+	progress := newSyncProgress(s.Progress, manifest)
+	progress.Start()
+	defer func() { progress.Stop(err) }()
 
-	sqliteChanged, err := syncSqlite(ctx, client, manifest.SQLite, dataDir, req.Force, s.Progress)
+	progress.SetPhase("SQLite")
+	sqliteChanged, err := syncSqlite(ctx, client, manifest.SQLite, dataDir, req.Force, progress)
 	if err != nil {
 		return Result{}, fmt.Errorf("sync sqlite: %w", err)
 	}
+	progress.SetPhase("SQLite verification")
 	if err := checkSQLite(ctx, filepath.Join(dataDir, sqliteFileName), "quick_check"); err != nil {
 		return Result{}, fmt.Errorf("validate synced sqlite: %w", err)
 	}
 
 	// fulltext index (.zotero_cli/fulltext) — always synced: small, and lets
 	// full-text search work right away without a local 'zot index build'.
-	ftDownloaded, ftSkipped, ftBytes, err := syncFulltext(ctx, client, manifest.Fulltext, dataDir, req.Force, concurrency, s.Progress)
+	progress.SetPhase("fulltext index")
+	ftDownloaded, ftSkipped, ftBytes, err := syncFulltext(ctx, client, manifest.Fulltext, dataDir, req.Force, concurrency, progress)
 	if err != nil {
 		return Result{}, fmt.Errorf("sync fulltext: %w", err)
 	}
 
-	downloaded, skipped, bytes, err := syncStorage(ctx, client, manifest.Storage, dataDir, req.Force, concurrency, s.Progress)
+	progress.SetPhase("attachments")
+	downloaded, skipped, bytes, err := syncStorage(ctx, client, manifest.Storage, dataDir, req.Force, concurrency, progress)
 	if err != nil {
 		return Result{}, fmt.Errorf("sync storage: %w", err)
 	}
-	linkedDownloaded, linkedSkipped, linkedBytes, linkedUnavailable, err := syncLinkedAttachments(ctx, client, manifest.Linked, dataDir, req.Force, concurrency, s.Progress)
+	progress.SetPhase("linked attachments")
+	linkedDownloaded, linkedSkipped, linkedBytes, linkedUnavailable, err := syncLinkedAttachments(ctx, client, manifest.Linked, dataDir, req.Force, concurrency, progress)
 	if err != nil {
 		return Result{}, fmt.Errorf("sync linked attachments: %w", err)
 	}
+	progress.SetPhase("finalizing mirror")
 
 	summary := SyncSummary{
 		DataDir: dataDir, SQLiteChanged: sqliteChanged,
@@ -188,6 +200,208 @@ type syncManifest struct {
 	Storage  []syncStorageMeta `json:"storage"`
 	Fulltext []syncPathMeta    `json:"fulltext"`
 	Linked   []syncLinkedMeta  `json:"linked,omitempty"`
+}
+
+type syncProgress struct {
+	writer io.Writer
+
+	totalFiles       int64
+	totalBytes       int64
+	completedFiles   int64
+	completedBytes   int64
+	transferredBytes int64
+
+	phaseMu sync.RWMutex
+	phase   string
+	writeMu sync.Mutex
+	start   time.Time
+	done    chan struct{}
+	wg      sync.WaitGroup
+	stop    sync.Once
+}
+
+func newSyncProgress(writer io.Writer, manifest syncManifest) *syncProgress {
+	p := &syncProgress{writer: writer}
+	add := func(size int64) {
+		p.totalFiles++
+		if size > 0 {
+			p.totalBytes += size
+		}
+	}
+	for _, entry := range manifest.SQLite {
+		add(entry.Size)
+	}
+	for _, entry := range manifest.Fulltext {
+		add(entry.Size)
+	}
+	for _, storage := range manifest.Storage {
+		for _, file := range storage.Files {
+			add(file.Size)
+		}
+	}
+	for _, entry := range manifest.Linked {
+		if entry.Available {
+			add(entry.Size)
+		}
+	}
+	return p
+}
+
+func (p *syncProgress) Start() {
+	if p == nil || p.writer == nil {
+		return
+	}
+	p.start = time.Now()
+	p.done = make(chan struct{})
+	p.write("Sync plan: %d files, %s total\n", p.totalFiles, humanBytes(p.totalBytes))
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				p.report("Syncing " + p.currentPhase())
+			case <-p.done:
+				return
+			}
+		}
+	}()
+}
+
+func (p *syncProgress) SetPhase(phase string) {
+	if p == nil {
+		return
+	}
+	previous := p.currentPhase()
+	if previous != "" && p.writer != nil {
+		p.report("Completed " + previous)
+	}
+	p.phaseMu.Lock()
+	p.phase = phase
+	p.phaseMu.Unlock()
+	if p.writer != nil {
+		p.write("Starting %s...\n", phase)
+	}
+}
+
+func (p *syncProgress) currentPhase() string {
+	if p == nil {
+		return ""
+	}
+	p.phaseMu.RLock()
+	defer p.phaseMu.RUnlock()
+	return p.phase
+}
+
+func (p *syncProgress) SkipFile(size int64) {
+	if p == nil {
+		return
+	}
+	atomic.AddInt64(&p.completedFiles, 1)
+	if size > 0 {
+		atomic.AddInt64(&p.completedBytes, size)
+	}
+}
+
+func (p *syncProgress) ResumeBytes(size int64) {
+	if p != nil && size > 0 {
+		atomic.AddInt64(&p.completedBytes, size)
+	}
+}
+
+func (p *syncProgress) TransferBytes(delta int64) {
+	if p == nil || delta == 0 {
+		return
+	}
+	atomic.AddInt64(&p.completedBytes, delta)
+	if delta > 0 {
+		atomic.AddInt64(&p.transferredBytes, delta)
+	}
+}
+
+func (p *syncProgress) CompleteFile() {
+	if p != nil {
+		atomic.AddInt64(&p.completedFiles, 1)
+	}
+}
+
+func (p *syncProgress) Stop(syncErr error) {
+	if p == nil || p.writer == nil {
+		return
+	}
+	p.stop.Do(func() {
+		if p.done != nil {
+			close(p.done)
+			p.wg.Wait()
+		}
+		if syncErr != nil {
+			p.report("Sync failed during " + p.currentPhase())
+			return
+		}
+		p.report("Sync complete")
+	})
+}
+
+func (p *syncProgress) report(label string) {
+	if p == nil || p.writer == nil {
+		return
+	}
+	files := atomic.LoadInt64(&p.completedFiles)
+	readyBytes := atomic.LoadInt64(&p.completedBytes)
+	transferred := atomic.LoadInt64(&p.transferredBytes)
+	if readyBytes < 0 {
+		readyBytes = 0
+	}
+	if readyBytes > p.totalBytes {
+		readyBytes = p.totalBytes
+	}
+	percent := 100.0
+	if p.totalBytes > 0 {
+		percent = float64(readyBytes) * 100 / float64(p.totalBytes)
+	} else if p.totalFiles > 0 {
+		percent = float64(files) * 100 / float64(p.totalFiles)
+	}
+	if percent > 100 {
+		percent = 100
+	}
+
+	elapsed := time.Since(p.start)
+	speed := float64(0)
+	if elapsed > 0 {
+		speed = float64(transferred) / elapsed.Seconds()
+	}
+	var suffix string
+	if speed > 0 {
+		suffix = fmt.Sprintf(", %s/s", humanBytes(int64(speed)))
+		remaining := p.totalBytes - readyBytes
+		if remaining > 0 {
+			suffix += ", ETA " + humanDuration(time.Duration(float64(remaining)/speed*float64(time.Second)))
+		}
+	}
+	p.write("%s: %d/%d files, %s/%s (%.1f%%)%s\n",
+		label, files, p.totalFiles, humanBytes(readyBytes), humanBytes(p.totalBytes), percent, suffix)
+}
+
+func (p *syncProgress) write(format string, args ...any) {
+	p.writeMu.Lock()
+	defer p.writeMu.Unlock()
+	fmt.Fprintf(p.writer, format, args...)
+}
+
+func humanDuration(d time.Duration) string {
+	if d < time.Second {
+		return "<1s"
+	}
+	d = d.Round(time.Second)
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
 }
 
 // --- sync client ---
@@ -288,7 +502,7 @@ const sqliteFileName = "zotero.sqlite"
 // changed files stage in a temp dir and swap in together (sidecars first, main
 // last) so an interrupted sync never leaves a mismatched main db + wal. Under
 // WAL mode this usually means only the small -wal is re-fetched.
-func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta, dataDir string, force bool, progress io.Writer) (changed bool, err error) {
+func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta, dataDir string, force bool, progress *syncProgress) (changed bool, err error) {
 	hasMain := false
 	allowed := map[string]bool{
 		sqliteFileName: true, sqliteFileName + "-wal": true,
@@ -328,6 +542,7 @@ func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta,
 		if !force {
 			if fi, perr := os.Stat(local); perr == nil && fi.Size() == e.Size && fi.ModTime().Unix() == e.Mtime {
 				skipped++
+				progress.SkipFile(e.Size)
 				continue
 			}
 		}
@@ -345,7 +560,7 @@ func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta,
 			body.Close()
 			return false, err
 		}
-		if _, err := io.Copy(f, body); err != nil {
+		if _, err := io.Copy(f, io.TeeReader(body, progressWriter{progress: progress})); err != nil {
 			body.Close()
 			f.Close()
 			return false, err
@@ -357,6 +572,7 @@ func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta,
 		}
 		toSwap = append(toSwap, e.Path)
 		downloaded++
+		progress.CompleteFile()
 	}
 
 	var obsolete []string
@@ -372,9 +588,6 @@ func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta,
 	}
 
 	if len(toSwap) == 0 && len(obsolete) == 0 {
-		if progress != nil {
-			fmt.Fprintf(progress, "  sqlite: %d files up to date\n", skipped)
-		}
 		return false, nil
 	}
 	// SQLite sidecars are part of the current database generation rather than
@@ -403,9 +616,6 @@ func syncSqlite(ctx context.Context, client *syncClient, entries []syncPathMeta,
 			break
 		}
 	}
-	if progress != nil {
-		fmt.Fprintf(progress, "  sqlite: %d downloaded, %d up to date, %d stale sidecars removed\n", downloaded, skipped, len(obsolete))
-	}
 	return true, nil
 }
 
@@ -420,10 +630,19 @@ type fileDownload struct {
 // fetchFn opens a download stream for a file by its slash-separated relPath.
 type fetchFn func(ctx context.Context, relPath string, offset int64) (io.ReadCloser, bool, error)
 
+type progressWriter struct {
+	progress *syncProgress
+}
+
+func (w progressWriter) Write(p []byte) (int, error) {
+	w.progress.TransferBytes(int64(len(p)))
+	return len(p), nil
+}
+
 // runDownloads fetches files into targetDir with incremental skip (size+mtime),
 // bounded concurrency, resumable partial files, atomic rename, and mtime restore.
 // Shared by storage and fulltext syncing.
-func runDownloads(ctx context.Context, targetDir string, files []fileDownload, force bool, concurrency int, progress io.Writer, fetch fetchFn) (downloaded, skipped, bytes int64, err error) {
+func runDownloads(ctx context.Context, targetDir string, files []fileDownload, force bool, concurrency int, progress *syncProgress, fetch fetchFn) (downloaded, skipped, bytes int64, err error) {
 	var jobs []fileDownload
 	for _, f := range files {
 		local, pathErr := safepath.JoinRelative(targetDir, f.relPath)
@@ -433,35 +652,18 @@ func runDownloads(ctx context.Context, targetDir string, files []fileDownload, f
 		if !force {
 			if fi, e := os.Stat(local); e == nil && fi.Size() == f.size && fi.ModTime().Unix() == f.mtime {
 				atomic.AddInt64(&skipped, 1)
+				progress.SkipFile(f.size)
 				continue
 			}
 		}
 		jobs = append(jobs, f)
 	}
 	if len(jobs) == 0 {
-		if progress != nil {
-			fmt.Fprintf(progress, "  %d files up to date\n", skipped)
-		}
 		return 0, skipped, 0, nil
 	}
 
-	if progress != nil {
-		fmt.Fprintf(progress, "  downloading %d files (%d up to date)...\n", len(jobs), skipped)
-		done := make(chan struct{})
-		go func() {
-			ticker := time.NewTicker(3 * time.Second)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					fmt.Fprintf(progress, "    %d downloaded, %d unchanged (%s)\n",
-						atomic.LoadInt64(&downloaded), atomic.LoadInt64(&skipped), humanBytes(atomic.LoadInt64(&bytes)))
-				case <-done:
-					return
-				}
-			}
-		}()
-		defer func() { close(done) }()
+	for _, job := range jobs {
+		progress.ResumeBytes(resumablePartialSize(targetDir, job))
 	}
 
 	// Fail-fast: cancel on the first download error so in-flight requests abort
@@ -486,7 +688,7 @@ func runDownloads(ctx context.Context, targetDir string, files []fileDownload, f
 			if ctx.Err() != nil {
 				return
 			}
-			if e := downloadOne(ctx, targetDir, j, fetch); e != nil {
+			if e := downloadOneWithProgress(ctx, targetDir, j, fetch, progress); e != nil {
 				mu.Lock()
 				if firstErr == nil {
 					firstErr = e
@@ -497,6 +699,7 @@ func runDownloads(ctx context.Context, targetDir string, files []fileDownload, f
 			}
 			atomic.AddInt64(&downloaded, 1)
 			atomic.AddInt64(&bytes, j.size)
+			progress.CompleteFile()
 		}(j)
 	}
 	wg.Wait()
@@ -504,6 +707,10 @@ func runDownloads(ctx context.Context, targetDir string, files []fileDownload, f
 }
 
 func downloadOne(ctx context.Context, targetDir string, f fileDownload, fetch fetchFn) error {
+	return downloadOneWithProgress(ctx, targetDir, f, fetch, nil)
+}
+
+func downloadOneWithProgress(ctx context.Context, targetDir string, f fileDownload, fetch fetchFn, progress *syncProgress) error {
 	dest, err := safepath.JoinRelative(targetDir, f.relPath)
 	if err != nil {
 		return err
@@ -537,6 +744,9 @@ func downloadOne(ctx context.Context, targetDir string, f fileDownload, fetch fe
 		return err
 	}
 	defer body.Close()
+	if offset > 0 && !resumed {
+		progress.TransferBytes(-offset)
+	}
 	flags := os.O_CREATE | os.O_WRONLY
 	if resumed {
 		flags |= os.O_APPEND
@@ -547,7 +757,7 @@ func downloadOne(ctx context.Context, targetDir string, f fileDownload, fetch fe
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(out, body); err != nil {
+	if _, err := io.Copy(out, io.TeeReader(body, progressWriter{progress: progress})); err != nil {
 		out.Close()
 		return err
 	}
@@ -565,7 +775,19 @@ func downloadOne(ctx context.Context, targetDir string, f fileDownload, fetch fe
 	return os.Rename(part, dest)
 }
 
-func syncStorage(ctx context.Context, client *syncClient, entries []syncStorageMeta, dataDir string, force bool, concurrency int, progress io.Writer) (downloaded, skipped, bytes int64, err error) {
+func resumablePartialSize(targetDir string, f fileDownload) int64 {
+	dest, err := safepath.JoinRelative(targetDir, f.relPath)
+	if err != nil {
+		return 0
+	}
+	part := fmt.Sprintf("%s.part-%d-%d", dest, f.size, f.mtime)
+	if info, err := os.Stat(part); err == nil && info.Size() > 0 && info.Size() < f.size {
+		return info.Size()
+	}
+	return 0
+}
+
+func syncStorage(ctx context.Context, client *syncClient, entries []syncStorageMeta, dataDir string, force bool, concurrency int, progress *syncProgress) (downloaded, skipped, bytes int64, err error) {
 	var files []fileDownload
 	for _, e := range entries {
 		for _, f := range e.Files {
@@ -584,7 +806,7 @@ func syncStorage(ctx context.Context, client *syncClient, entries []syncStorageM
 
 // syncFulltext pulls .zotero_cli/fulltext/ (FTS5 index + extracted-text cache)
 // so full-text search works post-sync without a local 'zot index build'.
-func syncFulltext(ctx context.Context, client *syncClient, entries []syncPathMeta, dataDir string, force bool, concurrency int, progress io.Writer) (downloaded, skipped, bytes int64, err error) {
+func syncFulltext(ctx context.Context, client *syncClient, entries []syncPathMeta, dataDir string, force bool, concurrency int, progress *syncProgress) (downloaded, skipped, bytes int64, err error) {
 	files := make([]fileDownload, 0, len(entries))
 	for _, e := range entries {
 		files = append(files, fileDownload{relPath: e.Path, size: e.Size, mtime: e.Mtime})
@@ -599,7 +821,7 @@ func syncFulltext(ctx context.Context, client *syncClient, entries []syncPathMet
 	return runDownloads(ctx, filepath.Join(dataDir, ".zotero_cli", "fulltext"), files, force, concurrency, progress, fetch)
 }
 
-func syncLinkedAttachments(ctx context.Context, client *syncClient, entries []syncLinkedMeta, dataDir string, force bool, concurrency int, progress io.Writer) (downloaded, skipped, bytes, unavailable int64, err error) {
+func syncLinkedAttachments(ctx context.Context, client *syncClient, entries []syncLinkedMeta, dataDir string, force bool, concurrency int, progress *syncProgress) (downloaded, skipped, bytes, unavailable int64, err error) {
 	attachmentMap, _, err := syncmirror.Load(dataDir)
 	if err != nil {
 		return 0, 0, 0, 0, err

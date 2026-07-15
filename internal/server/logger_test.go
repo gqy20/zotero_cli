@@ -130,4 +130,7 @@ func TestEnhancedAccessLog(t *testing.T) {
 	if !strings.Contains(logOutput, `"duration_ms"`) {
 		t.Errorf("log should contain duration_ms, got: %s", logOutput)
 	}
+	if !strings.Contains(logOutput, `"bytes_sent":`) {
+		t.Errorf("log should contain bytes_sent, got: %s", logOutput)
+	}
 }

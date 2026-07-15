@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -208,6 +209,37 @@ func TestServeFromConfig_RejectsRemoteMode(t *testing.T) {
 	_, err := ServeFromConfig(cfg)
 	if err == nil {
 		t.Fatal("expected error when serving with remote mode")
+	}
+}
+
+func TestServerURLsForUnspecifiedListener(t *testing.T) {
+	localURL, _ := serverURLs(&net.TCPAddr{IP: net.IPv6unspecified, Port: 8021})
+	if localURL != "http://localhost:8021" {
+		t.Fatalf("local URL = %q", localURL)
+	}
+}
+
+func TestServerURLsForConcreteAddresses(t *testing.T) {
+	tests := []struct {
+		name        string
+		addr        *net.TCPAddr
+		localURL    string
+		networkURLs []string
+	}{
+		{name: "loopback", addr: &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8021}, localURL: "http://127.0.0.1:8021"},
+		{name: "IPv4", addr: &net.TCPAddr{IP: net.ParseIP("192.168.1.50"), Port: 8021}, networkURLs: []string{"http://192.168.1.50:8021"}},
+		{name: "IPv6", addr: &net.TCPAddr{IP: net.ParseIP("2001:db8::10"), Port: 8021}, networkURLs: []string{"http://[2001:db8::10]:8021"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			localURL, networkURLs := serverURLs(tt.addr)
+			if localURL != tt.localURL {
+				t.Fatalf("local URL = %q, want %q", localURL, tt.localURL)
+			}
+			if fmt.Sprint(networkURLs) != fmt.Sprint(tt.networkURLs) {
+				t.Fatalf("network URLs = %v, want %v", networkURLs, tt.networkURLs)
+			}
+		})
 	}
 }
 

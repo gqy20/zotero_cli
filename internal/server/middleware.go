@@ -63,6 +63,7 @@ func loggingMiddleware(baseLogger *Logger) func(http.Handler) http.Handler {
 				"path", r.URL.Path,
 				"query", r.URL.RawQuery,
 				"status", rw.status,
+				"bytes_sent", rw.bytes,
 				"duration_ms", duration.Milliseconds(),
 				"user_agent", r.UserAgent(),
 				"remote_addr", r.RemoteAddr,
@@ -114,11 +115,18 @@ func getRequestLogger(ctx context.Context, fallback *Logger) *Logger {
 type responseWriter struct {
 	http.ResponseWriter
 	status int
+	bytes  int64
 }
 
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.status = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *responseWriter) Write(p []byte) (int, error) {
+	n, err := rw.ResponseWriter.Write(p)
+	rw.bytes += int64(n)
+	return n, err
 }
 
 func formatPanic(v any) string {

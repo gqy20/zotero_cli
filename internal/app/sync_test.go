@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,6 +58,8 @@ func TestSyncUsesConfiguredServerAndDefaultMirror(t *testing.T) {
 		return config.Config{ServerAddr: server.URL}, "", nil
 	}
 	service.DefaultPath = func() (string, error) { return filepath.Join(configDir, ".env"), nil }
+	var progressOutput bytes.Buffer
+	service.Progress = &progressOutput
 	result, err := service.Sync(context.Background(), SyncRequest{})
 	if err != nil {
 		t.Fatal(err)
@@ -74,6 +77,11 @@ func TestSyncUsesConfiguredServerAndDefaultMirror(t *testing.T) {
 	}
 	if _, err := os.Stat(syncManifestPath(dir)); err != nil {
 		t.Fatalf("sync manifest was not persisted: %v", err)
+	}
+	for _, want := range []string{"Fetching sync manifest", "Sync plan:", "Starting SQLite", "Sync complete:", "(100.0%)"} {
+		if !strings.Contains(progressOutput.String(), want) {
+			t.Fatalf("progress output %q does not contain %q", progressOutput.String(), want)
+		}
 	}
 }
 
@@ -152,6 +160,53 @@ func TestDownloadOneResumesMatchingPartialFile(t *testing.T) {
 	}
 	if !bytes.Equal(got, content) {
 		t.Fatalf("content=%q, want %q", got, content)
+	}
+}
+
+func TestDownloadOneReportsResumedAndTransferredBytes(t *testing.T) {
+	target := t.TempDir()
+	content := []byte("0123456789")
+	file := fileDownload{relPath: "KEY/file.pdf", size: int64(len(content)), mtime: 123}
+	dest := filepath.Join(target, "KEY", "file.pdf")
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	part := dest + ".part-10-123"
+	if err := os.WriteFile(part, content[:4], 0o644); err != nil {
+		t.Fatal(err)
+	}
+	progress := &syncProgress{totalFiles: 1, totalBytes: int64(len(content))}
+	progress.ResumeBytes(4)
+	fetch := func(_ context.Context, _ string, offset int64) (io.ReadCloser, bool, error) {
+		return io.NopCloser(bytes.NewReader(content[offset:])), true, nil
+	}
+	if err := downloadOneWithProgress(context.Background(), target, file, fetch, progress); err != nil {
+		t.Fatal(err)
+	}
+	if progress.completedBytes != 10 || progress.transferredBytes != 6 {
+		t.Fatalf("progress bytes = ready %d, transferred %d", progress.completedBytes, progress.transferredBytes)
+	}
+}
+
+func TestSyncProgressReportsPercentageSpeedAndETA(t *testing.T) {
+	var output bytes.Buffer
+	manifest := syncManifest{Storage: []syncStorageMeta{{
+		Key: "KEY1",
+		Files: []syncFileMeta{
+			{Name: "one.pdf", Size: 100},
+			{Name: "two.pdf", Size: 100},
+		},
+	}}}
+	progress := newSyncProgress(&output, manifest)
+	progress.start = time.Now().Add(-2 * time.Second)
+	progress.TransferBytes(100)
+	progress.CompleteFile()
+	progress.report("Syncing attachments")
+	got := output.String()
+	for _, want := range []string{"Syncing attachments", "1/2 files", "(50.0%)", "/s", "ETA"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("progress output %q does not contain %q", got, want)
+		}
 	}
 }
 
