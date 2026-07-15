@@ -83,6 +83,11 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 		return nil, err
 	}
 
+	attachmentMirror, mirrorPresent, err := syncmirror.Load(dataDir)
+	if err != nil {
+		return nil, fmt.Errorf("load synced attachment map: %w", err)
+	}
+
 	attachmentBaseDir := ""
 	if prefs.BaseAttachmentPath != "" {
 		attachmentBaseDir, err = filepath.Abs(prefs.BaseAttachmentPath)
@@ -90,9 +95,14 @@ func NewLocalReader(cfg config.Config) (*LocalReader, error) {
 			return nil, err
 		}
 	}
-	attachmentMirror, _, err := syncmirror.Load(dataDir)
-	if err != nil {
-		return nil, fmt.Errorf("load synced attachment map: %w", err)
+	// A sync mirror is self-contained: attachments: paths resolve below its
+	// attachments/ directory instead of depending on Zotero preferences from
+	// the server host.
+	syncedAttachmentDir := filepath.Join(dataDir, syncmirror.AttachmentsDir)
+	if mirrorPresent {
+		if info, statErr := os.Stat(syncedAttachmentDir); statErr == nil && info.IsDir() {
+			attachmentBaseDir = syncedAttachmentDir
+		}
 	}
 
 	return &LocalReader{
@@ -176,6 +186,13 @@ func (r *LocalReader) ListSyncLinkedAttachments(ctx context.Context) ([]SyncLink
 				filename = filepath.Base(filepath.FromSlash(zoteroPath))
 			}
 			entry := SyncLinkedAttachment{Key: key, Name: filename}
+			if after, relative := strings.CutPrefix(zoteroPath, "attachments:"); relative && r.AttachmentBaseDir != "" {
+				if candidate, pathErr := safepath.JoinRelative(r.AttachmentBaseDir, after); pathErr == nil {
+					if rel, relErr := filepath.Rel(r.AttachmentBaseDir, candidate); relErr == nil {
+						entry.RelativePath = filepath.ToSlash(rel)
+					}
+				}
+			}
 			resolved, ok := r.resolveAttachmentPathWithoutMirror(key, zoteroPath, filename)
 			if !ok {
 				entry.Error = "source file is unavailable"

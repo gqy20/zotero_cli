@@ -113,7 +113,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 .\zot.exe pdf text --collection "研究/植物/栗属" --grep "gene\s+flow|introgression" --json
 ```
 
-local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `content_path` / `chunks_path`；Agent 直接读取 `content_path`，不要期待 JSON 内嵌整篇正文。只有使用 `--grep`、`--pages` 或 `--max-chars` 时才返回文本子集；`--grep` 默认解析为不区分大小写的 Go 正则，可直接用 `|` 表达多个候选词，特殊字符按正则规则转义。指定条目范围时可传多个 item key，或用 `--collection` 传收藏夹 key、唯一名称或完整层级路径。有分页缓存时，JSON 按附件和命中页返回 `match_count`、页码与相邻上下文；检索保持只读，不会自动创建标注。只有显式 `--output-dir` 才导出 Markdown。remote 模式因客户端无法访问服务端路径，仍返回正文。
+local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `content_path` / `chunks_path`；Agent 直接读取 `content_path`，不要期待 JSON 内嵌整篇正文。这些是提取文本缓存，不是 PDF 二进制副本；源附件路径使用 `file path ATTACHMENT_KEY --json` 查询。只有使用 `--grep`、`--pages` 或 `--max-chars` 时才返回文本子集；`--grep` 默认解析为不区分大小写的 Go 正则，可直接用 `|` 表达多个候选词，特殊字符按正则规则转义。指定条目范围时可传多个 item key，或用 `--collection` 传收藏夹 key、唯一名称或完整层级路径。有分页缓存时，JSON 按附件和命中页返回 `match_count`、页码与相邻上下文；检索保持只读，不会自动创建标注。只有显式 `--output-dir` 才导出 Markdown，并且不会复制源 PDF。remote 模式因客户端无法访问服务端路径，仍返回正文。
 
 适用场景：
 
@@ -218,6 +218,7 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 .\zot.exe pdf text ITEMKEY --json
 .\zot.exe pdf text ITEM1 ITEM2 --grep "hybridization|introgression" --json
 .\zot.exe pdf text --collection "研究/植物/栗属" --grep "hybridization|introgression" --json
+.\zot.exe file path ATTACHMENT_KEY --json       # 返回附件真实本地路径，不打开文件
 
 # 双源读取标注
 .\zot.exe ann list ITEMKEY --json
@@ -232,8 +233,8 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 .\zot.exe ann new ITEMKEY --attachment ATTACHMENT_KEY --text "关键概念" --color red --comment "重要"
 .\zot.exe ann new ITEMKEY --text "speciation" --type underline --color blue
 
-# 与 Zotero 桌面端联动
-.\zot.exe pdf open ITEMKEY --page 5        # 阅读器中打开 PDF
+# 用系统默认程序打开，并在结果中返回真实路径；页码仅作为提示
+.\zot.exe pdf open ITEMKEY --page 5
 ```
 
 ## 笔记查询
@@ -296,7 +297,7 @@ CLI 配置存储在 `~/.zot/.env`。
 .\zot.exe config check   # 校验配置有效性
 ```
 
-`sync` 同时复制 `storage/` imported 附件和可解析的 `linked_file` 外部附件。外链文件使用 attachment key 镜像映射，不改写 SQLite；源文件缺失不会中止整库同步，已有旧副本保留。远端附件删除不传播到本地。未显式配置 `data_dir` 时，`--mode local` 自动识别 `~/.zot/sync`。
+`sync` 同时复制 `storage/` imported 附件和可解析的 `linked_file` 外部附件。外链文件保留 `attachments:` 后的相对目录并写入同步端 `~/.zot/sync/attachments/`，不依赖服务端绝对路径，也不改写 SQLite；缺少安全相对路径时同步失败，不回退到 attachment key 镜像。源文件缺失不会中止整库同步，已有旧副本保留。远端附件删除不传播到本地。未显式配置 `data_dir` 时，`--mode local` 自动识别 `~/.zot/sync`。
 
 配置缺失时，主动初始化而不是绕过错误。
 

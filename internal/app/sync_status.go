@@ -60,18 +60,19 @@ type SyncManifestStatus struct {
 }
 
 type SyncStatusSummary struct {
-	DataDir      string              `json:"data_dir"`
-	ServerAddr   string              `json:"server_addr,omitempty"`
-	ConfigError  string              `json:"config_error,omitempty"`
-	Ready        bool                `json:"ready"`
-	Healthy      bool                `json:"healthy"`
-	StatePresent bool                `json:"state_present"`
-	LastSync     *SyncState          `json:"last_sync,omitempty"`
-	SQLite       SyncSQLiteStatus    `json:"sqlite"`
-	Full         bool                `json:"full"`
-	Manifest     *SyncManifestStatus `json:"manifest,omitempty"`
-	PartialFiles int64               `json:"partial_files,omitempty"`
-	StagingDirs  int64               `json:"staging_dirs,omitempty"`
+	DataDir             string              `json:"data_dir"`
+	LinkedAttachmentDir string              `json:"linked_attachment_dir"`
+	ServerAddr          string              `json:"server_addr,omitempty"`
+	ConfigError         string              `json:"config_error,omitempty"`
+	Ready               bool                `json:"ready"`
+	Healthy             bool                `json:"healthy"`
+	StatePresent        bool                `json:"state_present"`
+	LastSync            *SyncState          `json:"last_sync,omitempty"`
+	SQLite              SyncSQLiteStatus    `json:"sqlite"`
+	Full                bool                `json:"full"`
+	Manifest            *SyncManifestStatus `json:"manifest,omitempty"`
+	PartialFiles        int64               `json:"partial_files,omitempty"`
+	StagingDirs         int64               `json:"staging_dirs,omitempty"`
 }
 
 func (s SyncService) loadSyncConfig() (config.Config, string, error) {
@@ -104,11 +105,12 @@ func (s SyncService) Status(ctx context.Context, req SyncStatusRequest) (Result,
 	}
 
 	summary := SyncStatusSummary{
-		DataDir:      dataDir,
-		ServerAddr:   serverAddr,
-		StatePresent: statePresent,
-		Full:         req.Full,
-		StagingDirs:  countSQLiteStagingDirs(dataDir),
+		DataDir:             dataDir,
+		LinkedAttachmentDir: filepath.Join(dataDir, syncmirror.AttachmentsDir),
+		ServerAddr:          serverAddr,
+		StatePresent:        statePresent,
+		Full:                req.Full,
+		StagingDirs:         countSQLiteStagingDirs(dataDir),
 	}
 	if configErr != nil {
 		summary.ConfigError = configErr.Error()
@@ -170,6 +172,7 @@ func (s SyncService) Status(ctx context.Context, req SyncStatusRequest) (Result,
 	var text strings.Builder
 	fmt.Fprintf(&text, "Sync status: %s\n", status)
 	fmt.Fprintf(&text, "  data dir: %s\n", dataDir)
+	fmt.Fprintf(&text, "  linked attachment dir: %s\n", summary.LinkedAttachmentDir)
 	if serverAddr != "" {
 		fmt.Fprintf(&text, "  server: %s\n", serverAddr)
 	}
@@ -332,16 +335,18 @@ func verifySyncManifest(dataDir string) (SyncManifestStatus, int64, error) {
 		if !entry.Available {
 			continue
 		}
-		name := safeMirrorFilename(entry.Name)
-		if entry.Key == "" || safeMirrorFilename(entry.Key) != entry.Key {
+		if _, keyErr := safepath.JoinComponents(dataDir, entry.Key); keyErr != nil {
 			return status, 0, fmt.Errorf("invalid linked manifest key %q", entry.Key)
 		}
-		rel := syncmirror.LinkedRelativePath(entry.Key, name)
+		rel, relErr := linkedAttachmentMirrorRelativePath(dataDir, entry)
+		if relErr != nil {
+			return status, 0, relErr
+		}
 		path, pathErr := safepath.JoinRelative(dataDir, rel)
 		if pathErr != nil {
 			return status, 0, fmt.Errorf("invalid linked manifest path: %w", pathErr)
 		}
-		verifyManifestFile(&status, path, "linked/"+entry.Key+"/"+entry.Name, entry.Size, entry.Mtime)
+		verifyManifestFile(&status, path, rel, entry.Size, entry.Mtime)
 	}
 	partial, err := countPartialFiles(dataDir)
 	return status, partial, err

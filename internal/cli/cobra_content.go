@@ -34,9 +34,18 @@ func (c *CLI) pdfService() app.PDFService {
 func (c *CLI) newPDFCommand(opts *globalOptions) *cobra.Command {
 	pdf := &cobra.Command{Use: "pdf", Short: "Extract and open PDF content"}
 	var textReq app.PDFTextRequest
-	textCmd := &cobra.Command{Use: "text [ITEM_KEY...]", Short: "Prepare PDF full-text cache paths or filtered text", Args: cobra.ArbitraryArgs}
+	textCmd := &cobra.Command{
+		Use:   "text [ITEM_KEY...]",
+		Short: "Prepare extracted-text cache paths or return filtered PDF text",
+		Long: "Prepare or query extracted text for PDF attachments.\n\n" +
+			"Without text filters, local mode returns content_path and chunks_path under\n" +
+			".zotero_cli/fulltext/cache/<attachment-key>/. These are extracted-text files,\n" +
+			"not copies of the source PDF. Use `zot file path ATTACHMENT_KEY` to locate\n" +
+			"the resolved PDF binary.",
+		Args: cobra.ArbitraryArgs,
+	}
 	textCmd.Flags().BoolVar(&textReq.All, "all", false, "prepare every item with a PDF")
-	textCmd.Flags().StringVarP(&textReq.OutputDir, "output-dir", "o", "", "write Markdown files to this directory")
+	textCmd.Flags().StringVarP(&textReq.OutputDir, "output-dir", "o", "", "write extracted text as Markdown; does not copy source PDFs")
 	textCmd.Flags().StringVar(&textReq.Pages, "pages", "", "page ranges such as 1-3,7")
 	textCmd.Flags().IntVar(&textReq.MaxChars, "max-chars", 0, "maximum returned characters")
 	textCmd.Flags().StringVar(&textReq.Grep, "grep", "", "return text matching a case-insensitive Go regular expression with adjacent context")
@@ -83,8 +92,15 @@ func (c *CLI) newPDFCommand(opts *globalOptions) *cobra.Command {
 	}
 
 	var page int
-	openCmd := &cobra.Command{Use: "open ITEM_KEY", Short: "Open an item's PDF", Args: cobra.ExactArgs(1)}
-	openCmd.Flags().IntVar(&page, "page", 0, "one-based page hint")
+	openCmd := &cobra.Command{
+		Use:   "open ITEM_KEY",
+		Short: "Open an item's PDF with the system default application and report its path",
+		Long: "Resolve the first PDF attached to an item, launch it with the operating\n" +
+			"system's default application, and return the resolved path in text or JSON.\n" +
+			"The optional page value is reported as a hint; the system opener may ignore it.",
+		Args: cobra.ExactArgs(1),
+	}
+	openCmd.Flags().IntVar(&page, "page", 0, "one-based page hint reported to the caller; system opener may ignore it")
 	openCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if page < 0 {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("--page must be non-negative")}
@@ -99,7 +115,31 @@ func (c *CLI) newPDFCommand(opts *globalOptions) *cobra.Command {
 }
 
 func (c *CLI) newFileCommand(opts *globalOptions) *cobra.Command {
-	file := &cobra.Command{Use: "file", Short: "Inspect library attachments"}
+	file := &cobra.Command{Use: "file", Short: "Locate and inspect local attachment files"}
+
+	var pathReq app.FileRequest
+	pathCmd := &cobra.Command{
+		Use:   "path [ATTACHMENT_KEY]",
+		Short: "Show resolved local attachment paths",
+		Long: "Show the resolved filesystem path for one attachment key, or all locally\n" +
+			"resolved attachments belonging to an item. This does not open or modify files.\n" +
+			"Requires local or hybrid mode; remote clients should run `zot sync` first.",
+		Args: cobra.MaximumNArgs(1),
+	}
+	pathCmd.Flags().StringVar(&pathReq.ItemKey, "item", "", "show paths for attachments belonging to one item")
+	pathCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if (len(args) == 1) == (strings.TrimSpace(pathReq.ItemKey) != "") {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("provide an attachment key or --item")}
+		}
+		if len(args) == 1 {
+			pathReq.AttachmentKey = args[0]
+		}
+		pathReq.PathOnly = true
+		path := app.CommandPath{Resource: "file", Action: "path"}
+		return c.runRead(cmd, opts, path, func(ctx context.Context, service app.ReadService) (app.Result, error) {
+			return service.Files(ctx, pathReq)
+		})
+	}
 
 	var showReq app.FileRequest
 	show := &cobra.Command{Use: "show [ATTACHMENT_KEY]", Short: "Preview a spreadsheet attachment", Args: cobra.MaximumNArgs(1)}
@@ -122,7 +162,7 @@ func (c *CLI) newFileCommand(opts *globalOptions) *cobra.Command {
 	}
 
 	var checkReq app.FileRequest
-	check := &cobra.Command{Use: "check [ATTACHMENT_KEY]", Short: "Check attachment health", Args: cobra.MaximumNArgs(1)}
+	check := &cobra.Command{Use: "check [ATTACHMENT_KEY]", Short: "Show resolved local paths and attachment health", Args: cobra.MaximumNArgs(1)}
 	check.Flags().StringVar(&checkReq.ItemKey, "item", "", "inspect attachments belonging to one item")
 	check.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 1 {
@@ -135,7 +175,7 @@ func (c *CLI) newFileCommand(opts *globalOptions) *cobra.Command {
 		})
 	}
 
-	file.AddCommand(show, check)
+	file.AddCommand(pathCmd, show, check)
 	return file
 }
 

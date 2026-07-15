@@ -35,12 +35,13 @@ type syncPathEntry struct {
 }
 
 type syncLinkedEntry struct {
-	Key       string `json:"key"`
-	Name      string `json:"name,omitempty"`
-	Size      int64  `json:"size,omitempty"`
-	Mtime     int64  `json:"mtime,omitempty"`
-	Available bool   `json:"available"`
-	Error     string `json:"error,omitempty"`
+	Key          string `json:"key"`
+	Name         string `json:"name,omitempty"`
+	RelativePath string `json:"relative_path,omitempty"`
+	Size         int64  `json:"size,omitempty"`
+	Mtime        int64  `json:"mtime,omitempty"`
+	Available    bool   `json:"available"`
+	Error        string `json:"error,omitempty"`
 }
 
 type syncManifest struct {
@@ -128,8 +129,16 @@ func (h *Handler) syncManifest(w http.ResponseWriter, r *http.Request) {
 		}
 		manifest.Linked = make([]syncLinkedEntry, 0, len(linked))
 		for _, entry := range linked {
+			if strings.TrimSpace(entry.RelativePath) == "" {
+				writeError(w, http.StatusInternalServerError, fmt.Errorf("linked attachment %q has no attachments: relative path", entry.Key))
+				return
+			}
+			if _, pathErr := safepath.JoinRelative(h.dataDir, entry.RelativePath); pathErr != nil {
+				writeError(w, http.StatusInternalServerError, fmt.Errorf("linked attachment %q has invalid relative path: %w", entry.Key, pathErr))
+				return
+			}
 			manifest.Linked = append(manifest.Linked, syncLinkedEntry{
-				Key: entry.Key, Name: entry.Name, Size: entry.Size, Mtime: entry.Mtime,
+				Key: entry.Key, Name: entry.Name, RelativePath: entry.RelativePath, Size: entry.Size, Mtime: entry.Mtime,
 				Available: entry.Available, Error: entry.Error,
 			})
 		}

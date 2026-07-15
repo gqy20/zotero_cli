@@ -146,9 +146,11 @@ go run .\cmd\zot config check
 .\zot.exe item supp ITEMKEY --json
 .\zot.exe item supp ITEMKEY --online --json
 .\zot.exe item supp --all --json --limit 50
+.\zot.exe file path ATTKEY --json
+.\zot.exe file path --item ITEMKEY --json
 .\zot.exe file show ATTKEY --json
 .\zot.exe file show --item ITEMKEY --json
-.\zot.exe file show --item ITEMKEY --health --json
+.\zot.exe file check --item ITEMKEY --json
 .\zot.exe find --missing-attachment --json
 
 # 双源读取标注（DB + PDF 文件内）
@@ -164,7 +166,7 @@ go run .\cmd\zot config check
 
 # remote 模式下以上两条也可用，但实际执行发生在 zot server 所在机器
 
-# 在 Zotero 阅读器中打开
+# 用系统默认程序打开并返回真实路径；页码仅作为提示
 .\zot.exe pdf open ITEMKEY --page 5
 ```
 

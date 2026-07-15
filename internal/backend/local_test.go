@@ -904,6 +904,83 @@ func TestNewLocalReaderLoadsDataDirAndAttachmentBaseDirFromPrefs(t *testing.T) {
 	}
 }
 
+func TestNewLocalReaderUsesSelfContainedSyncAttachmentDir(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dataDir, "storage"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dataDir, syncmirror.AttachmentsDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "zotero.sqlite"), []byte("sqlite"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mapJSON := `{"version":1,"attachments":{}}`
+	if err := os.MkdirAll(filepath.Dir(syncmirror.MapPath(dataDir)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(syncmirror.MapPath(dataDir), []byte(mapJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("APPDATA", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	reader, err := NewLocalReader(config.Config{Mode: "local", DataDir: dataDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(dataDir, syncmirror.AttachmentsDir)
+	if reader.AttachmentBaseDir != want {
+		t.Fatalf("AttachmentBaseDir = %q, want %q", reader.AttachmentBaseDir, want)
+	}
+}
+
+func TestListSyncLinkedAttachmentsPreservesAttachmentsRelativePath(t *testing.T) {
+	dataDir := t.TempDir()
+	baseDir := t.TempDir()
+	linkedPath := filepath.Join(baseDir, "Q_生物科学", "paper.pdf")
+	if err := os.MkdirAll(filepath.Dir(linkedPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(linkedPath, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sqlitePath := filepath.Join(dataDir, "zotero.sqlite")
+	db, err := sql.Open("sqlite", sqlitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statements := []string{
+		`CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT)`,
+		`CREATE TABLE itemAttachments (itemID INTEGER, linkMode INTEGER, path TEXT)`,
+		`CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID INTEGER)`,
+		`CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT)`,
+		`CREATE TABLE fieldsCombined (fieldID INTEGER PRIMARY KEY, fieldName TEXT)`,
+		`INSERT INTO items VALUES (1, 'LINK1')`,
+		`INSERT INTO itemAttachments VALUES (1, 2, 'attachments:Q_生物科学/paper.pdf')`,
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			db.Close()
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reader := &LocalReader{
+		DataDir: dataDir, SQLitePath: sqlitePath, StorageDir: filepath.Join(dataDir, "storage"),
+		AttachmentBaseDir: baseDir, openSQLiteDB: openSQLiteDB, createSnapshot: createSQLiteSnapshot,
+	}
+	entries, err := reader.ListSyncLinkedAttachments(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || !entries[0].Available || entries[0].RelativePath != "Q_生物科学/paper.pdf" {
+		t.Fatalf("unexpected linked attachments: %#v", entries)
+	}
+}
+
 func TestFindDefaultDataDirFallsBackToHomeZotero(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -1014,9 +1091,9 @@ func TestResolveAttachmentPathSupportsAbsolutePaths(t *testing.T) {
 	}
 }
 
-func TestResolveAttachmentPathPrefersSyncedMirror(t *testing.T) {
+func TestResolveAttachmentPathUsesSyncedAttachmentTree(t *testing.T) {
 	dataDir := t.TempDir()
-	mirrored := filepath.Join(dataDir, syncmirror.MetadataDir, syncmirror.LinkedDir, "ATTACH1", "paper.pdf")
+	mirrored := filepath.Join(dataDir, syncmirror.AttachmentsDir, "papers", "paper.pdf")
 	if err := os.MkdirAll(filepath.Dir(mirrored), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1026,7 +1103,7 @@ func TestResolveAttachmentPathPrefersSyncedMirror(t *testing.T) {
 	reader := &LocalReader{
 		DataDir: dataDir,
 		AttachmentMirror: map[string]syncmirror.AttachmentEntry{
-			"ATTACH1": {Key: "ATTACH1", RelativePath: syncmirror.LinkedRelativePath("ATTACH1", "paper.pdf")},
+			"ATTACH1": {Key: "ATTACH1", RelativePath: "attachments/papers/paper.pdf"},
 		},
 	}
 	got, ok := reader.resolveAttachmentPath("ATTACH1", `C:\missing\paper.pdf`, "paper.pdf")

@@ -143,6 +143,45 @@ func TestRunInspectAttachmentLocalJSON(t *testing.T) {
 	}
 }
 
+func TestRunFilePathLocalJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	t.Setenv("ZOT_MODE", "local")
+
+	dataDir := t.TempDir()
+	storageDir := filepath.Join(dataDir, "storage")
+	if err := os.Mkdir(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLocalShowFixture(t, filepath.Join(dataDir, "zotero.sqlite"), storageDir)
+	t.Setenv("ZOT_DATA_DIR", dataDir)
+
+	stdout, stderr := captureOutput(t)
+	if exitCode := Run([]string{"file", "path", "ATTACHPDF", "--json"}); exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid json: %v\n%s", err, stdout.String())
+	}
+	if got["command"] != "file path" {
+		t.Fatalf("unexpected command: %#v", got["command"])
+	}
+	data, ok := got["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected data: %#v", got["data"])
+	}
+	entry := data[0].(map[string]any)
+	want := filepath.Join(storageDir, "ATTACHPDF", "attention.pdf")
+	if entry["attachment_key"] != "ATTACHPDF" || filepath.Clean(entry["local_path"].(string)) != filepath.Clean(want) {
+		t.Fatalf("unexpected path entry: %#v", entry)
+	}
+	if _, exists := entry["workbook"]; exists {
+		t.Fatalf("file path unexpectedly inspected workbook: %#v", entry)
+	}
+}
+
 func TestRunInspectAttachmentItemJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

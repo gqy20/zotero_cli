@@ -10,7 +10,7 @@
 搜索/筛选文献 ──────────→ zot item find QUERY [filters] --json
 查看单条目 ─────────────→ zot item show ITEMKEY --json
 导出引用数据 ───────────→ zot item export [KEYS...] --as FORMAT --json
-补充材料/附件 ──────────→ zot item supp / zot file show|check
+补充材料/附件 ──────────→ zot item supp / zot file path|show|check
 正文检索 ───────────────→ item find --in fulltext --snippet
 整篇正文 ───────────────→ zot pdf text ITEMKEY
 图表提取 ───────────────→ zot pdf figs ITEMKEY
@@ -133,6 +133,7 @@ zot pdf text ITEMKEY --pages 3-8 --grep methods --max-chars 12000 --json
 zot pdf text ITEM1 ITEM2 --grep "gene\s+flow|introgression" --json
 zot pdf text --collection "研究/植物/栗属" --grep "gene\s+flow|introgression" --json
 zot pdf text KEY1 KEY2 --output-dir ./markdown --json
+zot file path ATTACHMENT_KEY --json
 zot pdf figs ITEMKEY --output-dir ./figures --json
 zot pdf open ITEMKEY --page 5
 
@@ -150,7 +151,7 @@ zot ann delete ITEMKEY --source pdf --attachment ATTACHMENT_KEY --type highlight
 2. `item show --snippet`
 3. `pdf text`
 
-local/hybrid 下，无过滤条件的 `pdf text --json` 返回 `content_path` 和可选的 `chunks_path`，Agent 直接读取缓存文件；`--grep`、`--pages`、`--max-chars` 才返回文本子集。`--grep` 默认按不区分大小写的 Go 正则解析；`--collection` 接受 key、唯一名称或完整层级路径。有分页缓存时结果包含附件、命中页、`match_count` 与上下文。检索保持只读。remote 模式仍返回正文。该命令不支持 worker 并发参数。
+local/hybrid 下，无过滤条件的 `pdf text --json` 返回 `content_path` 和可选的 `chunks_path`，Agent 直接读取提取文本缓存；它们不是 PDF 二进制副本，源文件用 `file path` 查询。`--grep`、`--pages`、`--max-chars` 才返回文本子集。`--grep` 默认按不区分大小写的 Go 正则解析；`--collection` 接受 key、唯一名称或完整层级路径。有分页缓存时结果包含附件、命中页、`match_count` 与上下文。检索保持只读。remote 模式仍返回正文。该命令不支持 worker 并发参数。
 
 多 PDF 条目默认选择第一个 PDF；`ann list/new/delete` 可用 `--attachment ATTACHMENT_KEY` 精确选择。`ann new` 在临时副本中写入并验证后替换，实际写入零匹配时保留原文件并报错。`ann delete` 是唯一 canonical 删除入口，必须显式选择 `--source zotero|pdf`。Zotero 来源按 annotation item key 走 Web API，PDF 来源按 xref 在临时副本中修改并验证后替换；不要组合 `list/new` 与 `--clear`。
 

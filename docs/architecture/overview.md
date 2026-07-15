@@ -16,7 +16,7 @@ zotero_cli/
 │   ├── backend/                   # 数据访问层
 │   │   ├── reader.go              # Reader 接口 + HybridReader
 │   │   ├── web.go                 # WebReader（Zotero Web API）
-│   │   ├── local.go               # LocalReader（SQLite + storage/）
+│   │   ├── local.go               # LocalReader（SQLite + storage/ + 外链 attachments/）
 │   │   ├── remote.go              # RemoteReader（HTTP client → 远端 `zot serve`）
 │   │   ├── local_loaders.go       # SQLite 查询实现
 │   │   ├── local_fulltext.go      # FTS5 全文检索
@@ -85,7 +85,7 @@ type Reader interface {
 | 模式 | 实现 | 数据源 | PDF 能力 |
 |------|------|--------|----------|
 | `web` | `WebReader` | Zotero Cloud API | 无 |
-| `local` | `LocalReader` | SQLite + `storage/` | PyMuPDF |
+| `local` | `LocalReader` | SQLite + `storage/` + 外链 `attachments/` | PyMuPDF |
 | `hybrid` | `HybridReader` | 本地优先，Web 回退 | 同 local |
 | `remote` | `RemoteReader` | HTTP → 远端 `zot serve` | 同服务端 |
 

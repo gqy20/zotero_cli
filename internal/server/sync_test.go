@@ -17,14 +17,20 @@ type linkedSyncReader struct {
 	path string
 }
 
+type missingRelativePathSyncReader struct{ mockReader }
+
+func (r *missingRelativePathSyncReader) ListSyncLinkedAttachments(context.Context) ([]backend.SyncLinkedAttachment, error) {
+	return []backend.SyncLinkedAttachment{{Key: "LINK1", Name: "paper.pdf", Available: true}}, nil
+}
+
 func (r *linkedSyncReader) ListSyncLinkedAttachments(context.Context) ([]backend.SyncLinkedAttachment, error) {
 	info, err := os.Stat(r.path)
 	if err != nil {
 		return nil, err
 	}
 	return []backend.SyncLinkedAttachment{
-		{Key: "LINK1", Name: filepath.Base(r.path), Size: info.Size(), Mtime: info.ModTime().Unix(), Available: true},
-		{Key: "MISSING", Name: "missing.pdf", Error: "source file is unavailable"},
+		{Key: "LINK1", Name: filepath.Base(r.path), RelativePath: "papers/linked.pdf", Size: info.Size(), Mtime: info.ModTime().Unix(), Available: true},
+		{Key: "MISSING", Name: "missing.pdf", RelativePath: "papers/missing.pdf", Error: "source file is unavailable"},
 	}, nil
 }
 
@@ -142,6 +148,9 @@ func TestSyncLinkedAttachmentManifestAndDownload(t *testing.T) {
 	if len(response.Data.Linked) != 2 || !response.Data.Linked[0].Available || response.Data.Linked[1].Available {
 		t.Fatalf("unexpected linked manifest: %#v", response.Data.Linked)
 	}
+	if response.Data.Linked[0].RelativePath != "papers/linked.pdf" {
+		t.Fatalf("linked relative path = %q", response.Data.Linked[0].RelativePath)
+	}
 
 	rec = httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/sync/linked/LINK1/linked.pdf", nil)
@@ -149,6 +158,19 @@ func TestSyncLinkedAttachmentManifestAndDownload(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusPartialContent || rec.Body.String() != "PDF" {
 		t.Fatalf("linked range response: code=%d body=%q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSyncManifestRejectsLinkedAttachmentWithoutRelativePath(t *testing.T) {
+	dataDir := t.TempDir()
+	writeSyncFixture(t, dataDir)
+	mux := http.NewServeMux()
+	NewHandlerWithDir(&missingRelativePathSyncReader{}, dataDir).RegisterRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/sync/manifest", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

@@ -265,6 +265,45 @@ func TestFileCheckOnlyExposesHealthRelevantFlags(t *testing.T) {
 			t.Fatalf("file show missing --%s", name)
 		}
 	}
+
+	pathCmd, _, err := root.Find([]string{"file", "path"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pathCmd.Flags().Lookup("item") == nil {
+		t.Fatal("file path missing --item")
+	}
+	for _, name := range []string{"sheet", "head", "max-sheets", "max-columns"} {
+		if pathCmd.Flags().Lookup(name) != nil {
+			t.Fatalf("file path unexpectedly exposes --%s", name)
+		}
+	}
+}
+
+func TestAttachmentCommandsExplainPathsAndCaches(t *testing.T) {
+	root := testCLI.newRootCommand()
+	checks := []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"pdf", "open"}, []string{"system default application", "return the resolved path", "may ignore"}},
+		{[]string{"pdf", "text"}, []string{"extracted-text files", "not copies of the source PDF", "zot file path"}},
+		{[]string{"index", "status"}, []string{"does not contain PDF binaries", "storage/ or attachments/", "zot file path"}},
+		{[]string{"file"}, []string{"Locate and inspect local attachment files"}},
+		{[]string{"file", "check"}, []string{"resolved local paths"}},
+	}
+	for _, check := range checks {
+		cmd, _, err := root.Find(check.args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		help := cmd.Short + "\n" + cmd.Long
+		for _, want := range check.want {
+			if !strings.Contains(help, want) {
+				t.Fatalf("%s help missing %q: %q", strings.Join(check.args, " "), want, help)
+			}
+		}
+	}
 }
 
 func TestAnnotationCreateValidationMatchesPhysicalPDFTypes(t *testing.T) {

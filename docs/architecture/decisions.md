@@ -40,14 +40,9 @@ Python 环境自动管理在 `{ZOT_DATA_DIR}/.zotero_cli/venv/`，优先使用 `
 | 版本号乐观锁 | 所有写操作要求 `--if-unmodified-since-version N` |
 | 删除默认禁止 | 删除操作需显式开启 |
 
-## 5. zotero:// 协议集成
+## 5. PDF 打开与路径解析
 
-`open` 和 `select` 命令直接调用系统 URI 协议，无需加载数据库或配置：
-
-| 命令 | 协议 | 说明 |
-|------|------|------|
-| `open` | `zotero://open-pdf/library/items/{attachmentKey}?page=N` | 在阅读器中打开 PDF，需传入**附件 itemKey**（非父条目 key） |
-| `select` | `zotero://select/library/items/{key}` | 在主界面选中条目 |
+`pdf open ITEM_KEY` 先通过当前 reader 解析父条目的第一个 PDF 附件，再调用操作系统默认文件程序，并在文本/JSON 结果中返回真实路径。`--page` 当前只作为结果提示，系统程序可能忽略。需要路径而不打开文件时使用 `file path ATTACHMENT_KEY` 或 `file path --item ITEM_KEY`。已退出的 `select` 桌面端入口不再属于稳定命令树。
 
 ## 6. 错误体系
 

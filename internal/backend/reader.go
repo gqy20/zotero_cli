@@ -99,12 +99,13 @@ type SavedSearchReader interface {
 // copied into a portable sync mirror. Imported attachments are handled by the
 // normal storage/ sync section and therefore do not appear here.
 type SyncLinkedAttachment struct {
-	Key       string
-	Name      string
-	Size      int64
-	Mtime     int64
-	Available bool
-	Error     string
+	Key          string
+	Name         string
+	RelativePath string
+	Size         int64
+	Mtime        int64
+	Available    bool
+	Error        string
 }
 
 type SyncLinkedAttachmentLister interface {

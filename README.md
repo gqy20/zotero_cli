@@ -297,9 +297,11 @@ zot pdf text --all -o ./markdown --json
 zot item supp KEY --json
 zot item supp KEY --online --json
 zot item supp --all --json --limit 50
+zot file path ATTKEY --json
+zot file path --item KEY --json
 zot file show ATTKEY --json
 zot file show --item KEY --json
-zot file show --item KEY --health --json
+zot file check --item KEY --json
 
 # 提取论文图表（支持缓存、多 PDF 附件、低质量误检过滤和每页上限）
 zot pdf figs KEY --json
@@ -323,22 +325,22 @@ zot ann delete KEY --source zotero --type highlight --dry-run --json
 zot ann delete KEY --source zotero --type highlight --yes --json
 zot ann delete KEY --source pdf --attachment ATTACHMENT_KEY --page 5 --author "User" --yes --json
 
-# 在 Zotero 阅读器中打开 PDF（跳转到指定页）
+# 用系统默认程序打开 PDF，并在结果中返回真实路径；页码只是提示
 zot pdf open KEY --page 5
 
 # 在 Zotero 主界面选中该条目
 # `select` 是已退出稳定 CLI 的桌面端专用入口；请在 Zotero Desktop 中定位条目
 ```
 
-PDF 导入完成后会对本次最终保留的附件执行增量全文索引，因此新文献无需再次运行全库 `index build` 即可参与全文检索。指定收藏夹、重复附件清理和增量索引共享同一个最终附件 key，不会索引已清理的重复记录。`find --snippet` 的 JSON 只返回轻量条目信息和 `matched_chunk` 证据，不复制摘要、附件、笔记或完整 Item；命中上下文以实际命中位置为中心，最多约 1200 个 Unicode 字符，并包含页码、附件 key 和坐标。`pdf text --grep` 默认按不区分大小写的 Go 正则解析，有分页缓存时按附件和命中页返回 `match_count`、页码与相邻上下文。`pdf text --collection` 接受收藏夹 key、唯一名称或完整层级路径。检索保持只读，不会自动创建标注。local/hybrid 下无过滤条件的 `pdf text` 默认只返回项目全文缓存的 `content_path` 和可选 `chunks_path`，调用方直接读取该文件；只有 `--grep`、`--pages`、`--max-chars` 才返回文本子集，只有显式 `--output-dir` 才生成 Markdown。缓存和 FTS 索引都会核对 PDF 的路径、大小和高精度修改时间；附件被替换后旧正文不会继续命中。remote 模式因客户端无法访问服务端本地路径，仍返回正文。
+PDF 导入完成后会对本次最终保留的附件执行增量全文索引，因此新文献无需再次运行全库 `index build` 即可参与全文检索。指定收藏夹、重复附件清理和增量索引共享同一个最终附件 key，不会索引已清理的重复记录。`find --snippet` 的 JSON 只返回轻量条目信息和 `matched_chunk` 证据，不复制摘要、附件、笔记或完整 Item；命中上下文以实际命中位置为中心，最多约 1200 个 Unicode 字符，并包含页码、附件 key 和坐标。`pdf text --grep` 默认按不区分大小写的 Go 正则解析，有分页缓存时按附件和命中页返回 `match_count`、页码与相邻上下文。`pdf text --collection` 接受收藏夹 key、唯一名称或完整层级路径。检索保持只读，不会自动创建标注。local/hybrid 下无过滤条件的 `pdf text` 默认只返回提取文本缓存的 `content_path` 和可选 `chunks_path`，调用方直接读取该文件；这些不是 PDF 二进制副本。只有 `--grep`、`--pages`、`--max-chars` 才返回文本子集，只有显式 `--output-dir` 才生成 Markdown。源 PDF 的真实路径使用 `zot file path ATTACHMENT_KEY` 获取。缓存和 FTS 索引都会核对 PDF 的路径、大小和高精度修改时间；附件被替换后旧正文不会继续命中。remote 模式因客户端无法访问服务端本地路径，仍返回正文。
 
 #### 与 Zotero 桌面端联动
 
-zot 不是独立工具，它直接读写你的 **Zotero 本地数据目录**，并通过 `zotero://` 协议与运行中的 Zotero 桌面端交互：
+zot 直接解析你的 **Zotero 本地数据目录** 和附件文件；需要打开 PDF 时调用操作系统默认程序：
 
 | 命令 | 联动方式 | 效果 |
 |------|----------|------|
-| `zot pdf open KEY` | `zotero://open-pdf` 协议 | 在已运行的 Zotero **阅读器**中打开 PDF，支持页码跳转 |
+| `zot pdf open KEY` | 系统默认文件程序 | 打开解析后的 PDF，并在文本/JSON 结果中返回真实路径；`--page` 仅作为提示，系统程序可能忽略 |
 | `zot ann list KEY` | SQLite + PyMuPDF 双源读取 | 同时获取 DB 层标注 **和** PDF 文件内嵌入的标注 |
 | `zot ann new KEY` | PyMuPDF 事务式写入 PDF | 在临时副本中完成 3 种定位模式，验证后替换原文件 |
 | `zot ann delete KEY --source zotero|pdf` | 分来源删除 | Zotero 标注按 item key 走 Web API；PDF 标注按 xref 在临时副本中修改并验证 |
@@ -350,8 +352,8 @@ zot 不是独立工具，它直接读写你的 **Zotero 本地数据目录**，�
 数据来源：
 
 - **Zotero Reader 标注** → 读取 `zotero.sqlite` 的 `itemAnnotations` 表（含你手动添加的高亮、笔记、时间戳）
-- **PDF 文件内标注** → 通过 PyMuPDF 扫描 `storage/` 目录下的 PDF 二进制数据（含位置、颜色、作者信息）
-- **附件路径解析** → 自动将 Zotero 内部路径映射为本地文件系统真实路径
+- **PDF 文件内标注** → 通过 PyMuPDF 扫描解析后的 PDF 二进制文件（可位于 `storage/` 或外链 `attachments/`）
+- **附件路径解析** → 自动将 Zotero 内部路径映射为本地文件系统真实路径，可用 `zot file path` 直接查询
 
 ### 笔记整理与导出
 
@@ -407,7 +409,7 @@ zot lib log --kind items --since 0 --json  # 版本变更记录
 | 模式 | 数据源 | 需要 | 适用场景 |
 |------|--------|------|----------|
 | `web` | Zotero Cloud API | API key | 远程检索、云端管理 |
-| `local` | 本地 SQLite + storage/ | `ZOT_DATA_DIR` 或 `~/.zot/sync` | 离线操作、PDF 处理、全文搜索 |
+| `local` | 本地 SQLite + `storage/` + 外链 `attachments/` | `ZOT_DATA_DIR` 或 `~/.zot/sync` | 离线操作、PDF 处理、全文搜索 |
 | `hybrid`（推荐） | 本地优先，Web 回退 | 两者都要 | 日常使用，兼顾速度与完整性 |
 | `remote` | HTTP → 远端 `zot serve` (port 8021) | ZOT_SERVER_ADDR | 同服务器端模式，局域网访问；PDF 标注读写走服务器 |
 
@@ -436,7 +438,21 @@ zot --mode local find ...
 
 服务成功绑定端口后会输出一条 `server ready` 结构化日志，其中 `server_addr` 可直接用于客户端配置；`local_url` 供本机访问，`network_urls` 列出检测到的局域网候选地址。如果存在多个网络接口，请选择客户端能够访问的地址。日志中的 `remote_config` 是可直接复制执行的完整配置命令。
 
-`zot sync` 是单向增量拉取：拉取原始 `zotero.sqlite`（数据库）、`storage/` 中的 imported PDF/附件、可解析的 `linked_file` 外部附件，以及 `.zotero_cli/fulltext/` 全文索引。外链附件复制到隔离的镜像目录，并通过 attachment key 映射供复制后的 SQLite 无感读取，不改写数据库中的原始路径。新增和变化的文件会下载；远端删除不会清理本地历史附件或全文缓存，SQLite 的 WAL/SHM/journal sidecar 则始终按当前远端数据库状态精确处理。源端暂时缺失的外链文件会被标记为 unavailable；若本地已有旧副本，继续保留并标记 stale。同步期间按 SQLite、校验、全文索引、普通附件、外部附件和最终写入显示阶段日志，并每两秒报告整体文件数、实时字节、百分比、速度和 ETA；进度写入 stderr，不影响 `--json` 的 stdout。同步后可直接运行 `zot --mode local ...`，全文检索和 PDF 操作均使用镜像；中断的大附件会续传并计入恢复进度。
+`zot sync` 是单向增量拉取：拉取原始 `zotero.sqlite`（数据库）、`storage/` 中的 imported PDF/附件、可解析的 `linked_file` 外部附件，以及 `.zotero_cli/fulltext/` 全文索引。外链附件保留 SQLite 中 `attachments:` 后的原相对目录，写入同步端自己的 `~/.zot/sync/attachments/`；例如服务端 `D:\zotero\zotero\Q_生物科学\paper.pdf` 会在同步端成为 `~/.zot/sync/attachments/Q_生物科学/paper.pdf`，不会写回或依赖服务端绝对路径。外链附件没有安全相对路径时同步会明确失败，不再创建 key 镜像。整个过程不改写 SQLite。
+
+同步结果是一个可直接使用的自包含本地镜像：
+
+```text
+~/.zot/sync/
+├── zotero.sqlite
+├── storage/                    # imported_file 附件
+├── attachments/                # linked_file 外部附件，保留原相对层级
+└── .zotero_cli/
+    ├── fulltext/
+    └── attachment-map.json
+```
+
+新增和变化的文件会下载；远端删除不会清理本地历史附件或全文缓存，SQLite 的 WAL/SHM/journal sidecar 则始终按当前远端数据库状态精确处理。源端暂时缺失的外链文件会被标记为 unavailable；若本地已有旧副本，继续保留并标记 stale。同步期间按 SQLite、校验、全文索引、普通附件、外部附件和最终写入显示阶段日志，并每两秒报告整体文件数、实时字节、百分比、速度和 ETA；进度写入 stderr，不影响 `--json` 的 stdout。同步后可直接运行 `zot --mode local ...`，此时数据库、普通附件、外链附件和全文索引均优先使用该镜像；中断的大附件会续传并计入恢复进度。
 
 `local` 模式未显式配置 `ZOT_DATA_DIR` 时会自动使用 `~/.zot/sync`；显式数据目录始终优先。`hybrid` 不会自动切换到同步镜像，离线使用请运行 `zot --mode local ...`。同步期间会校验远端文件路径，确保文件只写入本地镜像目录。
 
@@ -452,10 +468,10 @@ zot --mode local find ...
 | **关系** | `ref related` | 查询相关文献 |
 | **PDF** | `pdf text` | 提取 PDF 正文 |
 | **PDF** | `item supp` | 查找本地已保存的补充材料、Source data、表格/数据附件 |
-| **PDF** | `file show` | 检查本地附件健康状态，并预览 `.xlsx` 附件的 sheet、表头和前几行 |
+| **PDF** | `file path/check/show` | 查询本地真实路径、检查附件健康状态，并预览 `.xlsx` 附件 |
 | **PDF** | `pdf figs` | 提取论文图表（缓存、多 PDF 附件、低质量误检过滤） |
 | **标注** | `ann list` / `ann new` / `ann delete` | 读取、写入和删除 PDF 标注 |
-| **PDF** | `pdf open` | 在 Zotero 阅读器中打开 |
+| **PDF** | `pdf open` | 用系统默认程序打开并返回真实路径 |
 | **导出** | `export` | BibTeX / RIS / CSL-JSON |
 | **写操作** | `item new` / `item edit` / `item delete` / `item import` | 条目 CRUD；通过本机 Zotero 导入 PDF |
 | **标签** | `item tag` / `item untag` | 批量标签管理 |

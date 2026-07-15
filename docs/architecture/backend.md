@@ -86,7 +86,7 @@ local backend 不再是单个 `local.go`，而是按职责拆分：
 | 路径格式 | 解析方式 |
 |----------|----------|
 | `storage:filename.pdf` | → `storage/<attachmentKey>/filename`（可靠） |
-| `attachments:relative/path.pdf` | best-effort only（不假设能解析到 data_dir 下） |
+| `attachments:relative/path.pdf` | 普通本地库按 Zotero `baseAttachmentPath` 解析；同步镜像按 `data_dir/attachments/` 解析 |
 | 空 | 未解析（HTML snapshot / linked URL 等） |
 
 ### 可见条目策略

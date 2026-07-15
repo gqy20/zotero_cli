@@ -218,7 +218,7 @@ func (s IndexService) Status(_ context.Context) (Result, error) {
 	}
 	indexPath := filepath.Join(cacheDir, "index.sqlite")
 	info, statErr := os.Stat(indexPath)
-	data := map[string]any{"path": indexPath, "available": statErr == nil}
+	data := map[string]any{"path": indexPath, "available": statErr == nil, "attachment_path_command": "zot file path ATTACHMENT_KEY"}
 	if statErr == nil {
 		data["size_bytes"] = info.Size()
 		data["modified_at"] = info.ModTime()
@@ -227,5 +227,6 @@ func (s IndexService) Status(_ context.Context) (Result, error) {
 	if statErr == nil {
 		text = fmt.Sprintf("Full-text index: available (%d bytes)\nPath: %s", info.Size(), indexPath)
 	}
+	text += "\nSource PDFs: use `zot file path ATTACHMENT_KEY` (typically under storage/ or attachments/)"
 	return Result{Data: data, Meta: map[string]any{"available": statErr == nil}, Text: text}, nil
 }

@@ -13,7 +13,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode"
 
 	"zotero_cli/internal/config"
 	"zotero_cli/internal/safepath"
@@ -31,13 +30,14 @@ type SyncStats struct {
 }
 
 type SyncSummary struct {
-	DataDir           string    `json:"data_dir"`
-	SQLiteChanged     bool      `json:"sqlite_changed"`
-	Fulltext          SyncStats `json:"fulltext"`
-	Attachments       SyncStats `json:"attachments"`
-	LinkedAttachments SyncStats `json:"linked_attachments"`
-	LinkedUnavailable int64     `json:"linked_unavailable"`
-	Storage           bool      `json:"storage"`
+	DataDir             string    `json:"data_dir"`
+	LinkedAttachmentDir string    `json:"linked_attachment_dir"`
+	SQLiteChanged       bool      `json:"sqlite_changed"`
+	Fulltext            SyncStats `json:"fulltext"`
+	Attachments         SyncStats `json:"attachments"`
+	LinkedAttachments   SyncStats `json:"linked_attachments"`
+	LinkedUnavailable   int64     `json:"linked_unavailable"`
+	Storage             bool      `json:"storage"`
 }
 
 type SyncService struct {
@@ -137,11 +137,13 @@ func (s SyncService) Sync(ctx context.Context, req SyncRequest) (result Result, 
 	progress.SetPhase("finalizing mirror")
 
 	summary := SyncSummary{
-		DataDir: dataDir, SQLiteChanged: sqliteChanged,
-		Fulltext:          SyncStats{ftDownloaded, ftSkipped, ftBytes},
-		Attachments:       SyncStats{downloaded, skipped, bytes},
-		LinkedAttachments: SyncStats{linkedDownloaded, linkedSkipped, linkedBytes},
-		LinkedUnavailable: linkedUnavailable, Storage: true,
+		DataDir:             dataDir,
+		LinkedAttachmentDir: filepath.Join(dataDir, syncmirror.AttachmentsDir),
+		SQLiteChanged:       sqliteChanged,
+		Fulltext:            SyncStats{ftDownloaded, ftSkipped, ftBytes},
+		Attachments:         SyncStats{downloaded, skipped, bytes},
+		LinkedAttachments:   SyncStats{linkedDownloaded, linkedSkipped, linkedBytes},
+		LinkedUnavailable:   linkedUnavailable, Storage: true,
 	}
 	if err := writeSyncManifest(dataDir, manifest); err != nil {
 		return Result{}, fmt.Errorf("write sync manifest: %w", err)
@@ -155,6 +157,7 @@ func (s SyncService) Sync(ctx context.Context, req SyncRequest) (result Result, 
 	}
 	var text strings.Builder
 	fmt.Fprintf(&text, "Synced to %s\n", dataDir)
+	fmt.Fprintf(&text, "  linked attachment dir: %s\n", summary.LinkedAttachmentDir)
 	if sqliteChanged {
 		fmt.Fprintln(&text, "  zotero.sqlite: updated")
 	} else {
@@ -187,12 +190,13 @@ type syncPathMeta struct {
 }
 
 type syncLinkedMeta struct {
-	Key       string `json:"key"`
-	Name      string `json:"name,omitempty"`
-	Size      int64  `json:"size,omitempty"`
-	Mtime     int64  `json:"mtime,omitempty"`
-	Available bool   `json:"available"`
-	Error     string `json:"error,omitempty"`
+	Key          string `json:"key"`
+	Name         string `json:"name,omitempty"`
+	RelativePath string `json:"relative_path,omitempty"`
+	Size         int64  `json:"size,omitempty"`
+	Mtime        int64  `json:"mtime,omitempty"`
+	Available    bool   `json:"available"`
+	Error        string `json:"error,omitempty"`
 }
 
 type syncManifest struct {
@@ -832,9 +836,10 @@ func syncLinkedAttachments(ctx context.Context, client *syncClient, entries []sy
 
 	type remoteFile struct{ key, name string }
 	remote := make(map[string]remoteFile)
+	seen := make(map[string]fileDownload)
 	files := make([]fileDownload, 0, len(entries))
 	for _, entry := range entries {
-		if entry.Key == "" || entry.Key == "." || safeMirrorFilename(entry.Key) != entry.Key {
+		if _, keyErr := safepath.JoinComponents(dataDir, entry.Key); keyErr != nil {
 			return 0, 0, 0, unavailable, fmt.Errorf("invalid linked attachment key %q in manifest", entry.Key)
 		}
 		if !entry.Available {
@@ -845,6 +850,11 @@ func syncLinkedAttachments(ctx context.Context, client *syncClient, entries []sy
 			old.SourceAvailable = false
 			old.Stale = false
 			old.Error = entry.Error
+			rel, pathErr := linkedAttachmentMirrorRelativePath(dataDir, entry)
+			if pathErr != nil {
+				return 0, 0, 0, unavailable, pathErr
+			}
+			old.RelativePath = rel
 			if _, ok := syncmirror.Resolve(dataDir, old); ok {
 				old.Stale = true
 			} else {
@@ -855,16 +865,32 @@ func syncLinkedAttachments(ctx context.Context, client *syncClient, entries []sy
 			attachmentMap.Attachments[entry.Key] = old
 			continue
 		}
-		localName := safeMirrorFilename(entry.Name)
-		rel := filepath.ToSlash(filepath.Join(entry.Key, localName))
-		files = append(files, fileDownload{relPath: rel, size: entry.Size, mtime: entry.Mtime})
+		rel, pathErr := linkedAttachmentMirrorRelativePath(dataDir, entry)
+		if pathErr != nil {
+			return 0, 0, 0, unavailable, pathErr
+		}
+		file := fileDownload{relPath: rel, size: entry.Size, mtime: entry.Mtime}
+		if existing, duplicate := seen[rel]; duplicate {
+			if existing.size != file.size || existing.mtime != file.mtime {
+				return 0, 0, 0, unavailable, fmt.Errorf("linked attachments conflict at %q", entry.RelativePath)
+			}
+			skipped++
+			if progress != nil {
+				progress.SkipFile(entry.Size)
+			}
+			continue
+		}
+		seen[rel] = file
+		files = append(files, file)
 		remote[rel] = remoteFile{key: entry.Key, name: entry.Name}
 	}
 	fetch := func(ctx context.Context, relPath string, offset int64) (io.ReadCloser, bool, error) {
 		entry := remote[relPath]
 		return client.getStream(ctx, "/api/v1/sync/linked/"+url.PathEscape(entry.key)+"/"+url.PathEscape(entry.name), offset)
 	}
-	downloaded, skipped, bytes, err = runDownloads(ctx, filepath.Join(dataDir, syncmirror.MetadataDir, syncmirror.LinkedDir), files, force, concurrency, progress, fetch)
+	var runSkipped int64
+	downloaded, runSkipped, bytes, err = runDownloads(ctx, dataDir, files, force, concurrency, progress, fetch)
+	skipped += runSkipped
 	if err != nil {
 		return downloaded, skipped, bytes, unavailable, err
 	}
@@ -872,9 +898,13 @@ func syncLinkedAttachments(ctx context.Context, client *syncClient, entries []sy
 		if !entry.Available {
 			continue
 		}
+		rel, pathErr := linkedAttachmentMirrorRelativePath(dataDir, entry)
+		if pathErr != nil {
+			return downloaded, skipped, bytes, unavailable, pathErr
+		}
 		attachmentMap.Attachments[entry.Key] = syncmirror.AttachmentEntry{
 			Key: entry.Key, Name: entry.Name,
-			RelativePath: syncmirror.LinkedRelativePath(entry.Key, safeMirrorFilename(entry.Name)),
+			RelativePath: rel,
 			Size:         entry.Size, Mtime: entry.Mtime, SourceAvailable: true,
 		}
 	}
@@ -885,25 +915,22 @@ func syncLinkedAttachments(ctx context.Context, client *syncClient, entries []sy
 	return downloaded, skipped, bytes, unavailable, nil
 }
 
-func safeMirrorFilename(name string) string {
-	name = filepath.Base(strings.TrimSpace(name))
-	name = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) || strings.ContainsRune(`<>:"/\\|?*`, r) {
-			return '_'
-		}
-		return r
-	}, name)
-	name = strings.TrimRight(name, " .")
-	if name == "" || name == "." {
-		return "attachment"
+// linkedAttachmentMirrorRelativePath maps a server-side attachments: path to
+// the sync mirror's portable attachments/ tree.
+func linkedAttachmentMirrorRelativePath(dataDir string, entry syncLinkedMeta) (string, error) {
+	if strings.TrimSpace(entry.RelativePath) == "" {
+		return "", fmt.Errorf("linked attachment %q has no relative path", entry.Key)
 	}
-	stem := strings.ToUpper(strings.TrimSuffix(name, filepath.Ext(name)))
-	reserved := stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL" ||
-		(len(stem) == 4 && (strings.HasPrefix(stem, "COM") || strings.HasPrefix(stem, "LPT")) && stem[3] >= '1' && stem[3] <= '9')
-	if reserved {
-		name = "_" + name
+	attachmentsRoot := filepath.Join(dataDir, syncmirror.AttachmentsDir)
+	abs, err := safepath.JoinRelative(attachmentsRoot, entry.RelativePath)
+	if err != nil {
+		return "", fmt.Errorf("invalid linked attachment relative path %q: %w", entry.RelativePath, err)
 	}
-	return name
+	rel, err := filepath.Rel(dataDir, abs)
+	if err != nil || !safepath.Within(dataDir, abs) {
+		return "", fmt.Errorf("invalid linked attachment relative path %q", entry.RelativePath)
+	}
+	return filepath.ToSlash(rel), nil
 }
 
 func humanBytes(n int64) string {

@@ -40,6 +40,26 @@ type annotationTestDeleteClient struct {
 	version int
 }
 
+func TestFilePathRejectsRemoteModeBeforeDownloading(t *testing.T) {
+	created := false
+	service := ReadService{
+		LoadConfig: func() (config.Config, string, error) {
+			return config.Config{Mode: "remote"}, "", nil
+		},
+		NewReader: func(config.Config) (backend.Reader, error) {
+			created = true
+			return nil, nil
+		},
+	}
+	_, err := service.Files(context.Background(), FileRequest{AttachmentKey: "ATT1", PathOnly: true})
+	if err == nil || !strings.Contains(err.Error(), "run `zot sync`") {
+		t.Fatalf("error = %v", err)
+	}
+	if created {
+		t.Fatal("remote reader was created before file path mode gate")
+	}
+}
+
 func (c *annotationTestDeleteClient) GetLibraryVersion(context.Context) (int, error) {
 	return 17, nil
 }

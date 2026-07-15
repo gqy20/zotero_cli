@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"zotero_cli/internal/config"
@@ -9,6 +12,29 @@ import (
 	"zotero_cli/internal/backend"
 	"zotero_cli/internal/domain"
 )
+
+func TestIndexStatusPointsToAttachmentPathCommand(t *testing.T) {
+	dataDir := t.TempDir()
+	indexPath := filepath.Join(dataDir, ".zotero_cli", "fulltext", "index.sqlite")
+	if err := os.MkdirAll(filepath.Dir(indexPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(indexPath, []byte("index"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	service := IndexService{
+		LoadConfig: func() (config.Config, string, error) { return config.Config{DataDir: dataDir}, "", nil },
+		NewReader:  func(config.Config) (backend.Reader, error) { return &stubIndexReader{}, nil },
+	}
+	result, err := service.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := result.Data.(map[string]any)
+	if data["attachment_path_command"] != "zot file path ATTACHMENT_KEY" || !strings.Contains(result.Text, "storage/ or attachments/") {
+		t.Fatalf("unexpected index status: data=%#v text=%q", data, result.Text)
+	}
+}
 
 type stubIndexReader struct {
 	items     []domain.Item

@@ -10,7 +10,7 @@ import (
 
 const (
 	MetadataDir          = ".zotero_cli"
-	LinkedDir            = "linked"
+	AttachmentsDir       = "attachments"
 	AttachmentMapFile    = "attachment-map.json"
 	AttachmentMapVersion = 1
 )
@@ -33,10 +33,6 @@ type AttachmentMap struct {
 
 func MapPath(dataDir string) string {
 	return filepath.Join(dataDir, MetadataDir, AttachmentMapFile)
-}
-
-func LinkedRelativePath(key, name string) string {
-	return filepath.ToSlash(filepath.Join(MetadataDir, LinkedDir, key, name))
 }
 
 func Load(dataDir string) (AttachmentMap, bool, error) {
@@ -72,11 +68,16 @@ func Resolve(dataDir string, entry AttachmentEntry) (string, bool) {
 	if strings.TrimSpace(entry.RelativePath) == "" {
 		return "", false
 	}
-	root, err := filepath.Abs(dataDir)
+	root, err := filepath.Abs(filepath.Join(dataDir, AttachmentsDir))
 	if err != nil {
 		return "", false
 	}
-	path, err := filepath.Abs(filepath.Join(root, filepath.FromSlash(entry.RelativePath)))
+	portable := strings.ReplaceAll(strings.TrimSpace(entry.RelativePath), `\`, "/")
+	prefix := AttachmentsDir + "/"
+	if !strings.HasPrefix(portable, prefix) {
+		return "", false
+	}
+	path, err := filepath.Abs(filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(portable, prefix))))
 	if err != nil {
 		return "", false
 	}

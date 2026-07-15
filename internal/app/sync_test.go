@@ -68,6 +68,9 @@ func TestSyncUsesConfiguredServerAndDefaultMirror(t *testing.T) {
 	if !ok || summary.DataDir != dir || !summary.Storage {
 		t.Fatalf("unexpected summary: %#v", result.Data)
 	}
+	if summary.LinkedAttachmentDir != filepath.Join(dir, syncmirror.AttachmentsDir) {
+		t.Fatalf("linked attachment dir = %q", summary.LinkedAttachmentDir)
+	}
 	state, present, err := readSyncState(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -83,6 +86,9 @@ func TestSyncUsesConfiguredServerAndDefaultMirror(t *testing.T) {
 			t.Fatalf("progress output %q does not contain %q", progressOutput.String(), want)
 		}
 	}
+	if !strings.Contains(result.Text, "linked attachment dir:") {
+		t.Fatalf("sync result text %q does not report linked attachment directory", result.Text)
+	}
 }
 
 func TestSyncLinkedAttachmentsDownloadsAndRetainsUnavailableMirror(t *testing.T) {
@@ -97,7 +103,10 @@ func TestSyncLinkedAttachmentsDownloadsAndRetainsUnavailableMirror(t *testing.T)
 	}))
 	defer server.Close()
 	client := &syncClient{baseURL: server.URL, httpClient: server.Client()}
-	entries := []syncLinkedMeta{{Key: "LINK1", Name: "paper.pdf", Size: int64(len(content)), Mtime: 123, Available: true}}
+	entries := []syncLinkedMeta{{
+		Key: "LINK1", Name: "paper.pdf", RelativePath: "Q_生物科学/Q-3_研究方法与技术/paper.pdf",
+		Size: int64(len(content)), Mtime: 123, Available: true,
+	}}
 	downloaded, skipped, _, unavailable, err := syncLinkedAttachments(context.Background(), client, entries, dataDir, false, 2, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -110,6 +119,10 @@ func TestSyncLinkedAttachmentsDownloadsAndRetainsUnavailableMirror(t *testing.T)
 		t.Fatal(err)
 	}
 	entry := attachmentMap.Attachments["LINK1"]
+	wantRelative := filepath.ToSlash(filepath.Join(syncmirror.AttachmentsDir, "Q_生物科学", "Q-3_研究方法与技术", "paper.pdf"))
+	if entry.RelativePath != wantRelative {
+		t.Fatalf("relative path = %q, want %q", entry.RelativePath, wantRelative)
+	}
 	resolved, ok := syncmirror.Resolve(dataDir, entry)
 	if !ok {
 		t.Fatalf("linked attachment did not resolve: %#v", entry)
@@ -118,7 +131,10 @@ func TestSyncLinkedAttachmentsDownloadsAndRetainsUnavailableMirror(t *testing.T)
 		t.Fatalf("linked content = %q", got)
 	}
 
-	missing := []syncLinkedMeta{{Key: "LINK1", Name: "paper.pdf", Available: false, Error: "source file is unavailable"}}
+	missing := []syncLinkedMeta{{
+		Key: "LINK1", Name: "paper.pdf", RelativePath: "Q_生物科学/Q-3_研究方法与技术/paper.pdf",
+		Available: false, Error: "source file is unavailable",
+	}}
 	_, _, _, unavailable, err = syncLinkedAttachments(context.Background(), client, missing, dataDir, false, 2, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -130,6 +146,27 @@ func TestSyncLinkedAttachmentsDownloadsAndRetainsUnavailableMirror(t *testing.T)
 	}
 	if _, ok := syncmirror.Resolve(dataDir, entry); !ok {
 		t.Fatal("stale local copy should remain usable")
+	}
+}
+
+func TestSyncLinkedAttachmentsRejectsUnsafeRelativePath(t *testing.T) {
+	dataDir := t.TempDir()
+	client := &syncClient{baseURL: "http://example.test", httpClient: http.DefaultClient}
+	entries := []syncLinkedMeta{{
+		Key: "LINK1", Name: "paper.pdf", RelativePath: "../outside.pdf",
+		Size: 1, Mtime: 123, Available: true,
+	}}
+	if _, _, _, _, err := syncLinkedAttachments(context.Background(), client, entries, dataDir, false, 1, nil); err == nil {
+		t.Fatal("expected unsafe linked attachment path to be rejected")
+	}
+}
+
+func TestSyncLinkedAttachmentsRejectsManifestWithoutRelativePath(t *testing.T) {
+	dataDir := t.TempDir()
+	client := &syncClient{baseURL: "http://example.test", httpClient: http.DefaultClient}
+	entries := []syncLinkedMeta{{Key: "LINK1", Name: "paper.pdf", Size: 1, Mtime: 123, Available: true}}
+	if _, _, _, _, err := syncLinkedAttachments(context.Background(), client, entries, dataDir, false, 1, nil); err == nil {
+		t.Fatal("expected missing linked attachment relative path to be rejected")
 	}
 }
 
@@ -371,5 +408,35 @@ func TestVerifySyncManifestRejectsEscapingPath(t *testing.T) {
 	}
 	if _, _, err := verifySyncManifest(dataDir); err == nil {
 		t.Fatal("expected unsafe manifest path to be rejected")
+	}
+}
+
+func TestVerifySyncManifestChecksLinkedAttachmentRelativeTree(t *testing.T) {
+	dataDir := t.TempDir()
+	relativePath := "Q_生物科学/Q-3_研究方法与技术/paper.pdf"
+	path := filepath.Join(dataDir, syncmirror.AttachmentsDir, filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("pdf"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := syncManifest{Linked: []syncLinkedMeta{{
+		Key: "LINK1", Name: "paper.pdf", RelativePath: relativePath,
+		Size: info.Size(), Mtime: info.ModTime().Unix(), Available: true,
+	}}}
+	if err := writeSyncManifest(dataDir, manifest); err != nil {
+		t.Fatal(err)
+	}
+	status, _, err := verifySyncManifest(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Expected != 1 || status.Verified != 1 || status.Missing != 0 || status.Changed != 0 {
+		t.Fatalf("unexpected manifest status: %#v", status)
 	}
 }

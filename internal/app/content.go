@@ -16,6 +16,7 @@ import (
 type FileRequest struct {
 	AttachmentKey string
 	ItemKey       string
+	PathOnly      bool
 	Sheet         string
 	Head          int
 	MaxSheets     int
@@ -34,12 +35,19 @@ type FileResult struct {
 }
 
 func (s ReadService) Files(ctx context.Context, req FileRequest) (Result, error) {
-	cfg, reader, err := s.reader()
+	cfg, _, err := s.LoadConfig()
 	if err != nil {
 		return Result{}, err
 	}
 	if cfg.Mode == "web" {
 		return Result{}, fmt.Errorf("file inspection requires local, hybrid, or remote mode with attachment access")
+	}
+	if req.PathOnly && cfg.Mode == "remote" {
+		return Result{}, fmt.Errorf("file path requires local or hybrid mode; run `zot sync` before querying local mirror paths")
+	}
+	reader, err := s.NewReader(cfg)
+	if err != nil {
+		return Result{}, err
 	}
 	if req.AttachmentKey == "" && req.ItemKey == "" {
 		return Result{}, fmt.Errorf("attachment key or --item is required")
@@ -57,9 +65,11 @@ func (s ReadService) Files(ctx context.Context, req FileRequest) (Result, error)
 	}
 	meta := readMeta(reader)
 	meta["total"] = len(results)
-	meta["head"] = opts.Head
-	meta["max_sheets"] = opts.MaxSheets
-	meta["max_columns"] = opts.MaxColumns
+	if !req.PathOnly {
+		meta["head"] = opts.Head
+		meta["max_sheets"] = opts.MaxSheets
+		meta["max_columns"] = opts.MaxColumns
+	}
 	return Result{Data: results, Meta: meta, Text: fileResultsText(results), Warnings: readWarnings(meta)}, nil
 }
 
@@ -75,7 +85,7 @@ func inspectFileTargets(ctx context.Context, reader backend.Reader, req FileRequ
 			health := backend.InspectAttachmentHealth(attachment)
 			result.Health = &health
 		}
-		if !req.Health || isWorkbookPath(path) {
+		if !req.PathOnly && (!req.Health || isWorkbookPath(path)) {
 			workbook, err := backend.InspectTableFile(path, opts)
 			if err != nil {
 				return nil, err
@@ -89,7 +99,7 @@ func inspectFileTargets(ctx context.Context, reader backend.Reader, req FileRequ
 		return nil, err
 	}
 	attachments := workbookAttachments(item.Attachments)
-	if req.Health {
+	if req.Health || req.PathOnly {
 		attachments = item.Attachments
 	}
 	results := make([]FileResult, 0, len(attachments))
@@ -102,7 +112,7 @@ func inspectFileTargets(ctx context.Context, reader backend.Reader, req FileRequ
 			health := backend.InspectAttachmentHealth(attachment)
 			result.Health = &health
 		}
-		if attachment.Resolved && isWorkbookPath(firstNonEmpty(attachment.Filename, attachment.ZoteroPath, attachment.ResolvedPath, attachment.Title)) {
+		if !req.PathOnly && attachment.Resolved && isWorkbookPath(firstNonEmpty(attachment.Filename, attachment.ZoteroPath, attachment.ResolvedPath, attachment.Title)) {
 			workbook, err := backend.InspectTableFile(attachment.ResolvedPath, opts)
 			if err != nil {
 				return nil, fmt.Errorf("%s: %w", attachment.Key, err)

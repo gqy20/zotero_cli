@@ -26,7 +26,7 @@ zot
 ├── tag list|replace|apply|clean
 ├── search list|show|new|edit|delete
 ├── group list
-├── file show|check
+├── file path|show|check
 ├── pdf text|figs|open
 ├── ann list|new|delete
 ├── ref show|find|related|cited|ctx|links|entities|profile|build|resolve|status
@@ -126,6 +126,8 @@ zot search new --data '{"name":"Recent","conditions":[]}' --json
 
 ```powershell
 zot item supp ITEMKEY --json
+zot file path ATTACHKEY --json
+zot file path --item ITEMKEY --json
 zot file show ATTACHKEY --json
 zot file check ATTACHKEY --json
 
@@ -143,11 +145,13 @@ zot ann delete ITEMKEY --source zotero --type highlight --yes --json
 zot ann delete ITEMKEY --source pdf --attachment ATTACHMENT_KEY --page 3 --yes --json
 ```
 
+`file path` 只解析并返回附件的真实本地文件路径，不打开或修改文件；可传 attachment key，或通过 `--item` 返回一个条目下所有可解析附件。`file check` 同时返回 `local_path` 和健康诊断，`file show` 专用于表格预览。
+
 `item import` 在 Zotero 元数据识别完成后，会定位本次导入最终保留的 PDF 附件并执行增量全文索引；指定收藏夹、重复附件清理和索引均以最终附件 key 为准。索引失败会作为 JSON envelope 中的 warning 返回，不会重复写入 stderr，也不会回滚已成功的 Zotero 导入。`find --snippet` 只返回轻量条目信息和以实际命中为中心的约 1200 字符证据，并在 `matched_chunk` 中保留页码、附件 key 与坐标；它与 `--full` 互斥。
 
 `item import --collection` 接受收藏夹 key、唯一名称或完整层级路径。名称存在歧义时命令会列出带 key 的候选项，不会自动猜测。`config check` 会额外报告 `zotero_desktop_connector_available`；Connector 不可用不会使配置检查失败，但导入 PDF 前必须启动 Zotero 桌面端。
 
-local/hybrid 下无过滤条件的 `pdf text ITEMKEY --json` 默认返回 `content_path` 和可选的 `chunks_path`，不再把完整正文复制到 JSON；Agent 应直接读取 `content_path`。`--grep` 默认按不区分大小写的 Go 正则解析，可用 `|` 检索多个关键词；无效正则会直接报错。`--collection` 接受收藏夹 key、唯一名称或完整层级路径，并与 item keys、`--all` 三选一。使用 `--grep` 且存在分页缓存时，JSON 按附件和命中页返回 `match_count`、页码与相邻上下文，但不会创建标注。`--grep`、`--pages`、`--max-chars` 返回计算后的文本子集，`--max-chars` 按 Unicode 字符而非 UTF-8 字节计数。多条目和 `--all` 同样返回缓存路径数组，只有显式 `--output-dir` 才导出 Markdown。缓存读取、FTS 检索和 `index build` 的跳过判断都会校验 PDF 源文件；文件被替换后旧缓存与旧索引不会继续命中。remote 模式仍返回正文，因为客户端不能直接读取服务器路径。
+local/hybrid 下无过滤条件的 `pdf text ITEMKEY --json` 默认返回 `content_path` 和可选的 `chunks_path`，不再把完整正文复制到 JSON；Agent 应直接读取 `content_path`。这些路径属于 `.zotero_cli/fulltext/cache/<attachment-key>/` 下的提取文本缓存，不是 PDF 二进制副本；源 PDF 使用 `file path` 定位。`--grep` 默认按不区分大小写的 Go 正则解析，可用 `|` 检索多个关键词；无效正则会直接报错。`--collection` 接受收藏夹 key、唯一名称或完整层级路径，并与 item keys、`--all` 三选一。使用 `--grep` 且存在分页缓存时，JSON 按附件和命中页返回 `match_count`、页码与相邻上下文，但不会创建标注。`--grep`、`--pages`、`--max-chars` 返回计算后的文本子集，`--max-chars` 按 Unicode 字符而非 UTF-8 字节计数。多条目和 `--all` 同样返回缓存路径数组，只有显式 `--output-dir` 才导出 Markdown；它不会复制源 PDF。缓存读取、FTS 检索和 `index build` 的跳过判断都会校验 PDF 源文件；文件被替换后旧缓存与旧索引不会继续命中。`index status` 只报告派生索引的位置，并提示通过 `file path` 查询源文件。remote 模式仍返回正文，因为客户端不能直接读取服务器路径。
 
 `ann list`、`ann new`、`ann delete` 明确区分读取、创建和删除。多 PDF 条目默认选择第一个 PDF，也可统一使用 `--attachment ATTACHMENT_KEY` 精确选择。`ann new` 在临时副本中写入并验证后替换原 PDF；实际写入零匹配会报错并保留原文件，`--dry-run` 则允许零匹配。删除必须用 `--source zotero|pdf` 选择来源，建议先用 `--dry-run` 查看精确候选。Zotero 原生标注按 annotation item key 通过 Web API 删除，不再直接修改 SQLite；PDF 内嵌标注按 xref 在临时副本中修改并验证后替换。canonical 语法不接受 `annotations --clear` 或 `annotate --clear`。
 
@@ -206,7 +210,7 @@ Schema 响应默认缓存 7 天；`meta.read_source=cache` 表示缓存命中。
 
 completion 支持 `bash`、`zsh`、`fish`、`powershell`，生成过程不会加载配置或访问网络。
 
-`sync` 是远端到本地的单向增量拉取，包含 SQLite、全文索引、`storage/` imported 附件和可解析的 `linked_file` 外部附件。外链文件以 attachment key 复制到镜像覆盖层，不改写 SQLite；源文件不可用不会中止整库同步，本地已有旧副本会继续保留。远端删除不会传播为本地附件或全文缓存删除。同步过程按阶段输出整体文件数、实时字节、百分比、速度和 ETA，中断续传的已有字节会计入进度；这些信息写入 stderr，`--json` 的 stdout 仍只包含最终 canonical envelope。同步后可直接用 `zot --mode local ...`，未显式配置 `data_dir` 时会自动识别 `~/.zot/sync`；显式 `data_dir` 必须是绝对路径。`sync status` 执行 SQLite 快速检查并显示上次同步状态；`sync status --full` 额外执行完整 SQLite integrity check，并核对上次成功同步 manifest 中的所有可用文件。
+`sync` 是远端到本地的单向增量拉取，包含 SQLite、全文索引、`storage/` imported 附件和可解析的 `linked_file` 外部附件。外链文件保留 `attachments:` 后的相对目录并写入同步端 `~/.zot/sync/attachments/`，与服务端附件根目录的绝对路径无关；缺少安全相对路径会使同步明确失败，不再回退到 attachment key 镜像。同步不会改写 SQLite。源文件不可用不会中止整库同步，本地已有旧副本会继续保留。远端删除不会传播为本地附件或全文缓存删除。同步过程按阶段输出整体文件数、实时字节、百分比、速度和 ETA，中断续传的已有字节会计入进度；这些信息写入 stderr，`--json` 的 stdout 仍只包含最终 canonical envelope。同步后可直接用 `zot --mode local ...`，未显式配置 `data_dir` 时会自动识别 `~/.zot/sync`，并从该镜像的 `storage/`、`attachments/` 和 `.zotero_cli/fulltext/` 读取；显式 `data_dir` 必须是绝对路径。`sync status` 执行 SQLite 快速检查并显示上次同步状态；`sync status --full` 额外执行完整 SQLite integrity check，并核对上次成功同步 manifest 中的所有可用文件，包括 `attachments/` 外链附件。
 
 帮助页与 completion 是纯文本产物，不支持 `--json`。`config init --json` 为非交互模式，调用方必须一次提供当前模式所需的完整参数。
 
