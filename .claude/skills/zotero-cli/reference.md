@@ -117,7 +117,7 @@ zot search new --data '{"name":"Recent","conditions":[]}' --json
 
 输入统一为 `--set`、`--data`、`--from`。安全参数统一为 `--dry-run`、`--yes`、`--if-version`。
 
-`item import --collection` 接受收藏夹 key、唯一名称或完整层级路径。同名时返回带 key 的完整路径候选；导入依赖 Zotero 桌面端 Connector，并会为最终保留的附件增量建立全文索引。
+`item import --collection` 接受收藏夹 key、唯一名称或完整层级路径。同名时返回带 key 的完整路径候选；导入依赖 Zotero 桌面端 Connector，并会为最终保留的附件增量建立全文索引。`--dry-run` 不要求写权限，只校验 PDF、Connector 和收藏夹，不上传文件或创建条目。
 
 权限：
 
@@ -221,7 +221,7 @@ zot sync status --full
 zot --mode local find "query"
 ```
 
-`sync` 使用配置中的服务器地址和默认镜像目录，单向增量拉取 SQLite、storage、可解析的 linked_file 外部附件和全文索引；外链文件通过 attachment key 覆盖层供复制后的 SQLite 使用。远端删除不会清理本地附件或全文缓存，SQLite sidecar 除外；缺失的外链源文件不会中止同步，已有本地副本继续保留。同步后 `--mode local` 自动识别 `~/.zot/sync`。中断的大文件会自动续传，仅在需要重新下载全部文件时使用 `--force`。`sync status` 合并状态与校验；`--full` 会执行完整 SQLite 和上次 manifest 校验。
+`sync` 使用配置中的服务器地址和默认镜像目录，单向增量拉取 SQLite、storage、可解析的 linked_file 外部附件和全文索引；外链文件保留 `attachments:` 后的安全相对路径并写入同步端 `~/.zot/sync/attachments/`，不依赖服务端绝对路径，也不改写 SQLite。远端删除不会清理本地附件或全文缓存，SQLite sidecar 除外；缺失的外链源文件不会中止同步，已有本地副本继续保留。同步后 `--mode local` 自动识别 `~/.zot/sync`。中断的大文件会自动续传，仅在需要重新下载全部文件时使用 `--force`。`sync status` 合并状态与校验；`--full` 会执行完整 SQLite 和上次 manifest 校验；具体附件位置使用 `file path` 查询。
 
 ## 兼容边界
 

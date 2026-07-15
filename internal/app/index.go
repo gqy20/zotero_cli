@@ -32,6 +32,20 @@ type IndexBuildResult struct {
 	Elapsed          float64  `json:"elapsed_seconds"`
 }
 
+type LocalDataStatus struct {
+	Status string `json:"status"`
+	Path   string `json:"path,omitempty"`
+}
+
+type FullTextIndexStatus struct {
+	Status        string `json:"status"`
+	Path          string `json:"path,omitempty"`
+	IndexBytes    int64  `json:"index_bytes,omitempty"`
+	CacheBytes    int64  `json:"cache_bytes,omitempty"`
+	TotalBytes    int64  `json:"total_bytes,omitempty"`
+	UsageMeasured bool   `json:"usage_measured,omitempty"`
+}
+
 type IndexService struct {
 	LoadConfig func() (config.Config, string, error)
 	NewReader  func(config.Config) (backend.Reader, error)
@@ -212,21 +226,70 @@ func (s IndexService) Status(_ context.Context) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	cacheDir := filepath.Join(cfg.DataDir, ".zotero_cli", "fulltext")
-	if local, ok := reader.(*backend.LocalReader); ok {
-		cacheDir = local.FullTextCacheDir
+	status := inspectFullTextIndex(cfg, reader, true)
+	text := fmt.Sprintf("Full-text index: %s", status.Status)
+	if status.Path != "" {
+		text += fmt.Sprintf("\nPath: %s", status.Path)
 	}
-	indexPath := filepath.Join(cacheDir, "index.sqlite")
-	info, statErr := os.Stat(indexPath)
-	data := map[string]any{"path": indexPath, "available": statErr == nil, "attachment_path_command": "zot file path ATTACHMENT_KEY"}
-	if statErr == nil {
-		data["size_bytes"] = info.Size()
-		data["modified_at"] = info.ModTime()
-	}
-	text := fmt.Sprintf("Full-text index: unavailable\nPath: %s", indexPath)
-	if statErr == nil {
-		text = fmt.Sprintf("Full-text index: available (%d bytes)\nPath: %s", info.Size(), indexPath)
+	if status.Status == "available" {
+		text += fmt.Sprintf("\nIndex database: %s\nExtracted-text cache: %s\nTotal derived data: %s", humanBytes(status.IndexBytes), humanBytes(status.CacheBytes), humanBytes(status.TotalBytes))
+	} else if status.Status == "unavailable" {
+		text += "\nBuild: zot index build"
 	}
 	text += "\nSource PDFs: use `zot file path ATTACHMENT_KEY` (typically under storage/ or attachments/)"
-	return Result{Data: data, Meta: map[string]any{"available": statErr == nil}, Text: text}, nil
+	return Result{Data: status, Meta: map[string]any{"available": status.Status == "available"}, Text: text}, nil
+}
+
+func inspectLocalData(reader backend.Reader) LocalDataStatus {
+	if local := localReader(reader); local != nil {
+		return LocalDataStatus{Status: "available", Path: local.DataDir}
+	}
+	return LocalDataStatus{Status: "not_applicable"}
+}
+
+func inspectFullTextIndex(cfg config.Config, reader backend.Reader, measureUsage bool) FullTextIndexStatus {
+	if cfg.Mode == "remote" {
+		return FullTextIndexStatus{Status: "server_managed"}
+	}
+	local := localReader(reader)
+	if local == nil {
+		return FullTextIndexStatus{Status: "not_applicable"}
+	}
+	indexPath := filepath.Join(local.FullTextCacheDir, "index.sqlite")
+	status := FullTextIndexStatus{Status: "unavailable", Path: indexPath}
+	if info, err := os.Stat(indexPath); err == nil && !info.IsDir() {
+		status.Status = "available"
+		status.IndexBytes = info.Size()
+	}
+	if measureUsage {
+		status.CacheBytes = directoryBytes(filepath.Join(local.FullTextCacheDir, "cache"))
+		status.TotalBytes = status.IndexBytes + status.CacheBytes
+		status.UsageMeasured = true
+	}
+	return status
+}
+
+func localReader(reader backend.Reader) *backend.LocalReader {
+	switch value := reader.(type) {
+	case *backend.LocalReader:
+		return value
+	case *backend.HybridReader:
+		return value.LocalReader()
+	default:
+		return nil
+	}
+}
+
+func directoryBytes(root string) int64 {
+	var total int64
+	_ = filepath.WalkDir(root, func(_ string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return nil
+		}
+		if info, infoErr := entry.Info(); infoErr == nil {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
 }

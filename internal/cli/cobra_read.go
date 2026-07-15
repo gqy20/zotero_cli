@@ -30,32 +30,45 @@ func (c *CLI) runRead(cmd *cobra.Command, opts *globalOptions, path app.CommandP
 }
 
 func (c *CLI) newLibCommand(opts *globalOptions) *cobra.Command {
-	lib := &cobra.Command{Use: "lib", Short: "Inspect library state"}
-	show := &cobra.Command{Use: "show", Short: "Show a library overview", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+	lib := &cobra.Command{
+		Use:   "lib",
+		Short: "Inspect library state and management preferences",
+		Long:  "Inspect library counters, local data availability, the PDF full-text index, and optional library-management preferences.",
+	}
+	show := &cobra.Command{Use: "show", Short: "Show library, local data, full-text index, and taste status", Long: "Show a one-page library overview together with the resolved local data directory,\nPDF full-text index state, and library taste configuration.", Example: "  zot lib show\n  zot lib show --json", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return c.runRead(cmd, opts, app.CommandPath{Resource: "lib", Action: "show"}, func(ctx context.Context, s app.ReadService) (app.Result, error) { return s.Overview(ctx) })
 	}}
 	stats := &cobra.Command{Use: "stats", Short: "Show library counters", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return c.runRead(cmd, opts, app.CommandPath{Resource: "lib", Action: "stats"}, func(ctx context.Context, s app.ReadService) (app.Result, error) { return s.Stats(ctx) })
 	}}
 	var tasteInit, tastePath, tasteForce bool
-	taste := &cobra.Command{Use: "taste", Short: "Show or initialize library management preferences", Args: cobra.NoArgs}
-	taste.RunE = func(cmd *cobra.Command, _ []string) error {
-		if tasteInit && tastePath {
-			return &exitError{code: ExitUsage, err: fmt.Errorf("--init and --path are mutually exclusive")}
-		}
-		if tasteForce && !tasteInit {
-			return &exitError{code: ExitUsage, err: fmt.Errorf("--force requires --init")}
-		}
-		return c.runRead(cmd, opts, app.CommandPath{Resource: "lib", Action: "taste"}, func(ctx context.Context, s app.ReadService) (app.Result, error) {
-			switch {
-			case tasteInit:
-				return s.InitTaste(ctx, tasteForce)
-			case tastePath:
-				return s.TastePath(ctx)
-			default:
-				return s.Taste(ctx)
+	taste := &cobra.Command{
+		Use:   "taste",
+		Short: "Show or initialize library-management preferences",
+		Long: "Show the optional taste.md document used by people and agents to record stable\n" +
+			"tagging, classification, naming, and protection preferences. It is not a Zotero\n" +
+			"setting, and zot does not automatically enforce its rules. Use --init to create a\n" +
+			"starter document and --path to print its resolved location.",
+		Example: "  zot lib taste\n  zot lib taste --init\n  zot lib taste --path\n  zot lib taste --init --force",
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if tasteInit && tastePath {
+				return &exitError{code: ExitUsage, err: fmt.Errorf("--init and --path are mutually exclusive")}
 			}
-		})
+			if tasteForce && !tasteInit {
+				return &exitError{code: ExitUsage, err: fmt.Errorf("--force requires --init")}
+			}
+			return c.runRead(cmd, opts, app.CommandPath{Resource: "lib", Action: "taste"}, func(ctx context.Context, s app.ReadService) (app.Result, error) {
+				switch {
+				case tasteInit:
+					return s.InitTaste(ctx, tasteForce)
+				case tastePath:
+					return s.TastePath(ctx)
+				default:
+					return s.Taste(ctx)
+				}
+			})
+		},
 	}
 	taste.Flags().BoolVar(&tasteInit, "init", false, "create a starter taste.md")
 	taste.Flags().BoolVar(&tastePath, "path", false, "print the resolved taste.md path")

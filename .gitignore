@@ -61,3 +61,4 @@ internal/server/web/dist/
 web/.env
 web/.env.local
 web/.env.*.local
+.codex/tmp/

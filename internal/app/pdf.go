@@ -74,13 +74,13 @@ type remoteFigureExtractor interface {
 	ExtractFigures(context.Context, string, string) (backend.ExtractFiguresResult, error)
 }
 
-func (s PDFService) openReader() (config.Config, backend.Reader, error) {
-	cfg, _, err := s.LoadConfig()
+func (s PDFService) openReader() (config.Config, string, backend.Reader, error) {
+	cfg, configPath, err := s.LoadConfig()
 	if err != nil {
-		return config.Config{}, nil, err
+		return config.Config{}, "", nil, err
 	}
 	reader, err := s.NewReader(cfg)
-	return cfg, reader, err
+	return cfg, configPath, reader, err
 }
 
 func (s PDFService) Text(ctx context.Context, req PDFTextRequest) (Result, error) {
@@ -88,7 +88,7 @@ func (s PDFService) Text(ctx context.Context, req PDFTextRequest) (Result, error
 	if err != nil {
 		return Result{}, err
 	}
-	cfg, reader, err := s.openReader()
+	cfg, _, reader, err := s.openReader()
 	if err != nil {
 		return Result{}, err
 	}
@@ -558,7 +558,7 @@ func sanitizePDFName(value string) string {
 }
 
 func (s PDFService) Figures(ctx context.Context, req PDFFiguresRequest) (Result, error) {
-	cfg, reader, err := s.openReader()
+	cfg, configPath, reader, err := s.openReader()
 	if err != nil {
 		return Result{}, err
 	}
@@ -571,7 +571,16 @@ func (s PDFService) Figures(ctx context.Context, req PDFFiguresRequest) (Result,
 	}
 	outputDir := req.OutputDir
 	if outputDir == "" {
-		outputDir = filepath.Join(cfg.DataDir, ".zotero_cli", "figures")
+		resolvedCfg := cfg
+		if resolvedCfg.DataDir == "" {
+			if local := localReader(reader); local != nil {
+				resolvedCfg.DataDir = local.DataDir
+			}
+		}
+		outputDir, err = defaultFigureOutputDir(resolvedCfg, configPath)
+		if err != nil {
+			return Result{}, err
+		}
 	}
 	outputDir, err = filepath.Abs(outputDir)
 	if err != nil {
@@ -633,7 +642,21 @@ func (s PDFService) Figures(ctx context.Context, req PDFFiguresRequest) (Result,
 		totalFigures += len(result.value.Figures)
 		data = append(data, map[string]any{"item_key": result.key, "pdf": filepath.Base(result.value.PDFPath), "total_pages": result.value.TotalPages, "figures": result.value.Figures, "elapsed_sec": result.value.ElapsedSec, "error": result.value.Error})
 	}
-	return Result{Data: data, Meta: map[string]any{"total": len(data), "figures": totalFigures, "failed": failed, "output_dir": outputDir, "workers": workers}, Text: fmt.Sprintf("%d item(s), %d figure(s), %d failed", len(data), totalFigures, failed)}, nil
+	return Result{Data: data, Meta: map[string]any{"total": len(data), "figures": totalFigures, "failed": failed, "output_dir": outputDir, "workers": workers}, Text: fmt.Sprintf("%d item(s), %d figure(s), %d failed\nOutput: %s", len(data), totalFigures, failed, outputDir)}, nil
+}
+
+func defaultFigureOutputDir(cfg config.Config, configPath string) (string, error) {
+	if cfg.DataDir != "" {
+		return filepath.Join(cfg.DataDir, ".zotero_cli", "figures"), nil
+	}
+	if strings.TrimSpace(configPath) == "" {
+		var err error
+		configPath, err = config.DefaultPath()
+		if err != nil {
+			return "", fmt.Errorf("resolve default figure output: %w", err)
+		}
+	}
+	return filepath.Join(filepath.Dir(configPath), "figures"), nil
 }
 
 func capPDFPageFigures(result *backend.ExtractFiguresResult, outputDir string, max int) {
@@ -666,7 +689,7 @@ func pdfFigureArea(value string) int64 {
 }
 
 func (s PDFService) Open(ctx context.Context, req PDFOpenRequest) (Result, error) {
-	_, reader, err := s.openReader()
+	_, _, reader, err := s.openReader()
 	if err != nil {
 		return Result{}, err
 	}

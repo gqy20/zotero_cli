@@ -32,7 +32,14 @@ func (c *CLI) pdfService() app.PDFService {
 }
 
 func (c *CLI) newPDFCommand(opts *globalOptions) *cobra.Command {
-	pdf := &cobra.Command{Use: "pdf", Short: "Extract and open PDF content"}
+	pdf := &cobra.Command{
+		Use:   "pdf",
+		Short: "Extract text and figures or open PDF attachments",
+		Long: "Work with PDF attachments resolved from Zotero items. `text` creates or queries\n" +
+			"derived text, `figs` writes extracted figure images, and `open` launches the\n" +
+			"source PDF. Use `zot file path ATTACHMENT_KEY` when you need the PDF binary itself.",
+		Example: "  zot pdf text ITEM_KEY\n  zot pdf figs ITEM_KEY\n  zot pdf open ITEM_KEY",
+	}
 	var textReq app.PDFTextRequest
 	textCmd := &cobra.Command{
 		Use:   "text [ITEM_KEY...]",
@@ -42,7 +49,8 @@ func (c *CLI) newPDFCommand(opts *globalOptions) *cobra.Command {
 			".zotero_cli/fulltext/cache/<attachment-key>/. These are extracted-text files,\n" +
 			"not copies of the source PDF. Use `zot file path ATTACHMENT_KEY` to locate\n" +
 			"the resolved PDF binary.",
-		Args: cobra.ArbitraryArgs,
+		Example: "  zot pdf text ITEM_KEY\n  zot pdf text ITEM_KEY --pages 1-3\n  zot pdf text ITEM_KEY --grep \"gene flow|introgression\"\n  zot pdf text --all -o ./markdown",
+		Args:    cobra.ArbitraryArgs,
 	}
 	textCmd.Flags().BoolVar(&textReq.All, "all", false, "prepare every item with a PDF")
 	textCmd.Flags().StringVarP(&textReq.OutputDir, "output-dir", "o", "", "write extracted text as Markdown; does not copy source PDFs")
@@ -74,7 +82,17 @@ func (c *CLI) newPDFCommand(opts *globalOptions) *cobra.Command {
 	}
 
 	var figuresReq app.PDFFiguresRequest
-	figuresCmd := &cobra.Command{Use: "figs [ITEM_KEY...]", Short: "Extract figures from PDFs", Args: cobra.ArbitraryArgs}
+	figuresCmd := &cobra.Command{
+		Use:   "figs [ITEM_KEY...]",
+		Short: "Extract scientific figure candidates as image files",
+		Long: "Extract scientific figure candidates and write them below\n" +
+			"<output-dir>/<attachment-key>/. Local and hybrid mode default to\n" +
+			"<data-dir>/.zotero_cli/figures/; remote mode defaults to ~/.zot/figures/.\n" +
+			"--max-per-page keeps the largest N candidates on each page. Remote mode supports\n" +
+			"explicit item keys but not --all.",
+		Example: "  zot pdf figs ITEM_KEY\n  zot pdf figs ITEM1 ITEM2 -o ./figures\n  zot pdf figs ITEM_KEY --max-per-page 2\n  zot pdf figs --all --workers 4",
+		Args:    cobra.ArbitraryArgs,
+	}
 	figuresCmd.Flags().BoolVar(&figuresReq.All, "all", false, "extract figures from every PDF item")
 	figuresCmd.Flags().StringVarP(&figuresReq.OutputDir, "output-dir", "o", "", "figure output directory")
 	figuresCmd.Flags().IntVar(&figuresReq.Workers, "workers", 0, "parallel workers")
@@ -98,7 +116,8 @@ func (c *CLI) newPDFCommand(opts *globalOptions) *cobra.Command {
 		Long: "Resolve the first PDF attached to an item, launch it with the operating\n" +
 			"system's default application, and return the resolved path in text or JSON.\n" +
 			"The optional page value is reported as a hint; the system opener may ignore it.",
-		Args: cobra.ExactArgs(1),
+		Example: "  zot pdf open ITEM_KEY\n  zot pdf open ITEM_KEY --page 5",
+		Args:    cobra.ExactArgs(1),
 	}
 	openCmd.Flags().IntVar(&page, "page", 0, "one-based page hint reported to the caller; system opener may ignore it")
 	openCmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -115,7 +134,7 @@ func (c *CLI) newPDFCommand(opts *globalOptions) *cobra.Command {
 }
 
 func (c *CLI) newFileCommand(opts *globalOptions) *cobra.Command {
-	file := &cobra.Command{Use: "file", Short: "Locate and inspect local attachment files"}
+	file := &cobra.Command{Use: "file", Short: "Locate and inspect local attachment files", Long: "Resolve Zotero attachment records to local filesystem paths and inspect supported\nfiles. After `zot sync`, local mode resolves paths from the offline mirror.", Example: "  zot file path ATTACHMENT_KEY\n  zot file path --item ITEM_KEY\n  zot file check --item ITEM_KEY"}
 
 	var pathReq app.FileRequest
 	pathCmd := &cobra.Command{
@@ -123,8 +142,10 @@ func (c *CLI) newFileCommand(opts *globalOptions) *cobra.Command {
 		Short: "Show resolved local attachment paths",
 		Long: "Show the resolved filesystem path for one attachment key, or all locally\n" +
 			"resolved attachments belonging to an item. This does not open or modify files.\n" +
-			"Requires local or hybrid mode; remote clients should run `zot sync` first.",
-		Args: cobra.MaximumNArgs(1),
+			"Requires local or hybrid mode; remote clients should run `zot sync` first. Use\n" +
+			"`zot sync status` to inspect mirror health.",
+		Example: "  zot file path ATTACHMENT_KEY\n  zot file path --item ITEM_KEY\n  zot file path ATTACHMENT_KEY --json",
+		Args:    cobra.MaximumNArgs(1),
 	}
 	pathCmd.Flags().StringVar(&pathReq.ItemKey, "item", "", "show paths for attachments belonging to one item")
 	pathCmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -194,9 +215,18 @@ func (c *CLI) runAnnotation(cmd *cobra.Command, opts *globalOptions, path app.Co
 }
 
 func (c *CLI) newAnnotationCommand(opts *globalOptions) *cobra.Command {
-	ann := &cobra.Command{Use: "ann", Short: "Read and modify PDF annotations"}
+	ann := &cobra.Command{
+		Use:   "ann",
+		Short: "Read Zotero-managed and embedded PDF annotations",
+		Long: "Annotations have two independent sources: `zotero` annotations are managed by\n" +
+			"Zotero, while `pdf` annotations are embedded in the PDF binary. `ann list` reads\n" +
+			"both sources, `ann new` writes to the PDF, and `ann delete` changes only the\n" +
+			"explicit --source. Items with multiple PDFs default to the first attachment; use\n" +
+			"--attachment to select one precisely and `zot file path` to locate its file.",
+		Example: "  zot ann list ITEM_KEY\n  zot ann new ITEM_KEY --text \"key result\" --dry-run\n  zot ann delete ITEM_KEY --source pdf --dry-run",
+	}
 	var listFilter app.AnnotationFilter
-	list := &cobra.Command{Use: "list ITEM_KEY", Short: "List annotations", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	list := &cobra.Command{Use: "list ITEM_KEY", Short: "List Zotero-managed and embedded PDF annotations", Long: "Read both Zotero-managed annotation items and annotations embedded in the selected\nPDF. Results include the attachment key and resolved PDF path.", Example: "  zot ann list ITEM_KEY\n  zot ann list ITEM_KEY --attachment ATTACHMENT_KEY\n  zot ann list ITEM_KEY --type highlight --page 3", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		return c.runAnnotation(cmd, opts, app.CommandPath{Resource: "ann", Action: "list"}, func(ctx context.Context, service app.AnnotationService) (app.Result, error) {
 			return service.List(ctx, args[0], listFilter)
 		})
@@ -208,7 +238,7 @@ func (c *CLI) newAnnotationCommand(opts *globalOptions) *cobra.Command {
 	var rect, point string
 	create.Type = "highlight"
 	create.Color = "yellow"
-	newCmd := &cobra.Command{Use: "new [ITEM_KEY]", Short: "Create annotations", Args: cobra.MaximumNArgs(1)}
+	newCmd := &cobra.Command{Use: "new [ITEM_KEY]", Short: "Create annotations embedded in a PDF", Long: "Create a highlight, underline, or note in the selected PDF. Locate content with\n--text, target coordinates with --rect or --point, or load a JSON batch with --from.\n--dry-run previews matches without writing. Real writes use a verified temporary copy\nand require ZOT_ALLOW_WRITE=1 outside remote mode.", Example: "  zot ann new ITEM_KEY --text \"key result\" --dry-run\n  zot ann new ITEM_KEY --text \"key result\" --color red\n  zot ann new ITEM_KEY --page 2 --point 120,240 --comment \"Check this\"\n  zot ann new --from annotations.json", Args: cobra.MaximumNArgs(1)}
 	flags := newCmd.Flags()
 	flags.StringVar(&create.Text, "text", "", "text to locate")
 	flags.StringVar(&create.AttachmentKey, "attachment", "", "target PDF attachment key")
@@ -254,7 +284,7 @@ func (c *CLI) newAnnotationCommand(opts *globalOptions) *cobra.Command {
 	var deleteFilter app.AnnotationFilter
 	var safety app.SafetyOptions
 	var deleteSource string
-	deleteCmd := &cobra.Command{Use: "delete ITEM_KEY", Short: "Permanently delete annotations", Args: cobra.ExactArgs(1)}
+	deleteCmd := &cobra.Command{Use: "delete ITEM_KEY", Short: "Permanently delete annotations from one explicit source", Long: "Delete only annotations selected from the required --source. `zotero` deletes\nZotero-managed annotation items; `pdf` rewrites the PDF binary. Preview exact\ncandidates with --dry-run before using --yes. Real deletion requires\nZOT_ALLOW_DELETE=1; --if-version applies only to the Zotero source.", Example: "  zot ann delete ITEM_KEY --source zotero --type highlight --dry-run\n  zot ann delete ITEM_KEY --source zotero --type highlight --yes\n  zot ann delete ITEM_KEY --source pdf --attachment ATTACHMENT_KEY --dry-run\n  zot ann delete ITEM_KEY --source pdf --attachment ATTACHMENT_KEY --yes", Args: cobra.ExactArgs(1)}
 	addAnnotationFilterFlags(deleteCmd, &deleteFilter)
 	deleteCmd.Flags().StringVar(&deleteSource, "source", "", "required annotation source: zotero or pdf")
 	deleteCmd.Flags().BoolVar(&safety.DryRun, "dry-run", false, "preview exact deletion candidates")

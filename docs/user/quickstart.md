@@ -120,10 +120,11 @@ go run .\cmd\zot config check
 ### Agent 入口：一站式库概览
 
 ```powershell
-.\zot.exe lib show --json   # 统计 + 收藏夹 + 标签 + 最近条目 + 索引状态
+.\zot.exe lib show --json   # 统计 + 最近条目 + 本地数据 + 全文索引 + taste 状态
+.\zot.exe lib taste --init  # 可选：创建长期文献管理偏好模板
 ```
 
-返回 `data.stats` / `data.collections` / `data.tags` / `data.recent_items`，适合作为首次连接时的发现命令。
+返回 `data.stats` / `data.collections` / `data.tags` / `data.recent_items` / `data.local_data` / `data.fulltext_index` / `data.taste`，适合作为首次连接时的发现命令。
 
 ### 查找并查看详情
 
@@ -141,6 +142,7 @@ go run .\cmd\zot config check
 .\zot.exe pdf text ITEMKEY --json --pages 3-8 --grep methods --max-chars 12000
 .\zot.exe pdf text ITEM1 ITEM2 --json --grep "gene\s+flow|introgression"
 .\zot.exe pdf text --collection "研究/植物/栗属" --json --grep "gene\s+flow|introgression"
+.\zot.exe pdf figs ITEMKEY --json  # 输出结果会显示实际图片目录
 
 # 查找本地已保存的 Supplementary / Source data / 表格数据附件
 .\zot.exe item supp ITEMKEY --json
@@ -153,7 +155,7 @@ go run .\cmd\zot config check
 .\zot.exe file check --item ITEMKEY --json
 .\zot.exe find --missing-attachment --json
 
-# 双源读取标注（DB + PDF 文件内）
+# 双源读取标注（Zotero 管理的标注 + PDF 文件内嵌标注）
 .\zot.exe ann list ITEMKEY --json
 .\zot.exe ann list ITEMKEY --attachment ATTACHMENT_KEY --json  # 多 PDF 时精确选择
 
@@ -180,6 +182,7 @@ go run .\cmd\zot config check
 .\zot.exe item tag KEY1 KEY2 --tag "to-read" --json
 .\zot.exe find --collection COLL1234 --all --json > selected.json
 .\zot.exe item export --from selected.json --as csljson
+.\zot.exe item import .\paper.pdf --dry-run --json  # 无需写权限，不上传或创建条目
 .\zot.exe item import .\paper.pdf --collection "研究/植物/栗属" --json
 
 # 正则批量改名：默认预览，加 --yes 才写入

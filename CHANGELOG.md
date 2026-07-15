@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### 变更
+- **任务型 help 与状态语义**：`pdf/ref/index/ann/schema/lib/item supp/item import/sync status` 补齐用途、存储位置、模式限制、最小示例和跨命令引导；`lib show` 将误导性的 `Index` 拆为本地数据与 PDF 全文索引状态，`index status` 统计索引数据库和提取文本缓存的真实占用。`lib taste` 的根 help 改为有效的 `--init/--path` 语法；`item import --dry-run` 不再要求写权限；remote `pdf figs` 默认稳定写入 `~/.zot/figures/` 并显示最终目录；标注 JSON 使用 `zotero_annotations` 代替实现导向的 `db_annotations`。
 - **附件路径一等命令与 help 收敛**：新增 `zot file path ATTACHMENT_KEY` / `--item ITEM_KEY`，直接返回解析后的本地附件路径；`file check` 明确同时返回路径与健康状态。`pdf open` help 对齐系统默认程序和路径返回行为，`pdf text` 区分提取文本缓存、Markdown 导出与源 PDF，`index status` 不再暗示 PDF 位于索引目录，并提供精确路径命令。
 - **外链附件自包含镜像**：`zot sync` 现在传输并保留 `attachments:` 后的安全相对路径，将外部 PDF 写入同步端 `~/.zot/sync/attachments/` 的原目录层级；本地模式自动以该目录解析外链附件，`sync status --full` 同步核验新位置。服务端绝对附件根目录不再与同步端混淆；缺少相对路径时明确失败，不保留旧 key 镜像兼容层。
 - **`zot serve` 启动提示**：服务成功绑定端口后输出可直接配置客户端的 `server_addr`、本机 URL、局域网候选 URL 和完整 remote 配置命令；端口占用等监听失败不再先误报服务已启动。

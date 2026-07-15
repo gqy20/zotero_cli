@@ -108,10 +108,6 @@ func (s ItemImportService) Import(ctx context.Context, req ItemImportRequest) (R
 	if err != nil {
 		return Result{}, err
 	}
-	if !cfg.AllowWrite {
-		return Result{}, fmt.Errorf("writes are disabled; set ZOT_ALLOW_WRITE=1")
-	}
-
 	absPath, info, err := validateImportPDF(req.Path)
 	if err != nil {
 		return Result{}, err
@@ -136,6 +132,9 @@ func (s ItemImportService) Import(ctx context.Context, req ItemImportRequest) (R
 	data := ItemImportResult{File: absPath, Size: info.Size(), DryRun: req.DryRun, CollectionKey: collection.Key, CollectionName: collection.Name, CollectionPath: collection.Path}
 	if req.DryRun {
 		return Result{Data: data, Meta: map[string]any{"dry_run": true}, Text: fmt.Sprintf("dry run: %s is ready to import into Zotero desktop", absPath)}, nil
+	}
+	if !cfg.AllowWrite {
+		return Result{}, fmt.Errorf("writes are disabled; set ZOT_ALLOW_WRITE=1")
 	}
 
 	file, err := os.Open(absPath)

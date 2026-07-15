@@ -23,9 +23,10 @@ func TestOverviewTextIncludesEveryAvailableSection(t *testing.T) {
 		[]backend.Collection{{Key: "C1", Name: "Projects", NumItems: 3}},
 		[]backend.Tag{{Name: "transformers", NumItems: 2}},
 		[]domain.Item{{Key: "I1", Title: "Attention Is All You Need"}},
-		"available",
+		LocalDataStatus{Status: "available", Path: "/data/zotero"},
+		FullTextIndexStatus{Status: "unavailable", Path: "/data/zotero/.zotero_cli/fulltext/index.sqlite"},
 	)
-	for _, want := range []string{"Library: user:42", "Version: 9", "Top Collections:", "Projects", "Top Tags:", "transformers", "Recent Items:", "I1", "Index: available"} {
+	for _, want := range []string{"Library: user:42", "Version: 9", "Top Collections:", "Projects", "Top Tags:", "transformers", "Recent Items:", "I1", "Local data: available", "Data dir: /data/zotero", "Full-text index: unavailable", "Build: zot index build"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("overview text missing %q:\n%s", want, got)
 		}

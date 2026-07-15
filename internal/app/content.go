@@ -264,10 +264,10 @@ func (s AnnotationService) List(ctx context.Context, itemKey string, filter Anno
 	}
 	pdf := filterPDFAnnotations(annotations.PDFAnnotations, filter)
 	db := filterDBAnnotations(annotations.DBAnnotations, filter)
-	data := map[string]any{"item_key": itemKey, "attachment_key": annotations.AttachmentKey, "pdf_path": annotations.PDFPath, "pdf_annotations": pdf, "db_annotations": db, "total_pdf": len(pdf), "total_db": len(db)}
+	data := map[string]any{"item_key": itemKey, "attachment_key": annotations.AttachmentKey, "pdf_path": annotations.PDFPath, "pdf_annotations": pdf, "zotero_annotations": db, "total_pdf": len(pdf), "total_zotero": len(db)}
 	meta := readMeta(reader)
 	meta["total_pdf"] = len(pdf)
-	meta["total_db"] = len(db)
+	meta["total_zotero"] = len(db)
 	warnings := readWarnings(meta)
 	if annotations.PDFError != "" {
 		data["pdf_error"] = annotations.PDFError

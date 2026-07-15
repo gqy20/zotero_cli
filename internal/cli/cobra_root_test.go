@@ -234,7 +234,7 @@ func TestRootUsesCobraHelp(t *testing.T) {
 	if code := Run(nil); code != ExitOK {
 		t.Fatalf("code=%d stderr=%q", code, stderr.String())
 	}
-	for _, want := range []string{"Usage:", "item", "ref", "completion", "Common shortcuts:", "zot find QUERY", "zot show KEY", "zot export [KEY...]", "zot lib taste init"} {
+	for _, want := range []string{"Usage:", "item", "ref", "completion", "Common shortcuts:", "zot find QUERY", "zot show KEY", "zot export [KEY...]", "zot lib taste --init"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("root help missing %q: %q", want, stdout.String())
 		}
@@ -601,4 +601,33 @@ func TestRunnableCommandTreeInheritsStructuredOutputFlags(t *testing.T) {
 		}
 	}
 	walk(root)
+}
+
+func TestTaskOrientedHelpExplainsCapabilitiesAndBoundaries(t *testing.T) {
+	tests := []struct {
+		args  []string
+		wants []string
+	}{
+		{[]string{"pdf"}, []string{"figs", "zot file path", "zot pdf figs ITEM_KEY"}},
+		{[]string{"pdf", "figs"}, []string{"<output-dir>/<attachment-key>", "remote mode defaults to ~/.zot/figures/", "--max-per-page"}},
+		{[]string{"ref"}, []string{"citation network", "separate from `zot index`", ".zotero_cli/ref/index.sqlite"}},
+		{[]string{"index"}, []string{"does not contain PDF binaries", "zot find QUERY --in fulltext", "zot file path"}},
+		{[]string{"ann"}, []string{"two independent sources", "ann new` writes to the PDF", "--attachment"}},
+		{[]string{"schema"}, []string{"item types, fields, and creator roles", "read-only", "zot schema show journalArticle"}},
+		{[]string{"item", "supp"}, []string{"confidence", "not download, import, or modify", "--online and --all cannot be combined"}},
+		{[]string{"item", "import"}, []string{"Zotero desktop", "without uploading", "ZOT_ALLOW_WRITE=1"}},
+		{[]string{"lib", "taste"}, []string{"not a Zotero", "does not automatically enforce", "zot lib taste --init"}},
+	}
+	for _, test := range tests {
+		stdout, _ := captureOutput(t)
+		args := append(append([]string(nil), test.args...), "--help")
+		if code := Run(args); code != 0 {
+			t.Fatalf("zot %s --help code=%d", strings.Join(test.args, " "), code)
+		}
+		for _, want := range test.wants {
+			if !strings.Contains(stdout.String(), want) {
+				t.Fatalf("zot %s --help missing %q:\n%s", strings.Join(test.args, " "), want, stdout.String())
+			}
+		}
+	}
 }

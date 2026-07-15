@@ -86,7 +86,7 @@ func TestItemImportDryRunDoesNotUpload(t *testing.T) {
 	}
 	client := &fakeItemImportConnector{}
 	service := ItemImportService{
-		LoadConfig: func() (config.Config, string, error) { return config.Config{AllowWrite: true}, "", nil },
+		LoadConfig: func() (config.Config, string, error) { return config.Config{AllowWrite: false}, "", nil },
 		NewClient:  func(config.Config) ItemImportConnector { return client },
 	}
 	result, err := service.Import(context.Background(), ItemImportRequest{Path: path, DryRun: true})
@@ -194,7 +194,11 @@ func TestItemImportRejectsNonPDFAndDisabledWrites(t *testing.T) {
 		t.Fatalf("non-PDF error=%v", err)
 	}
 	service.LoadConfig = func() (config.Config, string, error) { return config.Config{AllowWrite: false}, "", nil }
-	if _, err := service.Import(context.Background(), ItemImportRequest{Path: path}); err == nil || !strings.Contains(err.Error(), "writes are disabled") {
+	pdfPath := filepath.Join(t.TempDir(), "paper.pdf")
+	if err := os.WriteFile(pdfPath, []byte("%PDF-test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Import(context.Background(), ItemImportRequest{Path: pdfPath}); err == nil || !strings.Contains(err.Error(), "writes are disabled") {
 		t.Fatalf("disabled error=%v", err)
 	}
 }

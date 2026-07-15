@@ -19,7 +19,7 @@ JSON 响应统一使用 `{ok, command, data, meta}`；`command` 始终是 canoni
 
 ```text
 zot
-├── lib show|stats|log
+├── lib show|stats|taste|log
 ├── item list|find|show|new|edit|delete|tag|untag|import|supp|export
 ├── coll list|show|new|edit|delete|add|remove
 ├── note list|show|find|new|edit|delete
@@ -46,6 +46,9 @@ zot
 ```powershell
 zot lib show --json
 zot lib stats --json
+zot lib taste --json
+zot lib taste --init
+zot lib taste --path
 zot lib log --deleted --json
 zot lib log --kind items --since 120 --json
 
@@ -63,6 +66,8 @@ zot tag list --json
 zot search list --json
 zot group list --json
 ```
+
+`lib show` 分别报告本地数据目录、PDF 全文索引和 `taste.md` 状态，不再用含义模糊的 `Index` 代指 `data_dir`。`lib taste` 显示供用户或 Agent 遵循的长期文献管理偏好；它不是 Zotero 原生设置，CLI 也不会自动执行其中规则。`--init` 创建模板，`--path` 输出实际位置。
 
 统一分页参数是 `--limit`、`--offset`、`--sort`、`--order asc|desc`。`item find` 的轻量结果默认限制 100 条，`--snippet` 或 `--full` 默认限制 20 条；`--all` 仅表示取消上限，并与 `--limit` 互斥。metadata 范围允许省略 QUERY，因此过滤、排序和默认浏览都不需要借用 `--all`。JSON 分页元数据包含 `returned`、`limit`、`offset`、`has_more` 和可选的 `next_offset`。旧 `--start`、`--direction` 已不再接受。
 
@@ -145,11 +150,13 @@ zot ann delete ITEMKEY --source zotero --type highlight --yes --json
 zot ann delete ITEMKEY --source pdf --attachment ATTACHMENT_KEY --page 3 --yes --json
 ```
 
+`item supp` 返回补充材料候选的类型、解析状态、置信度、证据、本地路径或在线下载地址；`--online` 只支持单个条目，不能与 `--all` 同用。命令不会自动下载、导入或修改任何补充文件。
+
 `file path` 只解析并返回附件的真实本地文件路径，不打开或修改文件；可传 attachment key，或通过 `--item` 返回一个条目下所有可解析附件。`file check` 同时返回 `local_path` 和健康诊断，`file show` 专用于表格预览。
 
 `item import` 在 Zotero 元数据识别完成后，会定位本次导入最终保留的 PDF 附件并执行增量全文索引；指定收藏夹、重复附件清理和索引均以最终附件 key 为准。索引失败会作为 JSON envelope 中的 warning 返回，不会重复写入 stderr，也不会回滚已成功的 Zotero 导入。`find --snippet` 只返回轻量条目信息和以实际命中为中心的约 1200 字符证据，并在 `matched_chunk` 中保留页码、附件 key 与坐标；它与 `--full` 互斥。
 
-`item import --collection` 接受收藏夹 key、唯一名称或完整层级路径。名称存在歧义时命令会列出带 key 的候选项，不会自动猜测。`config check` 会额外报告 `zotero_desktop_connector_available`；Connector 不可用不会使配置检查失败，但导入 PDF 前必须启动 Zotero 桌面端。
+`item import --collection` 接受收藏夹 key、唯一名称或完整层级路径。名称存在歧义时命令会列出带 key 的候选项，不会自动猜测。`--dry-run` 不需要开启写权限，只校验 PDF、Zotero Desktop Connector 和目标收藏夹，不上传文件、不创建条目、不分配收藏夹，也不启动元数据识别；真实导入才要求 `ZOT_ALLOW_WRITE=1`。`config check` 会额外报告 `zotero_desktop_connector_available`；Connector 不可用不会使配置检查失败，但导入 PDF 前必须启动 Zotero 桌面端。
 
 local/hybrid 下无过滤条件的 `pdf text ITEMKEY --json` 默认返回 `content_path` 和可选的 `chunks_path`，不再把完整正文复制到 JSON；Agent 应直接读取 `content_path`。这些路径属于 `.zotero_cli/fulltext/cache/<attachment-key>/` 下的提取文本缓存，不是 PDF 二进制副本；源 PDF 使用 `file path` 定位。`--grep` 默认按不区分大小写的 Go 正则解析，可用 `|` 检索多个关键词；无效正则会直接报错。`--collection` 接受收藏夹 key、唯一名称或完整层级路径，并与 item keys、`--all` 三选一。使用 `--grep` 且存在分页缓存时，JSON 按附件和命中页返回 `match_count`、页码与相邻上下文，但不会创建标注。`--grep`、`--pages`、`--max-chars` 返回计算后的文本子集，`--max-chars` 按 Unicode 字符而非 UTF-8 字节计数。多条目和 `--all` 同样返回缓存路径数组，只有显式 `--output-dir` 才导出 Markdown；它不会复制源 PDF。缓存读取、FTS 检索和 `index build` 的跳过判断都会校验 PDF 源文件；文件被替换后旧缓存与旧索引不会继续命中。`index status` 只报告派生索引的位置，并提示通过 `file path` 查询源文件。remote 模式仍返回正文，因为客户端不能直接读取服务器路径。
 
@@ -181,7 +188,9 @@ zot index build --workers 4 --json
 zot index status --json
 ```
 
-`ref build --scope pending|failed|contexts|grobid` 使用单一构建范围；`ref status --view summary|failed|unsupported|grobid` 使用单一展示视图。GROBID 仅在显式 `--scope grobid` 时启用。完整来源和 fallback 语义见 [引用索引与文献发现](./references.md)。
+`ref` 使用独立的结构化引用索引 `<data-dir>/.zotero_cli/ref/index.sqlite`，保存参考文献、引用语境、本地条目匹配和外部文献发现结果；它与 PDF 全文索引不是同一个数据库。`ref build --scope pending|failed|contexts|grobid` 使用单一构建范围；`ref status --view summary|failed|unsupported|grobid` 使用单一展示视图。GROBID 仅在显式 `--scope grobid` 时启用。完整来源和 fallback 语义见 [引用索引与文献发现](./references.md)。
+
+`index status` 同时统计 `index.sqlite` 和 `.zotero_cli/fulltext/cache/` 提取文本缓存的占用；其中不包含 PDF 二进制文件。源 PDF 继续通过 `file path` 查询。
 
 ## Schema、配置与运行时
 

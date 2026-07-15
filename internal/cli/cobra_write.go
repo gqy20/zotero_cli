@@ -81,7 +81,7 @@ func libraryTasteWriteWarning(path app.CommandPath) *app.Warning {
 	if err != nil || taste.Exists {
 		return nil
 	}
-	return &app.Warning{Code: "taste_missing", Message: "library taste is not configured; run `zot lib taste init` before classification changes"}
+	return &app.Warning{Code: "taste_missing", Message: "library taste is not configured; run `zot lib taste --init` before classification changes"}
 }
 
 func (c *CLI) addObjectWriteCommands(resource *cobra.Command, opts *globalOptions, kind string) {
@@ -184,7 +184,17 @@ func (c *CLI) addItemWriteCommands(item *cobra.Command, opts *globalOptions) {
 	c.addObjectWriteCommands(item, opts, "item")
 	var importDryRun bool
 	var importCollection string
-	importCmd := &cobra.Command{Use: "import PATH", Short: "Import a PDF into Zotero desktop", Args: cobra.ExactArgs(1)}
+	importCmd := &cobra.Command{
+		Use:   "import PATH",
+		Short: "Import a local PDF through Zotero desktop",
+		Long: "Import a readable local PDF through the Zotero desktop connector. Zotero desktop\n" +
+			"must be running. A successful import may queue metadata recognition and can assign\n" +
+			"the new item to a collection. Real imports require ZOT_ALLOW_WRITE=1.\n\n" +
+			"--dry-run validates the PDF, connector, and optional collection without uploading\n" +
+			"the file, creating an item, assigning a collection, or starting recognition.",
+		Example: "  zot item import paper.pdf --dry-run\n  zot item import paper.pdf\n  zot item import paper.pdf --collection \"Research/Methods\"",
+		Args:    cobra.ExactArgs(1),
+	}
 	importCmd.Flags().BoolVar(&importDryRun, "dry-run", false, "validate the PDF and Zotero connection without importing")
 	importCmd.Flags().StringVar(&importCollection, "collection", "", "collection key, unique name, or full path")
 	importCmd.RunE = func(cmd *cobra.Command, args []string) error {

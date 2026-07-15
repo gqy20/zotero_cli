@@ -99,7 +99,17 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 		})
 	}
 	var supp app.SupplementsRequest
-	suppCmd := &cobra.Command{Use: "supp [KEY]", Short: "Find supplementary material", Args: cobra.MaximumNArgs(1)}
+	suppCmd := &cobra.Command{
+		Use:   "supp [KEY]",
+		Short: "Find local and online supplementary-material candidates",
+		Long: "Find supplementary-material candidates associated with Zotero items. Local and\n" +
+			"hybrid mode inspect attachment metadata and resolved files; --online also queries\n" +
+			"public provider metadata for one item. Results include kind, resolution status,\n" +
+			"confidence, evidence, local paths, or candidate download URLs. This command does\n" +
+			"not download, import, or modify supplementary files. --online and --all cannot be combined.",
+		Example: "  zot item supp ITEM_KEY\n  zot item supp ITEM_KEY --online\n  zot item supp --all --limit 100",
+		Args:    cobra.MaximumNArgs(1),
+	}
 	suppCmd.Flags().BoolVar(&supp.All, "all", false, "scan every local item")
 	suppCmd.Flags().BoolVar(&supp.Online, "online", false, "query public online providers")
 	suppCmd.Flags().IntVar(&supp.Limit, "limit", 0, "maximum supplement records")

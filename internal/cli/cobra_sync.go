@@ -29,7 +29,11 @@ func (c *CLI) newSyncCommand(opts *globalOptions) *cobra.Command {
 	statusCmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show mirror status and verify local sync data",
-		Args:  cobra.NoArgs,
+		Long: "Show the health and location of the offline mirror. The data directory contains\n" +
+			"the mirrored SQLite database, storage/ attachments, and attachments/ linked files.\n" +
+			"Use `zot file path ATTACHMENT_KEY` to locate one resolved attachment.",
+		Example: "  zot sync status\n  zot sync status --full\n  zot sync status --json",
+		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			service := app.NewSyncService()
 			path := app.CommandPath{Resource: "sync", Action: "status"}

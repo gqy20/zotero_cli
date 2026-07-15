@@ -20,7 +20,7 @@ argument-hint: "<resource> <action> [ITEMKEY...] [options]"
 .\zot.exe lib taste --json
 ```
 
-当 `data.exists=true` 时，完整读取 `data.content`，并按“当前用户指令 > taste.md > 工具默认行为”的优先级执行。文件不存在时，提示用户运行 `.\zot.exe lib taste init`，但不要阻塞其他安全操作。
+当 `data.exists=true` 时，完整读取 `data.content`，并按“当前用户指令 > taste.md > 工具默认行为”的优先级执行。文件不存在时，提示用户运行 `.\zot.exe lib taste --init`，但不要阻塞其他安全操作。
 
 优先调用仓库中的 `zot`/`zot.exe`，源码验证时使用 `go run .\cmd\zot`。不要自行重写 Zotero API 调用。
 
@@ -140,7 +140,7 @@ zot ann delete ITEMKEY --source zotero --type highlight --yes --json
 zot ann delete ITEMKEY --source pdf --attachment ATTACHMENT_KEY --type highlight --yes --json
 ```
 
-`item import --collection` 接受收藏夹 key、唯一名称或完整层级路径；名称有歧义时会列出带 key 的完整路径候选，不会自动猜测。导入依赖 Zotero 桌面端 Connector，并在识别完成后为最终保留的附件建立增量全文索引。`file path` 只返回真实本地路径；`file check` 返回路径和附件健康状态；表格预览参数只属于 `file show`。`pdf open` 使用系统默认程序并返回路径，`--page` 只是可能被忽略的提示。
+`item import --collection` 接受收藏夹 key、唯一名称或完整层级路径；名称有歧义时会列出带 key 的完整路径候选，不会自动猜测。导入依赖 Zotero 桌面端 Connector，并在识别完成后为最终保留的附件建立增量全文索引。`item import --dry-run` 不要求写权限，只校验 PDF、Connector 和收藏夹，不上传文件或创建条目。`file path` 只返回真实本地路径；`file check` 返回路径和附件健康状态；表格预览参数只属于 `file show`。`pdf open` 使用系统默认程序并返回路径，`--page` 只是可能被忽略的提示。
 
 读取、创建、删除分别使用 `ann list/new/delete`。多 PDF 条目默认选择第一个 PDF，应优先使用 `--attachment ATTACHMENT_KEY` 精确选择。`ann new` 在临时副本中写入并验证后替换，非 dry-run 零匹配会失败且保留原 PDF。删除必须显式选择 `--source zotero|pdf`，并优先用 `--dry-run` 查看精确候选；不要生成 `annotations --clear` 或 `annotate --clear`，也不要直接修改 `itemAnnotations`。
 

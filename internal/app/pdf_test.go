@@ -2,11 +2,32 @@ package app
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"zotero_cli/internal/backend"
+	"zotero_cli/internal/config"
 	"zotero_cli/internal/domain"
 )
+
+func TestDefaultFigureOutputDirIsStableAcrossWorkingDirectories(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "zotero")
+	local, err := defaultFigureOutputDir(config.Config{DataDir: dataDir}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dataDir, ".zotero_cli", "figures"); local != want {
+		t.Fatalf("local output=%q want=%q", local, want)
+	}
+	configPath := filepath.Join(t.TempDir(), ".zot", ".env")
+	remote, err := defaultFigureOutputDir(config.Config{Mode: "remote"}, configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(filepath.Dir(configPath), "figures"); remote != want {
+		t.Fatalf("remote output=%q want=%q", remote, want)
+	}
+}
 
 type pdfScopeTestReader struct {
 	backend.Reader

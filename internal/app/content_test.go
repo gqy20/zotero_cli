@@ -98,6 +98,31 @@ func TestAnnotationFilters(t *testing.T) {
 	}
 }
 
+func TestAnnotationListUsesUserFacingZoteroKeys(t *testing.T) {
+	reader := &annotationTestReader{
+		item: domain.Item{Key: "ITEM1"},
+		result: backend.ItemAnnotationsResult{
+			AttachmentKey: "ATT1",
+			DBAnnotations: []domain.Annotation{{Key: "ANN1", Type: "highlight"}},
+		},
+	}
+	service := AnnotationService{
+		LoadConfig: func() (config.Config, string, error) { return config.Config{Mode: "local"}, "", nil },
+		NewReader:  func(config.Config) (backend.Reader, error) { return reader, nil },
+	}
+	result, err := service.List(context.Background(), "ITEM1", AnnotationFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := result.Data.(map[string]any)
+	if data["zotero_annotations"] == nil || data["total_zotero"] != 1 {
+		t.Fatalf("data=%#v", data)
+	}
+	if _, exists := data["db_annotations"]; exists {
+		t.Fatalf("implementation-facing key leaked: %#v", data)
+	}
+}
+
 func TestAnnotationDeleteSourceAndTypeValidation(t *testing.T) {
 	if _, err := normalizeAnnotationDeleteSource(""); err == nil {
 		t.Fatal("missing source was accepted")

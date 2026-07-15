@@ -104,8 +104,8 @@ Common shortcuts:
 
 Library preferences:
   zot lib taste        Show the current library taste
-  zot lib taste init   Create a starter taste.md
-  zot lib taste path   Show the resolved taste.md path`,
+  zot lib taste --init Create a starter taste.md
+  zot lib taste --path Show the resolved taste.md path`,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, _ []string) error {

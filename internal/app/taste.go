@@ -94,8 +94,8 @@ func (s ReadService) Taste(ctx context.Context) (Result, error) {
 		return Result{
 			Data:     taste,
 			Meta:     meta,
-			Text:     fmt.Sprintf("library taste is not configured\nCreate: zot lib taste init\nPath: %s", taste.Path),
-			Warnings: []Warning{{Code: "taste_missing", Message: "library taste is not configured; run `zot lib taste init`"}},
+			Text:     fmt.Sprintf("library taste is not configured\nCreate: zot lib taste --init\nPath: %s", taste.Path),
+			Warnings: []Warning{{Code: "taste_missing", Message: "library taste is not configured; run `zot lib taste --init`"}},
 		}, nil
 	}
 	return Result{Data: taste, Meta: meta, Text: taste.Content}, nil

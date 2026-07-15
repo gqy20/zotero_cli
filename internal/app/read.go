@@ -398,35 +398,26 @@ func (s ReadService) Overview(ctx context.Context) (Result, error) {
 	}
 	a.collections = limitSlice(a.collections, 5)
 	a.tags = limitSlice(a.tags, 10)
-	indexStatus := "unavailable"
-	if cfg.Mode == "local" || cfg.Mode == "hybrid" {
-		if cfg.DataDir == "" {
-			indexStatus = "not_configured"
-		} else if _, err := os.Stat(cfg.DataDir); err == nil {
-			indexStatus = "available"
-		} else {
-			indexStatus = "data_dir_missing"
-		}
-	}
+	localData := inspectLocalData(reader)
+	fullTextIndex := inspectFullTextIndex(cfg, reader, false)
 	_, configPath, _ := s.LoadConfig()
 	taste, tasteErr := LoadLibraryTaste(cfg, configPath)
 	if tasteErr != nil {
 		return Result{}, tasteErr
 	}
 	tasteStatus := LibraryTaste{Path: taste.Path, Exists: taste.Exists}
-	data := map[string]any{"stats": a.stats, "collections": a.collections, "tags": a.tags, "recent_items": a.items, "taste": tasteStatus}
+	data := map[string]any{"stats": a.stats, "collections": a.collections, "tags": a.tags, "recent_items": a.items, "local_data": localData, "fulltext_index": fullTextIndex, "taste": tasteStatus}
 	meta := readMeta(reader)
-	meta["index_status"] = indexStatus
 	meta["total_items"] = a.stats.TotalItems
 	meta["taste_path"] = taste.Path
 	meta["taste_exists"] = taste.Exists
-	text := overviewText(a.stats, a.collections, a.tags, a.items, indexStatus)
+	text := overviewText(a.stats, a.collections, a.tags, a.items, localData, fullTextIndex)
 	warnings := readWarnings(meta)
 	if taste.Exists {
 		text += "\nTaste: configured (" + taste.Path + ")"
 	} else {
-		text += "\nTaste: not configured\nCreate: zot lib taste init\nPath: " + taste.Path
-		warnings = append(warnings, Warning{Code: "taste_missing", Message: "library taste is not configured; run `zot lib taste init`"})
+		text += "\nTaste: not configured\nCreate: zot lib taste --init\nPath: " + taste.Path
+		warnings = append(warnings, Warning{Code: "taste_missing", Message: "library taste is not configured; run `zot lib taste --init`"})
 	}
 	return Result{Data: data, Meta: meta, Text: text, Warnings: warnings}, nil
 }
@@ -526,7 +517,7 @@ func isMachineNote(content string) bool {
 	return strings.Contains(strings.TrimSpace(content), `{"readingTime":`)
 }
 
-func overviewText(stats backend.LibraryStats, collections []backend.Collection, tags []backend.Tag, items []domain.Item, indexStatus string) string {
+func overviewText(stats backend.LibraryStats, collections []backend.Collection, tags []backend.Tag, items []domain.Item, localData LocalDataStatus, fullTextIndex FullTextIndexStatus) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Library: %s:%s\n", stats.LibraryType, stats.LibraryID)
 	fmt.Fprintf(&b, "Items: %d | Collections: %d | Searches: %d\n", stats.TotalItems, stats.TotalCollections, stats.TotalSearches)
@@ -551,7 +542,17 @@ func overviewText(stats backend.LibraryStats, collections []backend.Collection, 
 			fmt.Fprintf(&b, "  %-10s  %s\n", item.Key, item.Title)
 		}
 	}
-	fmt.Fprintf(&b, "Index: %s", indexStatus)
+	fmt.Fprintf(&b, "\nLocal data: %s", localData.Status)
+	if localData.Path != "" {
+		fmt.Fprintf(&b, "\nData dir: %s", localData.Path)
+	}
+	fmt.Fprintf(&b, "\nFull-text index: %s", fullTextIndex.Status)
+	if fullTextIndex.Path != "" {
+		fmt.Fprintf(&b, "\nIndex path: %s", fullTextIndex.Path)
+	}
+	if fullTextIndex.Status == "unavailable" {
+		b.WriteString("\nBuild: zot index build")
+	}
 	return b.String()
 }
 

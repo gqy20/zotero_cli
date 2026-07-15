@@ -14,7 +14,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 .\zot.exe lib taste --json
 ```
 
-当 `data.exists=true` 时，完整读取 `data.content`，并按“当前用户指令 > taste.md > 工具默认行为”的优先级执行。文件不存在时，提示用户运行 `.\zot.exe lib taste init`，但不要阻塞其他安全操作。
+当 `data.exists=true` 时，完整读取 `data.content`，并按“当前用户指令 > taste.md > 工具默认行为”的优先级执行。文件不存在时，提示用户运行 `.\zot.exe lib taste --init`，但不要阻塞其他安全操作。
 
 优先使用本地 CLI，不要自行实现 Zotero API 调用。
 

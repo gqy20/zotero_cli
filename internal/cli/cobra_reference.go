@@ -25,10 +25,19 @@ func (c *CLI) runReference(cmd *cobra.Command, opts *globalOptions, action strin
 }
 
 func (c *CLI) newReferenceCommand(opts *globalOptions) *cobra.Command {
-	ref := &cobra.Command{Use: "ref", Short: "Build and query the structured reference index"}
+	ref := &cobra.Command{
+		Use:   "ref",
+		Short: "Explore references, citation contexts, and literature networks",
+		Long: "Build and query a structured citation network for Zotero items. The reference\n" +
+			"index stores bibliographic references, citation contexts, links back to local\n" +
+			"items, and external literature data from PMC, PubMed, Europe PMC, and optional\n" +
+			"GROBID parsing. It is separate from `zot index`, which indexes PDF full text,\n" +
+			"and is stored under <data-dir>/.zotero_cli/ref/index.sqlite.",
+		Example: "  zot ref show ITEM_KEY\n  zot ref build --workers 3\n  zot ref resolve --workers 8\n  zot ref find \"gene flow\"\n  zot ref status",
+	}
 	var show app.ReferenceShowRequest
 	show.Source = "auto"
-	showCmd := &cobra.Command{Use: "show ITEM_KEY", Short: "Fetch and index references for one item", Args: cobra.ExactArgs(1)}
+	showCmd := &cobra.Command{Use: "show ITEM_KEY", Short: "Fetch, index, and show one item's references", Long: "Fetch references for one item from the selected source, save them in the local\nreference index, and return the indexed result.", Example: "  zot ref show ITEM_KEY\n  zot ref show ITEM_KEY --source pmc\n  zot ref show ITEM_KEY --refresh", Args: cobra.ExactArgs(1)}
 	showCmd.Flags().StringVar(&show.Source, "source", "auto", "auto, pmc, or pubmed")
 	showCmd.Flags().BoolVar(&show.Refresh, "refresh", false, "bypass caches")
 	showCmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -40,7 +49,7 @@ func (c *CLI) newReferenceCommand(opts *globalOptions) *cobra.Command {
 
 	var find app.ReferenceFindRequest
 	find.Options = references.SearchOptions{In: "all", Limit: 20}
-	findCmd := &cobra.Command{Use: "find QUERY", Short: "Search references and citation contexts", Args: cobra.MinimumNArgs(1)}
+	findCmd := &cobra.Command{Use: "find QUERY", Short: "Search indexed references, contexts, and metadata", Long: "Search the local structured reference index. Scope the query to bibliographic\nreferences, citation contexts, or enriched metadata with --in.", Example: "  zot ref find \"gene flow\"\n  zot ref find '\"key phrase\" OR prefix*' --in contexts\n  zot ref find \"Arabidopsis\" --in metadata --field mesh", Args: cobra.MinimumNArgs(1)}
 	findCmd.Flags().StringVar(&find.Options.In, "in", "all", "search scope: all, references, contexts, or metadata")
 	findCmd.Flags().StringVar(&find.Options.Field, "field", "", "metadata field")
 	findCmd.Flags().StringVar(&find.Options.Section, "section", "", "citation context section")
@@ -75,7 +84,7 @@ func (c *CLI) newReferenceCommand(opts *globalOptions) *cobra.Command {
 	build.Source = "auto"
 	build.Scope = "pending"
 	build.Workers = 3
-	buildCmd := &cobra.Command{Use: "build", Short: "Build or backfill the reference index", Args: cobra.NoArgs}
+	buildCmd := &cobra.Command{Use: "build", Short: "Build or backfill the structured reference index", Long: "Incrementally fetch and index references for library items. The default pending scope\nprocesses items without a fresh result; other scopes retry failures, backfill citation\ncontexts, or explicitly run experimental GROBID PDF parsing.", Example: "  zot ref build --workers 3\n  zot ref build --scope failed --limit 20\n  zot ref build --scope contexts\n  zot ref build --scope grobid --limit 5", Args: cobra.NoArgs}
 	buildCmd.Flags().IntVar(&build.Workers, "workers", 3, "parallel workers")
 	buildCmd.Flags().IntVar(&build.Limit, "limit", 0, "maximum items")
 	buildCmd.Flags().StringVar(&build.Source, "source", "auto", "auto, pmc, or pubmed")
@@ -101,7 +110,7 @@ func (c *CLI) newReferenceCommand(opts *globalOptions) *cobra.Command {
 
 	var status app.ReferenceStatusRequest
 	status.View = "summary"
-	statusCmd := &cobra.Command{Use: "status", Short: "Show reference index coverage", Args: cobra.NoArgs}
+	statusCmd := &cobra.Command{Use: "status", Short: "Show reference-index coverage and pending work", Example: "  zot ref status\n  zot ref status --view failed\n  zot ref status --view unsupported\n  zot ref status --view grobid", Args: cobra.NoArgs}
 	statusCmd.Flags().StringVar(&status.View, "view", "summary", "summary, failed, unsupported, or grobid")
 	statusCmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		status.View = strings.ToLower(strings.TrimSpace(status.View))
@@ -114,7 +123,7 @@ func (c *CLI) newReferenceCommand(opts *globalOptions) *cobra.Command {
 	}
 
 	var resolveWorkers int
-	resolve := &cobra.Command{Use: "resolve", Short: "Match indexed references to local items", Args: cobra.NoArgs}
+	resolve := &cobra.Command{Use: "resolve", Short: "Match indexed references back to local Zotero items", Long: "Match structured references by identifiers and metadata, then store links to the\ncorresponding local Zotero items for citation-network queries.", Example: "  zot ref resolve\n  zot ref resolve --workers 8", Args: cobra.NoArgs}
 	resolve.Flags().IntVar(&resolveWorkers, "workers", 0, "parallel workers")
 	resolve.RunE = func(cmd *cobra.Command, _ []string) error {
 		return c.runReference(cmd, opts, "resolve", func(ctx context.Context, service app.ReferenceService) (app.Result, error) {
@@ -137,7 +146,15 @@ func validReferenceStatusView(view string) bool {
 
 func (c *CLI) referenceDiscoveryCommand(opts *globalOptions, action string) *cobra.Command {
 	var req app.ReferenceDiscoveryRequest
-	cmd := &cobra.Command{Use: action + " ITEM_KEY", Short: "Query reference " + action + " data", Args: cobra.ExactArgs(1)}
+	short := map[string]string{
+		"related":  "Find related literature from PubMed",
+		"cited":    "Find local or external works that cite an item",
+		"ctx":      "Show citation contexts from the item's full text",
+		"links":    "Show linked NCBI and Europe PMC resources",
+		"entities": "Extract biomedical entities and relationships",
+		"profile":  "Summarize versions, funding, reviews, and open access",
+	}[action]
+	cmd := &cobra.Command{Use: action + " ITEM_KEY", Short: short, Example: "  zot ref " + action + " ITEM_KEY", Args: cobra.ExactArgs(1)}
 	if action == "related" || action == "cited" {
 		cmd.Flags().IntVar(&req.Limit, "limit", 0, "maximum results")
 	}

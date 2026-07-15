@@ -22,16 +22,25 @@ func TestIndexStatusPointsToAttachmentPathCommand(t *testing.T) {
 	if err := os.WriteFile(indexPath, []byte("index"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	cachePath := filepath.Join(filepath.Dir(indexPath), "cache", "ATT1", "content.txt")
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cachePath, []byte("cached text"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	service := IndexService{
 		LoadConfig: func() (config.Config, string, error) { return config.Config{DataDir: dataDir}, "", nil },
-		NewReader:  func(config.Config) (backend.Reader, error) { return &stubIndexReader{}, nil },
+		NewReader: func(config.Config) (backend.Reader, error) {
+			return &backend.LocalReader{DataDir: dataDir, FullTextCacheDir: filepath.Dir(indexPath)}, nil
+		},
 	}
 	result, err := service.Status(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	data := result.Data.(map[string]any)
-	if data["attachment_path_command"] != "zot file path ATTACHMENT_KEY" || !strings.Contains(result.Text, "storage/ or attachments/") {
+	data := result.Data.(FullTextIndexStatus)
+	if data.Status != "available" || data.IndexBytes != 5 || data.CacheBytes != 11 || data.TotalBytes != 16 || !strings.Contains(result.Text, "storage/ or attachments/") {
 		t.Fatalf("unexpected index status: data=%#v text=%q", data, result.Text)
 	}
 }
