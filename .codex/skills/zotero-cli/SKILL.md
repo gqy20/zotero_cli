@@ -55,6 +55,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 .\zot.exe ref status --view grobid --json              # 实验性：检查可选 PDF 后备
 .\zot.exe ref build --scope grobid --limit 5 --json     # 实验性：显式小批量解析
 .\zot.exe find --collection COLLKEY --all --json | .\zot.exe item export --from - --as csljson
+.\zot.exe item import paper1.pdf paper2.pdf --collection COLLKEY --dry-run --json # 批量 PDF 预检；正式导入去掉 --dry-run
 .\zot.exe ann list ITEMKEY --json          # 读取 PDF 标注（双源）
 ```
 

@@ -183,6 +183,7 @@ go run .\cmd\zot config check
 .\zot.exe item export --from selected.json --as csljson
 .\zot.exe item import .\paper.pdf --dry-run --json  # 无需写权限，不上传或创建条目
 .\zot.exe item import .\paper.pdf --collection "研究/植物/栗属" --json
+.\zot.exe item import .\paper1.pdf .\paper2.pdf --collection "研究/植物/栗属" --json
 
 # 正则批量改名：默认预览，加 --yes 才写入
 .\zot.exe tag replace --match '^(Gene Flow|Gene flow|gene flow)$' --replace 'Gene Flow'

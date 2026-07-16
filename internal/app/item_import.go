@@ -21,7 +21,7 @@ import (
 )
 
 type ItemImportRequest struct {
-	Source     string
+	Sources    []string
 	FromData   []byte
 	FromName   string
 	Collection string
@@ -99,7 +99,14 @@ type ItemImportService struct {
 	NewReader       func(config.Config) (backend.Reader, error)
 	ResolveArticle  func(context.Context, config.Config, references.Identifiers) (references.Article, error)
 	NewIndexBuilder func() itemImportIndexBuilder
+	OnProgress      func(ItemImportProgress)
 	PollInterval    time.Duration
+}
+
+type preparedPDFImport struct {
+	collection backend.CollectionTarget
+	resolver   itemImportCollectionResolver
+	client     ItemImportConnector
 }
 
 func NewItemImportService() ItemImportService {
@@ -138,36 +145,49 @@ func NewItemImportService() ItemImportService {
 	}
 }
 
-func (s ItemImportService) Import(ctx context.Context, req ItemImportRequest) (Result, error) {
-	cfg, _, err := s.LoadConfig()
-	if err != nil {
-		return Result{}, err
-	}
-	source := strings.TrimSpace(req.Source)
+func (s ItemImportService) importOne(ctx context.Context, cfg config.Config, req ItemImportRequest, source string) (Result, error) {
+	source = strings.TrimSpace(source)
 	if strings.TrimSpace(req.FromName) != "" || len(req.FromData) > 0 || isMetadataImportSource(source) {
 		return s.importMetadata(ctx, cfg, req, source)
 	}
+	if _, _, err := validateImportPDF(source); err != nil {
+		return Result{}, err
+	}
+	prepared, err := s.preparePDFImport(ctx, cfg, req.Collection)
+	if err != nil {
+		return Result{}, err
+	}
+	return s.importPreparedPDF(ctx, cfg, req, source, prepared)
+}
+
+func (s ItemImportService) preparePDFImport(ctx context.Context, cfg config.Config, collectionSelector string) (preparedPDFImport, error) {
+	var prepared preparedPDFImport
+	var err error
+	if strings.TrimSpace(collectionSelector) != "" {
+		prepared.resolver, err = s.NewResolver(cfg)
+		if err != nil {
+			return preparedPDFImport{}, fmt.Errorf("resolve import collection: %w", err)
+		}
+		prepared.collection, err = prepared.resolver.CollectionTarget(ctx, collectionSelector)
+		if err != nil {
+			return preparedPDFImport{}, err
+		}
+	}
+	prepared.client = s.NewClient(cfg)
+	if err := prepared.client.Ping(ctx); err != nil {
+		return preparedPDFImport{}, err
+	}
+	return prepared, nil
+}
+
+func (s ItemImportService) importPreparedPDF(ctx context.Context, cfg config.Config, req ItemImportRequest, source string, prepared preparedPDFImport) (Result, error) {
 	absPath, info, err := validateImportPDF(source)
 	if err != nil {
 		return Result{}, err
 	}
-
-	var collection backend.CollectionTarget
-	var resolver itemImportCollectionResolver
-	if strings.TrimSpace(req.Collection) != "" {
-		resolver, err = s.NewResolver(cfg)
-		if err != nil {
-			return Result{}, fmt.Errorf("resolve import collection: %w", err)
-		}
-		collection, err = resolver.CollectionTarget(ctx, req.Collection)
-		if err != nil {
-			return Result{}, err
-		}
-	}
-	client := s.NewClient(cfg)
-	if err := client.Ping(ctx); err != nil {
-		return Result{}, err
-	}
+	collection := prepared.collection
+	resolver := prepared.resolver
+	client := prepared.client
 	data := ItemImportResult{Status: "ready", SourceType: "pdf", Mode: cfg.Mode, Stages: map[string]string{"validation": "success", "connector": "success"}, File: absPath, Size: info.Size(), DryRun: req.DryRun, CollectionKey: collection.Key, CollectionName: collection.Name, CollectionPath: collection.Path}
 	if req.DryRun {
 		data.PlannedActions = []string{"upload PDF through Zotero desktop connector", "queue metadata recognition when supported"}

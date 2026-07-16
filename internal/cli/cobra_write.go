@@ -188,31 +188,28 @@ func (c *CLI) addItemWriteCommands(item *cobra.Command, opts *globalOptions) {
 	var importCollection string
 	var importFrom string
 	importCmd := &cobra.Command{
-		Use:   "import [SOURCE]",
-		Short: "Import a PDF or create an item from DOI/PMID metadata",
-		Long: "Import a local PDF through Zotero desktop, or create a Zotero item from a DOI,\n" +
+		Use:   "import [SOURCE...]",
+		Short: "Import PDFs or create an item from DOI/PMID metadata",
+		Long: "Import one or more local PDFs through Zotero desktop, or create a Zotero item from a DOI,\n" +
 			"PMID, doi.org URL, PubMed URL, or one JSON result supplied with --from. PDF\n" +
 			"imports require Zotero desktop. Identifier imports resolve metadata through PubMed\n" +
 			"and require Web API write access; they do not download a PDF. Existing matches are\n" +
-			"reported and skipped. Real imports require ZOT_ALLOW_WRITE=1.\n\n" +
+			"reported and skipped. Multiple PDF inputs run sequentially and return one status per\n" +
+			"file; one failure does not stop the remaining files. Real imports require ZOT_ALLOW_WRITE=1.\n\n" +
 			"--dry-run resolves metadata, checks duplicates and shows the final plan without uploading\n" +
 			"a PDF or creating a library item.",
-		Example: "  zot item import paper.pdf --dry-run\n  zot item import DOI:10.1000/example --dry-run\n  zot item import PMID:12345678\n  zot item import https://doi.org/10.1000/example\n  zot item import --from ref-result.json",
-		Args:    cobra.MaximumNArgs(1),
+		Example: "  zot item import paper.pdf --dry-run\n  zot item import paper1.pdf paper2.pdf --collection Research\n  zot item import --from pdf-files.json --dry-run\n  zot item import DOI:10.1000/example --dry-run\n  zot item import PMID:12345678\n  zot item import --from ref-result.json",
+		Args:    cobra.ArbitraryArgs,
 	}
 	importCmd.Flags().BoolVar(&importDryRun, "dry-run", false, "resolve, validate, check duplicates, and show the plan without writing")
 	importCmd.Flags().StringVar(&importCollection, "collection", "", "collection key; local/hybrid also accept a unique name or full path")
-	importCmd.Flags().StringVar(&importFrom, "from", "", "read one reference result as JSON from a file, or - for stdin")
+	importCmd.Flags().StringVar(&importFrom, "from", "", "read a PDF path array or one reference result as JSON from a file, or - for stdin")
 	importCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 && strings.TrimSpace(importFrom) == "" {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("SOURCE or --from is required")}
 		}
 		if len(args) > 0 && strings.TrimSpace(importFrom) != "" {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("SOURCE and --from cannot be combined")}
-		}
-		var source string
-		if len(args) > 0 {
-			source = args[0]
 		}
 		var fromData []byte
 		if strings.TrimSpace(importFrom) != "" {
@@ -227,9 +224,13 @@ func (c *CLI) addItemWriteCommands(item *cobra.Command, opts *globalOptions) {
 			}
 		}
 		service := app.NewItemImportService()
+		service.OnProgress = func(progress app.ItemImportProgress) {
+			percent := progress.Completed * 100 / progress.Total
+			fmt.Fprintf(c.stderr, "import [%d/%d] %3d%% %-7s %s\n", progress.Completed, progress.Total, percent, progress.Status, progress.Input)
+		}
 		path := app.CommandPath{Resource: "item", Action: "import"}
 		return c.renderResult(cmd.Context(), opts, path, func(ctx context.Context) (app.Result, error) {
-			return service.Import(ctx, app.ItemImportRequest{Source: source, FromData: fromData, FromName: importFrom, Collection: importCollection, DryRun: importDryRun})
+			return service.Import(ctx, app.ItemImportRequest{Sources: append([]string(nil), args...), FromData: fromData, FromName: importFrom, Collection: importCollection, DryRun: importDryRun})
 		})
 	}
 	item.AddCommand(importCmd)

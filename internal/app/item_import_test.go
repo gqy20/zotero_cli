@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,8 +45,11 @@ func (metadataImportReader) GetAttachmentFile(context.Context, string) (string, 
 
 type fakeItemImportConnector struct {
 	pinged     bool
+	pingCount  int
 	imported   bool
 	request    zoteroconnector.ImportPDFRequest
+	requests   []zoteroconnector.ImportPDFRequest
+	importErrs map[string]error
 	updated    zoteroconnector.UpdateSessionRequest
 	recognized bool
 }
@@ -97,12 +102,17 @@ func (f *fakeItemImportDeleteClient) DeleteItems(_ context.Context, keys []strin
 
 func (f *fakeItemImportConnector) Ping(context.Context) error {
 	f.pinged = true
+	f.pingCount++
 	return nil
 }
 
 func (f *fakeItemImportConnector) ImportPDF(_ context.Context, req zoteroconnector.ImportPDFRequest) (zoteroconnector.ImportPDFResult, error) {
 	f.imported = true
 	f.request = req
+	f.requests = append(f.requests, req)
+	if err := f.importErrs[req.Title]; err != nil {
+		return zoteroconnector.ImportPDFResult{}, err
+	}
 	return zoteroconnector.ImportPDFResult{CanRecognize: true}, nil
 }
 
@@ -116,7 +126,7 @@ func TestItemImportDryRunDoesNotUpload(t *testing.T) {
 		LoadConfig: func() (config.Config, string, error) { return config.Config{AllowWrite: false}, "", nil },
 		NewClient:  func(config.Config) ItemImportConnector { return client },
 	}
-	result, err := service.Import(context.Background(), ItemImportRequest{Source: path, DryRun: true})
+	result, err := service.Import(context.Background(), ItemImportRequest{Sources: []string{path}, DryRun: true})
 	if err != nil {
 		t.Fatalf("Import() error=%v", err)
 	}
@@ -140,7 +150,7 @@ func TestItemImportUploadsPDF(t *testing.T) {
 		LoadConfig: func() (config.Config, string, error) { return config.Config{AllowWrite: true}, "", nil },
 		NewClient:  func(config.Config) ItemImportConnector { return client },
 	}
-	result, err := service.Import(context.Background(), ItemImportRequest{Source: path})
+	result, err := service.Import(context.Background(), ItemImportRequest{Sources: []string{path}})
 	if err != nil {
 		t.Fatalf("Import() error=%v", err)
 	}
@@ -166,7 +176,7 @@ func TestItemImportAssignsCollection(t *testing.T) {
 			return fakeItemImportCollectionResolver{target: backend.CollectionTarget{ID: 23, Key: "COLLKEY", Name: "Genetics", Path: "Research/Genetics"}}, nil
 		},
 	}
-	result, err := service.Import(context.Background(), ItemImportRequest{Source: path, Collection: "COLLKEY"})
+	result, err := service.Import(context.Background(), ItemImportRequest{Sources: []string{path}, Collection: "COLLKEY"})
 	if err != nil {
 		t.Fatalf("Import() error=%v", err)
 	}
@@ -195,7 +205,7 @@ func TestItemImportIndexesRecognizedAttachment(t *testing.T) {
 		NewIndexBuilder: func() itemImportIndexBuilder { return indexer },
 		PollInterval:    time.Millisecond,
 	}
-	result, err := service.Import(context.Background(), ItemImportRequest{Source: path})
+	result, err := service.Import(context.Background(), ItemImportRequest{Sources: []string{path}})
 	if err != nil {
 		t.Fatalf("Import() error=%v", err)
 	}
@@ -217,7 +227,7 @@ func TestItemImportRejectsNonPDFAndDisabledWrites(t *testing.T) {
 		LoadConfig: func() (config.Config, string, error) { return config.Config{AllowWrite: true}, "", nil },
 		NewClient:  func(config.Config) ItemImportConnector { return &fakeItemImportConnector{} },
 	}
-	if _, err := service.Import(context.Background(), ItemImportRequest{Source: path}); err == nil || !strings.Contains(err.Error(), "only PDF") {
+	if _, err := service.Import(context.Background(), ItemImportRequest{Sources: []string{path}}); err == nil || !strings.Contains(err.Error(), "only PDF") {
 		t.Fatalf("non-PDF error=%v", err)
 	}
 	service.LoadConfig = func() (config.Config, string, error) { return config.Config{AllowWrite: false}, "", nil }
@@ -225,8 +235,121 @@ func TestItemImportRejectsNonPDFAndDisabledWrites(t *testing.T) {
 	if err := os.WriteFile(pdfPath, []byte("%PDF-test"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Import(context.Background(), ItemImportRequest{Source: pdfPath}); err == nil || !strings.Contains(err.Error(), "writes are disabled") {
+	if _, err := service.Import(context.Background(), ItemImportRequest{Sources: []string{pdfPath}}); err == nil || !strings.Contains(err.Error(), "writes are disabled") {
 		t.Fatalf("disabled error=%v", err)
+	}
+}
+
+func TestItemImportBatchPDFDryRunIsolatesInvalidFiles(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.pdf")
+	second := filepath.Join(dir, "second.pdf")
+	for _, path := range []string{first, second} {
+		if err := os.WriteFile(path, []byte("%PDF-test"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	missing := filepath.Join(dir, "missing.pdf")
+	client := &fakeItemImportConnector{}
+	resolverCount := 0
+	service := ItemImportService{
+		LoadConfig: func() (config.Config, string, error) { return config.Config{AllowWrite: false}, "", nil },
+		NewClient:  func(config.Config) ItemImportConnector { return client },
+		NewResolver: func(config.Config) (itemImportCollectionResolver, error) {
+			resolverCount++
+			return fakeItemImportCollectionResolver{target: backend.CollectionTarget{ID: 1, Key: "COLLKEY", Name: "Batch"}}, nil
+		},
+	}
+	result, err := service.Import(context.Background(), ItemImportRequest{Sources: []string{first, missing, second}, Collection: "COLLKEY", DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	batch := result.Data.(ItemImportBatchResult)
+	if batch.Total != 3 || batch.Ready != 2 || batch.Failed != 1 || batch.TotalBytes != int64(2*len("%PDF-test")) {
+		t.Fatalf("batch=%+v", batch)
+	}
+	if batch.Items[0].Status != "ready" || batch.Items[1].Status != "failed" || batch.Items[1].Error == nil || batch.Items[1].Error.Stage != "validation" || batch.Items[2].Status != "ready" {
+		t.Fatalf("items=%+v", batch.Items)
+	}
+	if client.pingCount != 1 || client.imported || resolverCount != 1 {
+		t.Fatalf("pingCount=%d imported=%v resolverCount=%d", client.pingCount, client.imported, resolverCount)
+	}
+	if batch.Items[0].Data == nil || batch.Items[0].Data.CollectionKey != "COLLKEY" || batch.Items[2].Data == nil || batch.Items[2].Data.CollectionKey != "COLLKEY" {
+		t.Fatalf("collection data=%+v", batch.Items)
+	}
+}
+
+func TestItemImportBatchPDFContinuesAfterUploadFailure(t *testing.T) {
+	dir := t.TempDir()
+	paths := []string{filepath.Join(dir, "first.pdf"), filepath.Join(dir, "broken.pdf"), filepath.Join(dir, "last.pdf")}
+	for _, path := range paths {
+		if err := os.WriteFile(path, []byte("%PDF-test"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	client := &fakeItemImportConnector{importErrs: map[string]error{"broken.pdf": errors.New("upload rejected")}}
+	service := ItemImportService{
+		LoadConfig: func() (config.Config, string, error) { return config.Config{AllowWrite: true}, "", nil },
+		NewClient:  func(config.Config) ItemImportConnector { return client },
+	}
+	result, err := service.Import(context.Background(), ItemImportRequest{Sources: paths})
+	if err != nil {
+		t.Fatal(err)
+	}
+	batch := result.Data.(ItemImportBatchResult)
+	if batch.Success != 2 || batch.Failed != 1 || len(client.requests) != 3 || client.pingCount != 1 {
+		t.Fatalf("batch=%+v requests=%d pingCount=%d", batch, len(client.requests), client.pingCount)
+	}
+	if batch.Items[0].Status != "success" || batch.Items[1].Status != "failed" || batch.Items[2].Status != "success" {
+		t.Fatalf("items=%+v", batch.Items)
+	}
+}
+
+func TestItemImportBatchRejectsDuplicateInputPerItem(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "paper.pdf")
+	if err := os.WriteFile(path, []byte("%PDF-test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeItemImportConnector{}
+	service := ItemImportService{
+		LoadConfig: func() (config.Config, string, error) { return config.Config{}, "", nil },
+		NewClient:  func(config.Config) ItemImportConnector { return client },
+	}
+	result, err := service.Import(context.Background(), ItemImportRequest{Sources: []string{path, path}, DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	batch := result.Data.(ItemImportBatchResult)
+	if batch.Ready != 1 || batch.Failed != 1 || batch.Items[1].Error == nil || !strings.Contains(batch.Items[1].Error.Message, "index 0") {
+		t.Fatalf("batch=%+v", batch)
+	}
+}
+
+func TestItemImportBatchReadsPDFPathsFromJSON(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.pdf")
+	second := filepath.Join(dir, "second.pdf")
+	for _, path := range []string{first, second} {
+		if err := os.WriteFile(path, []byte("%PDF-test"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := json.Marshal([]any{first, map[string]any{"path": second}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeItemImportConnector{}
+	service := ItemImportService{
+		LoadConfig: func() (config.Config, string, error) { return config.Config{}, "", nil },
+		NewClient:  func(config.Config) ItemImportConnector { return client },
+	}
+	result, err := service.Import(context.Background(), ItemImportRequest{FromData: data, FromName: "pdf-files.json", DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	batch := result.Data.(ItemImportBatchResult)
+	if batch.Total != 2 || batch.Ready != 2 || batch.Failed != 0 {
+		t.Fatalf("batch=%+v", batch)
 	}
 }
 
@@ -241,7 +364,7 @@ func TestItemImportMetadataDryRunShowsPlanWithoutWrite(t *testing.T) {
 		NewReader:      func(config.Config) (backend.Reader, error) { return metadataImportReader{}, nil },
 		NewWriteClient: func(config.Config) (itemImportWriteClient, error) { return writer, nil },
 	}
-	result, err := service.Import(context.Background(), ItemImportRequest{Source: "PMID:12345678", DryRun: true})
+	result, err := service.Import(context.Background(), ItemImportRequest{Sources: []string{"PMID:12345678"}, DryRun: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +388,7 @@ func TestItemImportMetadataSkipsExistingDOI(t *testing.T) {
 			return metadataImportReader{items: []domain.Item{{Key: "EXISTING", Title: article.Title, DOI: "https://doi.org/10.1000/test"}}}, nil
 		},
 	}
-	result, err := service.Import(context.Background(), ItemImportRequest{Source: "https://doi.org/10.1000/test"})
+	result, err := service.Import(context.Background(), ItemImportRequest{Sources: []string{"https://doi.org/10.1000/test"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +493,7 @@ func TestItemImportCollectionCleanupAndIndexUseFinalAttachment(t *testing.T) {
 		PollInterval:    time.Millisecond,
 	}
 
-	result, err := service.Import(context.Background(), ItemImportRequest{Source: path, Collection: "Research/Genetics"})
+	result, err := service.Import(context.Background(), ItemImportRequest{Sources: []string{path}, Collection: "Research/Genetics"})
 	if err != nil {
 		t.Fatalf("Import() error=%v", err)
 	}

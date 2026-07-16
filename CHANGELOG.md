@@ -8,6 +8,7 @@
 
 ### 新增
 - **可扩展导出与统一文献导入**：`item export` 按默认 100 条分批请求，并新增 `--batch-size` 与显式 `--stream` 原始流式输出；`--from PATH|-` 使用增量 JSON 解码。`item import` 在原有 PDF Connector 工作流之外支持 DOI、PMID、doi.org/PubMed URL 和单条引用 JSON，统一执行 PubMed 元数据解析、重复检查、dry-run 计划与 Web API 创建；identifier 导入不会隐式下载 PDF。
+- **批量 PDF 导入**：`item import` 接受多个 PDF 位置参数及 `--from PATH|-` 的路径数组，复用单个 Connector 客户端串行导入并返回逐文件状态、warning、失败阶段和总体统计；dry-run 汇总文件数与字节数，单项失败不会阻断其余文件，实时进度写入 stderr。
 
 ### 安全性
 - **导入安全与部分成功状态**：元数据导入按 DOI、PMID、标题/年份/首位作者检测重复，唯一命中安全跳过，多重命中停止并报告歧义；PDF 已上传后的收藏夹、识别、清理或索引失败以 `partial` 状态和 warning 返回，不再把已接受的导入伪装成整体失败。

@@ -109,6 +109,50 @@ func TestRunItemImportDryRunJSON(t *testing.T) {
 	}
 }
 
+func TestRunItemImportBatchPDFDryRunJSON(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.pdf")
+	second := filepath.Join(dir, "second.pdf")
+	for _, path := range []string{first, second} {
+		if err := os.WriteFile(path, []byte("%PDF-test"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pingCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/connector/ping" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		pingCount++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	t.Setenv("ZOT_CONNECTOR_URL", server.URL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"item", "import", first, second, "--dry-run", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("exit code=%d stderr=%q", exitCode, stderr.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
+	}
+	data := got["data"].(map[string]any)
+	if data["total"] != float64(2) || data["ready"] != float64(2) || len(data["items"].([]any)) != 2 {
+		t.Fatalf("data=%#v", data)
+	}
+	if pingCount != 1 {
+		t.Fatalf("pingCount=%d", pingCount)
+	}
+	if !strings.Contains(stderr.String(), "import [2/2]") || !strings.Contains(stderr.String(), "100%") {
+		t.Fatalf("stderr=%q", stderr.String())
+	}
+}
+
 func TestRunUpdateItemText(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

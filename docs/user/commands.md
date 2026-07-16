@@ -89,6 +89,8 @@ zot item import ./paper.pdf --dry-run --json
 zot item import ./paper.pdf --json
 zot item import ./paper.pdf --collection COLLKEY --json
 zot item import ./paper.pdf --collection "研究/植物/栗属" --json
+zot item import ./paper1.pdf ./paper2.pdf --collection COLLKEY --json
+zot item import --from ./pdf-files.json --dry-run --json
 zot item import DOI:10.1000/example --dry-run --json
 zot item import PMID:12345678 --json
 zot item import https://doi.org/10.1000/example --json
@@ -161,6 +163,8 @@ zot ann delete ITEMKEY --source pdf --attachment ATTACHMENT_KEY --page 3 --yes -
 `item import` 在 Zotero 元数据识别完成后，会定位本次导入最终保留的 PDF 附件并执行增量全文索引；指定收藏夹、重复附件清理和索引均以最终附件 key 为准。索引失败会作为 JSON envelope 中的 warning 返回，不会重复写入 stderr，也不会回滚已成功的 Zotero 导入。`find --snippet` 只返回轻量条目信息和以实际命中为中心的约 1200 字符证据，并在 `matched_chunk` 中保留页码、附件 key 与坐标；它与 `--full` 互斥。
 
 `item import --collection` 接受收藏夹 key、唯一名称或完整层级路径。名称存在歧义时命令会列出带 key 的候选项，不会自动猜测。`--dry-run` 不需要开启写权限，只校验 PDF、Zotero Desktop Connector 和目标收藏夹，不上传文件、不创建条目、不分配收藏夹，也不启动元数据识别；真实导入才要求 `ZOT_ALLOW_WRITE=1`。`config check` 会额外报告 `zotero_desktop_connector_available`；Connector 不可用不会使配置检查失败，但导入 PDF 前必须启动 Zotero 桌面端。
+
+批量 PDF 继续使用同一入口：`item import FILE1.pdf FILE2.pdf`，或由 `--from PATH|-` 读取字符串路径数组、`{"path":"..."}` 对象数组及 CLI `data` envelope。批量任务只解析一次公共收藏夹并复用一个 Connector 客户端，按输入顺序逐个上传和完成后处理；每项返回 `ready/success/partial/failed`、阶段、warning、item/attachment key 和索引状态。无效文件或单项上传失败只计入该项，公共配置、写权限、Connector 和收藏夹错误则使整批失败。相同规范路径的重复输入不会再次上传。批量进度写入 stderr，因此 `--json` stdout 始终保持单个有效 JSON envelope。单个输入仍返回原有单条结果，不额外包裹 batch 层。
 
 同一 `item import` 入口也接受 DOI、PMID、doi.org/PubMed URL 和 `--from PATH|-` 的单条引用 JSON。identifier 输入通过 PubMed 解析为最终 Zotero payload，按 DOI、PMID、标题/年份/首位作者去重；唯一命中返回 `existing` 并跳过，多重命中报告歧义且不创建。identifier 导入不会自动下载 PDF，真实创建要求 Web API 写能力（`web`/`hybrid`，或带 API 凭据的 `remote`）；纯 `local` 可执行 dry-run 和本地重复检查。PDF 已被 Connector 接受后，后续收藏夹、识别、重复附件清理或索引失败会返回 `partial` 和分阶段 warning，而不是把已成功上传伪装成整体失败。
 
