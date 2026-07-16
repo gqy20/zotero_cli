@@ -806,6 +806,215 @@ func TestCreateSQLiteSnapshotCopiesDatabaseAndSidecars(t *testing.T) {
 	}
 }
 
+func TestCachedSnapshotReusesUnchangedGeneration(t *testing.T) {
+	sourceDir := t.TempDir()
+	sqlitePath := filepath.Join(sourceDir, "zotero.sqlite")
+	cacheDir := filepath.Join(sourceDir, ".zotero_cli", "snapshot")
+	if err := os.WriteFile(sqlitePath, []byte("database"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sqlitePath+"-wal", []byte("wal"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, firstPath, err := createOrReuseCachedSnapshot(sqlitePath, cacheDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isSnapshotValid(sqlitePath, cacheDir) {
+		t.Fatal("fresh snapshot should be valid")
+	}
+	_, secondPath, err := createOrReuseCachedSnapshot(sqlitePath, cacheDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstPath != secondPath {
+		t.Fatalf("unchanged source should reuse generation: first=%q second=%q", firstPath, secondPath)
+	}
+}
+
+func TestCachedSnapshotRefreshesWhenWALChanges(t *testing.T) {
+	sourceDir := t.TempDir()
+	sqlitePath := filepath.Join(sourceDir, "zotero.sqlite")
+	cacheDir := filepath.Join(sourceDir, ".zotero_cli", "snapshot")
+	if err := os.WriteFile(sqlitePath, []byte("database"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sqlitePath+"-wal", []byte("wal-one"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, firstPath, err := createOrReuseCachedSnapshot(sqlitePath, cacheDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sqlitePath+"-wal", []byte("wal-two-with-new-data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if isSnapshotValid(sqlitePath, cacheDir) {
+		t.Fatal("WAL change must invalidate cached snapshot")
+	}
+	_, secondPath, err := createOrReuseCachedSnapshot(sqlitePath, cacheDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstPath == secondPath {
+		t.Fatalf("WAL change should publish a new generation: %q", secondPath)
+	}
+	data, err := os.ReadFile(secondPath + "-wal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(data); got != "wal-two-with-new-data" {
+		t.Fatalf("new WAL contents=%q", got)
+	}
+	if _, err := os.Stat(filepath.Dir(firstPath)); !os.IsNotExist(err) {
+		t.Fatalf("previous generation should be removed, stat err=%v", err)
+	}
+}
+
+func TestCachedSnapshotRefreshesWhenJournalAppears(t *testing.T) {
+	sourceDir := t.TempDir()
+	sqlitePath := filepath.Join(sourceDir, "zotero.sqlite")
+	cacheDir := filepath.Join(sourceDir, ".zotero_cli", "snapshot")
+	if err := os.WriteFile(sqlitePath, []byte("database"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, firstPath, err := createOrReuseCachedSnapshot(sqlitePath, cacheDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sqlitePath+"-journal", []byte("journal-data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, secondPath, err := createOrReuseCachedSnapshot(sqlitePath, cacheDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstPath == secondPath {
+		t.Fatalf("journal appearance should publish a new generation: %q", secondPath)
+	}
+	data, err := os.ReadFile(secondPath + "-journal")
+	if err != nil || string(data) != "journal-data" {
+		t.Fatalf("journal data=%q err=%v", data, err)
+	}
+}
+
+func TestCachedSnapshotDoesNotRefreshForSHMOnlyChange(t *testing.T) {
+	sourceDir := t.TempDir()
+	sqlitePath := filepath.Join(sourceDir, "zotero.sqlite")
+	cacheDir := filepath.Join(sourceDir, ".zotero_cli", "snapshot")
+	if err := os.WriteFile(sqlitePath, []byte("database"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sqlitePath+"-shm", []byte("shm-one"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, firstPath, err := createOrReuseCachedSnapshot(sqlitePath, cacheDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sqlitePath+"-shm", []byte("shm-two-with-lock-churn"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !isSnapshotValid(sqlitePath, cacheDir) {
+		t.Fatal("SHM-only changes must not invalidate data snapshot")
+	}
+	_, secondPath, err := createOrReuseCachedSnapshot(sqlitePath, cacheDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstPath != secondPath {
+		t.Fatalf("SHM-only change should reuse generation: first=%q second=%q", firstPath, secondPath)
+	}
+}
+
+func TestCachedSnapshotMigratesLegacyFlatCache(t *testing.T) {
+	sourceDir := t.TempDir()
+	sqlitePath := filepath.Join(sourceDir, "zotero.sqlite")
+	cacheDir := filepath.Join(sourceDir, ".zotero_cli", "snapshot")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sqlitePath, []byte("current-database"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := filepath.Join(cacheDir, "zotero.sqlite")
+	if err := os.WriteFile(legacyPath, []byte("legacy-database"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, snapshotPath, err := createOrReuseCachedSnapshot(sqlitePath, cacheDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshotPath == legacyPath || !strings.Contains(filepath.Base(filepath.Dir(snapshotPath)), "generation-") {
+		t.Fatalf("legacy cache was not migrated: %q", snapshotPath)
+	}
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy flat snapshot should be removed, stat err=%v", err)
+	}
+	if !isSnapshotValid(sqlitePath, cacheDir) {
+		t.Fatal("migrated snapshot should be valid")
+	}
+}
+
+func TestCachedSnapshotKeepsOldGenerationWhenSourceNeverStabilizes(t *testing.T) {
+	sourceDir := t.TempDir()
+	sqlitePath := filepath.Join(sourceDir, "zotero.sqlite")
+	cacheDir := filepath.Join(sourceDir, ".zotero_cli", "snapshot")
+	if err := os.WriteFile(sqlitePath, []byte("database"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sqlitePath+"-wal", []byte("wal-one"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, oldPath, err := createOrReuseCachedSnapshot(sqlitePath, cacheDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sqlitePath+"-wal", []byte("wal-invalidates-old-generation"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	copyAttempts := 0
+	unstableCopy := func(source, target string) error {
+		copyAttempts++
+		if err := copySQLiteSnapshotFiles(source, target); err != nil {
+			return err
+		}
+		file, err := os.OpenFile(source+"-wal", os.O_APPEND|os.O_WRONLY, 0)
+		if err != nil {
+			return err
+		}
+		_, writeErr := file.Write([]byte{byte('0' + copyAttempts)})
+		closeErr := file.Close()
+		if writeErr != nil {
+			return writeErr
+		}
+		return closeErr
+	}
+	_, fallbackPath, err := createOrReuseCachedSnapshotWithCopy(sqlitePath, cacheDir, unstableCopy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if copyAttempts != snapshotCopyMaxAttempts {
+		t.Fatalf("copy attempts=%d want=%d", copyAttempts, snapshotCopyMaxAttempts)
+	}
+	if fallbackPath != oldPath {
+		t.Fatalf("fallback path=%q want old generation %q", fallbackPath, oldPath)
+	}
+	if isSnapshotValid(sqlitePath, cacheDir) {
+		t.Fatal("fallback generation must remain marked stale")
+	}
+	meta := snapshotReadMetadata(sqlitePath, cacheDir)
+	if !meta.SQLiteFallback || !meta.SnapshotStale {
+		t.Fatalf("metadata=%+v", meta)
+	}
+}
+
 func TestWithReadableDBFallsBackToSnapshotWhenQueryHitsBusy(t *testing.T) {
 	liveDB, err := sql.Open("sqlite", "file:live-fallback?mode=memory&cache=shared")
 	if err != nil {

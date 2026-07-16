@@ -75,7 +75,9 @@ zot group list --json
 
 `item find --in metadata|fulltext` 是唯一的检索范围选择器，默认 `metadata`。fulltext 的 QUERY 原样交给 SQLite FTS5，可使用 `"完整短语"`、`prefix*`、`AND` / `OR` / `NOT` 和括号；`--snippet` 要求 `--in fulltext`。元数据与全文使用不同查询语义，因此不提供含混的合并范围。`note find QUERY` 则使用不区分大小写的 Go 正则；`note list` 只负责枚举，不接受查询参数。
 
-导出只接收明确的 item key，或通过 `--from PATH|-` 接收 key 数组、item 数组及 `find --json` 响应。需要按收藏夹、日期或标签导出时，先运行 `item find --json`，再把结果文件或 stdin 交给 `item export --from`。服务会按 `--batch-size`（默认 100）分批请求；默认输出继续使用统一 JSON/text 契约，显式 `--stream` 则把 BibTeX、RIS 或一个有效的 CSL-JSON 数组直接流式写到 stdout，且不能与 `--json` 同用。
+导出只接收明确的 item key，或通过 `--from PATH|-` 接收 key 数组、item 数组及 `find --json` 响应。需要按收藏夹、日期或标签导出时，先运行 `item find --json`，再把结果文件或 stdin 交给 `item export --from`。BibTeX、BibLaTeX、RIS 和 CSL-JSON 会按 `--batch-size`（默认 100）分批请求；默认输出继续使用统一 JSON/text 契约，显式 `--stream` 则把原始导出数据直接写到 stdout，且不能与 `--json` 同用。
+
+`--as bibliography --style STYLE` 通过 Zotero Web API 把全部 key 一次排版成编号连续的 CSL 参考文献，`--style` 省略时继承 `ZOT_STYLE`。条目必须已经同步到 Zotero Web library；仅存在于 hybrid 本地数据库的 key 会得到明确的未同步提示。普通输出为逐条纯文本，`--stream` 输出保留斜体等格式的 Zotero 原始 HTML。bibliography 最多接受 100 个条目，不支持 `--batch-size`，也不支持纯 local 模式；离线场景请先使用 `--as csljson` 导出结构化引用数据。
 
 ## 写入与安全
 

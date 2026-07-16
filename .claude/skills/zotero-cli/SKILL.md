@@ -66,6 +66,7 @@ zot lib stats --json
 zot item find "query" --in metadata --limit 20 --json
 zot item show ITEMKEY --json
 zot item export ITEMKEY --as bibtex --json
+zot item export KEY1 KEY2 --as bibliography --style nature
 zot ref show ITEMKEY --json
 zot index status --json
 ```

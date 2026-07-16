@@ -17,10 +17,12 @@ import (
 type ItemExportRequest struct {
 	Keys      []string
 	Format    string
+	Style     string
 	BatchSize int
 }
 
 const defaultExportBatchSize = 100
+const maxBibliographyItems = 100
 
 type exportClient interface {
 	ExportItems(context.Context, []string, zoteroapi.ExportOptions) (zoteroapi.ExportResult, error)
@@ -56,12 +58,15 @@ func (s ExportService) Export(ctx context.Context, req ItemExportRequest) (Resul
 	if format == "" {
 		format = "bibtex"
 	}
-	if format != "bibtex" && format != "biblatex" && format != "csljson" && format != "ris" {
+	if !supportedExportFormat(format) {
 		return Result{}, fmt.Errorf("unsupported export format %q", format)
 	}
 	keys := uniqueExportKeys(req.Keys)
 	if len(keys) == 0 {
 		return Result{}, fmt.Errorf("item export requires item keys or --from")
+	}
+	if format == "bibliography" {
+		return s.exportBibliography(ctx, cfg, keys, req.Style)
 	}
 	batchSize := exportBatchSize(req.BatchSize)
 	readMeta := map[string]any{"total": len(keys), "batch_size": batchSize, "batches": batchCount(len(keys), batchSize)}
@@ -146,12 +151,15 @@ func (s ExportService) Stream(ctx context.Context, req ItemExportRequest, out io
 	if format == "" {
 		format = "bibtex"
 	}
-	if format != "bibtex" && format != "biblatex" && format != "csljson" && format != "ris" {
+	if !supportedExportFormat(format) {
 		return fmt.Errorf("unsupported export format %q", format)
 	}
 	keys := uniqueExportKeys(req.Keys)
 	if len(keys) == 0 {
 		return fmt.Errorf("item export requires item keys or --from")
+	}
+	if format == "bibliography" {
+		return s.streamBibliography(ctx, cfg, keys, req.Style, out)
 	}
 	batchSize := exportBatchSize(req.BatchSize)
 	if format == "csljson" && cfg.Mode != "web" && cfg.Mode != "remote" {
@@ -188,6 +196,86 @@ func (s ExportService) Stream(ctx context.Context, req ItemExportRequest, out io
 		}
 	}
 	return nil
+}
+
+func supportedExportFormat(format string) bool {
+	switch format {
+	case "bibtex", "biblatex", "bibliography", "csljson", "ris":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s ExportService) exportBibliography(ctx context.Context, cfg config.Config, keys []string, styleOverride string) (Result, error) {
+	if err := validateBibliographyRequest(cfg, keys); err != nil {
+		return Result{}, err
+	}
+	client, err := s.NewClient(cfg)
+	if err != nil {
+		return Result{}, err
+	}
+	style := bibliographyStyle(cfg, styleOverride)
+	exported, err := client.ExportItems(ctx, keys, zoteroapi.ExportOptions{
+		Format: "bib",
+		Style:  style,
+		Locale: cfg.Locale,
+	})
+	if err != nil {
+		return Result{}, err
+	}
+	exported.Format = "bibliography"
+	exported.Style = style
+	exported.Locale = cfg.Locale
+	meta := map[string]any{
+		"total":       len(keys),
+		"batches":     1,
+		"read_source": "web",
+		"style":       style,
+		"locale":      cfg.Locale,
+	}
+	return Result{Data: exported, Meta: meta, Text: exported.Text}, nil
+}
+
+func (s ExportService) streamBibliography(ctx context.Context, cfg config.Config, keys []string, styleOverride string, out io.Writer) error {
+	if err := validateBibliographyRequest(cfg, keys); err != nil {
+		return err
+	}
+	client, err := s.NewClient(cfg)
+	if err != nil {
+		return err
+	}
+	exported, err := client.ExportItems(ctx, keys, zoteroapi.ExportOptions{
+		Format: "bib",
+		Style:  bibliographyStyle(cfg, styleOverride),
+		Locale: cfg.Locale,
+	})
+	if err != nil {
+		return err
+	}
+	raw := exported.HTML
+	if raw == "" {
+		raw = exported.Text
+	}
+	_, err = io.WriteString(out, raw)
+	return err
+}
+
+func validateBibliographyRequest(cfg config.Config, keys []string) error {
+	if cfg.Mode == "local" {
+		return fmt.Errorf("bibliography export requires Zotero Web API access; local mode supports csljson export only")
+	}
+	if len(keys) > maxBibliographyItems {
+		return fmt.Errorf("bibliography export supports at most %d items per request; export csljson for larger sets", maxBibliographyItems)
+	}
+	return nil
+}
+
+func bibliographyStyle(cfg config.Config, override string) string {
+	if style := strings.TrimSpace(override); style != "" {
+		return style
+	}
+	return strings.TrimSpace(cfg.Style)
 }
 
 func ResolveExportKeys(from string, stdin io.Reader) ([]string, error) {

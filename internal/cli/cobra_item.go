@@ -128,14 +128,22 @@ func (c *CLI) addItemReadCommands(item *cobra.Command, opts *globalOptions) {
 	var exportReq app.ItemExportRequest
 	var exportFrom string
 	var exportStream bool
-	exportCmd := &cobra.Command{Use: "export [KEY...]", Short: "Export item citations", Long: "Export citations in bounded batches. Default text/JSON output keeps the stable result\ncontract; --stream writes raw citation data incrementally to stdout and cannot be\ncombined with --json.", Args: cobra.ArbitraryArgs}
-	exportCmd.Flags().StringVar(&exportReq.Format, "as", "bibtex", "bibtex, biblatex, csljson, or ris")
+	exportCmd := &cobra.Command{Use: "export [KEY...]", Short: "Export citation data or a formatted bibliography", Long: "Export citation data in bounded batches, or render up to 100 items as one\nnumbering-safe bibliography. Bibliography text is shown by default; --stream writes\nthe raw Zotero HTML. Other formats stream their raw export data.", Args: cobra.ArbitraryArgs}
+	exportCmd.Flags().StringVar(&exportReq.Format, "as", "bibtex", "bibtex, biblatex, bibliography, csljson, or ris")
+	exportCmd.Flags().StringVar(&exportReq.Style, "style", "", "CSL style for --as bibliography; defaults to ZOT_STYLE")
 	exportCmd.Flags().StringVar(&exportFrom, "from", "", "read item keys or find JSON from a file, or - for stdin")
 	exportCmd.Flags().IntVar(&exportReq.BatchSize, "batch-size", 100, "maximum item keys per export request")
 	exportCmd.Flags().BoolVar(&exportStream, "stream", false, "write raw export data incrementally to stdout")
 	exportCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if exportReq.Format != "bibtex" && exportReq.Format != "biblatex" && exportReq.Format != "csljson" && exportReq.Format != "ris" {
+		exportReq.Format = strings.ToLower(strings.TrimSpace(exportReq.Format))
+		if exportReq.Format != "bibtex" && exportReq.Format != "biblatex" && exportReq.Format != "bibliography" && exportReq.Format != "csljson" && exportReq.Format != "ris" {
 			return &exitError{code: ExitUsage, err: fmt.Errorf("unsupported export format %q", exportReq.Format)}
+		}
+		if exportReq.Format != "bibliography" && strings.TrimSpace(exportReq.Style) != "" {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--style requires --as bibliography")}
+		}
+		if exportReq.Format == "bibliography" && cmd.Flags().Changed("batch-size") {
+			return &exitError{code: ExitUsage, err: fmt.Errorf("--batch-size is not supported with --as bibliography; the bibliography is rendered as one request")}
 		}
 		exportReq.Keys = args
 		if len(args) > 0 && strings.TrimSpace(exportFrom) != "" {

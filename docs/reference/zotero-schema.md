@@ -256,6 +256,8 @@ PRAGMA foreign_keys = true;        -- 外键约束
 > - `locking_mode = EXCLUSIVE` 是 CLI 做 snapshot 回退的根本原因 — Zotero 运行时无法获得读锁
 > - WAL 模式允许并发读者，但 EXCLUSIVE 锁优先级更高
 > - CLI 的 `withReadableDB()` → live 尝试 → snapshot 回退策略正是为此设计
+> - snapshot 缓存以主库、WAL、journal 的联合指纹失效；SHM 随副本复制但不单独触发刷新
+> - 快照经 staging generation 构建，复制前后指纹一致后才通过 manifest 发布，避免半新半旧的 SQLite/WAL 组合
 
 ---
 

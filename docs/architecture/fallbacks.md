@@ -43,6 +43,8 @@
 
 Zotero 运行时可能锁定 SQLite 数据库。本地读取先尝试 live 数据库；遇到可识别的 busy/locked 情况时，改读临时或缓存快照。
 
+缓存快照通过 `manifest.json` 记录源 `zotero.sqlite`、`-wal` 和 `-journal` 的大小与纳秒级修改时间；任一数据文件发生变化都会创建新的 generation。`-shm` 会随快照复制，但其锁协调变化不会单独触发数百 MB 主库重拷贝。创建 generation 时会在复制前后重复读取源指纹，只有两次一致才发布 manifest；最多重试三次，源持续变化或刷新失败时保留上一个可读 generation，并通过 `snapshot_stale` 明确告警。旧的平铺 snapshot 会在首次刷新时自动迁移。
+
 快照回退具有以下可见语义：
 
 - `read_source` 为 `snapshot`

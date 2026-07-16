@@ -97,6 +97,58 @@ func TestRunExportBibTeXText(t *testing.T) {
 	}
 }
 
+func TestRunExportBibliographyNatureText(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"export", "ART12345", "ART67890", "--as", "bibliography", "--style", "nature"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "1. Lovelace, A. Primary Article. Nature (2024).") ||
+		!strings.Contains(got, "2. Hopper, G. Secondary Article. Nature (2023).") ||
+		strings.Contains(got, "<div") {
+		t.Fatalf("unexpected bibliography text: %q", got)
+	}
+}
+
+func TestRunExportBibliographyStreamWritesHTML(t *testing.T) {
+	configRoot := t.TempDir()
+	setTestConfigDir(t, configRoot)
+	writeTestConfig(t, configRoot)
+
+	serverURL, cleanup := newTestAPI(t)
+	defer cleanup()
+	t.Setenv("ZOT_BASE_URL", serverURL)
+
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"export", "ART12345", "--as", "bibliography", "--style", "nature", "--stream"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, `<div class="csl-bib-body">`) || !strings.Contains(got, "<i>Primary Article</i>") {
+		t.Fatalf("unexpected bibliography HTML: %q", got)
+	}
+}
+
+func TestRunExportStyleRequiresBibliography(t *testing.T) {
+	stdout, stderr := captureOutput(t)
+	exitCode := Run([]string{"export", "ART12345", "--as", "bibtex", "--style", "nature"})
+	if exitCode != ExitUsage {
+		t.Fatalf("expected usage exit code, got %d; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "--style requires --as bibliography") {
+		t.Fatalf("unexpected error: %q", stderr.String())
+	}
+}
+
 func TestRunExportCSLJSONJSON(t *testing.T) {
 	configRoot := t.TempDir()
 	setTestConfigDir(t, configRoot)

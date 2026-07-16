@@ -122,16 +122,18 @@ func newTestAPI(t *testing.T) (string, func()) {
 			if itemKey != "" && format == "bib" {
 				keys := strings.Split(itemKey, ",")
 				var buf strings.Builder
+				buf.WriteString(`<div class="csl-bib-body">`)
 				for _, k := range keys {
 					switch strings.TrimSpace(k) {
 					case "ART12345":
-						buf.WriteString("Lovelace, A. (2024). Primary Article.\n\n")
+						buf.WriteString(`<div class="csl-entry">1. Lovelace, A. <i>Primary Article</i>. Nature (2024).</div>`)
 					case "ART67890", "ITEM5678":
-						buf.WriteString("Hopper, G. (2023). Secondary Article.\n\n")
+						buf.WriteString(`<div class="csl-entry">2. Hopper, G. Secondary Article. Nature (2023).</div>`)
 					default:
-						buf.WriteString("Unknown Article.\n\n")
+						buf.WriteString(`<div class="csl-entry">1. Unknown Article.</div>`)
 					}
 				}
+				buf.WriteString(`</div>`)
 				_, _ = w.Write([]byte(buf.String()))
 				return
 			}

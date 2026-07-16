@@ -302,6 +302,63 @@ func TestClientExportItemsCSLJSON(t *testing.T) {
 	}
 }
 
+func TestClientExportItemsBibliography(t *testing.T) {
+	t.Parallel()
+
+	htmlBody := `<div class="csl-bib-body">
+  <div class="csl-entry">1. Smith, J. <i>First article</i>. Nature (2025).</div>
+  <div class="csl-entry">2. Zhang, Q. &amp; Li, M. Second article.</div>
+</div>`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("itemKey"); got != "ITEM1,ITEM2" {
+			t.Fatalf("unexpected itemKey: %q", got)
+		}
+		if got := r.URL.Query().Get("format"); got != "bib" {
+			t.Fatalf("unexpected format: %q", got)
+		}
+		if got := r.URL.Query().Get("style"); got != "nature" {
+			t.Fatalf("unexpected style: %q", got)
+		}
+		if got := r.URL.Query().Get("locale"); got != "en-US" {
+			t.Fatalf("unexpected locale: %q", got)
+		}
+		_, _ = w.Write([]byte(htmlBody))
+	}))
+	defer server.Close()
+
+	client := New(config.Config{LibraryType: "user", LibraryID: "123", APIKey: "secret"}, server.URL, server.Client())
+	result, err := client.ExportItems(context.Background(), []string{"ITEM1", "ITEM2"}, ExportOptions{
+		Format: "bib",
+		Style:  "nature",
+		Locale: "en-US",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.HTML != htmlBody {
+		t.Fatalf("html=%q", result.HTML)
+	}
+	wantText := "1. Smith, J. First article. Nature (2025).\n2. Zhang, Q. & Li, M. Second article."
+	if result.Text != wantText {
+		t.Fatalf("text=%q want=%q", result.Text, wantText)
+	}
+}
+
+func TestClientExportItemsRejectsEmptyBibliography(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<div class="csl-bib-body"></div>`))
+	}))
+	defer server.Close()
+
+	client := New(config.Config{LibraryType: "user", LibraryID: "123", APIKey: "secret"}, server.URL, server.Client())
+	_, err := client.ExportItems(context.Background(), []string{"LOCALONLY"}, ExportOptions{Format: "bib", Style: "nature"})
+	if err == nil || !strings.Contains(err.Error(), "empty bibliography") || !strings.Contains(err.Error(), "Web library") {
+		t.Fatalf("expected actionable empty-bibliography error, got %v", err)
+	}
+}
+
 func TestClientGetItem(t *testing.T) {
 	t.Parallel()
 

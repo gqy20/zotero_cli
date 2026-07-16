@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### 新增
+- **CSL 样式参考文献导出**：`item export --as bibliography --style STYLE` 可将最多 100 个明确条目一次交给 Zotero Web API 排版，保证 Nature 等数字样式编号连续；普通输出为逐条纯文本，`--stream` 保留原始 HTML 和斜体等格式，省略 `--style` 时继承 `ZOT_STYLE`。纯 local 模式继续使用 CSL-JSON 导出，不伪装成本地 CSL 排版。
 - **可扩展导出与统一文献导入**：`item export` 按默认 100 条分批请求，并新增 `--batch-size` 与显式 `--stream` 原始流式输出；`--from PATH|-` 使用增量 JSON 解码。`item import` 在原有 PDF Connector 工作流之外支持 DOI、PMID、doi.org/PubMed URL 和单条引用 JSON，统一执行 PubMed 元数据解析、重复检查、dry-run 计划与 Web API 创建；identifier 导入不会隐式下载 PDF。
 - **批量 PDF 导入**：`item import` 接受多个 PDF 位置参数及 `--from PATH|-` 的路径数组，复用单个 Connector 客户端串行导入并返回逐文件状态、warning、失败阶段和总体统计；dry-run 汇总文件数与字节数，单项失败不会阻断其余文件，实时进度写入 stderr。
 
@@ -21,6 +22,7 @@
 - **同步实时进度**：`zot sync` 根据 manifest 汇总整个镜像的文件数与字节数，分阶段显示实时百分比、传输速度和 ETA；跳过文件与断点续传字节纳入整体进度，进度继续写入 stderr 以保持 `--json` stdout 稳定。`zot serve` 请求日志新增 `bytes_sent`。
 
 ### 修复
+- **本地 SQLite snapshot 新鲜度与一致性**：缓存有效性由仅比较 `zotero.sqlite` 时间升级为主库、WAL、journal 的 `size + mtime` 联合指纹，修复 Zotero 运行时新条目、元数据、标签和附件只进入 WAL 后仍长期复用旧 snapshot 的问题。刷新通过 staging generation 构建并在复制前后校验源指纹，只有一致副本才由 manifest 发布；SHM 锁变化不单独触发大文件重拷贝，源持续变化时保留旧 generation 并准确标记 `snapshot_stale`。
 - **同步 manifest 诊断与异常外链隔离**：`zot sync` 在 manifest 返回非 200 时读取并显示服务端 JSON 错误，不再只报告 `HTTP 500`；`zot serve` 记录 manifest 失败阶段、具体 attachment key、错误和阶段耗时，并在成功时报告各区段数量。单个外链附件缺少 `attachments:` 相对路径、基本目录或源文件时以 unavailable 条目和 warning 返回并跳过，不再阻断 SQLite、正常附件及全文索引同步；路径验证先于文件访问，避免探测不受支持的绝对路径或离线盘符。
 
 ### 工具链

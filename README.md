@@ -37,6 +37,7 @@
 | Europe PMC 增强 | `zot ref cited ITEMKEY --external`；`zot ref entities ITEMKEY`；`ref links` 自动合并两套资源 |
 | 开放科学画像 | `zot ref profile ITEMKEY --json` 查看预印本/正式版本、评价、基金、OA 和许可证 |
 | 复制粘贴 BibTeX / RIS | `zot item export KEY --as bibtex` → AI 直接消费标准导出 |
+| 生成期刊格式参考文献 | `zot item export KEY1 KEY2 --as bibliography --style nature` → Zotero 官方 CSL 排版 |
 | 标注散落在各处无法汇总 | `zot ann list KEY --json` → 双源（Zotero+PDF）统一输出，支持按类型/页码/作者过滤和分来源安全删除 |
 | 批量打标签靠手点 | `zot item tag --items K1,K2,K3 --tag "to-read"` | 一条命令 |
 
@@ -386,6 +387,10 @@ zot item export KEY --as bibtex --json
 zot find --collection COLLKEY --all --json | zot item export --from - --as ris
 zot item export KEY --as csljson --json
 zot item export --from selected.json --as csljson --stream --batch-size 100 > library.json
+
+# 生成一组编号连续的 Nature 参考文献；--stream 可保存 Zotero 原始 HTML
+zot item export KEY1 KEY2 --as bibliography --style nature
+zot item export KEY1 KEY2 --as bibliography --style nature --stream > references.html
 ```
 
 ### 库管理
@@ -482,7 +487,7 @@ zot --mode local find ...
 | **PDF** | `pdf figs` | 提取论文图表（缓存、多 PDF 附件、低质量误检过滤） |
 | **标注** | `ann list` / `ann new` / `ann delete` | 读取、写入和删除 PDF 标注 |
 | **PDF** | `pdf open` | 用系统默认程序打开并返回真实路径 |
-| **导出** | `export` | BibTeX / RIS / CSL-JSON |
+| **导出** | `export` | BibTeX / RIS / CSL-JSON / CSL 样式参考文献 |
 | **写操作** | `item new` / `item edit` / `item delete` / `item import` | 条目 CRUD；通过本机 Zotero 导入 PDF |
 | **标签** | `item tag` / `item untag` | 批量标签管理 |
 | **收藏夹** | `coll list` / `coll new` | 收藏夹查看与创建 |

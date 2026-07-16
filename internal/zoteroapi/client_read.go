@@ -180,6 +180,20 @@ func (c *Client) ExportItems(ctx context.Context, keys []string, opts ExportOpti
 	if err != nil {
 		return ExportResult{}, err
 	}
+	if format == "bib" {
+		htmlValue := string(body)
+		textValue := bibliographyText(htmlValue)
+		if textValue == "" {
+			return ExportResult{}, fmt.Errorf("Zotero returned an empty bibliography; verify the item keys exist in the Web library and have finished syncing")
+		}
+		return ExportResult{
+			Format: format,
+			Style:  opts.Style,
+			Locale: opts.Locale,
+			Text:   textValue,
+			HTML:   htmlValue,
+		}, nil
+	}
 
 	return ExportResult{
 		Format: format,

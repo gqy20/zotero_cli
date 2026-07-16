@@ -55,6 +55,7 @@ description: 使用本仓库的本地 Zotero CLI 工具进行文献检索、查�
 .\zot.exe ref status --view grobid --json              # 实验性：检查可选 PDF 后备
 .\zot.exe ref build --scope grobid --limit 5 --json     # 实验性：显式小批量解析
 .\zot.exe find --collection COLLKEY --all --json | .\zot.exe item export --from - --as csljson
+.\zot.exe item export KEY1 KEY2 --as bibliography --style nature # Web API 排版；--stream 输出原始 HTML
 .\zot.exe item import paper1.pdf paper2.pdf --collection COLLKEY --dry-run --json # 批量 PDF 预检；正式导入去掉 --dry-run
 .\zot.exe ann list ITEMKEY --json          # 读取 PDF 标注（双源）
 ```
@@ -246,7 +247,7 @@ local / hybrid 下该命令默认确保项目全文缓存存在，并返回 `con
 .\zot.exe note find 'CRISPR|gene\s+editing' --limit 20 --json
 ```
 
-`note find QUERY` 默认按不区分大小写的 Go 正则解析；`note list` 只枚举笔记。导出只接收明确 item key，或 `--from PATH|-` 读取 key 数组、item 数组及 `find --json` 响应；所有筛选先由 `find` 完成。
+`note find QUERY` 默认按不区分大小写的 Go 正则解析；`note list` 只枚举笔记。导出只接收明确 item key，或 `--from PATH|-` 读取 key 数组、item 数组及 `find --json` 响应；所有筛选先由 `find` 完成。`--as bibliography --style STYLE` 使用 Zotero Web API 一次排版最多 100 条参考文献，普通输出为纯文本，`--stream` 为原始 HTML；纯 local 模式应改用 `--as csljson`。
 
 ## 写操作安全
 

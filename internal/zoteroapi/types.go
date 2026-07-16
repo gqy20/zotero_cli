@@ -105,7 +105,10 @@ type ExportOptions struct {
 
 type ExportResult struct {
 	Format string `json:"format"`
+	Style  string `json:"style,omitempty"`
+	Locale string `json:"locale,omitempty"`
 	Text   string `json:"text,omitempty"`
+	HTML   string `json:"html,omitempty"`
 	Data   any    `json:"data,omitempty"`
 }
 

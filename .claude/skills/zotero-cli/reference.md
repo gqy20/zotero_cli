@@ -90,6 +90,7 @@ zot item show ITEMKEY --snippet --json
 ```powershell
 zot item export ITEMKEY --as bibtex --json
 zot item export KEY1 KEY2 --as csljson --json
+zot item export KEY1 KEY2 --as bibliography --style nature
 zot item find --collection COLLKEY --all --json > selected.json
 zot item export --from selected.json --as ris
 zot item find '"hybrid speciation"' --in metadata --json | zot item export --from - --as biblatex
