@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"zotero_cli/internal/domain"
@@ -74,7 +75,7 @@ import json, sys
 import fitz
 
 pdf_path = sys.argv[1]
-req = ` + string(reqJSON) + `
+req = json.loads(` + strconv.Quote(string(reqJSON)) + `)
 
 doc = fitz.open(pdf_path)
 results = []
@@ -233,7 +234,11 @@ sys.stdout.buffer.write(payload.encode("utf-8"))
 		Matches []annotateMatchRaw `json:"matches"`
 		DryRun  bool               `json:"dry_run"`
 	}
-	if err := json.Unmarshal(stdout, &rawResult); err != nil {
+	payload, err := pythonJSONPayload(stdout)
+	if err != nil {
+		return AnnotateResult{}, fmt.Errorf("annotate output: %w", err)
+	}
+	if err := json.Unmarshal(payload, &rawResult); err != nil {
 		return AnnotateResult{}, err
 	}
 	if !rawResult.DryRun && len(rawResult.Matches) == 0 {
