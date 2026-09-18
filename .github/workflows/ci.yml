@@ -11,7 +11,6 @@ permissions:
   contents: read
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   GO_VERSION_LDFLAGS: >-
     -X zotero_cli/internal/cli.version=dev
     -X zotero_cli/internal/cli.commit=${{ github.sha }}
@@ -27,10 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
@@ -44,7 +43,7 @@ jobs:
         run: make test
 
       - name: Install UPX
-        uses: crazy-max/ghaction-upx@v3
+        uses: crazy-max/ghaction-upx@v4
         with:
           install-only: true
           version: latest
@@ -72,10 +71,10 @@ jobs:
             goarch: arm64
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
@@ -95,7 +94,7 @@ jobs:
           go build -trimpath -ldflags "${GO_VERSION_LDFLAGS}" -o "${out}" ./cmd/zot
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zot-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
